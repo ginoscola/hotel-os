@@ -1,0 +1,93 @@
+═══════════════════════════════════════════════════════════════════
+ Revenue Master — Checklist trasloco / deploy su nuova macchina
+ Per i comandi completi vedere: docs/GUIDA_DEPLOY.md
+═══════════════════════════════════════════════════════════════════
+
+PREREQUISITI SERVER
+  [ ] PostgreSQL installato e avviato
+  [ ] Python 3.11+ installato
+  [ ] Node.js 18+ e npm installati
+  [ ] git installato
+  [ ] (Produzione) nginx installato
+
+─────────────────────────────────────────────────────────────────
+PASSO 1 — CODICE
+─────────────────────────────────────────────────────────────────
+  [ ] git clone <repository> revenue-master
+  [ ] cd revenue-master
+
+─────────────────────────────────────────────────────────────────
+PASSO 2 — DATABASE
+─────────────────────────────────────────────────────────────────
+  [ ] Creare database PostgreSQL:
+        createdb revenue_master
+  [ ] (Produzione) Creare utente dedicato:
+        createuser -P revenue_user
+        GRANT ALL PRIVILEGES ON DATABASE revenue_master TO revenue_user;
+
+─────────────────────────────────────────────────────────────────
+PASSO 3 — BACKEND
+─────────────────────────────────────────────────────────────────
+  [ ] Copiare il template:
+        cp docs/.env.example backend/.env
+  [ ] Editare backend/.env con i valori reali:
+        [ ] DATABASE_URL  — utente, password, nome DB
+        [ ] SECRET_KEY    — stringa casuale lunga (vedi GUIDA_DEPLOY.md)
+        [ ] DEBUG         — impostare a "false" in produzione
+        [ ] UPLOADS_DIR   — lasciare "../uploads" salvo esigenze diverse
+  [ ] Creare virtualenv e installare dipendenze:
+        cd backend
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+  [ ] Applicare le migrazioni database:
+        alembic upgrade head
+  [ ] Verificare che il backend si avvii:
+        uvicorn app.main:app --port 8000
+        (aprire http://localhost:8000/docs — deve rispondere)
+
+─────────────────────────────────────────────────────────────────
+PASSO 4 — CONFIGURAZIONE DATABASE (app_config)
+─────────────────────────────────────────────────────────────────
+  [ ] Aggiornare cors_origins con il dominio/IP del server:
+        psql revenue_master -c "UPDATE app_config SET value='https://tuodominio.it' WHERE key='cors_origins';"
+  [ ] (Opzionale) Aggiornare il nome dell'applicazione:
+        psql revenue_master -c "UPDATE app_config SET value='KM Di Mare Revenue' WHERE key='app_name';"
+
+─────────────────────────────────────────────────────────────────
+PASSO 5 — FRONTEND
+─────────────────────────────────────────────────────────────────
+  [ ] Editare frontend/.env.production:
+        VITE_API_URL=https://tuodominio.it   (o IP del server)
+  [ ] Installare dipendenze e compilare:
+        cd frontend
+        npm install
+        npm run build
+      (genera la cartella frontend/dist/)
+
+─────────────────────────────────────────────────────────────────
+PASSO 6 — (SOLO PRODUZIONE) SERVER WEB
+─────────────────────────────────────────────────────────────────
+  [ ] Configurare nginx:
+        — servire frontend/dist/ come file statici
+        — fare proxy di /api/* verso 127.0.0.1:8000
+        (vedere esempio in GUIDA_DEPLOY.md)
+  [ ] Creare service systemd per uvicorn:
+        (vedere esempio in GUIDA_DEPLOY.md)
+  [ ] Abilitare e avviare i servizi:
+        sudo systemctl enable --now revenue-backend
+        sudo systemctl reload nginx
+  [ ] (Opzionale) SSL con Let's Encrypt:
+        sudo certbot --nginx -d tuodominio.it
+
+─────────────────────────────────────────────────────────────────
+PASSO 7 — VERIFICA FINALE
+─────────────────────────────────────────────────────────────────
+  [ ] Login funziona con admin / admin2024
+  [ ] Dashboard gruppo carica i dati
+  [ ] Dashboard hotel carica i dati
+  [ ] Export Excel/PDF funziona
+  [ ] Cambio password admin (Admin → Gestione Utenti)
+  [ ] (Produzione) Cambiare password admin di default!
+
+═══════════════════════════════════════════════════════════════════

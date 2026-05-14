@@ -1,0 +1,67 @@
+"""Applicazione FastAPI principale per Revenue Master Gruppo."""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.middleware import SlowAPIMiddleware
+
+from app.routers import admin, auth, budget, dashboard, export, hotels, modules, settimane, snapshots, upload
+from app.routers import config as config_router
+
+
+def _leggi_cors_origini() -> list:
+    """Legge cors_origins da app_config; fallback a localhost:5173 se non raggiungibile."""
+    try:
+        from app.database import SessionLocal
+        from app.models.revenue import AppConfig
+        db = SessionLocal()
+        try:
+            row = db.query(AppConfig).filter(AppConfig.key == 'cors_origins').first()
+            if row:
+                return [o.strip() for o in row.value.split(',')]
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return ["http://localhost:5173"]
+
+
+limiter = Limiter(key_func=lambda request: request.client.host if request.client else 'unknown')
+
+app = FastAPI(
+    title="Revenue Master Gruppo",
+    description="API per reporting revenue alberghiero - Club Hotel, Hotel Du Parc, Hotel International",
+    version="1.0.0",
+)
+
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_leggi_cors_origini(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(auth.router)
+app.include_router(modules.router)
+app.include_router(hotels.router)
+app.include_router(budget.router)
+app.include_router(upload.router)
+app.include_router(dashboard.router)
+app.include_router(settimane.router)
+app.include_router(snapshots.router)
+app.include_router(export.router)
+app.include_router(admin.router)
+app.include_router(config_router.router)
+
+
+@app.get("/")
+def root():
+    return {"messaggio": "Revenue Master API attiva", "versione": "1.0.0"}
+
+
+@app.get("/health")
+def health_check():
+    return {"stato": "ok"}

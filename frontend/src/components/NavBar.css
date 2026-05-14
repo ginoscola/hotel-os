@@ -1,0 +1,191 @@
+/* ══════════════════════════════════════════════
+   NavBar — due livelli
+   L1: moduli (64px) · L2: sotto-navigazione (40px)
+   ══════════════════════════════════════════════ */
+
+.navbar-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Livello 1 ── */
+
+.navbar-l1 {
+  background: linear-gradient(90deg, #1e3a5f 0%, #2d6a9f 100%);
+  height: 60px;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Brand */
+.navbar-brand {
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+  margin-right: 1.5rem;
+  flex-shrink: 0;
+  transition: opacity 0.2s ease;
+}
+.navbar-brand:hover { opacity: 0.9; }
+
+.navbar-brand-logo {
+  height: 34px;
+  width: 34px;
+  object-fit: cover;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Tab moduli */
+.navbar-moduli {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  gap: 0;
+}
+
+.navbar-modulo {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 1rem;
+  color: rgba(255, 255, 255, 0.70);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+}
+.navbar-modulo:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+.navbar-modulo--active {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.12);
+  border-bottom-color: #fff; /* sostituito inline con il colore del modulo */
+}
+.navbar-modulo-icon { font-size: 15px; }
+.navbar-modulo-name { font-size: 13px; }
+
+/* Utente */
+.navbar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+  margin-left: 1rem;
+}
+.navbar-username { color: #fff; font-size: 13px; font-weight: 500; }
+
+.navbar-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.navbar-badge--admin  { background: #60a5fa; color: #fff; }
+.navbar-badge--viewer { background: #34d399; color: #fff; }
+
+.navbar-logout {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.navbar-logout:hover {
+  background: #fff;
+  color: #1e3a5f;
+  border-color: #fff;
+}
+
+/* ── Livello 2 ── */
+
+.navbar-l2 {
+  background: #16304f;
+  height: 40px;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.navbar-l2-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  height: 100%;
+}
+
+/* Link sottonavigazione */
+.subnav-link {
+  position: relative;
+  color: rgba(255, 255, 255, 0.70);
+  text-decoration: none;
+  padding: 4px 11px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.subnav-link::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 11px;
+  right: 11px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: 1px;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s ease;
+}
+.subnav-link:hover { color: #fff; }
+.subnav-link:hover::after { transform: scaleX(1); }
+.subnav-link--active {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.14);
+}
+.subnav-link--active::after { display: none; }
+.subnav-link--small { font-size: 12px; }
+
+/* Separatore e WIP */
+.subnav-separator {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.18);
+  margin: 0 0.35rem;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.subnav-wip {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  font-style: italic;
+  padding: 0 0.5rem;
+}
