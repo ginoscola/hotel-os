@@ -48,7 +48,7 @@ export default function ImportBulk() {
               type="text"
               value={cartella}
               onChange={e => setCartella(e.target.value)}
-              placeholder="es. /Users/ginoscola/revenue-master/uploads"
+              placeholder="es. /Users/ginoscola/hotel-os/uploads"
               style={{ width: '100%', padding: '6px 10px', border: '1px solid #ccc', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
             />
           </div>
