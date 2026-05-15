@@ -1,5 +1,5 @@
 ═══════════════════════════════════════════════════════════════════
- Revenue Master — Checklist trasloco / deploy su nuova macchina
+ HotelOS — Checklist trasloco / deploy su nuova macchina
  Per i comandi completi vedere: docs/GUIDA_DEPLOY.md
 ═══════════════════════════════════════════════════════════════════
 
@@ -13,17 +13,17 @@ PREREQUISITI SERVER
 ─────────────────────────────────────────────────────────────────
 PASSO 1 — CODICE
 ─────────────────────────────────────────────────────────────────
-  [ ] git clone <repository> revenue-master
-  [ ] cd revenue-master
+  [ ] git clone <repository> hotel-os
+  [ ] cd hotel-os
 
 ─────────────────────────────────────────────────────────────────
 PASSO 2 — DATABASE
 ─────────────────────────────────────────────────────────────────
   [ ] Creare database PostgreSQL:
-        createdb revenue_master
+        createdb hotel_os
   [ ] (Produzione) Creare utente dedicato:
         createuser -P revenue_user
-        GRANT ALL PRIVILEGES ON DATABASE revenue_master TO revenue_user;
+        GRANT ALL PRIVILEGES ON DATABASE hotel_os TO revenue_user;
 
 ─────────────────────────────────────────────────────────────────
 PASSO 3 — BACKEND
@@ -50,9 +50,9 @@ PASSO 3 — BACKEND
 PASSO 4 — CONFIGURAZIONE DATABASE (app_config)
 ─────────────────────────────────────────────────────────────────
   [ ] Aggiornare cors_origins con il dominio/IP del server:
-        psql revenue_master -c "UPDATE app_config SET value='https://tuodominio.it' WHERE key='cors_origins';"
+        psql hotel_os -c "UPDATE app_config SET value='https://tuodominio.it' WHERE key='cors_origins';"
   [ ] (Opzionale) Aggiornare il nome dell'applicazione:
-        psql revenue_master -c "UPDATE app_config SET value='KM Di Mare Revenue' WHERE key='app_name';"
+        psql hotel_os -c "UPDATE app_config SET value='KM Di Mare Revenue' WHERE key='app_name';"
 
 ─────────────────────────────────────────────────────────────────
 PASSO 5 — FRONTEND

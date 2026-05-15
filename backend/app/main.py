@@ -1,4 +1,4 @@
-"""Applicazione FastAPI principale per Revenue Master Gruppo."""
+"""Applicazione FastAPI principale per HotelOS."""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,8 +29,8 @@ def _leggi_cors_origini() -> list:
 limiter = Limiter(key_func=lambda request: request.client.host if request.client else 'unknown')
 
 app = FastAPI(
-    title="Revenue Master Gruppo",
-    description="API per reporting revenue alberghiero - Club Hotel, Hotel Du Parc, Hotel International",
+    title="HotelOS",
+    description="API per la gestione alberghiera - Club Hotel, Hotel Du Parc, Hotel International",
     version="1.0.0",
 )
 
@@ -59,7 +59,7 @@ app.include_router(config_router.router)
 
 @app.get("/")
 def root():
-    return {"messaggio": "Revenue Master API attiva", "versione": "1.0.0"}
+    return {"messaggio": "HotelOS API attiva", "versione": "1.0.0"}
 
 
 @app.get("/health")

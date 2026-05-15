@@ -1,7 +1,7 @@
-# Revenue Master Gruppo — Istruzioni per Claude Code
+# HotelOS — Istruzioni per Claude Code
 
 ## Contesto del progetto
-Applicazione web di revenue reporting per gruppo alberghiero.
+Applicazione web di gestione alberghiera per gruppo alberghiero.
 Replica e migliora un sistema precedentemente basato su Google Sheets + Apps Script.
 Linguaggio dell'applicazione: italiano.
 

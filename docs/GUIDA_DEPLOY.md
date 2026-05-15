@@ -1,4 +1,4 @@
-# Revenue Master — Guida al Deploy
+# HotelOS — Guida al Deploy
 
 Questa guida copre il deploy su un server Linux headless (Ubuntu/Debian).
 Per lo sviluppo locale su macOS seguire solo i Passi 1–3.
@@ -34,11 +34,11 @@ psql --version
 
 ```bash
 # Creare il database
-sudo -u postgres createdb revenue_master
+sudo -u postgres createdb hotel_os
 
 # (Produzione) Creare utente dedicato con password
 sudo -u postgres psql -c "CREATE USER revenue_user WITH PASSWORD 'SCEGLI_UNA_PASSWORD';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE revenue_master TO revenue_user;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE hotel_os TO revenue_user;"
 ```
 
 ---
@@ -47,8 +47,8 @@ sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE revenue_master TO rev
 
 ```bash
 # Clonare il repository
-git clone <url-repository> /opt/revenue-master
-cd /opt/revenue-master
+git clone <url-repository> /opt/hotel-os
+cd /opt/hotel-os
 
 # Creare e attivare virtualenv
 cd backend
@@ -87,7 +87,7 @@ psql $DATABASE_URL -c "UPDATE app_config SET value='https://tuodominio.it' WHERE
 ## Passo 4 — Frontend
 
 ```bash
-cd /opt/revenue-master/frontend
+cd /opt/hotel-os/frontend
 
 # Impostare l'URL del backend
 echo "VITE_API_URL=https://tuodominio.it" > .env.production
@@ -106,17 +106,17 @@ Creare il file `/etc/systemd/system/revenue-backend.service`:
 
 ```ini
 [Unit]
-Description=Revenue Master Backend
+Description=HotelOS Backend
 After=network.target postgresql.service
 
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=/opt/revenue-master/backend
-ExecStart=/opt/revenue-master/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+WorkingDirectory=/opt/hotel-os/backend
+ExecStart=/opt/hotel-os/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=5
-EnvironmentFile=/opt/revenue-master/backend/.env
+EnvironmentFile=/opt/hotel-os/backend/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -133,7 +133,7 @@ sudo systemctl status revenue-backend   # deve mostrare "active (running)"
 
 ## Passo 6 — Nginx
 
-Creare il file `/etc/nginx/sites-available/revenue-master`:
+Creare il file `/etc/nginx/sites-available/hotel-os`:
 
 ```nginx
 server {
@@ -141,7 +141,7 @@ server {
     server_name tuodominio.it;   # o IP del server
 
     # File statici frontend
-    root /opt/revenue-master/frontend/dist;
+    root /opt/hotel-os/frontend/dist;
     index index.html;
 
     # React Router: tutte le route non trovate → index.html
@@ -166,7 +166,7 @@ server {
 > oppure usare un sottodominio dedicato (es. `api.tuodominio.it`).
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/revenue-master /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/hotel-os /etc/nginx/sites-enabled/
 sudo nginx -t          # verifica la configurazione
 sudo systemctl reload nginx
 ```
@@ -185,7 +185,7 @@ sudo certbot --nginx -d tuodominio.it
 ## Aggiornare l'applicazione (deploy aggiornamenti)
 
 ```bash
-cd /opt/revenue-master
+cd /opt/hotel-os
 git pull
 
 # Backend: reinstallare dipendenze se cambiate, applicare nuove migrazioni

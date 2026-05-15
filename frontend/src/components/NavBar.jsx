@@ -62,7 +62,7 @@ export default function NavBar() {
   const location = useLocation()
 
   const [utente, setUtente] = useState(null)
-  const [appName, setAppName] = useState('KM Di Mare Revenue')
+  const [appName, setAppName] = useState('HotelOS')
   const [moduli, setModuli] = useState([])
   const [hotels, setHotels] = useState([])
 
