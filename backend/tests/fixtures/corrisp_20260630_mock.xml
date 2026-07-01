@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<r:DatiCorrispettivi xmlns:r="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/corrispettivi/dati/v1.0">
+  <DataOraRilevazione>2026-06-30T21:00:45</DataOraRilevazione>
+  <Trasmissione>
+    <Progressivo>944</Progressivo>
+  </Trasmissione>
+  <DatiRT>
+    <Riepilogo>
+      <IVA>
+        <AliquotaIVA>10.00</AliquotaIVA>
+      </IVA>
+      <ImportoParziale>1735.54</ImportoParziale>
+      <Imposta>173.55</Imposta>
+      <Ammontare>1909.09</Ammontare>
+    </Riepilogo>
+    <Riepilogo>
+      <IVA>
+        <AliquotaIVA>22.00</AliquotaIVA>
+      </IVA>
+      <ImportoParziale>0.00</ImportoParziale>
+      <Imposta>0.00</Imposta>
+      <Ammontare>0.00</Ammontare>
+    </Riepilogo>
+    <Riepilogo>
+      <Natura>N1</Natura>
+      <ImportoParziale>46.01</ImportoParziale>
+      <NonRiscossoServizi>12.00</NonRiscossoServizi>
+    </Riepilogo>
+    <Riepilogo>
+      <Natura>N4</Natura>
+      <ImportoParziale>0.00</ImportoParziale>
+    </Riepilogo>
+    <Totali>
+      <NumeroDocCommerciali>13</NumeroDocCommerciali>
+      <PagatoContanti>199.00</PagatoContanti>
+      <PagatoElettronico>1756.10</PagatoElettronico>
+    </Totali>
+  </DatiRT>
+  <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+    <SignedInfo></SignedInfo>
+    <SignatureValue>ANONIMIZZATO==</SignatureValue>
+  </Signature>
+</r:DatiCorrispettivi>

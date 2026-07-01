@@ -2416,6 +2416,14 @@ function TabControlloRT() {
   const [msgOk, setMsgOk] = useState('')
   const [dataManualeInput, setDataManualeInput] = useState('')
 
+  // Import CORRISP.xml
+  const [dialogImport, setDialogImport] = useState(false)
+  const [importRt, setImportRt] = useState('RT1')
+  const [importFile, setImportFile] = useState(null)
+  const [importOnConflict, setImportOnConflict] = useState('salta')
+  const [importInCorso, setImportInCorso] = useState(false)
+  const [importMsg, setImportMsg] = useState(null)   // { tipo: 'success'|'warning'|'info', testo }
+
   const carica = useCallback(async () => {
     setCaricamento(true)
     setErrore('')
@@ -2518,6 +2526,43 @@ function TabControlloRT() {
     }
   }
 
+  const apriDialogImport = () => {
+    setImportRt('RT1'); setImportFile(null); setImportOnConflict('salta'); setImportMsg(null)
+    setDialogImport(true)
+  }
+
+  // Nome file RT: 99MEX036593-YYYYMMDDTHHMMSS-NNNN-CORRISP.xml
+  const dataDaNomeFile = (nome) => {
+    const m = nome.match(/-(\d{4})(\d{2})(\d{2})T\d{6}-/)
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : null
+  }
+
+  const eseguiImport = async () => {
+    if (!importFile) return
+    setImportInCorso(true)
+    setImportMsg(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', importFile)
+      const { data } = await api.post(
+        `/corrispettivi/rt-chiusure/import-xml?rt_code=${importRt}&on_conflict=${importOnConflict}`,
+        formData,
+      )
+      if (data.esito === 'inserito') {
+        setImportMsg({ tipo: 'success', testo: `Chiusura del ${fmtD(data.data_chiusura)} importata correttamente (${data.rt_code})` })
+      } else if (data.esito === 'aggiornato') {
+        setImportMsg({ tipo: 'info', testo: `Chiusura del ${fmtD(data.data_chiusura)} aggiornata (${data.rt_code})` })
+      } else {
+        setImportMsg({ tipo: 'warning', testo: data.warning || 'Riga già presente — saltata' })
+      }
+      if (data.esito !== 'saltato') await carica()
+    } catch (e) {
+      setImportMsg({ tipo: 'error', testo: mostraErrore(e) })
+    } finally {
+      setImportInCorso(false)
+    }
+  }
+
   const fmtDelta = (delta) => {
     if (delta === null) return { label: '—', color: '#94a3b8' }
     if (Math.abs(delta) <= 0.01) return { label: '✓', color: '#16a34a' }
@@ -2558,6 +2603,14 @@ function TabControlloRT() {
           {/* Input data manuale per aggiungere chiusure su giorni senza PMS */}
           {isAdmin() && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
+              <button
+                onClick={apriDialogImport}
+                style={{
+                  border: '1px solid #1e3a5f', borderRadius: 6, padding: '5px 12px',
+                  cursor: 'pointer', background: '#fff', color: '#1e3a5f',
+                  fontSize: '0.82rem', fontWeight: 600,
+                }}
+              >📥 Importa CORRISP.xml</button>
               <input
                 type="date"
                 value={dataManualeInput}
@@ -2725,6 +2778,77 @@ function TabControlloRT() {
               borderRadius: 7, cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem',
             }}
           >{salvando ? 'Salvataggio…' : 'Salva chiusure RT'}</button>
+        </div>
+      )}
+
+      {dialogImport && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 440 }}>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1e3a5f', marginBottom: 4 }}>Importa CORRISP.xml</div>
+            <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '0 0 16px' }}>
+              File prodotto dal registratore telematico dopo ogni chiusura Z.
+            </p>
+
+            <label style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 4 }}>Registratore telematico</label>
+            <select value={importRt} onChange={e => setImportRt(e.target.value)} style={{ ...inpSt, width: '100%', marginBottom: 14, boxSizing: 'border-box' }}>
+              <option value="RT1">RT1 — Du Parc + Club Hotel</option>
+              <option value="RT2">RT2 — Hotel International</option>
+            </select>
+
+            <label style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 4 }}>File CORRISP.xml</label>
+            <input
+              type="file"
+              accept=".xml"
+              onChange={e => setImportFile(e.target.files?.[0] || null)}
+              style={{ ...inpSt, width: '100%', marginBottom: 6, boxSizing: 'border-box' }}
+            />
+            {importFile && (
+              <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 6px' }}>
+                {importFile.name}{dataDaNomeFile(importFile.name) ? ` — data ${dataDaNomeFile(importFile.name)}` : ''}
+              </p>
+            )}
+            {importFile && !importFile.name.toUpperCase().includes('CORRISP') && (
+              <p style={{ fontSize: '0.75rem', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '5px 8px', margin: '0 0 10px' }}>
+                Verifica che sia un file CORRISP.xml dell'RT
+              </p>
+            )}
+
+            <label style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 4, marginTop: 10 }}>Se già presente</label>
+            <select value={importOnConflict} onChange={e => setImportOnConflict(e.target.value)} style={{ ...inpSt, width: '100%', boxSizing: 'border-box' }}>
+              <option value="salta">Salta se già presente</option>
+              <option value="aggiorna">Aggiorna</option>
+            </select>
+            {importOnConflict === 'aggiorna' && (
+              <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '4px 0 0' }}>
+                Le righe modificate manualmente non verranno sovrascritte.
+              </p>
+            )}
+
+            {importMsg && (
+              <p style={{
+                fontSize: '0.82rem', marginTop: 14, padding: '8px 10px', borderRadius: 6,
+                background: importMsg.tipo === 'success' ? '#f0fdf4' : importMsg.tipo === 'warning' ? '#fffbeb' : importMsg.tipo === 'error' ? '#fef2f2' : '#eff6ff',
+                color:      importMsg.tipo === 'success' ? '#166534' : importMsg.tipo === 'warning' ? '#92400e' : importMsg.tipo === 'error' ? '#dc2626' : '#1e40af',
+              }}>{importMsg.testo}</p>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+              <button onClick={() => setDialogImport(false)} style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer', fontSize: '0.85rem' }}>
+                Chiudi
+              </button>
+              <button
+                onClick={eseguiImport}
+                disabled={!importFile || importInCorso}
+                style={{
+                  padding: '9px 16px', borderRadius: 8, border: 'none', color: '#fff', fontSize: '0.85rem', fontWeight: 700,
+                  background: (!importFile || importInCorso) ? '#93c5fd' : '#1e3a5f',
+                  cursor: (!importFile || importInCorso) ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {importInCorso ? 'Importazione in corso…' : 'Importa'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

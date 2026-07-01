@@ -150,6 +150,19 @@ class RtChiusura(Base):
     totale_22 = Column(Numeric(12, 2), nullable=True)      # shop 22%
     totale_ts = Column(Numeric(12, 2), nullable=True)      # tassa soggiorno esente
     totale_penali = Column(Numeric(12, 2), nullable=True)  # penali esente
+    # Dettaglio da import CORRISP.xml (AdE) — opzionali, assenti su righe manuali pre-esistenti
+    progressivo = Column(Integer, nullable=True)
+    imponibile_10 = Column(Numeric(12, 2), nullable=True)
+    imposta_10 = Column(Numeric(12, 2), nullable=True)
+    imponibile_22 = Column(Numeric(12, 2), nullable=True)
+    imposta_22 = Column(Numeric(12, 2), nullable=True)
+    esente_n1 = Column(Numeric(12, 2), nullable=True)
+    tassa_soggiorno_nrs = Column(Numeric(12, 2), nullable=True)
+    num_documenti = Column(Integer, nullable=True)
+    pagato_contanti = Column(Numeric(12, 2), nullable=True)
+    pagato_elettronico = Column(Numeric(12, 2), nullable=True)
+    # True per righe inserite/corrette a mano: l'import XML non le sovrascrive mai
+    modificato_manualmente = Column(Boolean, nullable=False, default=False)
     note = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -211,7 +211,11 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
 ### Tabelle DB principali
 - `corrispettivi_documenti`: UNIQUE(struttura_code, data_documento, numero, suffisso); audit trail (`modificato_manualmente`, `*_originale`); `camera` e `codice_prenotazione` TEXT (prenotazioni gruppo = liste lunghe).
 - `corrispettivi_manuali`: UNIQUE(data_giorno, struttura_code).
-- `rt_chiusure`: UNIQUE(data_chiusura, rt_code); RT1→[DPH,CLB], RT2→[INT].
+- `rt_chiusure`: UNIQUE(data_chiusura, rt_code); RT1→[DPH,CLB], RT2→[INT]. Audit trail `modificato_manualmente`
+  (come `corrispettivi_documenti`): tutte le righe inserite prima di luglio 2026 sono marcate `True` (protette).
+  Campi dettaglio da CORRISP.xml: `progressivo`, `imponibile_10/22`, `imposta_10/22`, `esente_n1`,
+  `tassa_soggiorno_nrs`, `num_documenti`, `pagato_contanti`, `pagato_elettronico` — tutti nullable
+  (assenti sulle righe manuali che non arrivano da import XML).
 
 ### Idempotenza import
 - **salta** (default): ON CONFLICT DO NOTHING
@@ -225,7 +229,15 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
 - `GET /report/giornaliero?data_da=&data_a=&struttura_code=&tipo=` → valori lordi; toggle IVA client-side
 - `GET /report/fatturati?anno=&lordo=` → tassa soggiorno esclusa dal totale (transito Comune)
 - `GET /check?data_da=&data_a=`
-- `POST|GET|DELETE /rt-chiusure`
+- `POST|GET|DELETE /rt-chiusure` (scrittura: admin)
+- `POST /rt-chiusure/import-xml?rt_code=RT1|RT2&on_conflict=salta|aggiorna` (multipart `file`, admin) →
+  parsing CORRISP.xml (`services/corrisp_xml_parser.py`), popola `rt_chiusure`. Un file copre un RT intero
+  (RT1 = DPH+CLB, RT2 = INT), non un singolo hotel. Formula totale: Σ `Ammontare` (righe con `AliquotaIVA`,
+  solo se >0) + Σ `ImportoParziale` (righe con `Natura`, solo se >0). Popola anche i campi legacy
+  `totale_10/22/ts/penali` usati dal confronto per categoria vs PMS (`totale_10/22` = `Ammontare` lordo,
+  `totale_ts` = `tassa_soggiorno_nrs`, `totale_penali` = 0 — l'XML non ha una Natura dedicata alle penali).
+  Protegge sempre `modificato_manualmente=True` anche con `on_conflict=aggiorna` (risponde `esito=saltato`).
+  Frontend: pulsante "Importa CORRISP.xml" in `TabControlloRT` (dentro `Corrispettivi.jsx`).
 
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.

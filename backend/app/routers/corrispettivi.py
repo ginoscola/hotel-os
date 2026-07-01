@@ -24,6 +24,7 @@ Endpoint:
   DELETE /corrispettivi/admin/test-data       → cancella tutti i record is_test
 
   POST   /corrispettivi/rt-chiusure           → upsert chiusura RT giornaliera (admin)
+  POST   /corrispettivi/rt-chiusure/import-xml → import CORRISP.xml del RT (admin)
   GET    /corrispettivi/rt-chiusure           → lista mese con delta vs PMS
   DELETE /corrispettivi/rt-chiusure/{id}      → elimina chiusura RT (admin)
 """
@@ -48,6 +49,7 @@ from app.models.corrispettivi import (
     RtChiusura,
 )
 from app.services.corrispettivi_excel_parser import _determina_categoria, parse_excel
+from app.services.corrisp_xml_parser import parse_corrisp_xml
 
 router = APIRouter(prefix="/corrispettivi", tags=["corrispettivi"])
 
@@ -1647,6 +1649,17 @@ def _fmt_rt(r: RtChiusura) -> dict:
         'totale_22': float(r.totale_22) if r.totale_22 is not None else None,
         'totale_ts': float(r.totale_ts) if r.totale_ts is not None else None,
         'totale_penali': float(r.totale_penali) if r.totale_penali is not None else None,
+        'progressivo': r.progressivo,
+        'imponibile_10': float(r.imponibile_10) if r.imponibile_10 is not None else None,
+        'imposta_10': float(r.imposta_10) if r.imposta_10 is not None else None,
+        'imponibile_22': float(r.imponibile_22) if r.imponibile_22 is not None else None,
+        'imposta_22': float(r.imposta_22) if r.imposta_22 is not None else None,
+        'esente_n1': float(r.esente_n1) if r.esente_n1 is not None else None,
+        'tassa_soggiorno_nrs': float(r.tassa_soggiorno_nrs) if r.tassa_soggiorno_nrs is not None else None,
+        'num_documenti': r.num_documenti,
+        'pagato_contanti': float(r.pagato_contanti) if r.pagato_contanti is not None else None,
+        'pagato_elettronico': float(r.pagato_elettronico) if r.pagato_elettronico is not None else None,
+        'modificato_manualmente': r.modificato_manualmente,
         'note': r.note,
         'created_at': r.created_at.isoformat() if r.created_at else None,
     }
@@ -1685,6 +1698,7 @@ def upsert_rt_chiusura(
         esistente.totale_penali = _dec(body.get('totale_penali'))
         esistente.note = body.get('note')
         esistente.updated_by = utente.id
+        esistente.modificato_manualmente = True
         db.commit()
         db.refresh(esistente)
         return _fmt_rt(esistente)
@@ -1699,11 +1713,66 @@ def upsert_rt_chiusura(
         totale_penali=_dec(body.get('totale_penali')),
         note=body.get('note'),
         created_by=utente.id,
+        modificato_manualmente=True,
     )
     db.add(nuovo)
     db.commit()
     db.refresh(nuovo)
     return _fmt_rt(nuovo)
+
+
+@router.post("/rt-chiusure/import-xml")
+def importa_rt_chiusura_xml(
+    file: UploadFile = File(...),
+    rt_code: str = Query(..., description="RT1 (DPH+CLB) o RT2 (INT)"),
+    on_conflict: str = Query('salta', description="'salta' (non tocca righe già presenti) o 'aggiorna' (rispetta modificato_manualmente)"),
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    """Importa un file CORRISP.xml del registratore telematico e popola/aggiorna rt_chiusure."""
+    if rt_code not in RT_STRUTTURE:
+        raise HTTPException(400, f"rt_code non valido: usa {list(RT_STRUTTURE.keys())}")
+    if on_conflict not in ('salta', 'aggiorna'):
+        raise HTTPException(400, "on_conflict deve essere 'salta' o 'aggiorna'")
+    if not file.filename.lower().endswith('.xml'):
+        raise HTTPException(400, "Solo file .xml accettati")
+
+    contenuto = file.file.read()
+    try:
+        dati = parse_corrisp_xml(contenuto)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Errore parsing CORRISP.xml: {exc}")
+
+    def _risposta(esito: str, warning: Optional[str] = None) -> dict:
+        return {
+            'esito': esito,
+            'data_chiusura': dati['data_chiusura'].isoformat(),
+            'rt_code': rt_code,
+            'totale_giorno': float(dati['totale_giorno']),
+            'progressivo': dati['progressivo'],
+            'warning': warning,
+        }
+
+    esistente = db.query(RtChiusura).filter(
+        RtChiusura.data_chiusura == dati['data_chiusura'],
+        RtChiusura.rt_code == rt_code,
+    ).first()
+
+    if esistente:
+        if on_conflict == 'salta':
+            return _risposta('saltato', 'Riga già presente — saltata')
+        if esistente.modificato_manualmente:
+            return _risposta('saltato', 'Riga modificata manualmente — non sovrascritta')
+        for campo, valore in dati.items():
+            setattr(esistente, campo, valore)
+        esistente.updated_by = utente.id
+        db.commit()
+        return _risposta('aggiornato')
+
+    nuovo = RtChiusura(rt_code=rt_code, created_by=utente.id, modificato_manualmente=False, **dati)
+    db.add(nuovo)
+    db.commit()
+    return _risposta('inserito')
 
 
 @router.get("/rt-chiusure")
