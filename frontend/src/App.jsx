@@ -6,12 +6,14 @@ import Import from './pages/Import.jsx'
 import ImportBulk from './pages/ImportBulk.jsx'
 import DashboardHotel from './pages/DashboardHotel.jsx'
 import DashboardGruppo from './pages/DashboardGruppo.jsx'
-import Admin from './pages/Admin.jsx'
 import AdminUtenti from './pages/AdminUtenti.jsx'
 import Budget from './pages/Budget.jsx'
 import Usali from './pages/Usali.jsx'
 import Dipendenti from './pages/Dipendenti.jsx'
 import Corrispettivi from './pages/Corrispettivi.jsx'
+import AdminCentriDiCosto from './pages/AdminCentriDiCosto.jsx'
+import Forecast from './pages/Forecast.jsx'
+import AdminUnificato from './pages/AdminUnificato.jsx'
 
 export default function App() {
   return (
@@ -41,10 +43,13 @@ export default function App() {
             <ProtectedRoute ruoloRichiesto="admin" moduleCode="revenue"><ImportBulk /></ProtectedRoute>
           } />
           <Route path="/admin" element={
-            <ProtectedRoute ruoloRichiesto="admin" moduleCode="revenue"><Admin /></ProtectedRoute>
+            <ProtectedRoute ruoloRichiesto="admin"><AdminUnificato /></ProtectedRoute>
           } />
           <Route path="/admin/utenti" element={
             <ProtectedRoute ruoloRichiesto="admin" moduleCode="revenue"><AdminUtenti /></ProtectedRoute>
+          } />
+          <Route path="/admin/centri-di-costo" element={
+            <ProtectedRoute ruoloRichiesto="admin" moduleCode="dipendenti"><AdminCentriDiCosto /></ProtectedRoute>
           } />
 
           {/* ── Altri moduli ── */}
@@ -59,6 +64,9 @@ export default function App() {
           } />
           <Route path="/corrispettivi" element={
             <ProtectedRoute moduleCode="corrispettivi"><Corrispettivi /></ProtectedRoute>
+          } />
+          <Route path="/forecast" element={
+            <ProtectedRoute moduleCode="forecast"><Forecast /></ProtectedRoute>
           } />
         </Routes>
       </main>

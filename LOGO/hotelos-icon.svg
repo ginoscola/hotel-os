@@ -1,0 +1,57 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <title>HotelOS - Icona</title>
+  <desc>Icona dell'applicazione HotelOS: pannello di controllo con grafico a torta, indicatore di trend, indicatore di progresso e grafico a barre, su sfondo blu con scritta HotelOS.</desc>
+
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#2d6a9f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Layer: Sfondo -->
+  <g id="layer-background">
+    <rect id="bg-rounded-square" x="10" y="10" width="180" height="180" rx="30" fill="url(#bg-gradient)"/>
+  </g>
+
+  <!-- Layer: Quadrati del pannello -->
+  <g id="layer-panel-squares">
+    <rect id="square-top-left" x="40" y="32" width="54" height="54" rx="10" fill="#ffffff" opacity="0.95"/>
+    <rect id="square-top-right" x="102" y="32" width="54" height="54" rx="10" fill="#7ec8f5"/>
+    <rect id="square-bottom-left" x="40" y="94" width="54" height="54" rx="10" fill="#34d399"/>
+    <rect id="square-bottom-right" x="102" y="94" width="54" height="54" rx="10" fill="#ffffff" opacity="0.95"/>
+  </g>
+
+  <!-- Layer: Icona grafico a torta (quadrato in alto a sinistra) -->
+  <g id="layer-icon-piechart">
+    <circle id="pie-base-azzurro" cx="67" cy="59" r="18" fill="#7ec8f5"/>
+    <path id="pie-spicchio-blu" d="M 67 59 L 67 41 A 18 18 0 0 1 82.6 50 Z" fill="#1e3a5f"/>
+    <path id="pie-spicchio-arancione" d="M 67 59 L 82.6 50 A 18 18 0 0 1 82.6 68 Z" fill="#f5a25b"/>
+  </g>
+
+  <!-- Layer: Icona trend/freccia (quadrato in alto a destra) -->
+  <g id="layer-icon-trend">
+    <path id="trend-arrow" d="M 114 59 L 123 50 L 134 63 L 145 47" stroke="#1e3a5f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Layer: Icona progresso/check (quadrato in basso a sinistra) -->
+  <g id="layer-icon-progress">
+    <circle id="progress-circle" cx="67" cy="121" r="15" fill="none" stroke="#1e3a5f" stroke-width="3.5"/>
+    <path id="progress-check" d="M 67 114 L 67 121 L 72 126" stroke="#1e3a5f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Layer: Icona grafico a barre (quadrato in basso a destra) -->
+  <g id="layer-icon-barchart">
+    <rect id="bar-1" x="112" y="124" width="7" height="14" fill="#1e3a5f"/>
+    <rect id="bar-2" x="124" y="114" width="7" height="24" fill="#1e3a5f"/>
+    <rect id="bar-3" x="136" y="106" width="7" height="32" fill="#1e3a5f"/>
+  </g>
+
+  <!-- Layer: Testo logo -->
+  <g id="layer-text">
+    <text id="text-hotelos" x="40" y="172" textLength="116" lengthAdjust="spacingAndGlyphs" font-family="Helvetica, Arial, sans-serif" font-size="24">
+      <tspan id="text-hotel" font-weight="400" fill="#ffffff">Hotel</tspan><tspan id="text-os" font-weight="700" fill="#7ec8f5">OS</tspan>
+    </text>
+  </g>
+
+</svg>

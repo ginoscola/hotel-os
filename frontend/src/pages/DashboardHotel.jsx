@@ -8,13 +8,68 @@ import {
 import api from '../api/client.js'
 import KPICard from '../components/KPICard.jsx'
 import { ExportMenu, SezioneHeader } from '../components/ExportMenu.jsx'
+import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import { useSnapshotConfronto } from '../hooks/useSnapshotConfronto.js'
 import {
-  formatEuro, formatPerc, formatN, formatData, addDays, calcolaDelta,
+  formatEuro, formatPerc, formatN, formatData, addDays, calcolaDelta, mostraErrore,
 } from '../utils/format.js'
 
 const HOTEL_CODES = ['CLB', 'DPH', 'INT']
 const HOTEL_NOMI = { CLB: 'Club Hotel', DPH: 'Hotel Du Parc', INT: 'Hotel International' }
+
+const MESI_IT = [
+  'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
+]
+
+function aggregaMensile(giorni) {
+  const mesi = {}
+  for (const g of giorni) {
+    if (!g.data) continue
+    const ym = g.data.slice(0, 7)
+    if (!mesi[ym]) {
+      mesi[ym] = {
+        ym, rooms_sold: 0, rooms_available: 0,
+        revenue_rooms: 0, revenue_fnb: 0, revenue_extra: 0, revenue_total: 0,
+        giorni_presenze: 0,
+      }
+    }
+    const m = mesi[ym]
+    m.rooms_sold     += g.rooms_sold     || 0
+    m.rooms_available += g.rooms_available || 0
+    m.revenue_rooms  += g.revenue_rooms  || 0
+    m.revenue_fnb    += g.revenue_fnb    || 0
+    m.revenue_extra  += g.revenue_extra  || 0
+    m.revenue_total  += g.revenue_total  || 0
+    if ((g.rooms_sold || 0) > 0) m.giorni_presenze += 1
+  }
+  return Object.values(mesi)
+    .filter(m => m.rooms_sold > 0)
+    .sort((a, b) => a.ym.localeCompare(b.ym))
+    .map(m => {
+      const [year, month] = m.ym.split('-')
+      const label    = `${MESI_IT[parseInt(month) - 1]} ${year}`
+      const rs = m.rooms_sold, ra = m.rooms_available, rt = m.revenue_total
+      return {
+        label,
+        giorni:      m.giorni_presenze,
+        rooms_sold:  rs,
+        rooms_available: ra,
+        revenue_rooms:  m.revenue_rooms,
+        revenue_fnb:    m.revenue_fnb,
+        revenue_extra:  m.revenue_extra,
+        revenue_total:  rt,
+        occupancy: ra > 0 ? (rs / ra * 100) : null,
+        adr:       rs > 0 ? (m.revenue_rooms / rs) : null,
+        rmc:       rs > 0 ? (rt / rs) : null,
+        revpar:    ra > 0 ? (m.revenue_rooms / ra) : null,
+        trevpar:   ra > 0 ? (rt / ra) : null,
+        inc_rooms: rt > 0 ? (m.revenue_rooms / rt * 100) : null,
+        inc_fnb:   rt > 0 ? (m.revenue_fnb   / rt * 100) : null,
+        inc_extra: rt > 0 ? (m.revenue_extra  / rt * 100) : null,
+      }
+    })
+}
 
 /**
  * Allinea i dati di confronto ai giorni correnti.
@@ -120,7 +175,7 @@ export default function DashboardHotel() {
         setCompDisponibile(!confrontoAttivo || !!(confrontoAttivo && compSnap))
       }
     } catch (err) {
-      setErrore(err.response?.data?.detail || err.message)
+      setErrore(mostraErrore(err))
       setDati(null)
     } finally {
       setLoading(false)
@@ -257,6 +312,133 @@ export default function DashboardHotel() {
   )
 }
 
+function CardCorrispettivi({ hotel, data }) {
+  const [kpi, setKpi] = useState(null)
+
+  useEffect(() => {
+    if (!data) return
+    setKpi(null)
+    api.get(`/corrispettivi/kpi/giornaliero?data=${data}&struttura_code=${hotel}`)
+      .then(r => setKpi(r.data))
+      .catch(() => setKpi(null))
+  }, [hotel, data])
+
+  if (!kpi || kpi.n_documenti === 0) return null
+
+  return (
+    <div className="card sezione" style={{ marginTop: '1rem' }}>
+      <h3 style={{ margin: '0 0 0.75rem' }}>Corrispettivi — {data}</h3>
+      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 12, color: '#6b7280' }}>Documenti</div>
+          <div style={{ fontWeight: 600, fontSize: 20 }}>{kpi.n_documenti}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: '#6b7280' }}>Incassato</div>
+          <div style={{ fontWeight: 600, fontSize: 20 }}>{formatEuro(kpi.totale_incassato)}</div>
+        </div>
+        {kpi.totale_sospeso > 0 && (
+          <div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>Sospeso</div>
+            <div style={{ fontWeight: 600, fontSize: 20, color: '#d97706' }}>{formatEuro(kpi.totale_sospeso)}</div>
+          </div>
+        )}
+        {kpi.n_sospesi_aperti > 0 && (
+          <div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>Sospesi aperti</div>
+            <div style={{ fontWeight: 600, fontSize: 20, color: '#ef4444' }}>{kpi.n_sospesi_aperti}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TabellaAggregatiMensili({ mesi }) {
+  if (!mesi || mesi.length === 0) return null
+
+  const tot = mesi.reduce((acc, m) => {
+    acc.rooms_sold      += m.rooms_sold
+    acc.rooms_available += m.rooms_available
+    acc.revenue_rooms   += m.revenue_rooms
+    acc.revenue_fnb     += m.revenue_fnb
+    acc.revenue_extra   += m.revenue_extra
+    acc.revenue_total   += m.revenue_total
+    acc.giorni          += m.giorni
+    return acc
+  }, { rooms_sold: 0, rooms_available: 0, revenue_rooms: 0, revenue_fnb: 0, revenue_extra: 0, revenue_total: 0, giorni: 0 })
+
+  const { rooms_sold: rs, rooms_available: ra, revenue_total: rt } = tot
+  const totKpi = {
+    occupancy: ra > 0 ? (rs / ra * 100) : null,
+    adr:       rs > 0 ? (tot.revenue_rooms / rs) : null,
+    rmc:       rs > 0 ? (rt / rs) : null,
+    revpar:    ra > 0 ? (tot.revenue_rooms / ra) : null,
+    trevpar:   ra > 0 ? (rt / ra) : null,
+    inc_rooms: rt > 0 ? (tot.revenue_rooms / rt * 100) : null,
+    inc_fnb:   rt > 0 ? (tot.revenue_fnb   / rt * 100) : null,
+    inc_extra: rt > 0 ? (tot.revenue_extra  / rt * 100) : null,
+  }
+
+  return (
+    <div className="card sezione">
+      <h3 style={{ margin: '0 0 0.75rem' }}>Aggregati mensili — intera stagione</h3>
+      <div style={{ overflowX: 'auto' }}>
+        <table>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left' }}>Mese</th>
+              <th>Gg.</th>
+              <th>Cam. vend.</th>
+              <th>Occup. %</th>
+              <th>ADR</th>
+              <th>RMC</th>
+              <th>RevPAR</th>
+              <th>TRevPAR</th>
+              <th>Inc. Rooms</th>
+              <th>Inc. F&B</th>
+              <th>Inc. Extra</th>
+              <th>Rev. Totale</th>
+            </tr>
+          </thead>
+          <tbody>
+            {mesi.map((m, i) => (
+              <tr key={i}>
+                <td>{m.label}</td>
+                <td>{m.giorni}</td>
+                <td>{formatN(m.rooms_sold)}</td>
+                <td>{m.occupancy != null ? formatPerc(m.occupancy) : '—'}</td>
+                <td>{m.adr != null ? formatEuro(m.adr) : '—'}</td>
+                <td>{m.rmc != null ? formatEuro(m.rmc) : '—'}</td>
+                <td>{m.revpar != null ? formatEuro(m.revpar) : '—'}</td>
+                <td>{m.trevpar != null ? formatEuro(m.trevpar) : '—'}</td>
+                <td>{m.inc_rooms != null ? formatPerc(m.inc_rooms) : '—'}</td>
+                <td>{m.inc_fnb != null ? formatPerc(m.inc_fnb) : '—'}</td>
+                <td>{m.inc_extra != null ? formatPerc(m.inc_extra) : '—'}</td>
+                <td>{formatEuro(m.revenue_total)}</td>
+              </tr>
+            ))}
+            <tr style={{ fontWeight: 700, borderTop: '2px solid #e5e7eb', background: '#f9fafb' }}>
+              <td>TOTALE STAGIONE</td>
+              <td>{tot.giorni}</td>
+              <td>{formatN(tot.rooms_sold)}</td>
+              <td>{totKpi.occupancy != null ? formatPerc(totKpi.occupancy) : '—'}</td>
+              <td>{totKpi.adr != null ? formatEuro(totKpi.adr) : '—'}</td>
+              <td>{totKpi.rmc != null ? formatEuro(totKpi.rmc) : '—'}</td>
+              <td>{totKpi.revpar != null ? formatEuro(totKpi.revpar) : '—'}</td>
+              <td>{totKpi.trevpar != null ? formatEuro(totKpi.trevpar) : '—'}</td>
+              <td>{totKpi.inc_rooms != null ? formatPerc(totKpi.inc_rooms) : '—'}</td>
+              <td>{totKpi.inc_fnb != null ? formatPerc(totKpi.inc_fnb) : '—'}</td>
+              <td>{totKpi.inc_extra != null ? formatPerc(totKpi.inc_extra) : '—'}</td>
+              <td>{formatEuro(tot.revenue_total)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function ContenutoDashboard({
   dati, datiComp, compLabel, isAnnoPrecedente,
   hotel, currentSnap, giornalieriEspansi, onToggleGiornalieri,
@@ -272,6 +454,8 @@ function ContenutoDashboard({
     () => mergeConfrontoGiorni(giorni, datiComp?.giorni, isAnnoPrecedente),
     [giorni, datiComp, isAnnoPrecedente]
   )
+
+  const mesiAggregati = useMemo(() => aggregaMensile(giorni), [giorni])
 
   function kpiDelta(key) { return calcolaDelta(kpi[key], kpiComp?.[key]) }
   function kpiCompV(key, fmt) {
@@ -369,6 +553,7 @@ function ContenutoDashboard({
               formatter={(v, n) => [v != null ? `${Number(v).toFixed(1)}%` : '—', n]}
             />
             <Legend />
+            {pastReferenceArea(giorniMerged, 'data', null, currentSnap?.snapshot_date)}
             {/* Area di evidenziazione settimana di riferimento */}
             {refStart && refEnd && (
               <ReferenceArea x1={refStart} x2={refEnd}
@@ -407,6 +592,7 @@ function ContenutoDashboard({
                 formatter={v => v != null ? formatEuro(v) : '—'}
               />
               <Legend />
+              {pastReferenceArea(giorniMerged, 'data', null, currentSnap?.snapshot_date)}
               {refStart && refEnd && (
                 <ReferenceArea x1={refStart} x2={refEnd}
                   fill="#3b82f6" fillOpacity={0.08} />
@@ -432,6 +618,7 @@ function ContenutoDashboard({
                 formatter={v => formatEuro(v)}
               />
               <Legend />
+              {pastReferenceArea(giorniMerged, 'data', null, currentSnap?.snapshot_date)}
               {refStart && refEnd && (
                 <ReferenceArea x1={refStart} x2={refEnd}
                   fill="#3b82f6" fillOpacity={0.08} />
@@ -511,6 +698,9 @@ function ContenutoDashboard({
         </div>
       )}
 
+      {/* Aggregati mensili — intera stagione */}
+      <TabellaAggregatiMensili mesi={mesiAggregati} />
+
       {/* Tabella giornaliera — collassabile */}
       {giorni.length > 0 && (
         <div className="card sezione">
@@ -571,6 +761,14 @@ function ContenutoDashboard({
             </div>
           )}
         </div>
+      )}
+
+      {/* Card Corrispettivi — mostra KPI del giorno di riferimento se disponibili */}
+      {refStart && (
+        <CardCorrispettivi
+          hotel={hotel}
+          data={refStart}
+        />
       )}
     </>
   )

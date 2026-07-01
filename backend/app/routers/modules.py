@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
-from app.models.revenue import Module, ModulePermission
+from app.models.revenue import Module, ModulePermission, UserModulePermission
 
 router = APIRouter(prefix="/modules", tags=["modules"])
 
@@ -76,12 +76,30 @@ def lista_moduli(utente=Depends(richiedi_utente_attivo), db: Session = Depends(g
     I moduli disattivati non compaiono nella lista.
     """
     moduli = db.query(Module).filter(Module.attivo == True).order_by(Module.ordine).all()
+    # Carica override per-utente in un dict module_code → UserModulePermission
+    overrides = {
+        o.module_code: o
+        for o in db.query(UserModulePermission).filter(UserModulePermission.user_id == utente.id).all()
+    }
     result = []
     for m in moduli:
-        perm = db.query(ModulePermission).filter(
-            ModulePermission.module_code == m.code,
-            ModulePermission.ruolo == utente.ruolo,
-        ).first()
+        # Gli admin vedono e modificano sempre tutto
+        if utente.ruolo == 'admin':
+            puo_vedere = True
+            puo_modificare = True
+            puo_importare = True
+        else:
+            perm_ruolo = db.query(ModulePermission).filter(
+                ModulePermission.module_code == m.code,
+                ModulePermission.ruolo == utente.ruolo,
+            ).first()
+            # Override per-utente su puo_vedere; modificare/importare sempre dal ruolo
+            if m.code in overrides:
+                puo_vedere = overrides[m.code].puo_vedere
+            else:
+                puo_vedere = perm_ruolo.puo_vedere if perm_ruolo else False
+            puo_modificare = perm_ruolo.puo_modificare if perm_ruolo else False
+            puo_importare = perm_ruolo.puo_importare if perm_ruolo else False
         result.append(ModuleSchema(
             code=m.code,
             name=m.name,
@@ -91,9 +109,9 @@ def lista_moduli(utente=Depends(richiedi_utente_attivo), db: Session = Depends(g
             ordine=m.ordine,
             attivo=m.attivo,
             colore=m.colore,
-            puo_vedere=perm.puo_vedere if perm else False,
-            puo_modificare=perm.puo_modificare if perm else False,
-            puo_importare=perm.puo_importare if perm else False,
+            puo_vedere=puo_vedere,
+            puo_modificare=puo_modificare,
+            puo_importare=puo_importare,
         ))
     return result
 

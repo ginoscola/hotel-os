@@ -1,4 +1,4 @@
-import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useState, useMemo } from 'react'
 import { getUtenteCorrente } from './ProtectedRoute.jsx'
 import api from '../api/client.js'
@@ -18,7 +18,6 @@ function getSubnav(modulo, hotels, isAdmin) {
       ...hotelItems,
       ...(hotelItems.length > 0 ? [{ tipo: 'sep' }] : []),
       { label: 'Gruppo', to: '/dashboard/gruppo' },
-      ...(isAdmin ? [{ tipo: 'sep' }, { label: 'Admin', to: '/admin' }] : []),
     ]
   }
 
@@ -106,7 +105,7 @@ export default function NavBar() {
       <nav className="navbar-l1">
         {/* Brand */}
         <NavLink to="/dashboard/gruppo" className="navbar-brand">
-          <img src="/logo.png" alt="Logo" className="navbar-brand-logo" />
+          <img src="/hotelos-icon.svg" alt="HotelOS" className="navbar-brand-logo" />
           {appName}
         </NavLink>
 
@@ -131,6 +130,11 @@ export default function NavBar() {
 
         {/* Utente */}
         <div className="navbar-user">
+          {isAdmin && (
+            <Link to="/admin" className="navbar-admin-link">
+              ⚙ Admin
+            </Link>
+          )}
           <span className="navbar-username">{utente.username}</span>
           <span className={`navbar-badge navbar-badge--${utente.ruolo}`}>{utente.ruolo}</span>
           <button className="navbar-logout" onClick={handleLogout}>Esci</button>

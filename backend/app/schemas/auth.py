@@ -32,6 +32,8 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = Field(None, max_length=50)
+    email: Optional[EmailStr] = None
     ruolo: Optional[str] = Field(None, pattern='^(admin|viewer)$')
     attivo: Optional[bool] = None
 

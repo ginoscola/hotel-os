@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import api from '../api/client.js'
-import { formatData } from '../utils/format.js'
+import { formatData, mostraErrore } from '../utils/format.js'
 
 export default function ImportBulk() {
   const [cartella, setCartella] = useState('')
@@ -23,8 +23,7 @@ export default function ImportBulk() {
       const { data } = await api.post(`/upload/bulk?${params}`)
       setRisultato(data)
     } catch (err) {
-      const msg = err.response?.data?.detail || err.message
-      setErrore(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      setErrore(mostraErrore(err))
     } finally {
       setLoading(false)
     }

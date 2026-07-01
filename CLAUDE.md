@@ -1,488 +1,304 @@
 # HotelOS — Istruzioni per Claude Code
 
-## Contesto del progetto
-Applicazione web di gestione alberghiera per gruppo alberghiero.
-Replica e migliora un sistema precedentemente basato su Google Sheets + Apps Script.
-Linguaggio dell'applicazione: italiano.
+> **Prima di scrivere codice**: presentare strategia, file coinvolti, rischi. Attendere conferma.
+> **Aggiornare questo file** a ogni sessione con modifiche significative (endpoint, modelli, logica business).
+> **Dopo ogni modifica testata e funzionante**: committare i file coinvolti e fare `git push origin main` per tenere GitHub aggiornato.
 
-## Hotel del gruppo
-- CLB = Club Hotel, 45 camere
-- DPH = Hotel Du Parc, 43 camere
-- INT = Hotel International, 45 camere
+## Progetto e stack
+Gestione alberghiera per gruppo (CLB=Club Hotel 45cam, DPH=Du Parc 43cam, INT=International 45cam).
+Replica sistema Google Sheets + Apps Script. Lingua: italiano.
+Stack: FastAPI + SQLAlchemy + Alembic + PostgreSQL / React + Vite / openpyxl + reportlab / pytest.
 
 ## Stagioni operative
-Ogni hotel ha date di apertura e chiusura che cambiano ogni anno.
-Configurate nella tabella `hotel_seasons` (hotel_id, season_year, open_date, close_date, total_rooms, notes).
-
-Stagioni 2026:
-- DPH: 01/05/2026 – 19/09/2026
-- CLB: 30/05/2026 – 19/09/2026
-- INT: 30/05/2026 – 19/09/2026
-
-Regole parser con filtro stagionale:
-- Le date fuori dal periodo open_date–close_date vengono scartate con WARNING (non errore bloccante)
-- Il contatore `righe_fuori_stagione` traccia quante righe sono state escluse
-- La lista `warnings` contiene messaggi descrittivi con hotel_code, data e motivo
-- Senza filtro stagionale il parser accetta tutte le date valide (comportamento di default)
-- Il router POST /upload/coppia/{hotel_code} legge automaticamente la stagione dal DB
-
-## Stack tecnologico
-- Backend: Python 3.11 + FastAPI + SQLAlchemy + Alembic
-- Database: PostgreSQL (locale su Mac in sviluppo)
-- Frontend: React + Vite
-- Export: openpyxl (Excel), reportlab (PDF)
-- Test: pytest
+Tabella `hotel_seasons` (hotel_id, season_year, open_date, close_date, total_rooms, notes).
+Stagioni 2026: DPH 01/05–19/09, CLB e INT 30/05–19/09.
+Parser con filtro stagionale: date fuori range → WARNING (non errore), contatore `righe_fuori_stagione`.
 
 ## Struttura cartelle
-- backend/app/services/    → logica business (parser, calculator, aggregator)
-- backend/app/routers/     → endpoint API FastAPI
-  - hotels.py              → GET /hotels/, POST /hotels/, PUT /hotels/{code}, POST /hotels/{code}/seasons, GET /hotels/{code}/seasons/{year}
-  - upload.py              → POST /upload/coppia/{hotel_code}, POST /upload/bulk
-  - settimane.py           → GET /settimane/{hotel_code}, GET /settimane/gruppo
-  - snapshots.py           → GET /snapshots/{hotel_code}
-  - export.py              → GET /export/hotel/{code}/settimanale|giornaliero?snapshot=, GET /export/gruppo
-  - admin.py               → GET /admin/test-stats, DELETE /admin/test-data
-  - dashboard.py           → GET /dashboard/hotel/{code}?snapshot=, GET /dashboard/gruppo
-  - config.py              → GET /config/, GET /config/{key} (sola lettura)
-  - budget.py              → POST /budget/{hotel_code}/{season_year}, GET /budget/{hotel_code}/{season_year}, GET /budget/{hotel_code}/{season_year}/{week_start}
-- backend/app/models/      → modelli database SQLAlchemy
-  - Hotel, HotelSeason, DailyRevenue, ImportSession, AppConfig, BudgetEntry
-- backend/app/schemas/     → validazione Pydantic
-- backend/app/utils/       → utility condivise
-  - locale_it.py           → MESI_IT, GIORNI_IT, formatta_data_it() — unica sorgente di verità per la localizzazione
-- frontend/src/pages/      → pagine React
-- frontend/src/components/ → componenti riutilizzabili
-- uploads/                 → file CSV caricati (non committare in git)
-- tests/                   → test con i file CSV reali degli hotel
+```
+backend/app/
+  services/   → logica business (parser, calculator, aggregator)
+  routers/    → endpoint FastAPI (vedi sezioni moduli)
+  models/     → SQLAlchemy (revenue.py, corrispettivi.py, analisi_ricavi.py, rooms.py, shared.py)
+  schemas/    → Pydantic
+  utils/
+    locale_it.py  → MESI_IT, GIORNI_IT, formatta_data_it() — UNICA sorgente localizzazione
+frontend/src/
+  pages/      → pagine React
+  components/ → componenti riutilizzabili
+  utils/format.js → utility formattazione (vedi sezione)
+uploads/      → CSV/PDF caricati (non committare)
+```
 
-## Regole critiche sui file CSV
-I file arrivano sempre in coppia per ogni hotel:
-- File 1 (es. CLB1.csv): RICAVI TRAT comprensivi di ristorante
-- File 2 (es. CLB2.csv): RICAVI TRAT solo alloggio
+## Regole critiche Revenue CSV
+File sempre in coppia: file1 = RICAVI TRAT comprensivi ristorante, file2 = solo alloggio.
+- `revenue_rooms = file2.RICAVI_TRAT`
+- `revenue_fnb = file1.RICAVI_TRAT - file2.RICAVI_TRAT` (mai negativo)
+- `revenue_extra = EXTRA_TRATT` (in entrambi i file)
+- `revenue_total = rooms + fnb + extra`
 
-Formule revenue:
-- revenue_rooms  = RICAVI TRAT da file 2
-- revenue_fnb    = RICAVI TRAT file1 - RICAVI TRAT file2  (mai negativo)
-- revenue_extra  = EXTRA TRATT (colonna presente in entrambi i file)
-- revenue_total  = revenue_rooms + revenue_fnb + revenue_extra
+Scartare righe con "(SDLY)" o "(LY)" nel campo DATA, o senza data dd/mm/yyyy.
+Numeri: virgola decimale. Date: dd/mm/yyyy (es. 30/05/2026 sab).
+Convenzione nome file: `YYYYMMDD_PlanningForecast-HOTELCODE[12].xlsx/csv`
 
-Righe da SCARTARE sempre:
-- Contengono "(SDLY)" nel campo DATA
-- Contengono "(LY)" nel campo DATA
-- Non hanno data nel formato dd/mm/yyyy
+## KPI — regole invarianti
+**MAI fare medie semplici — usare sempre i totali aggregati.**
+- occupancy = rooms_sold / rooms_available → percentuale (non €)
+- adr = revenue_rooms / rooms_sold
+- revpar = revenue_rooms / rooms_available
+- trevpar = revenue_total / rooms_available
+- rmc = revenue_total / rooms_sold
+- inc_fnb/inc_rooms = revenue_fnb/rooms / revenue_total
 
-Numeri: usano VIRGOLA come decimale (es. 2538,6900 → 2538.69)
-Date: formato italiano dd/mm/yyyy (es. 30/05/2026 sab)
+Divisioni per zero → None. KPISchema include `revenue_total: Optional[float]`.
+**Aggregazione gruppo**: ADR = Σrooms_revenue / Σrooms_sold. MAI media dei KPI singoli hotel.
+**Settimana commerciale**: Sabato→Venerdì. KPI settimanali calcolati su TOTALI, non media giornaliera.
 
-## KPI da calcolare (mai fare medie semplici — usare sempre i totali)
-- occupancy  = rooms_sold / rooms_available  → percentuale, NON valore euro
-- adr        = revenue_rooms / rooms_sold
-- revpar     = revenue_rooms / rooms_available
-- trevpar    = revenue_total / rooms_available
-- rmc        = revenue_total / rooms_sold
-- inc_fnb    = revenue_fnb / revenue_total
-- inc_rooms  = revenue_rooms / revenue_total
-
-Divisioni per zero → restituire None, non errore.
-
-KPISchema include anche `revenue_total: Optional[float]` (€) per le card "Tot. Revenue"
-nelle dashboard hotel e gruppo.
-
-## Settimana commerciale
-Sabato → Venerdì (week_start = sabato, week_end = venerdì successivo)
-KPI settimanali calcolati sui TOTALI della settimana, non media dei KPI giornalieri.
-
-## Aggregazione gruppo
-ADR gruppo = somma revenue_rooms tutti hotel / somma rooms_sold tutti hotel
-Occupazione gruppo = somma rooms_sold / somma rooms_available
-MAI fare media semplice dei KPI dei singoli hotel.
-
-## File di test disponibili in uploads/
-- PlanningForecast-CLB1.csv  (113 righe valide, 01/06-31/08/2026)
-- PlanningForecast-CLB2.csv  (113 righe valide, 01/06-31/08/2026)
-- PlanningForecast-DPH1.csv  (142 righe valide, 01/05-31/08/2026)
-- PlanningForecast-DPH2.csv  (142 righe valide, 01/05-31/08/2026)
-- PlanningForecast-INT1.csv  (113 righe valide, 01/06-31/08/2026)
-- PlanningForecast-INT2.csv  (113 righe valide, 01/06-31/08/2026)
-
-## Comandi di sviluppo
-# Avvia backend
-cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8000
-
-# Avvia frontend
-cd frontend && npm run dev
-
-# Esegui test
-cd backend && source venv/bin/activate && pytest tests/ -v
-
-## Formato file supportati
-- CSV (separatore ;, decimali con virgola) — formato originale
-- Excel .xlsx — date come datetime Python, numeri già float
-
-## Convenzione nome file
-YYYYMMDD_PlanningForecast-HOTELCODE[12].xlsx/csv
-- YYYYMMDD → snapshot_date (data del forecast)
-- HOTELCODE → codice hotel (es. CLB, DPH, INT)
-- [12] → indice file (ignorato, auto-detect via somma ricavi)
-
-## Tabella imports
-Registra ogni sessione di import:
-- hotel_code, snapshot_date → chiave univoca (idempotenza)
-- stato: success / warning / error
-- Bulk import salta automaticamente le coppie già importate con successo
-
-## Hotel dinamici
-Gli hotel sono gestiti nel database, non hardcoded.
-- POST /hotels/ → crea hotel
-- PUT /hotels/{code} → aggiorna
-- Il codice viene estratto automaticamente dal nome file
-- Il frontend carica la lista hotel da GET /hotels/ (non hardcoded)
-
-## Dashboard hotel — logica snapshot (aggiornata)
-La dashboard del singolo hotel mostra l'istantanea completa di una snapshot,
-con visione sull'intera stagione di apertura.
-
-### Navigazione snapshot
-- GET /snapshots/{hotel_code}: lista distinct snapshot_date, più recente prima
-- Il frontend naviga tra snapshot con frecce ← Prec. / Succ. →
-- Ogni snapshot corrisponde a un caricamento settimanale dati da Welcome
-
-### Settimana di riferimento
-- Per ogni snapshot, la "settimana di riferimento" = settimana commerciale (Sab–Ven)
-  che contiene la snapshot_date
-- Calcolata con: ref_start = snapshot_date - (weekday - 5) % 7 giorni
-- Restituita dalla API come settimana_ref_start / settimana_ref_end
-- kpi_periodo = KPI calcolati SOLO sui giorni della settimana di riferimento
-- La settimana di riferimento è evidenziata nei grafici (ReferenceArea) e nella tabella
-
-### Confronti
-- "Confronta snapshot precedente": carica la snapshot precedente nella lista;
-  confronta kpi_periodo delle due snapshot
-- "Confronta anno precedente": cerca snapshot a ~364 giorni fa (± 30 gg tolleranza);
-  allineamento date: addDays(comp.data, 364) → data corrente
-- I due toggle sono mutuamente esclusivi
-- Se dati confronto non disponibili: badge grigio, nessun errore
-
-### Grafici e tabella
-- Asse X: tutti i giorni della stagione (ISO date string, tick solo sabato)
-- Serie confronto: tratteggiata arancione (occupazione) / colori chiari (revenue)
-- Tabella settimanale: tutte le settimane della stagione, riga ref evidenziata in blu chiaro
-- SettimanaDashboard include inc_rooms, inc_fnb, inc_extra
-
-### Grafico revenue giornaliero (DashboardHotel)
-- **Senza confronto**: BarChart impilato con tre serie (Camere, F&B, Extra)
-- **Con confronto attivo** (week-1 o year-1): LineChart con due linee su `revenue_total`
-  — linea blu continua (snapshot corrente) e linea arancione tratteggiata (snapshot confronto)
-  — il campo `revenue_total_comp` è calcolato in `mergeConfrontoGiorni` da `comp.revenue_total`
-  — il titolo del grafico cambia dinamicamente in base alla modalità
-
-## Dashboard gruppo — modalità di visualizzazione
-Due modalità selezionabili con toggle, persistita in localStorage (chiave `gruppo_modalita`):
-
-**"Settimana per settimana"** (default):
-- Naviga tra settimane commerciali via `GET /settimane/gruppo`
-- Chiama `GET /dashboard/gruppo?modalita=settimana&settimana=YYYY-MM-DD&snapshot=YYYY-MM-DD`
-- Mostra KPI cards, grafico contributo hotel, tabella dettaglio hotel
-- Confronta: settimana precedente (−7 gg, stesso snapshot) / anno precedente (−364 gg)
-
-**"Stagione intera"**:
-- Naviga tra snapshot via `GET /dashboard/gruppo/snapshots`
-- Chiama `GET /dashboard/gruppo?modalita=stagione&snapshot=YYYY-MM-DD`
-- Mostra KPI cards (incluso Tot. Revenue), contributo hotel, tabella aggregati settimanali
-- Tre grafici trend (solo in questa modalità):
-  1. "Trend settimanale gruppo RevPAR / TRevPAR" — linee blu/verde, asse Y in €
-  2. "Trend settimanale Revenue" — linea arancione, asse Y in migliaia €
-  3. "Trend settimanale Occupazione" — linea viola, asse Y 0–100%
-- Tutti e tre i grafici supportano le linee di confronto tratteggiate
-- Confronta: snapshot precedente nella lista / snapshot anno precedente (±30 gg tolleranza)
-
-Parametri endpoint `/dashboard/gruppo`:
-- `modalita=stagione&snapshot=` → intera stagione per snapshot
-- `modalita=settimana&settimana=&snapshot=` → singola settimana da snapshot
-- `da=&a=` → legacy (compatibile, senza filtro snapshot)
-
-Nuovo endpoint:
-- `GET /dashboard/gruppo/snapshots` → lista snapshot disponibili (aggregata su tutti gli hotel)
-
-## Export per sezione
-- Endpoint: GET /export/hotel/{code}/settimanale|giornaliero?snapshot=&da=&a=&formato=xlsx/csv/pdf
-- Quando snapshot è fornito, il filtro per data_snapshot viene applicato prima di da/a
-- Endpoint: GET /export/gruppo?da=&a=&formato=xlsx/csv/pdf
-
-### Colonne export hotel settimanale (16, ordine fisso)
-Settimana, Giorni, Cam. Vendute, Cam. Disponibili, Occup.%, ADR, RevPAR, TRevPAR, RMC,
-Rev. Camere, Rev. F&B, Rev. Extra, Rev. Totale, Inc. Rooms%, Inc. F&B%, Inc. Extra%
-- Riga "TOTALE STAGIONE" in grassetto in fondo (Excel e CSV)
-
-### Colonne export hotel giornaliero (13, ordine fisso)
-Data, Giorno, Cam. Vendute, PAX, Occup.%, ADR, RMC, RevPAR, TRevPAR,
-Rev. Camere, Rev. F&B, Rev. Extra, Rev. Totale
-
-### Export gruppo
-- Excel: 2 fogli — "Aggregati settimanali" (16 col + totale) e "Dettaglio hotel" (12 col)
-- CSV: 2 sezioni separate da riga vuota (stesse colonne Excel)
-- PDF: 2 tabelle (aggregati + dettaglio hotel)
-- Colonne aggregati settimanali gruppo: stesse 16 del hotel settimanale con "Hotel attivi" al posto di "Giorni"
-- Colonne dettaglio hotel: Codice, Hotel, Cam. Vend., Cam. Disp., Occup.%, ADR, RevPAR,
-  Rev. Camere, Rev. F&B, Rev. Extra, Rev. Totale, % Gruppo
-
-### Formattazione Excel
-- Revenue: formato `#,##0.00 "€"`
-- Percentuali (0-100): formato `0.0"%"` (% letterale, senza moltiplicazione)
-- Interi: formato `#,##0`
-- Intestazioni: bold bianco su sfondo blu, righe alternate grigio chiaro
-
-### PDF
-- Orientamento landscape A4, font 8pt, intestazioni abbreviate
-- Intestazioni bold su sfondo blu, righe alternate grigio, riga totale bold
-
-## Dati giornalieri collassabili
-- Sezione dati giornalieri parte collapsed con "Dati giornalieri (N giorni) ▼"
-- Stato salvato in localStorage per hotel: chiave `giornalieri_{hotel_code}`
-
-## Colonne KPI nelle tabelle settimanali
-SettimanaDashboard include (nell'ordine): rooms_sold, rooms_available, occupancy, adr, rmc,
-revpar, trevpar, revenue_rooms, revenue_fnb, revenue_extra, revenue_total, inc_rooms, inc_fnb, inc_extra.
-Tutte visibili nella tabella aggregati settimanali hotel; gruppo mostra le stesse tranne inc_*.
-
-## Area Admin
-Tre sezioni a larghezza piena:
-
-### Stagioni operative
-- Selettore anno (2024–2027); carica/salva stagioni per tutti gli hotel
-- API: GET /hotels/{code}/seasons/{year} (lettura), POST /hotels/{code}/seasons (upsert)
-- Campi: apertura, chiusura, camere, note — pulsante "Salva" per hotel con feedback inline
-- Se stagione non configurata mostra badge "non configurata"
-
-### Import Massivo
-- Link a /import/bulk
-
-### Gestione dati di test
-- Flag is_test su daily_revenue e imports
-- GET /admin/test-stats → conteggio record di test
-- DELETE /admin/test-data → cancella tutti i record is_test=true
-- Checkbox "Dati di test" nelle maschere Import e Import Massivo
-
-## Configurazione applicazione (app_config)
-Tabella `app_config` (key PK, value, description, updated_at) creata dalla migrazione e4f5a6b7c8d9.
-Chiavi attive:
-- `week_start_weekday` = '5' → giorno inizio settimana commerciale (0=lun, 5=sab)
-- `anno_confronto_giorni_offset` = '364' → offset giorni per confronto anno precedente
-- `anno_confronto_tolleranza_giorni` = '30' → tolleranza in giorni per trovare snapshot anno prec.
-- `cors_origins` = 'http://localhost:5173' → origini CORS autorizzate (virgola-separato)
-- `app_name` = 'KM Di Mare Revenue' → nome applicazione mostrato nella navbar (modificabile da DB)
-
-Lettura config nel codice:
-- `main.py` legge `cors_origins` da DB al startup; fallback a localhost:5173 se DB non raggiungibile
-- `weekly_aggregator._leggi_week_start()` legge `week_start_weekday` con cache in-process;
-  resettabile con `_reset_week_start_cache()` nei test
-- Endpoint sola lettura: GET /config/, GET /config/{key}
-
-## Budget settimanale
-Tabella `budget_entries` (migrazione f5a6b7c8d9e0): hotel_id FK, season_year, week_start, version (default 'v1'), valori budget per camere/fnb/extra/total, notes.
-Constraint univoco: `uq_budget_hotel_settimana` su (hotel_id, season_year, week_start, version).
-POST /budget/{hotel_code}/{season_year} fa upsert su ON CONFLICT constraint.
-La tabella parte vuota — nessun dato di budget caricato al momento.
+## Funzioni centrali — non duplicare
+- `aggrega_totali_righe(righe)` in `kpi_calculator.py` → unica funzione per sommare RigaRevenue
+- `_carica_righe(db, hotel_code, snapshot_date, da, a)` in `dashboard.py` → unica funzione per leggere daily_revenue; `_raggruppa_per_hotel(righe)` per dict hotel→righe
+- `kpi_stagione` è il campo canonico in DashboardHotelResponse (non `kpi_periodo`)
+- Merge confronto settimanale in DashboardGruppo.jsx: per chiave `week_start`, non per indice
 
 ## Schema database — vincoli chiave
-- `daily_revenue.snapshot_date` è NOT NULL (migrazione d3e4f5a6b7c8)
-- Constraint univoco `uq_hotel_data_snapshot` su (hotel_code, data, snapshot_date)
-  → ogni snapshot conserva il proprio set di righe indipendente
-- `imports` ha constraint `uq_import_hotel_snapshot` su (hotel_code, snapshot_date)
-- `daily_revenue.hotel_id` FK → hotels(id), nullable, popolata dalla migrazione a9b0c1d2e3f4
-  hotel_code rimane per compatibilità; hotel_id viene valorizzato anche dagli import futuri
+- `daily_revenue.snapshot_date` NOT NULL; UNIQUE `uq_hotel_data_snapshot` su (hotel_code, data, snapshot_date)
+- `imports`: UNIQUE `uq_import_hotel_snapshot` su (hotel_code, snapshot_date)
+- `daily_revenue.hotel_id` FK→hotels nullable; hotel_code rimane per compatibilità
+- `budget_entries`: UNIQUE su (hotel_id, season_year, week_start, version)
 
-## Localizzazione italiana
-- MESI_IT, GIORNI_IT e formatta_data_it() sono definiti SOLO in backend/app/utils/locale_it.py
-- Non ridefinire questi array nei singoli router — importarli sempre da locale_it
-- Il frontend usa le proprie funzioni JS di formattazione (non condivise col backend)
+## Configurazione app (app_config)
+Chiavi attive: `week_start_weekday`='5', `anno_confronto_giorni_offset`='364', `anno_confronto_tolleranza_giorni`='30', `cors_origins`, `app_name`, `cc_colori_reparti` (JSON hex per grafici Dipendenti).
+- `main.py` legge `cors_origins` al startup (fallback localhost:5173)
+- `weekly_aggregator._leggi_week_start()` usa cache in-process; resettabile con `_reset_week_start_cache()` nei test
+- Endpoint: `GET/PUT /config/`, `GET /config/{key}`, `GET|PUT /config/cc-colori/mappa`
 
-## Autenticazione e autorizzazione
-
-### Credenziali admin di default
-- username: `admin`
-- password: `admin2024`
-- ruolo: `admin`
-Per cambiare la password: Admin → Gestione Utenti → Reset pwd, oppure via API:
-`POST /admin/utenti/{id}/reset-password` con body `{"password": "nuova_password"}`
-
-### Ruoli
-- `admin`: accesso completo (import, upload, admin, gestione utenti)
-- `viewer`: sola lettura (dashboard hotel, dashboard gruppo, export)
-
-### Token JWT
-- Firmato con `SECRET_KEY` da `.env` (cambiare in produzione)
-- Scadenza: 8 ore
-- Algoritmo: HS256
-- Salvato in `localStorage` chiave `auth_token`; dati utente in `auth_user`
-
-### Dipendenze FastAPI
-- `richiedi_utente_attivo` → qualsiasi utente loggato e attivo
-- `richiedi_admin` → solo ruolo admin, altrimenti 403
-
-### Endpoint protetti
-| Endpoint | Protezione |
-|----------|-----------|
-| GET /hotels/, /dashboard/*, /settimane/*, /snapshots/*, /export/*, /config/ | richiedi_utente_attivo |
-| POST/PUT /hotels/, /upload/*, /budget/* | richiedi_admin |
-| Tutti /admin/* | richiedi_admin |
-| POST /auth/login | nessuna (rate limit: 5 tentativi/15 min per IP) |
-| GET /auth/me, POST /auth/logout | richiedi_utente_attivo |
-
-### Endpoint gestione utenti
-- `GET /admin/utenti` → lista utenti (no password_hash)
-- `POST /admin/utenti` → crea utente (admin only)
-- `PUT /admin/utenti/{id}` → modifica ruolo/stato (admin only)
-- `POST /admin/utenti/{id}/reset-password` → reimposta password (admin only)
-Constraint: non è possibile disattivare l'ultimo admin attivo.
-
-### Frontend
-- `Login.jsx` → form login, salva token in localStorage
-- `ProtectedRoute.jsx` → reindirizza a /login se non loggato; 403 se ruolo insufficiente
-- `NavBar.jsx` → mostra username, badge ruolo, bottone Esci; nasconde Import e Admin ai viewer
-- `AdminUtenti.jsx` → pagina CRUD utenti (solo admin, su /admin/utenti)
-- `api/client.js` → interceptors axios: allega Bearer token, gestisce 401 → redirect /login?sessione_scaduta=1
-
-## Aggregazione KPI — unica sorgente di verità
-
-`aggrega_totali_righe(righe)` in `backend/app/services/kpi_calculator.py` è l'unica
-funzione che somma i campi di una lista di `RigaRevenue`.
-- Usata da `dashboard.py._kpi_schema()` e da `upload.py._calcola_kpi_periodo()`
-- **Non ridefinire le somme inline** in altri moduli — importare sempre questa funzione
-- Restituisce `TotaliRighe` (dataclass) con tutti i campi aggregati pronti per `calcola_kpi()`
-
-## Caricamento righe DB — unica funzione
-
-`_carica_righe(db, hotel_code=None, snapshot_date=None, da=None, a=None)` in
-`backend/app/routers/dashboard.py` è l'unica funzione per leggere `daily_revenue`.
-- Tutti i parametri sono opzionali e combinabili
-- `hotel_code=None` → restituisce tutti gli hotel
-- Per ottenere un dict `hotel_code → righe` usare `_raggruppa_per_hotel(righe)`
-- **Non aggiungere nuove funzioni `_carica_righe_*`** — estendere questa
-
-## Nomenclatura KPI dashboard hotel
-
-Il campo canonico è `kpi_stagione` in `DashboardHotelResponse`.
-- `kpi_periodo` esiste solo in `RisultatoUpload` (upload response) con semantica diversa
-- Nel frontend usare sempre `dati.kpi_stagione` — il fallback `kpi_periodo` è stato rimosso
-
-## Merge confronto settimanale (frontend)
-
-In `DashboardGruppo.jsx`, il merge tra le settimane correnti e quelle di confronto
-avviene per chiave `week_start` (non per indice array).
-- Confronto "anno precedente": chiave = `addDays(s.week_start, -364)`
-- Confronto "snapshot precedente": chiave = `s.week_start` (stesso anno, snapshot diversa)
-- Questo evita confronti sfasati quando le due snapshot hanno stagioni di lunghezza diversa.
-
-## Test di integrazione — nota auth
-
-I test in `test_navigazione_confronto_export.py` e `test_parser_e_bulk.py` che chiamano
-endpoint protetti (upload, dashboard) falliscono con 401 perché il `TestClient` non
-include l'header di autenticazione. È un problema pre-esistente del test suite,
-non dei test unitari (che passano tutti).
+## Autenticazione
+Ruoli: `admin` (accesso completo) / `viewer` (sola lettura).
+JWT HS256, 8h, `SECRET_KEY` da .env. Token in `localStorage('auth_token')`.
+Dipendenze FastAPI: `richiedi_utente_attivo` / `richiedi_admin`.
+Credenziali default: admin / admin2024.
+- Lettura (dashboard, export, config): `richiedi_utente_attivo`
+- Scrittura (upload, budget, admin/*): `richiedi_admin`
+- Login: nessuna auth (rate limit 5/15min per IP)
+- `api/client.js`: allega Bearer, gestisce 401 → redirect `/login?sessione_scaduta=1`
 
 ## Architettura modulare
+Moduli: `revenue` (/dashboard/gruppo), `budget` (/budget), `usali` (placeholder), `dipendenti` (/dipendenti), `corrispettivi` (/corrispettivi), `forecast` (/forecast).
+Tabelle: `modules` (code PK, name, icon, route, ordine, attivo, colore), `module_permissions` (module_code, ruolo, puo_vedere, puo_modificare, puo_importare).
+NavBar L1: tab moduli da `GET /modules/`; L2: sotto-nav del modulo attivo.
+Permessi: al login → `localStorage['moduli_permessi']`; ProtectedRoute verifica `puo_vedere`.
+**Aggiungere modulo**: riga in `modules` → righe `module_permissions` → pagina JSX → `<Route moduleCode="">` in App.jsx. Appare automaticamente in NavBar.
+Placeholder: `WorkInProgress.jsx`.
 
-Il sistema è organizzato in moduli indipendenti e interconnessi.
+## Area Admin (`/admin` → AdminUnificato.jsx, sidebar `?s=`)
+**Comune**: `utenti` (CRUD), `stagioni` (stagioni operative), `moduli` (attiva/disattiva/permessi)
+**Revenue**: `revenue-import` (bulk import), `revenue-test` (cancella is_test)
+**Dipendenti**: `dip-cc` (AdminCentriDiCosto), `dip-colori` (colori CC), `dip-test`
+**Corrispettivi**: `corr-tipi-doc`, `corr-pagamenti`, `corr-prefissi` ⚠️ tabelle droppate — da rimuovere; `corr-classificazione` (CorrClassificazioneTrattamenti)
+Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
+Dati test: flag `is_test`; `GET|DELETE /admin/test-stats|test-data`, `GET|DELETE /dipendenti/admin/test-stats|test-data`.
 
-### Moduli esistenti
-| code | Nome | Route | Stato |
-|------|------|-------|-------|
-| revenue | Revenue & Statistiche | /dashboard/gruppo | Implementato |
-| budget | Budget | /budget | Placeholder |
-| usali | USALI | /usali | Placeholder |
-| dipendenti | Spese Dipendenti | /dipendenti | Placeholder |
-| corrispettivi | Corrispettivi | /corrispettivi | Placeholder |
+## Variabili ambiente e deploy
+Frontend: `VITE_API_URL` in `.env` / `.env.production`. **Mai URL hardcoded.**
+`api/client.js` usa `import.meta.env.VITE_API_URL || 'http://localhost:8000'`.
+Deploy Linux: nginx (reverse proxy) → uvicorn (systemd) → PostgreSQL. SSL via certbot.
+Aggiornare `cors_origins` in DB dopo deploy.
 
-### Tabelle database moduli
-- `modules` — definizione moduli (code PK, name, icon, route, ordine, attivo, colore)
-- `module_permissions` — permessi per ruolo (module_code FK, ruolo, puo_vedere, puo_modificare, puo_importare); constraint unique su (module_code, ruolo)
-- `data_connections` — mappa interconnessioni future (source_module FK, target_module FK, description, attivo)
+## Comandi sviluppo
+```bash
+cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8000
+cd frontend && npm run dev
+cd backend && source venv/bin/activate && pytest tests/ -v
+```
+File test: `uploads/PlanningForecast-{CLB,DPH,INT}{1,2}.csv`.
+Test di integrazione che chiamano endpoint protetti falliscono con 401 (TestClient senza auth) — problema pre-esistente, i test unitari passano tutti.
 
-### Aggiungere un nuovo modulo
-1. Inserire riga in `modules` (via migrazione Alembic o direttamente in Admin > Gestione Moduli)
-2. Inserire righe in `module_permissions` per ogni ruolo
-3. Creare `frontend/src/pages/NuovoModulo.jsx` (usare `WorkInProgress.jsx` finché non implementato)
-4. Aggiungere `<Route path="/nuova-route">` in `App.jsx` con `moduleCode="nuovo_code"`
-5. La NavBar L1 legge i moduli da `GET /modules/` — appare automaticamente
+## Localizzazione
+`MESI_IT`, `GIORNI_IT`, `formatta_data_it()` definiti SOLO in `locale_it.py`. Non ridefinire nei router.
+UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % (mai €).
 
-### Endpoint moduli
-- `GET /modules/` → lista moduli attivi con permessi dell'utente corrente (richiede auth)
-- `GET /modules/{code}` → dettaglio con tutti i permessi per ruolo
-- `PUT /modules/admin/{code}` → modifica nome/icona/route/ordine/attivo/colore (solo admin)
-- `PUT /modules/admin/{code}/permissions/{ruolo}` → aggiorna permessi (solo admin)
-- `PUT /modules/admin/ordine` → riordina moduli con lista di code (solo admin)
+## Utility frontend (format.js)
+- `formatEuro(v)`, `formatEuroK(v)` (≥1000 → "Xk €"), `formatPerc(v)`, `formatN(v)`, `formatData(iso)`, `addDays(isoDate, n)`, `calcolaDelta(val, ref)`
+- `mostraErrore(e)` — **OBBLIGATORIO in ogni catch block**. Se `localStorage('debug_errori')==='true'` → stack trace completo; altrimenti prima riga. **Mai** usare inline `e.response?.data?.detail || e.message`.
 
-### NavBar a due livelli
-- **L1 (60px)**: logo + tab moduli dinamici da `GET /modules/` + utente/logout
-- **L2 (40px)**: sotto-navigazione del modulo attivo, determinato dall'URL corrente
-  - Revenue: Importazione (admin) | hotel da `GET /hotels/` | Gruppo | Admin (admin)
-  - Altri moduli: badge "in sviluppo" finché non implementati
-- Il colore accent del tab attivo viene dal campo `colore` del modulo nel DB
-- CSS in `NavBar.css` (`.navbar-l1`, `.navbar-l2`, `.navbar-modulo`, `.subnav-link`)
+## Componenti grafici condivisi
+**`PastReferenceArea`** (`frontend/src/components/PastReferenceArea.jsx`): sfondo scuro sui periodi già trascorsi in un grafico Recharts, per distinguere visivamente "maturato" (passato) da "OTB" (futuro).
+- Props: `data` (array punti), `dateKey` (chiave ISO YYYY-MM-DD per confronto con oggi), `displayKey` (chiave usata su XAxis se diversa da `dateKey`)
+- Usato in: DashboardHotel (3 grafici), DashboardGruppo (4 grafici), Budget (2 grafici), Forecast (1 grafico)
+- **⚠️ Usare come funzione inline, non come componente JSX** — Recharts riconosce i figli per tipo e ignora componenti wrapper custom. Usare `{pastReferenceArea(data, 'week_start', 'label')}` dentro il chart.
+- Aggiungere a ogni nuovo grafico con asse temporale: `{pastReferenceArea(data, 'week_start', 'label')}`
+- Se il grafico usa date ISO direttamente sull'XAxis: `{pastReferenceArea(data, 'data')}`
+- Nota: se `grafici[]` usa `label=week_start.slice(5)`, includere `week_start` nell'oggetto per poter usare `dateKey="week_start"`
 
-### Permessi modulo (ProtectedRoute)
-- Al login, `GET /modules/` viene chiamato e i permessi salvati in `localStorage['moduli_permessi']`
-- `ProtectedRoute` accetta prop `moduleCode` per verificare `puo_vedere` prima di renderizzare
-- Se `puo_vedere=false` → pagina 403 "Accesso al modulo non autorizzato"
-- Utility: `getPermessiModuli()`, `puoVedereModulo(code)` in `ProtectedRoute.jsx`
+---
 
-### Admin — Gestione Moduli
-Sezione in `Admin.jsx` (`GestioneModuli`) che permette di:
-- Attivare/disattivare moduli (scompaiono dalla NavBar per tutti gli utenti)
-- Riordinare moduli con frecce ↑↓
-- Gestire permessi per ruolo con tabella checkbox + pulsante Salva per ruolo
+## Dashboard Hotel
+- Snapshot: `GET /snapshots/{hotel_code}` → navigazione con frecce. Settimana di riferimento = settimana Sab–Ven contenente snapshot_date.
+- `kpi_periodo` = KPI solo sulla settimana di riferimento; evidenziata in grafici (ReferenceArea) e tabella.
+- Confronto snapshot precedente (mutuamente esclusivo con anno precedente, offset 364gg ±30gg tolleranza).
+- Revenue giornaliero: senza confronto → BarChart impilato (Camere/F&B/Extra); con confronto → LineChart `revenue_total` corrente vs confronto.
+- Dati giornalieri: collassabili, stato in `localStorage('giornalieri_{hotel_code}')`.
+- SettimanaDashboard include: rooms_sold, rooms_available, occupancy, adr, rmc, revpar, trevpar, revenue_*, inc_rooms, inc_fnb, inc_extra.
 
-### WorkInProgress.jsx
-Componente placeholder (`frontend/src/components/WorkInProgress.jsx`) per moduli non ancora
-implementati. Props: `nome`, `icona`, `colore`. Mostra barra animata decorativa e bottone
-per tornare a Revenue.
+## Dashboard Gruppo
+Due modalità (toggle, `localStorage('gruppo_modalita')`):
+- **Settimana**: `GET /dashboard/gruppo?modalita=settimana&settimana=&snapshot=`
+- **Stagione intera**: `GET /dashboard/gruppo?modalita=stagione&snapshot=`; 3 grafici trend (RevPAR/TRevPAR, Revenue, Occupazione).
+- `GET /dashboard/gruppo/snapshots` → lista snapshot aggregate.
+- Merge confronto per chiave `week_start` (non indice) per evitare sfasamenti tra stagioni diverse.
 
-## Variabili d'ambiente frontend
+## Export
+- Hotel: `GET /export/hotel/{code}/settimanale|giornaliero?snapshot=&da=&a=&formato=xlsx|csv|pdf`
+- Gruppo: `GET /export/gruppo?da=&a=&formato=`
+- Excel: revenue `#,##0.00 "€"`, percentuali `0.0"%"`, interi `#,##0`. Intestazioni bold bianco su blu, righe alternate grigio.
+- PDF: landscape A4, 8pt.
+- Gruppo Excel: 2 fogli (aggregati settimanali + dettaglio hotel).
 
-Il frontend usa Vite con la variabile `VITE_API_URL` per l'URL del backend.
+---
 
-| File | Scopo |
-|------|-------|
-| `frontend/.env` | Sviluppo locale (non committare) |
-| `frontend/.env.production` | Build di produzione (aggiornare prima del deploy) |
+## Modulo Dipendenti
+Parser PDF cedolini paghe (pdfplumber): layout fisso, 13 voci in ordine fisso (`VOCI_ORDINE` in `payroll_parser.py`).
+Voci: ret_netta, contr_prev_dip, contr_san_dip, irpef, altre_trattenute, anticipi_inps, tot_lordo | contr_prev_az, contr_san_az, inail, altri_enti, tfr, tot_costo_az.
 
-- Sviluppo: `VITE_API_URL=http://localhost:8000`
-- Produzione Linux: `VITE_API_URL=https://tuodominio.it` (o IP del server)
+**CC — gerarchia 3 livelli** (struttura → categoria → reparto, self-referencing `parent_id` in `cost_centers`):
+- `albero_centri(db)` in `cost_center_service.py` → unica fonte di verità per l'albero
+- `_trova_struttura(cc, tutti_by_id)` in `dipendenti.py`: risale da reparto a struttura
+- Report usano `struttura_code`/`struttura_name` (non `parent_code`)
+- Colori CC: `app_config.cc_colori_reparti` (JSON) → `GET|PUT /config/cc-colori/mappa`
+- `GET /cost-centers/albero` → tutti i CC (attivi e inattivi)
 
-Regole:
-- **Non usare mai URL hardcoded** nel frontend. Usare sempre `import.meta.env.VITE_API_URL`
-- `api/client.js` usa `import.meta.env.VITE_API_URL || 'http://localhost:8000'` come fallback
-- `Login.jsx` usa la stessa variabile (usa `axios` diretto, non il client condiviso, perché
-  il login avviene prima che il token sia disponibile)
+Strutture extra-alberghiere: `BON` (ristorante), `KMDIMARE` (aggregatore virtuale gruppo).
 
-## Compatibilità macOS / Linux
+**Assegnazione CC**: `employee_cc_default` (granularità anno/mese); `EmployeeCostCenterMonthly` per split su più CC (somma % = 100).
+Idempotenza import: UNIQUE su (mese, anno, societa). Reimport: `DELETE /dipendenti/import/{id}?conferma=true`.
+Aggiungere voce di costo: riga in `payroll_cost_types` + aggiornare `VOCI_ORDINE`.
 
-Il progetto viene sviluppato su macOS ma deve essere deployato su un server Linux headless (produzione).
+Endpoint chiave:
+- `POST /dipendenti/import`, `GET /dipendenti/report/mensile?mese=&anno=`, `GET /dipendenti/report/annuale-riepilogo?anno=`
+- `GET /dipendenti/report/annuale/dettaglio-cc?anno=&cc_code=|cc_name=|cat_name=&strutture=`
+- `POST /dipendenti/ricalcola-cc-anno?anno=`
+- `GET /cost-centers/albero`
 
-### Regole di sviluppo cross-platform
-- **Nessun path hardcoded** specifico per macOS (es. `/Users/...`, `/Library/...`)
-- **Nessun URL hardcoded**: usare sempre `VITE_API_URL` nel frontend, `cors_origins` da DB nel backend
-- Evitare comandi shell specifici per BSD/macOS (es. `sed -i ''` → usare `sed -i` su Linux)
-- Python e Node.js sono cross-platform: il codice applicativo non richiede modifiche
+Frontend `Dipendenti.jsx`: 3 sezioni (report / anagrafica / import). Vista analisi CC: per struttura / categoria / reparto. `trasformaCentri(centri, vista)` con `_aggrega`. `isAdmin` → mostra/nasconde import e ricalcolo.
+File test: `uploads/202604_costi  aziendali .pdf` (8 dipendenti, aprile 2026).
 
-### Deploy su Linux (produzione)
-Stack consigliato:
-- **Reverse proxy**: nginx → ascolta su porta 80/443, fa proxy a uvicorn su 127.0.0.1:8000
-- **Backend**: uvicorn gestito da systemd (`uvicorn app.main:app --host 127.0.0.1 --port 8000`)
-- **Frontend**: `npm run build` → cartella `dist/` servita da nginx come file statici
-- **SSL**: Let's Encrypt via certbot (`certbot --nginx -d tuodominio.it`)
-- **CORS**: aggiornare `cors_origins` in `app_config` nel DB con il dominio reale
+---
 
-### Procedura deploy (sintesi)
-1. Sul server: `git clone`, `pip install -r requirements.txt`, `alembic upgrade head`
-2. `cd frontend && npm install && VITE_API_URL=https://tuodominio.it npm run build`
-3. Configurare nginx per servire `dist/` e fare proxy a `:8000`
-4. Creare service systemd per uvicorn con `WorkingDirectory` e `ExecStart`
-5. Aggiornare `app_config.cors_origins` nel DB PostgreSQL del server
+## Modulo Corrispettivi
 
-## Note importanti
-- Sempre commentare il codice in italiano
-- Gestire tutti gli errori con messaggi chiari in italiano
-- La UI deve mostrare date in formato italiano, euro con simbolo €, percentuali con %
-- occupancy va sempre formattato come percentuale (es. 60.0%) mai come valore monetario
+### Contesto fiscale (non modificare senza capire)
+- **Scontrini e fatture sono registri separati per legge** (SC/SCA → cassa RT + AdE; F → SDI).
+- **Imponibile = lordo / (1 + aliquota)** — MAI `lordo - iva` (errori arrotondamento).
+- **Caparre (CP, FD) = escluse** — doppio conteggio IVA. Salvate con `tipo='escluso'` per audit.
+- **CHECK giornaliero**: totale scontrini deve coincidere con chiusura RT trasmessa ad AdE.
+- **MMS/BON**: inserimento manuale, IVA 10%, imponibile auto-calcolato.
+
+Strutture: DPH/CLB/INT → import Excel (Welcome PMS); MMS (Maremosso), BON (Buona Onda) → manuale.
+
+### Formati Excel
+Auto-detect dal set colonne. **Base** (18 col): Data, Numero, Suffisso, Totale, Imponibile, Iva, Annullato…
+**Esteso** (36 col): aggiunge Tassa di soggiorno, Data annullamento, Sigla, Numero Scontrino + 15 altri.
+- `tassa_soggiorno` nel DB: valore esatto dal formato esteso (NULL = base)
+- Suffisso `{prefisso}-{tipo}`: D→DPH, C→CLB, I→INT; SC/SCA→scontrino, F→fattura, CP/FD/altri→escluso
+
+**Categorizzazione IVA** (tolleranza ±0.5%): arrangiamenti≈10%, shop≈22%, tassa_soggiorno≈0%+imponibile>0, penali≈0%+imponibile=0, altro=fuori range.
+Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `imponibile > 0`).
+
+**Disaggregazione tassa soggiorno**: formato esteso → `lordo_ts = tassa_soggiorno` (esatto); base → inferenza `IVA×11`.
+**Confronto RT**: usare colonna `tassa_soggiorno` (TS embedded in arrangiamenti) + `categoria='tassa_soggiorno'` (standalone). Non usare solo `totale_lordo WHERE categoria='tassa_soggiorno'`.
+
+### Tabelle DB principali
+- `corrispettivi_documenti`: UNIQUE(struttura_code, data_documento, numero, suffisso); audit trail (`modificato_manualmente`, `*_originale`); `camera` e `codice_prenotazione` TEXT (prenotazioni gruppo = liste lunghe).
+- `corrispettivi_manuali`: UNIQUE(data_giorno, struttura_code).
+- `rt_chiusure`: UNIQUE(data_chiusura, rt_code); RT1→[DPH,CLB], RT2→[INT].
+
+### Idempotenza import
+- **salta** (default): ON CONFLICT DO NOTHING
+- **aggiorna**: aggiorna campi MA protegge `modificato_manualmente=True`
+- DELETE /import/{id}: rimuove doc non modificati, scollega (import_id=NULL) quelli modificati
+
+### Endpoint API (prefix `/corrispettivi`)
+- `POST /import?is_test=&on_conflict=salta|aggiorna`
+- `GET|PUT /documenti/{id}`, `GET /scontrini`, `GET /fatture` (alias)
+- `POST|PUT|GET /manuali`
+- `GET /report/giornaliero?data_da=&data_a=&struttura_code=&tipo=` → valori lordi; toggle IVA client-side
+- `GET /report/fatturati?anno=&lordo=` → tassa soggiorno esclusa dal totale (transito Comune)
+- `GET /check?data_da=&data_a=`
+- `POST|GET|DELETE /rt-chiusure`
+
+Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
+Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.
+
+### Analisi Ricavi (tab in Corrispettivi.jsx)
+Tabelle: `trattamenti_classificazione` (codice PK, nome_display, categoria, escludi, ordine, colore), `analisi_ricavi_imports`, `analisi_ricavi_trattamenti`, `analisi_ricavi_reparti`.
+Migrazioni: ar001_2026 (tabelle), ar002_2026 (colore su classificazione).
+Parser CSV: auto-detect da intestazione; encoding utf-8-sig→utf-8→latin-1; `_pulisci_valore()` gestisce `€` corrotto.
+**Ridistribuzione Non Def**: codici `escludi=true` esclusi, valore redistribuito proporzionalmente a query-time (`_applica_ridistribuzione()`).
+
+Endpoint (prefix `/analisi-ricavi`):
+- `POST /import`, `POST /import/sovrascrivi`, `GET /import/storico`, `DELETE /import/{id}`
+- `GET /trattamenti?hotel_code=&anno=&mese=[&mese_fine=]` → classificazione + ridistribuzione
+- `GET /reparti?hotel_code=&anno=&mese=[&mese_fine=]` → revenue_module solo per mese singolo
+- `GET /gruppo?anno=&mese=[&mese_fine=]` → aggregato tutti gli hotel; `mese_fine` per range
+- `GET|POST|PUT /classificazione[/{codice}]` → include campo `colore`
+
+Frontend `TabAnalisiRicavi.jsx`: bottoni hotel [DPH][CLB][INT][Gruppo]; frecce ◀▶ mese/anno; toggle Range (mese_fine); toggle dettaglio/macrocategorie; toggle Δ Revenue (solo hotel singolo). Default: mese precedente a quello corrente. Colori: priorità DB → `CATEGORIA_COLORI` → palette.
+Admin `corr-classificazione`: `CorrClassificazioneTrattamenti` con colonna Colore (swatch + hex).
+
+### Frontend Corrispettivi.jsx (8 tab)
+Import | Corrispettivi giornalieri (drawer cella→documenti) | Scontrini | Fatture | Riepilogo Fatturati | Controllo RT | Analisi Ricavi | Dati di test.
+`PerHotelView`: generico per scontrini/fatture, `localStorage('scontrini_vista'|'fatture_vista')`.
+Tab attiva: `localStorage('corrispettivi_tab')`.
+
+---
+
+## Modulo Forecast & OTB
+- **OTB**: da `daily_revenue`, identificato da `snapshot_date`
+- **Maturato**: override manuale OTB, un record per (hotel_id, anno, mese)
+- **Pickup rate**: % incremento su base (maturato se presente, altrimenti OTB)
+- **Consuntivo**: snapshot più recente per ogni data
+
+Tabelle (`forecast_maturato`, `forecast_budget`, `forecast_pickup_config`): UNIQUE per (hotel_id, anno, mese).
+Endpoint: `GET /forecast/summary?anno=&hotel_code=` (hotel_code=all → aggregato), `GET /forecast/pace`, `PUT /forecast/maturato|budget|pickup-config`, `DELETE /forecast/maturato/{id}`.
+
+---
+
+## Modulo Budget
+4 input settimanali: occupancy_budget (%), adr_budget, adr_fnb_budget, adr_extra_budget.
+`rooms_sold_budget = round(occupancy/100 * rooms_available)`. KPI derivati calcolati in `budget_calculator.py`.
+**Mese contabile**: mese con più giorni nella settimana (≥4, nessuna parità possibile).
+**Versioning**: v1 = ufficiale; v2+ copiate da source_version, completamente indipendenti.
+**Proiezione**: settimane con actual da `daily_revenue` (snapshot più recente); senza actual → stima budget. Trend: 'sopra/sotto_budget/in_linea' (soglia 5%).
+
+Endpoint chiave: `PUT /budget/{hotel}/{year}/{week_start}`, `GET /budget/{hotel}/{year}/confronto[/mensile]`, `GET /budget/{hotel}/{year}/proiezione`, `POST /budget/{hotel}/{year}/import-excel`, `GET /budget/gruppo/{year}/confronto|proiezione`.
+Frontend: 4 tab (Inserimento / Confronto Actual vs Budget / Proiezione / Gruppo).
+
+---
+
+## Modulo Camere (Rooms)
+Tabella `rooms`: code PK, hotel_id FK, struttura_code, tipo_risorsa, nome_tipo, posti_letto, piano, attiva, note.
+Endpoint: `GET|POST /rooms/`, `GET|PUT|DELETE /rooms/{code}`.
+
+---
+
+## Tabelle condivise
+`tipi_pagamento` in `shared.py`: codice unique, descrizione, categoria, attivo, ordine.
+Router: `GET|POST|PUT /lookup/tipi-pagamento`.
+
+---
+
+## Principi di progettazione
+
+### Riusabilità tra moduli
+- Lookup condivisi → `models/shared.py`, endpoint → `routers/lookup.py`
+- Costanti usate da più moduli → `app/utils/`
+- Componenti riutilizzabili → `frontend/src/components/`
+- Prima di creare nuova tabella, verificare se qualcosa di simile esiste già
+
+### Colori configurabili
+Ogni elemento visivo che usa colori per distinguere categorie/serie deve avere i colori configurabili in Admin.
+- **DB**: colonna `colore VARCHAR(7)` nullable sulla tabella che definisce l'elemento
+- **Admin**: colonna Colore con swatch cliccabile (color picker nativo) + campo hex `#rrggbb`
+- **Frontend priorità**: colore DB → costante per categoria → palette generica ciclica
+- Prevedere `colore` e UI Admin fin dall'inizio, non aggiungerla dopo
+- Esempi: `cc_colori_reparti` in app_config (Dipendenti), `trattamenti_classificazione.colore` (Analisi Ricavi)

@@ -9,6 +9,8 @@ export default function Admin() {
       <GestioneUtenti />
       <GestioneStagioni />
       <GestioneModuli />
+      <GestioneCentriDiCosto />
+      <GestioneCorrispettivi />
       <ImportMassivo />
       <GestioneDatiTest />
     </div>
@@ -252,6 +254,36 @@ function GestioneStagioni() {
 // ---------------------------------------------------------------------------
 // Sezione: import massivo
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Sezione: centri di costo (modulo Dipendenti)
+// ---------------------------------------------------------------------------
+
+function GestioneCentriDiCosto() {
+  return (
+    <div className="card" style={{ marginBottom: '1.5rem', border: '1px solid #c7d2fe', background: '#eef2ff' }}>
+      <h3 style={{ marginTop: 0, color: '#3730a3' }}>Centri di Costo — Dipendenti</h3>
+      <p style={{ color: '#6366f1', fontSize: 13, marginBottom: '1rem' }}>
+        Gestisci la gerarchia a 3 livelli (Struttura → Categoria → Reparto): rinomina, aggiungi categorie e reparti, attiva/disattiva nodi.
+      </p>
+      <Link
+        to="/admin/centri-di-costo"
+        style={{
+          display: 'inline-block',
+          padding: '8px 18px',
+          background: '#4338ca',
+          color: '#fff',
+          borderRadius: 6,
+          textDecoration: 'none',
+          fontWeight: 600,
+          fontSize: 14,
+        }}
+      >
+        Gestisci centri di costo →
+      </Link>
+    </div>
+  )
+}
 
 function ImportMassivo() {
   return (
@@ -582,6 +614,194 @@ function GestioneModuli() {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Sezione: configurazione modulo Corrispettivi
+// ---------------------------------------------------------------------------
+
+function GestioneCorrispettivi() {
+  const [tipiDoc, setTipiDoc]     = useState([])
+  const [tipiPag, setTipiPag]     = useState([])
+  const [prefissi, setPrefissi]   = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [feedback, setFeedback]   = useState('')
+
+  // Form aggiunta tipo pagamento
+  const [nuovoPagCode, setNuovoPagCode] = useState('')
+  const [nuovoPagName, setNuovoPagName] = useState('')
+
+  // Form aggiunta prefisso
+  const [nuovoPrePrefisso, setNuovoPrePrefisso]     = useState('')
+  const [nuovoPreStruttura, setNuovoPreStruttura]   = useState('')
+  const [nuovoPreTipo, setNuovoPreTipo]             = useState('lettera_iniziale')
+  const [hotels, setHotels]                          = useState([])
+
+  const carica = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [dDoc, dPag, dPre, dH] = await Promise.all([
+        api.get('/corrispettivi/config/tipi-documento').then(r => r.data).catch(() => []),
+        api.get('/corrispettivi/config/tipi-pagamento').then(r => r.data).catch(() => []),
+        api.get('/corrispettivi/config/prefissi-struttura').then(r => r.data).catch(() => []),
+        api.get('/hotels/').then(r => r.data).catch(() => []),
+      ])
+      setTipiDoc(dDoc); setTipiPag(dPag); setPrefissi(dPre); setHotels(dH)
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { carica() }, [carica])
+
+  function fb(msg) { setFeedback(msg); setTimeout(() => setFeedback(''), 2500) }
+
+  async function toggleDoc(t) {
+    await api.put(`/corrispettivi/config/tipi-documento/${t.id}`, { attivo: !t.attivo }).catch(e => {
+      fb('Errore: ' + (e.response?.data?.detail || e.message)); return
+    })
+    fb(t.attivo ? 'Tipo disattivato' : 'Tipo attivato')
+    carica()
+  }
+
+  async function aggiungiPagamento() {
+    if (!nuovoPagCode || !nuovoPagName) { fb('Codice e nome obbligatori'); return }
+    try {
+      await api.post('/corrispettivi/config/tipi-pagamento', { code: nuovoPagCode, name: nuovoPagName })
+      setNuovoPagCode(''); setNuovoPagName('')
+      fb('Tipo pagamento aggiunto')
+      carica()
+    } catch (e) { fb('Errore: ' + (e.response?.data?.detail || e.message)) }
+  }
+
+  async function aggiungiPrefisso() {
+    if (!nuovoPrePrefisso || !nuovoPreStruttura) { fb('Prefisso e struttura obbligatori'); return }
+    try {
+      await api.post('/corrispettivi/config/prefissi-struttura', {
+        prefisso: nuovoPrePrefisso,
+        struttura_code: nuovoPreStruttura,
+        tipo: nuovoPreTipo,
+      })
+      setNuovoPrePrefisso(''); setNuovoPreStruttura(''); setNuovoPreTipo('lettera_iniziale')
+      fb('Prefisso aggiunto')
+      carica()
+    } catch (e) { fb('Errore: ' + (e.response?.data?.detail || e.message)) }
+  }
+
+  async function eliminaPrefisso(id) {
+    if (!confirm('Eliminare questo prefisso?')) return
+    try { await api.delete(`/corrispettivi/config/prefissi-struttura/${id}`); fb('Eliminato'); carica() }
+    catch (e) { fb('Errore: ' + (e.response?.data?.detail || e.message)) }
+  }
+
+  const inputSm = { fontSize: 12, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4 }
+  const btnSm   = { fontSize: 12, padding: '4px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }
+
+  return (
+    <div className="card" style={{ marginBottom: '1.5rem', border: '1px solid #fecaca', background: '#fff5f5' }}>
+      <h3 style={{ marginTop: 0, color: '#991b1b' }}>Corrispettivi — Configurazione</h3>
+      {loading ? <p style={{ color: '#6b7280' }}>Caricamento…</p> : (
+        <>
+          {feedback && (
+            <div style={{ marginBottom: 12, padding: '6px 12px', background: '#d1fae5', borderRadius: 6, color: '#065f46', fontSize: 13, fontWeight: 600 }}>
+              {feedback}
+            </div>
+          )}
+
+          {/* Tipi documento */}
+          <div style={{ marginBottom: 20 }}>
+            <h4 style={{ marginTop: 0, marginBottom: 8, color: '#7f1d1d' }}>Tipi documento</h4>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {tipiDoc.map(t => (
+                <div key={t.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: t.attivo ? '#fee2e2' : '#f3f4f6',
+                  borderRadius: 8, padding: '6px 12px',
+                }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{t.code}</span>
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>{t.name}</span>
+                  <button onClick={() => toggleDoc(t)} style={{
+                    ...btnSm,
+                    background: t.attivo ? '#fca5a5' : '#d1fae5',
+                    color: t.attivo ? '#7f1d1d' : '#065f46',
+                  }}>
+                    {t.attivo ? 'Disattiva' : 'Attiva'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tipi pagamento */}
+          <div style={{ marginBottom: 20 }}>
+            <h4 style={{ marginTop: 0, marginBottom: 8, color: '#7f1d1d' }}>Tipi pagamento</h4>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {tipiPag.map(t => (
+                <span key={t.id} style={{
+                  background: t.attivo ? '#fee2e2' : '#f3f4f6',
+                  color: t.attivo ? '#7f1d1d' : '#6b7280',
+                  borderRadius: 12, padding: '3px 10px', fontSize: 12, fontWeight: 600,
+                }}>
+                  {t.name} ({t.code})
+                </span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input value={nuovoPagCode} onChange={e => setNuovoPagCode(e.target.value.toUpperCase())}
+                placeholder="Codice (es. SATISPAY)" style={{ ...inputSm, width: 140 }} />
+              <input value={nuovoPagName} onChange={e => setNuovoPagName(e.target.value)}
+                placeholder="Nome (es. Satispay)" style={{ ...inputSm, width: 160 }} />
+              <button onClick={aggiungiPagamento} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>
+                + Aggiungi
+              </button>
+            </div>
+          </div>
+
+          {/* Prefissi struttura */}
+          <div>
+            <h4 style={{ marginTop: 0, marginBottom: 8, color: '#7f1d1d' }}>Prefissi struttura (resolver camera)</h4>
+            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse', marginBottom: 10 }}>
+              <thead>
+                <tr style={{ background: '#fee2e2' }}>
+                  {['Prefisso', 'Struttura', 'Tipo', ''].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '5px 8px', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {prefissi.map(p => (
+                  <tr key={p.id} style={{ borderTop: '1px solid #fecaca' }}>
+                    <td style={{ padding: '5px 8px', fontWeight: 600 }}>{p.prefisso}</td>
+                    <td style={{ padding: '5px 8px' }}>{p.struttura_code}</td>
+                    <td style={{ padding: '5px 8px', color: '#6b7280' }}>{p.tipo}</td>
+                    <td style={{ padding: '5px 8px' }}>
+                      <button onClick={() => eliminaPrefisso(p.id)} style={{ ...btnSm, background: '#fca5a5', color: '#7f1d1d' }}>
+                        Elimina
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input value={nuovoPrePrefisso} onChange={e => setNuovoPrePrefisso(e.target.value)}
+                placeholder="Prefisso (es. C)" style={{ ...inputSm, width: 120 }} />
+              <select value={nuovoPreStruttura} onChange={e => setNuovoPreStruttura(e.target.value)} style={inputSm}>
+                <option value="">— Struttura —</option>
+                {hotels.map(h => <option key={h.code} value={h.code}>{h.code} — {h.name}</option>)}
+              </select>
+              <select value={nuovoPreTipo} onChange={e => setNuovoPreTipo(e.target.value)} style={inputSm}>
+                <option value="lettera_iniziale">lettera_iniziale</option>
+                <option value="nome_esatto">nome_esatto</option>
+                <option value="contiene">contiene</option>
+              </select>
+              <button onClick={aggiungiPrefisso} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>
+                + Aggiungi
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

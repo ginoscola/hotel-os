@@ -6,7 +6,8 @@ import {
 import api from '../api/client.js'
 import KPICard from '../components/KPICard.jsx'
 import { ExportMenu, SezioneHeader } from '../components/ExportMenu.jsx'
-import { formatEuro, formatPerc, formatN, formatData, addDays, calcolaDelta } from '../utils/format.js'
+import pastReferenceArea from '../components/PastReferenceArea.jsx'
+import { formatEuro, formatEuroK, formatPerc, formatN, formatData, addDays, calcolaDelta, mostraErrore } from '../utils/format.js'
 
 const COLORI_HOTEL = { CLB: '#3b82f6', DPH: '#10b981', INT: '#f59e0b' }
 const MODALITA_KEY = 'gruppo_modalita'
@@ -44,6 +45,7 @@ export default function DashboardGruppo() {
   const [compDisponibile, setCompDisponibile] = useState(true)
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState(null)
+  const [settimanePerHotel, setSettimanePerHotel] = useState({})
 
   // Persiste modalità e reset navigazione al cambio
   useEffect(() => {
@@ -116,6 +118,23 @@ export default function DashboardGruppo() {
       const { data } = await api.get(url)
       setDati(data)
 
+      // In modalità stagione carica l'occupazione settimanale per-hotel in parallelo
+      if (modalita === 'stagione') {
+        const codici = data.hotel_attivi || []
+        const risultati = await Promise.all(
+          codici.map(code =>
+            api.get(`/dashboard/hotel/${code}?snapshot=${currentSnap.snapshot_date}`)
+              .then(r => ({ code, settimane: r.data.settimane || [] }))
+              .catch(() => ({ code, settimane: [] }))
+          )
+        )
+        const byHotel = {}
+        risultati.forEach(({ code, settimane }) => { byHotel[code] = settimane })
+        setSettimanePerHotel(byHotel)
+      } else {
+        setSettimanePerHotel({})
+      }
+
       if (confrontoAttivo && urlComp) {
         try {
           const { data: comp } = await api.get(urlComp)
@@ -133,7 +152,7 @@ export default function DashboardGruppo() {
         )
       }
     } catch (err) {
-      setErrore(err.response?.data?.detail || err.message)
+      setErrore(mostraErrore(err))
       setDati(null)
     } finally {
       setLoading(false)
@@ -255,6 +274,8 @@ export default function DashboardGruppo() {
           compLabel={compLabel}
           modalita={modalita}
           isAnnoPrecedente={confrontaPrevAnno}
+          settimanePerHotel={settimanePerHotel}
+          snapshotDate={currentSnap?.snapshot_date}
         />
       )}
     </div>
@@ -265,7 +286,7 @@ export default function DashboardGruppo() {
 // Contenuto dashboard gruppo
 // ---------------------------------------------------------------------------
 
-function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoPrecedente }) {
+function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoPrecedente, settimanePerHotel = {}, snapshotDate }) {
   const kpi      = dati.kpi_gruppo
   const kpiComp  = datiComp?.kpi_gruppo || null
   const contributi = dati.contributi || []
@@ -297,6 +318,25 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
       }
     })
   }, [settimane, datiComp, isAnnoPrecedente])
+
+  // Dati per grafico occupazione comparativa per hotel (solo modalità stagione)
+  const occupazioneComparativa = useMemo(() => {
+    const codici = Object.keys(settimanePerHotel)
+    if (codici.length === 0) return []
+    const tutteWeek = new Set()
+    codici.forEach(code => settimanePerHotel[code].forEach(w => tutteWeek.add(w.week_start)))
+    return [...tutteWeek].sort().map(ws => {
+      const row = { week_start: ws, label: ws }
+      codici.forEach(code => {
+        const w = settimanePerHotel[code].find(s => s.week_start === ws)
+        if (w && !row.label.includes('/')) row.label = w.label
+        row[code] = w?.occupancy != null ? Math.round(w.occupancy * 10) / 10 : null
+      })
+      return row
+    })
+  }, [settimanePerHotel])
+
+  const hotelesAttivi = Object.keys(settimanePerHotel)
 
   const datiContributoBar = contributi.map(c => ({
     name: c.hotel_code,
@@ -334,8 +374,8 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
           compValue={kpiCompV('inc_fnb', formatPerc)} compLabel={compLabel} delta={kpiDelta('inc_fnb')} />
         <KPICard label="Inc. Extra" value={kpi.inc_extra != null ? formatPerc(kpi.inc_extra) : '—'}
           compValue={kpiCompV('inc_extra', formatPerc)} compLabel={compLabel} delta={kpiDelta('inc_extra')} />
-        <KPICard label="Tot. Revenue" value={kpi.revenue_total != null ? formatEuro(kpi.revenue_total) : '—'}
-          compValue={kpiCompV('revenue_total', formatEuro)} compLabel={compLabel} delta={kpiDelta('revenue_total')} />
+        <KPICard label="Tot. Revenue" value={kpi.revenue_total != null ? formatEuroK(kpi.revenue_total) : '—'}
+          compValue={kpiCompV('revenue_total', formatEuroK)} compLabel={compLabel} delta={kpiDelta('revenue_total')} />
       </div>
 
       {/* Contributo revenue per hotel */}
@@ -404,6 +444,35 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
         </div>
       )}
 
+      {/* Occupazione comparativa per hotel — solo stagione intera */}
+      {modalita === 'stagione' && occupazioneComparativa.length > 0 && (
+        <div className="card sezione">
+          <SezioneHeader titolo="Occupazione settimanale per hotel" />
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={occupazioneComparativa} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} width={42} />
+              <Tooltip formatter={(v, name) => [v != null ? `${v.toFixed(1)}%` : '—', name]} />
+              <Legend />
+              {pastReferenceArea(occupazioneComparativa, 'week_start', 'label', snapshotDate)}
+              {hotelesAttivi.map(code => (
+                <Line
+                  key={code}
+                  type="monotone"
+                  dataKey={code}
+                  stroke={COLORI_HOTEL[code] || '#999'}
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                  name={code}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {/* Trend settimanale RevPAR / TRevPAR — solo stagione intera */}
       {modalita === 'stagione' && settimane.length > 0 && (
         <div className="card sezione">
@@ -416,6 +485,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
               <YAxis tickFormatter={v => formatEuro(v)} />
               <Tooltip formatter={v => formatEuro(v)} />
               <Legend />
+              {pastReferenceArea(settimaneConfronto, 'week_start', 'label', snapshotDate)}
               <Line type="monotone" dataKey="trevpar" stroke="#3b82f6" dot={false} name="TRevPAR" strokeWidth={2} />
               <Line type="monotone" dataKey="revpar"  stroke="#10b981" dot={false} name="RevPAR"  strokeWidth={2} />
               {datiComp && <>
@@ -439,6 +509,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
               <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={v => formatEuro(v)} />
               <Legend />
+              {pastReferenceArea(settimaneConfronto, 'week_start', 'label', snapshotDate)}
               <Line type="monotone" dataKey="revenue_total" stroke="#f59e0b" dot={false} name="Tot. Revenue" strokeWidth={2} />
               {datiComp && (
                 <Line type="monotone" dataKey="revenue_total_comp" stroke="#fcd34d" dot={false} strokeDasharray="4 4" name={`Tot. Revenue ${compLabel}`} />
@@ -460,6 +531,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
               <YAxis tickFormatter={v => `${v.toFixed(1)}%`} domain={[0, 100]} />
               <Tooltip formatter={(v, n) => [v != null ? `${Number(v).toFixed(1)}%` : '—', n]} />
               <Legend />
+              {pastReferenceArea(settimaneConfronto, 'week_start', 'label', snapshotDate)}
               <Line type="monotone" dataKey="occupancy" stroke="#8b5cf6" dot={false} name="Occupazione %" strokeWidth={2} />
               {datiComp && (
                 <Line type="monotone" dataKey="occupancy_comp" stroke="#c4b5fd" dot={false} strokeDasharray="4 4" name={`Occup. ${compLabel}`} />

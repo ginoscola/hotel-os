@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client.js'
-import { formatEuro, formatPerc, formatData } from '../utils/format.js'
+import { formatEuro, formatPerc, formatData, mostraErrore } from '../utils/format.js'
 
 // Replica della logica backend: estrae snapshot_date dai primi 8 caratteri del basename
 function estraiSnapshotDate(nomeFile) {
@@ -99,8 +99,7 @@ export default function Import() {
       )
       setRisultato(data)
     } catch (err) {
-      const msg = err.response?.data?.detail || err.message
-      setErrore(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      setErrore(mostraErrore(err))
     } finally {
       setLoading(false)
     }

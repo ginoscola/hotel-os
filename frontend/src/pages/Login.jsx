@@ -85,17 +85,11 @@ export default function Login() {
       }}>
         {/* Logo / titolo */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{
-            background: '#1a1a2e',
-            borderRadius: 10,
-            display: 'inline-block',
-            padding: '10px 20px',
-            marginBottom: 12,
-          }}>
-            <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: 18, letterSpacing: '0.02em' }}>
-              HotelOS
-            </span>
-          </div>
+          <img
+            src="/hotelos-icon.svg"
+            alt="HotelOS"
+            style={{ width: 200, height: 200, borderRadius: 36, marginBottom: 18 }}
+          />
           <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>
             Accedi per continuare
           </p>
