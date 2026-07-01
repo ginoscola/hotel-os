@@ -1,10 +1,13 @@
 /**
  * TabStampanteRT — invio comandi X/Z/STATUS al registratore telematico Epson FP-81 II.
- * Chiamata diretta browser → stampante (nessun proxy backend): l'IP è letto da hotels.rt_ip.
+ * Chiamata diretta browser → stampante (nessun proxy backend): l'IP è letto da GET /rt-printers/,
+ * dove più hotel possono condividere la stessa stampante (es. Du Parc + Club Hotel).
  * Il controllo "solo admin per Z" è applicato solo lato interfaccia (nessuna enforcement server-side,
  * dato che il browser parla direttamente con la stampante).
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import api from '../api/client'
+import { mostraErrore } from '../utils/format'
 
 const CONFERMA_Z_DELAY_MS = 2000
 
@@ -23,15 +26,22 @@ function urlStampante(ip) {
   return `http://${ip}/cgi-bin/fpmate.cgi?devid=local_printer&timeout=10000`
 }
 
-export default function TabStampanteRT({ hotels, isAdmin }) {
-  const stampanti = (hotels || []).filter(h => h.rt_ip)
-  const [selezionata, setSelezionata] = useState(stampanti[0]?.code || null)
+export default function TabStampanteRT({ isAdmin }) {
+  const [stampanti, setStampanti] = useState([])
+  const [caricamentoErrore, setCaricamentoErrore] = useState(null)
+  const [selezionata, setSelezionata] = useState(null)
   const [comandoInCorso, setComandoInCorso] = useState(null)
   const [log, setLog] = useState([])
   const [dialogZ, setDialogZ] = useState(false)
   const [confermaAbilitata, setConfermaAbilitata] = useState(false)
 
-  const stampante = stampanti.find(s => s.code === selezionata) || null
+  useEffect(() => {
+    api.get('/rt-printers/')
+      .then(({ data }) => { setStampanti(data); if (data.length) setSelezionata(data[0].id) })
+      .catch(e => setCaricamentoErrore(mostraErrore(e)))
+  }, [])
+
+  const stampante = stampanti.find(s => s.id === selezionata) || null
 
   function aggiungiLog(messaggio, tipo = 'info') {
     setLog(prev => [
@@ -43,11 +53,15 @@ export default function TabStampanteRT({ hotels, isAdmin }) {
   async function inviaComando(cmd) {
     if (!stampante) return
     setComandoInCorso(cmd)
-    aggiungiLog(`→ ${cmd} su ${stampante.name} (${stampante.rt_ip})…`, 'info')
+    aggiungiLog(`→ ${cmd} su ${stampante.nome} (${stampante.ip})…`, 'info')
     try {
-      const resp = await fetch(urlStampante(stampante.rt_ip), {
+      // Content-Type 'text/plain' e nessun header custom: una richiesta "simple" CORS
+      // non genera preflight OPTIONS. Con 'text/xml' + header SOAPAction il browser manda
+      // prima una OPTIONS e poi la POST — se la fpmate.cgi non distingue i verbi HTTP,
+      // il risultato è una stampa duplicata (causa del bug osservato in campo).
+      const resp = await fetch(urlStampante(stampante.ip), {
         method: 'POST',
-        headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: '""' },
+        headers: { 'Content-Type': 'text/plain' },
         body: buildSOAP(cmd),
       })
       const testo = await resp.text()
@@ -101,18 +115,24 @@ export default function TabStampanteRT({ hotels, isAdmin }) {
         Seleziona stampante
       </div>
 
-      {stampanti.length === 0 && (
+      {caricamentoErrore && (
+        <div style={{ padding: '10px 14px', background: '#fdecea', border: '1px solid #f5c6c3', borderRadius: 10, fontSize: '0.82rem', color: '#c62828', marginBottom: 20 }}>
+          {caricamentoErrore}
+        </div>
+      )}
+
+      {!caricamentoErrore && stampanti.length === 0 && (
         <div style={{ padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: '0.85rem', color: '#64748b', marginBottom: 20 }}>
-          Nessun registratore telematico configurato. Imposta l'IP in Admin → Stagioni/Hotel (campo <code>rt_ip</code>).
+          Nessun registratore telematico configurato. Aggiungilo in Admin → Corrispettivi → Stampanti RT.
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
         {stampanti.map(s => {
-          const vpn = !s.rt_ip.startsWith('192.168.100.')
-          const attiva = s.code === selezionata
+          const vpn = !s.ip.startsWith('192.168.100.')
+          const attiva = s.id === selezionata
           return (
-            <label key={s.code} onClick={() => setSelezionata(s.code)} style={{
+            <label key={s.id} onClick={() => setSelezionata(s.id)} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
               border: `2px solid ${attiva ? '#1e3a5f' : '#e2e8f0'}`,
               background: attiva ? '#eff6ff' : '#fff',
@@ -125,8 +145,10 @@ export default function TabStampanteRT({ hotels, isAdmin }) {
                 boxShadow: attiva ? 'inset 0 0 0 3px #fff' : 'none',
               }} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b' }}>{s.name}</div>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>{s.rt_ip}</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b' }}>{s.nome}</div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>
+                  {s.ip}{s.hotels?.length ? ` · ${s.hotels.join(', ')}` : ''}
+                </div>
               </div>
               <span style={{
                 fontSize: '0.7rem', fontWeight: 700, padding: '3px 9px', borderRadius: 20,
@@ -181,7 +203,7 @@ export default function TabStampanteRT({ hotels, isAdmin }) {
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 420 }}>
             <div style={{ fontSize: '1rem', fontWeight: 700, color: '#c62828', marginBottom: 10 }}>⚠️ Chiusura fiscale Z</div>
             <div style={{ fontSize: '0.85rem', color: '#334155', marginBottom: 6 }}>
-              Stampante: <strong>{stampante.name}</strong> ({stampante.rt_ip})
+              Stampante: <strong>{stampante.nome}</strong> ({stampante.ip})
             </div>
             <div style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5, marginBottom: 18 }}>
               Questa operazione è <strong>definitiva</strong>: azzera i totalizzatori e trasmette i corrispettivi

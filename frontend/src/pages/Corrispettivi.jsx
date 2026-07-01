@@ -2839,7 +2839,7 @@ export default function Corrispettivi() {
         <TabControlloRT />
       )}
       {tab === 'rt-stampante' && (
-        <TabStampanteRT hotels={hotels} isAdmin={isAdmin()} />
+        <TabStampanteRT isAdmin={isAdmin()} />
       )}
       {tab === 'analisi' && (
         <TabAnalisiRicavi hotels={hotels} isAdmin={isAdmin()} />

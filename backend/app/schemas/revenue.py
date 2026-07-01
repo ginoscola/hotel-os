@@ -15,9 +15,20 @@ class HotelBase(BaseModel):
     default_rooms: int
 
 
+class RtPrinterBase(BaseModel):
+    nome: str
+    ip: str
+
+
+class RtPrinterRead(RtPrinterBase):
+    id: int
+
+    model_config = {"from_attributes": True}
+
+
 class HotelRead(HotelBase):
     id: int
-    rt_ip: Optional[str] = None
+    rt_printer: Optional[RtPrinterRead] = None
     stagione_corrente: Optional["HotelSeasonRead"] = None
 
     model_config = {"from_attributes": True}

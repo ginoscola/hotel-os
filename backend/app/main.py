@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.routers import admin, auth, budget, corrispettivi, dashboard, dipendenti, export, forecast, hotels, modules, rooms, settimane, snapshots, upload
+from app.routers import admin, auth, budget, corrispettivi, dashboard, dipendenti, export, forecast, hotels, modules, rooms, rt_printers, settimane, snapshots, upload
 from app.routers import config as config_router
 from app.routers import lookup as lookup_router
 from app.routers import analisi_ricavi as analisi_ricavi_router
@@ -62,6 +62,7 @@ app.include_router(dipendenti.router)
 app.include_router(corrispettivi.router)
 app.include_router(forecast.router)
 app.include_router(rooms.router)
+app.include_router(rt_printers.router)
 app.include_router(lookup_router.router)
 app.include_router(analisi_ricavi_router.router)
 app.include_router(usali_router.router)

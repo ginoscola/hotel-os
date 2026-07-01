@@ -37,6 +37,7 @@ const SEZIONI = [
       { id: 'corr-pagamenti',       label: 'Tipi pagamento' },
       { id: 'corr-prefissi',        label: 'Prefissi struttura' },
       { id: 'corr-classificazione', label: 'Classif. trattamenti' },
+      { id: 'corr-rt-stampanti',    label: 'Stampanti RT' },
     ],
   },
   {
@@ -149,6 +150,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'corr-pagamenti')   return <CorrTipiPagamento />
   if (sezione === 'corr-prefissi')        return <CorrPrefissiStruttura />
   if (sezione === 'corr-classificazione') return <CorrClassificazioneTrattamenti />
+  if (sezione === 'corr-rt-stampanti')    return <CorrStampantiRT />
   if (sezione === 'usali-kpi')            return <UsaliKpiConfig />
   if (sezione === 'usali-cc')             return <UsaliCCMapping />
   if (sezione === 'sistema-debug')        return <SistemaDebug />
@@ -1266,6 +1268,119 @@ function CorrPrefissiStruttura() {
             </select>
             <button onClick={aggiungi} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
           </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Corrispettivi — Stampanti RT
+// ---------------------------------------------------------------------------
+
+function CorrStampantiRT() {
+  const [stampanti, setStampanti] = useState([])
+  const [hotels, setHotels] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [nuovoNome, setNuovoNome] = useState('')
+  const [nuovoIp, setNuovoIp] = useState('')
+  const [msg, fb] = useFeedback()
+
+  const carica = useCallback(async () => {
+    setLoading(true)
+    const [dStampanti, dHotels] = await Promise.all([
+      api.get('/rt-printers/').then(r => r.data).catch(() => []),
+      api.get('/hotels/').then(r => r.data).catch(() => []),
+    ])
+    setStampanti(dStampanti); setHotels(dHotels); setLoading(false)
+  }, [])
+  useEffect(() => { carica() }, [carica])
+
+  async function aggiungi() {
+    if (!nuovoNome || !nuovoIp) { fb('Nome e IP obbligatori'); return }
+    try {
+      await api.post('/rt-printers/', { nome: nuovoNome, ip: nuovoIp })
+      setNuovoNome(''); setNuovoIp('')
+      fb('Stampante aggiunta'); carica()
+    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
+  }
+
+  async function elimina(id) {
+    if (!confirm('Eliminare questa stampante? Gli hotel associati resteranno senza RT configurato.')) return
+    try { await api.delete(`/rt-printers/${id}`); fb('Eliminata'); carica() }
+    catch (e) { fb('Errore: ' + mostraErrore(e)) }
+  }
+
+  async function associa(hotelCode, printerId) {
+    try {
+      await api.put(`/rt-printers/hotels/${hotelCode}`, { printer_id: printerId ? Number(printerId) : null })
+      fb('Associazione aggiornata'); carica()
+    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
+  }
+
+  return (
+    <div>
+      <h2 style={{ marginTop: 0, marginBottom: 4 }}>Stampanti RT — Corrispettivi</h2>
+      <p style={{ marginTop: 0, marginBottom: 20, fontSize: 13, color: '#6b7280' }}>
+        Registratori telematici Epson FP-81 II. Più hotel possono condividere la stessa stampante
+        (es. Du Parc + Club Hotel): basta associarli allo stesso IP.
+      </p>
+      {msg && <div style={{ marginBottom: 12, padding: '6px 12px', background: '#d1fae5', borderRadius: 6, color: '#065f46', fontSize: 13, fontWeight: 600 }}>{msg}</div>}
+      {loading ? <p style={{ color: '#9ca3af' }}>Caricamento…</p> : (
+        <>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', marginBottom: 20 }}>
+            <thead>
+              <tr style={{ background: '#fee2e2' }}>
+                {['Nome', 'IP', 'Hotel associati', ''].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {stampanti.map(s => (
+                <tr key={s.id} style={{ borderTop: '1px solid #fecaca' }}>
+                  <td style={{ padding: '6px 10px', fontWeight: 600 }}>{s.nome}</td>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{s.ip}</td>
+                  <td style={{ padding: '6px 10px', color: '#6b7280' }}>{s.hotels.join(', ') || '—'}</td>
+                  <td style={{ padding: '6px 10px' }}>
+                    <button onClick={() => elimina(s.id)} style={{ ...btnSm, background: '#fca5a5', color: '#7f1d1d' }}>Elimina</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Aggiungi:</span>
+            <input value={nuovoNome} onChange={e => setNuovoNome(e.target.value)}
+              placeholder="Nome (es. Du Parc / Club Hotel)" style={{ ...inputSm, width: 220 }} />
+            <input value={nuovoIp} onChange={e => setNuovoIp(e.target.value)}
+              placeholder="IP (es. 192.168.100.134)" style={{ ...inputSm, width: 160 }} />
+            <button onClick={aggiungi} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
+          </div>
+
+          <h3 style={{ fontSize: 14, marginBottom: 10 }}>Associazione hotel → stampante</h3>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f3f4f6' }}>
+                {['Hotel', 'Stampante RT'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {hotels.map(h => (
+                <tr key={h.code} style={{ borderTop: '1px solid #e5e7eb' }}>
+                  <td style={{ padding: '6px 10px', fontWeight: 600 }}>{h.code} — {h.name}</td>
+                  <td style={{ padding: '6px 10px' }}>
+                    <select value={h.rt_printer?.id || ''} onChange={e => associa(h.code, e.target.value)} style={inputSm}>
+                      <option value="">— Nessuna —</option>
+                      {stampanti.map(s => <option key={s.id} value={s.id}>{s.nome} ({s.ip})</option>)}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </>
       )}
     </div>

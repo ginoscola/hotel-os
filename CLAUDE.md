@@ -257,10 +257,20 @@ Tab attiva: `localStorage('corrispettivi_tab')`.
 ### Stampante RT — comandi Epson FP-81 II (`TabStampanteRT.jsx`)
 Invia comandi X/Z/STATUS al registratore telematico via SOAP/HTTP (`fpmate.cgi`), **chiamata diretta
 browser → stampante** (nessun proxy backend: si è verificato empiricamente che l'RT non blocca CORS).
-- IP letto da `hotels.rt_ip` (colonna nullable; NULL = RT non configurato, hotel non appare in elenco)
-- Badge VPN/LAN calcolato client-side: IP fuori da `192.168.100.x` → VPN
-- `STATUS` riusa il payload di `X` (`printXReport`): l'Epson non espone un comando di stato dedicato
-- Risposta RT: XML con `<response success="" code="" status="">` (attributi, non elementi annidati)
+- **Tabella `rt_printers`** (id, nome, ip univoco): un registratore può essere condiviso da più hotel
+  (es. Du Parc + Club Hotel sullo stesso IP `192.168.100.134`). `hotels.rt_printer_id` FK nullable
+  (NULL = RT non configurato per quell'hotel). Endpoint gestione: `routers/rt_printers.py`
+  (`GET|POST /rt-printers/`, `PUT|DELETE /rt-printers/{id}`, `PUT /rt-printers/hotels/{hotel_code}`
+  per associare/disassociare — scrittura solo admin).
+- Admin unificata: `corr-rt-stampanti` → `CorrStampantiRT` (CRUD stampanti + select associazione per hotel).
+- Frontend carica l'elenco da `GET /rt-printers/` (non più da `hotels`), un solo elemento per stampante
+  condivisa. Badge VPN/LAN calcolato client-side: IP fuori da `192.168.100.x` → VPN.
+- `STATUS` riusa il payload di `X` (`printXReport`): l'Epson non espone un comando di stato dedicato.
+- Risposta RT: XML con `<response success="" code="" status="">` (attributi, non elementi annidati).
+- **fetch() con `Content-Type: text/plain` e nessun header custom** (niente `SOAPAction`): con
+  `text/xml` + header custom il browser manda prima una OPTIONS di preflight CORS, e la fpmate.cgi
+  (non distinguendo i verbi HTTP) esegue la stampa su entrambe le richieste → stampa duplicata
+  (bug osservato e corretto in campo su Report X).
 - **Nessuna enforcement server-side sul comando Z** — il pulsante è visibile solo se `isAdmin()` lato
   frontend, ma chiunque abbia accesso di rete alla stampante può inviare comandi direttamente:
   il controllo è solo di interfaccia, non di sicurezza

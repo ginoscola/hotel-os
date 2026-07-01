@@ -127,10 +127,23 @@ class Hotel(Base):
     code = Column(String(20), unique=True, nullable=False, index=True)  # es. CLB, DPH, INT
     name = Column(String(100), nullable=False)
     default_rooms = Column(Integer, nullable=False)  # capacità standard (può variare per stagione)
-    rt_ip = Column(String(50), nullable=True)  # IP registratore telematico Epson (NULL = non configurato)
+    rt_printer_id = Column(Integer, ForeignKey("rt_printers.id", ondelete="SET NULL"), nullable=True)
 
     stagioni = relationship("HotelSeason", back_populates="hotel", cascade="all, delete-orphan")
     rooms    = relationship("Room", back_populates="hotel", cascade="all, delete-orphan")
+    rt_printer = relationship("RtPrinter", back_populates="hotels")
+
+
+class RtPrinter(Base):
+    """Registratore telematico Epson FP-81 II condiviso da uno o più hotel."""
+
+    __tablename__ = "rt_printers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(100), nullable=False)
+    ip = Column(String(50), unique=True, nullable=False)
+
+    hotels = relationship("Hotel", back_populates="rt_printer")
 
 
 class HotelSeason(Base):
