@@ -1,43 +1,74 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<r:DatiCorrispettivi xmlns:r="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/corrispettivi/dati/v1.0">
-  <DataOraRilevazione>2026-06-30T21:00:45</DataOraRilevazione>
-  <Trasmissione>
-    <Progressivo>944</Progressivo>
-  </Trasmissione>
-  <DatiRT>
-    <Riepilogo>
-      <IVA>
-        <AliquotaIVA>10.00</AliquotaIVA>
-      </IVA>
-      <ImportoParziale>1735.54</ImportoParziale>
-      <Imposta>173.55</Imposta>
-      <Ammontare>1909.09</Ammontare>
-    </Riepilogo>
-    <Riepilogo>
-      <IVA>
-        <AliquotaIVA>22.00</AliquotaIVA>
-      </IVA>
-      <ImportoParziale>0.00</ImportoParziale>
-      <Imposta>0.00</Imposta>
-      <Ammontare>0.00</Ammontare>
-    </Riepilogo>
-    <Riepilogo>
-      <Natura>N1</Natura>
-      <ImportoParziale>46.01</ImportoParziale>
-      <NonRiscossoServizi>12.00</NonRiscossoServizi>
-    </Riepilogo>
-    <Riepilogo>
-      <Natura>N4</Natura>
-      <ImportoParziale>0.00</ImportoParziale>
-    </Riepilogo>
-    <Totali>
-      <NumeroDocCommerciali>13</NumeroDocCommerciali>
-      <PagatoContanti>199.00</PagatoContanti>
-      <PagatoElettronico>1756.10</PagatoElettronico>
-    </Totali>
-  </DatiRT>
-  <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
-    <SignedInfo></SignedInfo>
-    <SignatureValue>ANONIMIZZATO==</SignatureValue>
-  </Signature>
+<r:DatiCorrispettivi xmlns:r="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/corrispettivi/dati/v1.0" versione="COR10">
+<Trasmissione>
+<Progressivo>944</Progressivo>
+<Formato>COR10</Formato>
+</Trasmissione>
+<DataOraRilevazione>2026-06-30T21:00:45</DataOraRilevazione>
+<DatiRT>
+<Riepilogo>
+<Natura>N4</Natura>
+<Ammontare>0.00</Ammontare>
+<ImportoParziale>0.00</ImportoParziale>
+</Riepilogo>
+<Riepilogo>
+<IVA>
+<AliquotaIVA>22.00</AliquotaIVA>
+<Imposta>0.00</Imposta>
+</IVA>
+<Ammontare>0.00</Ammontare>
+<ImportoParziale>0.00</ImportoParziale>
+</Riepilogo>
+<Riepilogo>
+<IVA>
+<AliquotaIVA>10.00</AliquotaIVA>
+<Imposta>173.55</Imposta>
+</IVA>
+<Ammontare>1909.27</Ammontare>
+<ImportoParziale>1735.54</ImportoParziale>
+<NonRiscossoServizi>173.74</NonRiscossoServizi>
+</Riepilogo>
+<Riepilogo>
+<IVA>
+<AliquotaIVA>4.00</AliquotaIVA>
+<Imposta>0.00</Imposta>
+</IVA>
+<Ammontare>0.00</Ammontare>
+<ImportoParziale>0.00</ImportoParziale>
+</Riepilogo>
+<Riepilogo>
+<IVA>
+<AliquotaIVA>5.00</AliquotaIVA>
+<Imposta>0.00</Imposta>
+</IVA>
+<Ammontare>0.00</Ammontare>
+<ImportoParziale>0.00</ImportoParziale>
+</Riepilogo>
+<Riepilogo>
+<Natura>N1</Natura>
+<Ammontare>54.00</Ammontare>
+<ImportoParziale>46.01</ImportoParziale>
+<NonRiscossoServizi>7.99</NonRiscossoServizi>
+</Riepilogo>
+<Totali>
+<NumeroDocCommerciali>13</NumeroDocCommerciali>
+<PagatoContanti>199.00</PagatoContanti>
+<PagatoElettronico>1756.10</PagatoElettronico>
+</Totali>
+</DatiRT>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+<SignedInfo>
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>
+<Reference URI="">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+<DigestValue>ANONIMIZZATO=</DigestValue>
+</Reference>
+</SignedInfo>
+<SignatureValue>ANONIMIZZATO==</SignatureValue>
+</Signature>
 </r:DatiCorrispettivi>

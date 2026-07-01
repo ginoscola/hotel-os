@@ -41,16 +41,23 @@ def _dec(text) -> Decimal:
         return Decimal('0')
 
 
-def _aliquota_di(riepilogo: ET.Element):
-    aliquota = _child_text(riepilogo, 'AliquotaIVA')
-    if aliquota is not None:
-        return _dec(aliquota)
+def _iva_info(riepilogo: ET.Element):
+    """Legge AliquotaIVA e Imposta di una riga IVA.
+
+    Nei file reali dell'RT entrambi i campi sono annidati dentro <IVA>
+    (<IVA><AliquotaIVA/><Imposta/></IVA>), non fratelli diretti di <IVA> sotto
+    <Riepilogo>: senza questo fallback annidato <Imposta> risulterebbe sempre 0.
+    """
+    aliquota_testo = _child_text(riepilogo, 'AliquotaIVA')
+    imposta_testo = _child_text(riepilogo, 'Imposta')
     iva = _find_child(riepilogo, 'IVA')
     if iva is not None:
-        aliquota = _child_text(iva, 'AliquotaIVA')
-        if aliquota is not None:
-            return _dec(aliquota)
-    return None
+        if aliquota_testo is None:
+            aliquota_testo = _child_text(iva, 'AliquotaIVA')
+        if imposta_testo is None:
+            imposta_testo = _child_text(iva, 'Imposta')
+    aliquota = _dec(aliquota_testo) if aliquota_testo is not None else None
+    return aliquota, _dec(imposta_testo)
 
 
 def parse_corrisp_xml(xml_content: bytes) -> dict:
@@ -89,13 +96,12 @@ def parse_corrisp_xml(xml_content: bytes) -> dict:
 
     for r in riepiloghi:
         importo_parziale = _dec(_child_text(r, 'ImportoParziale'))
-        imposta = _dec(_child_text(r, 'Imposta'))
         ammontare = _dec(_child_text(r, 'Ammontare'))
         nrs_testo = _child_text(r, 'NonRiscossoServizi')
         if nrs_testo is not None:
             tassa_soggiorno_nrs += _dec(nrs_testo)
 
-        aliquota = _aliquota_di(r)
+        aliquota, imposta = _iva_info(r)
         natura = _child_text(r, 'Natura')
 
         if aliquota is not None:

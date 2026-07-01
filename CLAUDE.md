@@ -237,7 +237,15 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   `totale_10/22/ts/penali` usati dal confronto per categoria vs PMS (`totale_10/22` = `Ammontare` lordo,
   `totale_ts` = `tassa_soggiorno_nrs`, `totale_penali` = 0 — l'XML non ha una Natura dedicata alle penali).
   Protegge sempre `modificato_manualmente=True` anche con `on_conflict=aggiorna` (risponde `esito=saltato`).
-  Frontend: pulsante "Importa CORRISP.xml" in `TabControlloRT` (dentro `Corrispettivi.jsx`).
+  Frontend: pulsante "Importa CORRISP.xml" in `TabControlloRT` (dentro `Corrispettivi.jsx`), due modalità:
+  - **Dalla cartella stampante** (default): dato un giorno, l'app legge direttamente
+    `http://{ip_stampante}/www/dati-rt/{YYYYMMDD}/` (elenco HTML con `<a href="...">`, chiamata diretta
+    browser→stampante come in `TabStampanteRT`), trova il file `*CORRISP*.xml` (la cartella contiene anche
+    `*ESITO-{id}.xml` e `*ZREPORT.txt`, da ignorare) e lo invia al backend come se fosse stato caricato.
+    IP letto da `GET /rt-printers/` mappando RT1→hotel DPH/CLB, RT2→hotel INT.
+  - **Carica da PC**: selezione manuale del file, comportamento originale.
+  ⚠️ Nel file reale `<Imposta>` è annidato dentro `<IVA>` insieme a `<AliquotaIVA>` (non fratello diretto
+  di `<IVA>` sotto `<Riepilogo>`): il parser gestisce entrambe le forme.
 
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.

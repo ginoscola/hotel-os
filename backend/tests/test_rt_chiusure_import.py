@@ -121,7 +121,7 @@ class TestImportXmlInserisce:
         assert dati["esito"] == "inserito"
         assert dati["data_chiusura"] == DATA_TEST
         assert dati["rt_code"] == RT_CODE_TEST
-        assert dati["totale_giorno"] == pytest.approx(1955.10)
+        assert dati["totale_giorno"] == pytest.approx(1955.28)
         assert dati["progressivo"] == 944
 
 
