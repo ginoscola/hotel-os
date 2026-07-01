@@ -817,7 +817,7 @@ function TabGiornalieri({ lordo }) {
             {/* Riga 2: categorie */}
             <tr style={{ background: '#2d4f7c', color: '#cbd5e1' }}>
               {STRUTTURE_HOTEL.map(sc => (
-                ['Arrangiamenti', 'Tassa di Soggiorno', 'Penali', 'Shop', 'Tot.'].map((l, i) => (
+                ['Arrangiamenti', 'Tassa di Soggiorno', 'Penali', 'Shop/ricariche', 'Tot.'].map((l, i) => (
                   <th key={`${sc}_${i}`} style={{
                     ...thSt, color: '#cbd5e1', fontSize: '0.7rem',
                     borderLeft: i === 0 ? '3px solid #4a6fa5' : '1px solid #3d6a9a',
