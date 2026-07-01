@@ -39,6 +39,16 @@
 }
 .navbar-brand:hover { opacity: 0.9; }
 
+.navbar-version {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.5;
+  letter-spacing: 0.03em;
+  margin-left: 2px;
+  align-self: flex-end;
+  margin-bottom: 4px;
+}
+
 .navbar-brand-logo {
   height: 40px;
   width: 40px;

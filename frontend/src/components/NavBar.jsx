@@ -2,6 +2,7 @@ import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useState, useMemo } from 'react'
 import { getUtenteCorrente } from './ProtectedRoute.jsx'
 import api from '../api/client.js'
+import { APP_VERSION } from '../version.js'
 import './NavBar.css'
 
 // ---------------------------------------------------------------------------
@@ -107,6 +108,7 @@ export default function NavBar() {
         <NavLink to="/dashboard/gruppo" className="navbar-brand">
           <img src="/hotelos-icon.svg" alt="HotelOS" className="navbar-brand-logo" />
           {appName}
+          <span className="navbar-version">v{APP_VERSION}</span>
         </NavLink>
 
         {/* Tab moduli */}

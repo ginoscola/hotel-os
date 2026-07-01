@@ -4,6 +4,7 @@ import AdminUtenti from './AdminUtenti.jsx'
 import AdminCentriDiCosto from './AdminCentriDiCosto.jsx'
 import api from '../api/client.js'
 import { mostraErrore } from '../utils/format.js'
+import { APP_VERSION, APP_VERSION_DATE } from '../version.js'
 
 const SEZIONI = [
   {
@@ -71,8 +72,11 @@ export default function AdminUnificato() {
         borderRight: '1px solid #e2e8f0',
         paddingTop: 8,
         background: '#f8fafc',
+        display: 'flex',
+        flexDirection: 'column',
       }}>
         {SEZIONI.map(({ gruppo, voci }) => (
+
           <div key={gruppo} style={{ marginBottom: 4 }}>
             <div style={{
               padding: '10px 18px 4px',
@@ -109,6 +113,19 @@ export default function AdminUnificato() {
             ))}
           </div>
         ))}
+
+        {/* ── Versione ── */}
+        <div style={{
+          marginTop: 'auto',
+          padding: '16px 18px 12px',
+          borderTop: '1px solid #e2e8f0',
+          fontSize: 11,
+          color: '#94a3b8',
+          lineHeight: 1.6,
+        }}>
+          <div style={{ fontWeight: 600 }}>HotelOS v{APP_VERSION}</div>
+          <div>{APP_VERSION_DATE}</div>
+        </div>
       </aside>
 
       {/* ── Contenuto ── */}
