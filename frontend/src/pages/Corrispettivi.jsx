@@ -2424,22 +2424,7 @@ function TabControlloRT() {
   const [importInCorso, setImportInCorso] = useState(false)
   const [importMsg, setImportMsg] = useState(null)   // { tipo: 'success'|'warning'|'info', testo }
   const [importModalita, setImportModalita] = useState('cartella')   // 'cartella' | 'locale'
-  const [stampantiIp, setStampantiIp] = useState({})                  // { RT1: ip, RT2: ip }
   const [importDataCartella, setImportDataCartella] = useState(() => new Date().toISOString().slice(0, 10))
-  const [importCercando, setImportCercando] = useState(false)
-  const [importNomeTrovato, setImportNomeTrovato] = useState(null)
-  const [importErroreCartella, setImportErroreCartella] = useState(null)
-
-  useEffect(() => {
-    api.get('/rt-printers/').then(({ data }) => {
-      const mappa = {}
-      data.forEach(p => {
-        if (p.hotels.some(h => ['DPH', 'CLB'].includes(h))) mappa.RT1 = p.ip
-        if (p.hotels.includes('INT')) mappa.RT2 = p.ip
-      })
-      setStampantiIp(mappa)
-    }).catch(() => {})
-  }, [])
 
   const carica = useCallback(async () => {
     setCaricamento(true)
@@ -2545,41 +2530,8 @@ function TabControlloRT() {
 
   const apriDialogImport = () => {
     setImportRt('RT1'); setImportFile(null); setImportOnConflict('salta'); setImportMsg(null)
-    setImportModalita('cartella'); setImportNomeTrovato(null); setImportErroreCartella(null)
+    setImportModalita('cartella'); setImportDataCartella(new Date().toISOString().slice(0, 10))
     setDialogImport(true)
-  }
-
-  // Legge il file CORRISP.xml direttamente dalla cartella della stampante fiscale
-  // (chiamata diretta browser → stampante, stesso meccanismo di TabStampanteRT).
-  const cercaFileCartella = async () => {
-    setImportCercando(true)
-    setImportErroreCartella(null)
-    setImportNomeTrovato(null)
-    setImportFile(null)
-    try {
-      const ip = stampantiIp[importRt]
-      if (!ip) throw new Error(`IP stampante non configurato per ${importRt} (Admin → Stampanti RT)`)
-      const cartella = importDataCartella.replaceAll('-', '')
-      const urlCartella = `http://${ip}/www/dati-rt/${cartella}/`
-
-      const respLista = await fetch(urlCartella)
-      if (!respLista.ok) throw new Error(`Cartella non raggiungibile (HTTP ${respLista.status})`)
-      const html = await respLista.text()
-      const trovati = [...html.matchAll(/href="([^"]*CORRISP[^"]*\.xml)"/gi)].map(m => m[1])
-      if (trovati.length === 0) throw new Error('Nessun file CORRISP.xml trovato in questa cartella')
-      const nomeFile = trovati[trovati.length - 1]
-
-      const respFile = await fetch(urlCartella + nomeFile)
-      if (!respFile.ok) throw new Error(`File non raggiungibile (HTTP ${respFile.status})`)
-      const testoXml = await respFile.text()
-
-      setImportFile(new File([testoXml], nomeFile, { type: 'text/xml' }))
-      setImportNomeTrovato(nomeFile)
-    } catch (e) {
-      setImportErroreCartella(e.message || 'RT non raggiungibile — verifica rete/VPN')
-    } finally {
-      setImportCercando(false)
-    }
   }
 
   // Nome file RT: 99MEX036593-YYYYMMDDTHHMMSS-NNNN-CORRISP.xml
@@ -2589,20 +2541,33 @@ function TabControlloRT() {
   }
 
   const eseguiImport = async () => {
-    if (!importFile) return
+    if (importModalita === 'locale' && !importFile) return
     setImportInCorso(true)
     setImportMsg(null)
     try {
-      const formData = new FormData()
-      formData.append('file', importFile)
-      const { data } = await api.post(
-        `/corrispettivi/rt-chiusure/import-xml?rt_code=${importRt}&on_conflict=${importOnConflict}`,
-        formData,
-      )
+      let data
+      if (importModalita === 'cartella') {
+        // Il backend legge il file direttamente dalla cartella della stampante:
+        // il file server della stampante non invia le intestazioni CORS necessarie
+        // per essere letto via fetch() dal browser, quindi la ricerca avviene lato server.
+        const resp = await api.post('/corrispettivi/rt-chiusure/import-da-stampante', {
+          rt_code: importRt, data: importDataCartella, on_conflict: importOnConflict,
+        })
+        data = resp.data
+      } else {
+        const formData = new FormData()
+        formData.append('file', importFile)
+        const resp = await api.post(
+          `/corrispettivi/rt-chiusure/import-xml?rt_code=${importRt}&on_conflict=${importOnConflict}`,
+          formData,
+        )
+        data = resp.data
+      }
+      const suffisso = data.nome_file ? ` — ${data.nome_file}` : ''
       if (data.esito === 'inserito') {
-        setImportMsg({ tipo: 'success', testo: `Chiusura del ${fmtD(data.data_chiusura)} importata correttamente (${data.rt_code})` })
+        setImportMsg({ tipo: 'success', testo: `Chiusura del ${fmtD(data.data_chiusura)} importata correttamente (${data.rt_code}${suffisso})` })
       } else if (data.esito === 'aggiornato') {
-        setImportMsg({ tipo: 'info', testo: `Chiusura del ${fmtD(data.data_chiusura)} aggiornata (${data.rt_code})` })
+        setImportMsg({ tipo: 'info', testo: `Chiusura del ${fmtD(data.data_chiusura)} aggiornata (${data.rt_code}${suffisso})` })
       } else {
         setImportMsg({ tipo: 'warning', testo: data.warning || 'Riga già presente — saltata' })
       }
@@ -2852,7 +2817,7 @@ function TabControlloRT() {
 
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
               <button
-                onClick={() => { setImportModalita('cartella'); setImportFile(null); setImportNomeTrovato(null); setImportErroreCartella(null) }}
+                onClick={() => { setImportModalita('cartella'); setImportFile(null); setImportMsg(null) }}
                 style={{
                   flex: 1, padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600,
                   border: `1px solid ${importModalita === 'cartella' ? '#1e3a5f' : '#e2e8f0'}`,
@@ -2861,7 +2826,7 @@ function TabControlloRT() {
                 }}
               >Dalla cartella stampante</button>
               <button
-                onClick={() => { setImportModalita('locale'); setImportFile(null); setImportNomeTrovato(null); setImportErroreCartella(null) }}
+                onClick={() => { setImportModalita('locale'); setImportFile(null); setImportMsg(null) }}
                 style={{
                   flex: 1, padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600,
                   border: `1px solid ${importModalita === 'locale' ? '#1e3a5f' : '#e2e8f0'}`,
@@ -2874,35 +2839,16 @@ function TabControlloRT() {
             {importModalita === 'cartella' ? (
               <>
                 <label style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 4 }}>Giorno chiusura</label>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                  <input
-                    type="date"
-                    value={importDataCartella}
-                    onChange={e => setImportDataCartella(e.target.value)}
-                    style={{ ...inpSt, flex: 1, boxSizing: 'border-box' }}
-                  />
-                  <button
-                    onClick={cercaFileCartella}
-                    disabled={importCercando}
-                    style={{
-                      padding: '6px 14px', borderRadius: 6, border: 'none', cursor: importCercando ? 'not-allowed' : 'pointer',
-                      background: '#1e3a5f', color: '#fff', fontSize: '0.82rem', fontWeight: 600,
-                    }}
-                  >{importCercando ? 'Ricerca…' : 'Cerca file'}</button>
-                </div>
-                <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '0 0 6px' }}>
-                  Legge http://{stampantiIp[importRt] || '—'}/www/dati-rt/{importDataCartella.replaceAll('-', '')}/ direttamente dalla stampante.
+                <input
+                  type="date"
+                  value={importDataCartella}
+                  onChange={e => setImportDataCartella(e.target.value)}
+                  style={{ ...inpSt, width: '100%', marginBottom: 6, boxSizing: 'border-box' }}
+                />
+                <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '0 0 10px' }}>
+                  Il backend cerca ed importa il file CORRISP.xml di questa data direttamente dalla
+                  cartella della stampante del registratore selezionato.
                 </p>
-                {importErroreCartella && (
-                  <p style={{ fontSize: '0.75rem', color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '5px 8px', margin: '0 0 10px' }}>
-                    {importErroreCartella}
-                  </p>
-                )}
-                {importNomeTrovato && (
-                  <p style={{ fontSize: '0.75rem', color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, padding: '5px 8px', margin: '0 0 10px' }}>
-                    ✅ Trovato: {importNomeTrovato}
-                  </p>
-                )}
               </>
             ) : (
               <>
@@ -2951,11 +2897,11 @@ function TabControlloRT() {
               </button>
               <button
                 onClick={eseguiImport}
-                disabled={!importFile || importInCorso}
+                disabled={(importModalita === 'locale' && !importFile) || importInCorso}
                 style={{
                   padding: '9px 16px', borderRadius: 8, border: 'none', color: '#fff', fontSize: '0.85rem', fontWeight: 700,
-                  background: (!importFile || importInCorso) ? '#93c5fd' : '#1e3a5f',
-                  cursor: (!importFile || importInCorso) ? 'not-allowed' : 'pointer',
+                  background: ((importModalita === 'locale' && !importFile) || importInCorso) ? '#93c5fd' : '#1e3a5f',
+                  cursor: ((importModalita === 'locale' && !importFile) || importInCorso) ? 'not-allowed' : 'pointer',
                 }}
               >
                 {importInCorso ? 'Importazione in corso…' : 'Importa'}

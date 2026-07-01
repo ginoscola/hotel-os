@@ -231,21 +231,28 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
 - `GET /check?data_da=&data_a=`
 - `POST|GET|DELETE /rt-chiusure` (scrittura: admin)
 - `POST /rt-chiusure/import-xml?rt_code=RT1|RT2&on_conflict=salta|aggiorna` (multipart `file`, admin) →
-  parsing CORRISP.xml (`services/corrisp_xml_parser.py`), popola `rt_chiusure`. Un file copre un RT intero
-  (RT1 = DPH+CLB, RT2 = INT), non un singolo hotel. Formula totale: Σ `Ammontare` (righe con `AliquotaIVA`,
-  solo se >0) + Σ `ImportoParziale` (righe con `Natura`, solo se >0). Popola anche i campi legacy
-  `totale_10/22/ts/penali` usati dal confronto per categoria vs PMS (`totale_10/22` = `Ammontare` lordo,
-  `totale_ts` = `tassa_soggiorno_nrs`, `totale_penali` = 0 — l'XML non ha una Natura dedicata alle penali).
+  parsing CORRISP.xml caricato manualmente (`services/corrisp_xml_parser.py`), popola `rt_chiusure`.
+- `POST /rt-chiusure/import-da-stampante` (JSON `{rt_code, data, on_conflict}`, admin) → il **backend**
+  (non il browser) si collega alla stampante, legge l'elenco `http://{ip}/www/dati-rt/{YYYYMMDD}/`
+  (HTML con `<a href="...">`), trova il file `*CORRISP*.xml` (la cartella contiene anche `*ESITO-{id}.xml`
+  e `*ZREPORT.txt`, ignorati) e lo importa. IP risolto via `Hotel.rt_printer_id → RtPrinter.ip`
+  (RT1→hotel DPH/CLB, RT2→hotel INT). Risposta include `nome_file`.
+  ⚠️ **Chiamata lato backend, non browser**: il file server `/www/dati-rt/` della stampante non invia le
+  intestazioni CORS necessarie per essere letto via `fetch()` da uno script — la navigazione diretta
+  nel browser funziona sempre (non passa da CORS) ma dà un falso senso di raggiungibilità da JS.
+  `fpmate.cgi` (comandi X/Z/Status in `TabStampanteRT`) invece risulta raggiungibile da `fetch()`,
+  quindi per quello resta valida la chiamata diretta browser→stampante.
+  Un file CORRISP.xml copre un RT intero (RT1 = DPH+CLB, RT2 = INT), non un singolo hotel.
+  Formula totale: Σ `Ammontare` (righe con `AliquotaIVA`, solo se >0) + Σ `ImportoParziale` (righe con
+  `Natura`, solo se >0). Popola anche i campi legacy `totale_10/22/ts/penali` usati dal confronto per
+  categoria vs PMS (`totale_10/22` = `Ammontare` lordo, `totale_ts` = `tassa_soggiorno_nrs`,
+  `totale_penali` = 0 — l'XML non ha una Natura dedicata alle penali).
   Protegge sempre `modificato_manualmente=True` anche con `on_conflict=aggiorna` (risponde `esito=saltato`).
+  Logica di upsert condivisa tra i due endpoint: `_upsert_rt_chiusura_da_xml()`.
   Frontend: pulsante "Importa CORRISP.xml" in `TabControlloRT` (dentro `Corrispettivi.jsx`), due modalità:
-  - **Dalla cartella stampante** (default): dato un giorno, l'app legge direttamente
-    `http://{ip_stampante}/www/dati-rt/{YYYYMMDD}/` (elenco HTML con `<a href="...">`, chiamata diretta
-    browser→stampante come in `TabStampanteRT`), trova il file `*CORRISP*.xml` (la cartella contiene anche
-    `*ESITO-{id}.xml` e `*ZREPORT.txt`, da ignorare) e lo invia al backend come se fosse stato caricato.
-    IP letto da `GET /rt-printers/` mappando RT1→hotel DPH/CLB, RT2→hotel INT.
-  - **Carica da PC**: selezione manuale del file, comportamento originale.
-  ⚠️ Nel file reale `<Imposta>` è annidato dentro `<IVA>` insieme a `<AliquotaIVA>` (non fratello diretto
-  di `<IVA>` sotto `<Riepilogo>`): il parser gestisce entrambe le forme.
+  **Dalla cartella stampante** (default, sceglie solo RT + data) e **Carica da PC** (selezione manuale file).
+  ⚠️ Nel file XML reale `<Imposta>` è annidato dentro `<IVA>` insieme a `<AliquotaIVA>` (non fratello
+  diretto di `<IVA>` sotto `<Riepilogo>` come nell'esempio iniziale): il parser gestisce entrambe le forme.
 
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.

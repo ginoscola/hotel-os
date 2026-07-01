@@ -24,17 +24,20 @@ Endpoint:
   DELETE /corrispettivi/admin/test-data       → cancella tutti i record is_test
 
   POST   /corrispettivi/rt-chiusure           → upsert chiusura RT giornaliera (admin)
-  POST   /corrispettivi/rt-chiusure/import-xml → import CORRISP.xml del RT (admin)
+  POST   /corrispettivi/rt-chiusure/import-xml → import CORRISP.xml caricato dall'utente (admin)
+  POST   /corrispettivi/rt-chiusure/import-da-stampante → legge CORRISP.xml dalla stampante (admin)
   GET    /corrispettivi/rt-chiusure           → lista mese con delta vs PMS
   DELETE /corrispettivi/rt-chiusure/{id}      → elimina chiusura RT (admin)
 """
 
 import os
+import re
 import tempfile
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Set, Tuple
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import func, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -48,6 +51,7 @@ from app.models.corrispettivi import (
     CorrispettiviManuale,
     RtChiusura,
 )
+from app.models.revenue import Hotel, RtPrinter
 from app.services.corrispettivi_excel_parser import _determina_categoria, parse_excel
 from app.services.corrisp_xml_parser import parse_corrisp_xml
 
@@ -1721,27 +1725,8 @@ def upsert_rt_chiusura(
     return _fmt_rt(nuovo)
 
 
-@router.post("/rt-chiusure/import-xml")
-def importa_rt_chiusura_xml(
-    file: UploadFile = File(...),
-    rt_code: str = Query(..., description="RT1 (DPH+CLB) o RT2 (INT)"),
-    on_conflict: str = Query('salta', description="'salta' (non tocca righe già presenti) o 'aggiorna' (rispetta modificato_manualmente)"),
-    db: Session = Depends(get_db),
-    utente=Depends(richiedi_admin),
-):
-    """Importa un file CORRISP.xml del registratore telematico e popola/aggiorna rt_chiusure."""
-    if rt_code not in RT_STRUTTURE:
-        raise HTTPException(400, f"rt_code non valido: usa {list(RT_STRUTTURE.keys())}")
-    if on_conflict not in ('salta', 'aggiorna'):
-        raise HTTPException(400, "on_conflict deve essere 'salta' o 'aggiorna'")
-    if not file.filename.lower().endswith('.xml'):
-        raise HTTPException(400, "Solo file .xml accettati")
-
-    contenuto = file.file.read()
-    try:
-        dati = parse_corrisp_xml(contenuto)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Errore parsing CORRISP.xml: {exc}")
+def _upsert_rt_chiusura_da_xml(dati: dict, rt_code: str, on_conflict: str, db: Session, utente) -> dict:
+    """Upsert condiviso tra import da file caricato e import diretto dalla stampante."""
 
     def _risposta(esito: str, warning: Optional[str] = None) -> dict:
         return {
@@ -1773,6 +1758,96 @@ def importa_rt_chiusura_xml(
     db.add(nuovo)
     db.commit()
     return _risposta('inserito')
+
+
+@router.post("/rt-chiusure/import-xml")
+def importa_rt_chiusura_xml(
+    file: UploadFile = File(...),
+    rt_code: str = Query(..., description="RT1 (DPH+CLB) o RT2 (INT)"),
+    on_conflict: str = Query('salta', description="'salta' (non tocca righe già presenti) o 'aggiorna' (rispetta modificato_manualmente)"),
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    """Importa un file CORRISP.xml caricato dall'utente e popola/aggiorna rt_chiusure."""
+    if rt_code not in RT_STRUTTURE:
+        raise HTTPException(400, f"rt_code non valido: usa {list(RT_STRUTTURE.keys())}")
+    if on_conflict not in ('salta', 'aggiorna'):
+        raise HTTPException(400, "on_conflict deve essere 'salta' o 'aggiorna'")
+    if not file.filename.lower().endswith('.xml'):
+        raise HTTPException(400, "Solo file .xml accettati")
+
+    contenuto = file.file.read()
+    try:
+        dati = parse_corrisp_xml(contenuto)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Errore parsing CORRISP.xml: {exc}")
+
+    return _upsert_rt_chiusura_da_xml(dati, rt_code, on_conflict, db, utente)
+
+
+@router.post("/rt-chiusure/import-da-stampante")
+def importa_rt_chiusura_da_stampante(
+    body: dict,
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    """
+    Legge il file CORRISP.xml direttamente dalla cartella della stampante (lato backend,
+    non soggetto a CORS: il file server della stampante non invia le intestazioni necessarie
+    perché il browser possa leggerlo via fetch(), a differenza di fpmate.cgi).
+
+    Body: { rt_code: "RT1"|"RT2", data: "YYYY-MM-DD", on_conflict: "salta"|"aggiorna" }
+    """
+    rt_code = body.get('rt_code')
+    on_conflict = body.get('on_conflict', 'salta')
+    if rt_code not in RT_STRUTTURE:
+        raise HTTPException(400, f"rt_code non valido: usa {list(RT_STRUTTURE.keys())}")
+    if on_conflict not in ('salta', 'aggiorna'):
+        raise HTTPException(400, "on_conflict deve essere 'salta' o 'aggiorna'")
+    try:
+        data = date.fromisoformat(body.get('data', ''))
+    except ValueError:
+        raise HTTPException(400, "data non valida (formato YYYY-MM-DD)")
+
+    printer = (
+        db.query(RtPrinter)
+        .join(Hotel, Hotel.rt_printer_id == RtPrinter.id)
+        .filter(Hotel.code.in_(RT_STRUTTURE[rt_code]))
+        .first()
+    )
+    if not printer:
+        raise HTTPException(404, f"Nessuna stampante RT configurata per {rt_code} (Admin → Stampanti RT)")
+
+    cartella = data.strftime('%Y%m%d')
+    url_cartella = f"http://{printer.ip}/www/dati-rt/{cartella}/"
+
+    try:
+        resp_lista = httpx.get(url_cartella, timeout=8.0)
+    except httpx.RequestError as exc:
+        raise HTTPException(502, f"Stampante non raggiungibile ({printer.ip}): {exc}")
+    if resp_lista.status_code != 200:
+        raise HTTPException(404, f"Cartella non trovata sulla stampante per il {data.strftime('%d/%m/%Y')}")
+
+    nomi_trovati = re.findall(r'href="([^"]*CORRISP[^"]*\.xml)"', resp_lista.text, re.IGNORECASE)
+    if not nomi_trovati:
+        raise HTTPException(404, f"Nessun file CORRISP.xml trovato per il {data.strftime('%d/%m/%Y')}")
+    nome_file = nomi_trovati[-1]
+
+    try:
+        resp_file = httpx.get(url_cartella + nome_file, timeout=8.0)
+    except httpx.RequestError as exc:
+        raise HTTPException(502, f"Stampante non raggiungibile ({printer.ip}): {exc}")
+    if resp_file.status_code != 200:
+        raise HTTPException(502, f"Errore lettura file dalla stampante (HTTP {resp_file.status_code})")
+
+    try:
+        dati = parse_corrisp_xml(resp_file.content)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Errore parsing CORRISP.xml: {exc}")
+
+    risultato = _upsert_rt_chiusura_da_xml(dati, rt_code, on_conflict, db, utente)
+    risultato['nome_file'] = nome_file
+    return risultato
 
 
 @router.get("/rt-chiusure")

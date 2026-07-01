@@ -8,6 +8,7 @@ Test per l'import CORRISP.xml in rt_chiusure:
 """
 import os
 import sys
+from unittest.mock import patch
 
 import pytest
 
@@ -20,7 +21,7 @@ from starlette.testclient import TestClient
 from app.auth import hash_password, crea_token_accesso
 from app.database import Base, get_db
 from app.main import app
-from app.models.revenue import User  # noqa: F401
+from app.models.revenue import User, Hotel, RtPrinter  # noqa: F401
 from app.models.corrispettivi import RtChiusura  # noqa: F401
 
 TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
@@ -71,6 +72,12 @@ def setup_db(TestSession):
                     ruolo=ruolo,
                     attivo=True,
                 ))
+        # Hotel + stampante RT di test, necessari per /rt-chiusure/import-da-stampante
+        if not db.query(Hotel).filter(Hotel.code == 'DPH').first():
+            printer = RtPrinter(nome='Test RT1', ip='10.0.0.1')
+            db.add(printer)
+            db.flush()
+            db.add(Hotel(code='DPH', name='Test Du Parc', default_rooms=10, rt_printer_id=printer.id))
         db.commit()
     finally:
         db.close()
@@ -235,3 +242,81 @@ class TestImportXmlPermessi:
             headers=_headers("admin"),
         )
         assert resp.status_code == 400
+
+
+def _fake_response(status_code, text=None, content=None):
+    resp = type('FakeResp', (), {})()
+    resp.status_code = status_code
+    resp.text = text or ''
+    resp.content = content or b''
+    return resp
+
+
+ELENCO_CARTELLA_HTML = (
+    '<html><body><table>'
+    '<tr><td><a href="99MEX036593-20260630T210045-0944-CORRISP.xml">...</a></td></tr>'
+    '<tr><td><a href="99MEX036593-20260630T210045-0944-ESITO-123.xml">...</a></td></tr>'
+    '<tr><td><a href="99MEX036593-20260630T210045-0944-ZREPORT.txt">...</a></td></tr>'
+    '</table></body></html>'
+)
+
+
+class TestImportDaStampante:
+    """httpx.get è mockato: verifica la logica del backend (ricerca file, parsing, upsert),
+    non la reale raggiungibilità della stampante (non testabile in questo ambiente)."""
+
+    def test_importa_con_successo(self, client, setup_db):
+        with open(FIXTURE_PATH, 'rb') as f:
+            contenuto_xml = f.read()
+
+        def _side_effect(url, timeout=None):
+            if url.endswith('/'):
+                return _fake_response(200, text=ELENCO_CARTELLA_HTML)
+            return _fake_response(200, content=contenuto_xml)
+
+        with patch('app.routers.corrispettivi.httpx.get', side_effect=_side_effect):
+            resp = client.post(
+                "/corrispettivi/rt-chiusure/import-da-stampante",
+                json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
+                headers=_headers("admin"),
+            )
+        assert resp.status_code == 200
+        dati = resp.json()
+        assert dati["esito"] == "inserito"
+        assert dati["nome_file"] == "99MEX036593-20260630T210045-0944-CORRISP.xml"
+        assert dati["totale_giorno"] == pytest.approx(1955.28)
+
+    def test_nessun_file_corrisp_in_cartella(self, client, setup_db):
+        html_senza_corrisp = '<html><body><a href="99MEX036593-20260630T210045-0944-ZREPORT.txt">a</a></body></html>'
+        with patch('app.routers.corrispettivi.httpx.get', return_value=_fake_response(200, text=html_senza_corrisp)):
+            resp = client.post(
+                "/corrispettivi/rt-chiusure/import-da-stampante",
+                json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
+                headers=_headers("admin"),
+            )
+        assert resp.status_code == 404
+
+    def test_cartella_non_trovata(self, client, setup_db):
+        with patch('app.routers.corrispettivi.httpx.get', return_value=_fake_response(404)):
+            resp = client.post(
+                "/corrispettivi/rt-chiusure/import-da-stampante",
+                json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
+                headers=_headers("admin"),
+            )
+        assert resp.status_code == 404
+
+    def test_data_non_valida(self, client, setup_db):
+        resp = client.post(
+            "/corrispettivi/rt-chiusure/import-da-stampante",
+            json={"rt_code": RT_CODE_TEST, "data": "30-06-2026", "on_conflict": "salta"},
+            headers=_headers("admin"),
+        )
+        assert resp.status_code == 400
+
+    def test_viewer_non_puo_importare(self, client, setup_db):
+        resp = client.post(
+            "/corrispettivi/rt-chiusure/import-da-stampante",
+            json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
+            headers=_headers("viewer"),
+        )
+        assert resp.status_code == 403
