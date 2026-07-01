@@ -3,6 +3,7 @@
 > **Prima di scrivere codice**: presentare strategia, file coinvolti, rischi. Attendere conferma.
 > **Aggiornare questo file** a ogni sessione con modifiche significative (endpoint, modelli, logica business).
 > **Dopo ogni modifica testata e funzionante**: committare i file coinvolti e fare `git push origin main` per tenere GitHub aggiornato.
+> **Versionamento** (`frontend/src/version.js`): PATCH x.x.+1 = fix/tweaks; MINOR x.+1.0 = nuova funzionalità/sezione; MAJOR +1.0.0 = nuovo modulo o redesign architetturale. Aggiornare APP_VERSION e APP_VERSION_DATE a ogni commit.
 
 ## Progetto e stack
 Gestione alberghiera per gruppo (CLB=Club Hotel 45cam, DPH=Du Parc 43cam, INT=International 45cam).
