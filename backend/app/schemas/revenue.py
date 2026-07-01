@@ -17,6 +17,7 @@ class HotelBase(BaseModel):
 
 class HotelRead(HotelBase):
     id: int
+    rt_ip: Optional[str] = None
     stagione_corrente: Optional["HotelSeasonRead"] = None
 
     model_config = {"from_attributes": True}

@@ -246,10 +246,26 @@ Endpoint (prefix `/analisi-ricavi`):
 Frontend `TabAnalisiRicavi.jsx`: bottoni hotel [DPH][CLB][INT][Gruppo]; frecce ◀▶ mese/anno; toggle Range (mese_fine); toggle dettaglio/macrocategorie; toggle Δ Revenue (solo hotel singolo). Default: mese precedente a quello corrente. Colori: priorità DB → `CATEGORIA_COLORI` → palette.
 Admin `corr-classificazione`: `CorrClassificazioneTrattamenti` con colonna Colore (swatch + hex).
 
-### Frontend Corrispettivi.jsx (8 tab)
-Import | Corrispettivi giornalieri (drawer cella→documenti) | Scontrini | Fatture | Riepilogo Fatturati | Controllo RT | Analisi Ricavi | Dati di test.
+### Frontend Corrispettivi.jsx (9 tab)
+Import | Corrispettivi giornalieri (drawer cella→documenti) | Scontrini | Fatture | Riepilogo Fatturati | Controllo RT | Stampante RT | Analisi Ricavi | Dati di test.
 `PerHotelView`: generico per scontrini/fatture, `localStorage('scontrini_vista'|'fatture_vista')`.
 Tab attiva: `localStorage('corrispettivi_tab')`.
+
+⚠️ "Controllo RT" (tab id `rt`, riconciliazione scontrini vs `rt_chiusure` trasmesse ad AdE) e "Stampante RT"
+(tab id `rt-stampante`, comandi hardware Epson) sono due sezioni distinte — nomi simili ma nessuna relazione.
+
+### Stampante RT — comandi Epson FP-81 II (`TabStampanteRT.jsx`)
+Invia comandi X/Z/STATUS al registratore telematico via SOAP/HTTP (`fpmate.cgi`), **chiamata diretta
+browser → stampante** (nessun proxy backend: si è verificato empiricamente che l'RT non blocca CORS).
+- IP letto da `hotels.rt_ip` (colonna nullable; NULL = RT non configurato, hotel non appare in elenco)
+- Badge VPN/LAN calcolato client-side: IP fuori da `192.168.100.x` → VPN
+- `STATUS` riusa il payload di `X` (`printXReport`): l'Epson non espone un comando di stato dedicato
+- Risposta RT: XML con `<response success="" code="" status="">` (attributi, non elementi annidati)
+- **Nessuna enforcement server-side sul comando Z** — il pulsante è visibile solo se `isAdmin()` lato
+  frontend, ma chiunque abbia accesso di rete alla stampante può inviare comandi direttamente:
+  il controllo è solo di interfaccia, non di sicurezza
+- Dialog di conferma Z: pulsante abilitato dopo 2s (`CONFERMA_Z_DELAY_MS`), per evitare click accidentali
+- Testare sempre prima con Report X prima di una Chiusura Z (irreversibile)
 
 ---
 

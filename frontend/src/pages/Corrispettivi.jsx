@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import TabAnalisiRicavi from './TabAnalisiRicavi'
+import TabStampanteRT from './TabStampanteRT'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip,
   Legend, ResponsiveContainer, Cell,
@@ -2742,6 +2743,7 @@ const TABS_BASE = [
   { id: 'fatture', label: 'Fatture' },
   { id: 'fatturati', label: 'Riepilogo Fatturati' },
   { id: 'rt', label: 'Controllo RT' },
+  { id: 'rt-stampante', label: 'Stampante RT' },
   { id: 'analisi', label: 'Analisi Ricavi' },
 ]
 const TABS_ADMIN = [
@@ -2835,6 +2837,9 @@ export default function Corrispettivi() {
       )}
       {tab === 'rt' && (
         <TabControlloRT />
+      )}
+      {tab === 'rt-stampante' && (
+        <TabStampanteRT hotels={hotels} isAdmin={isAdmin()} />
       )}
       {tab === 'analisi' && (
         <TabAnalisiRicavi hotels={hotels} isAdmin={isAdmin()} />

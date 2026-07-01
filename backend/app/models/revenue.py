@@ -127,6 +127,7 @@ class Hotel(Base):
     code = Column(String(20), unique=True, nullable=False, index=True)  # es. CLB, DPH, INT
     name = Column(String(100), nullable=False)
     default_rooms = Column(Integer, nullable=False)  # capacità standard (può variare per stagione)
+    rt_ip = Column(String(50), nullable=True)  # IP registratore telematico Epson (NULL = non configurato)
 
     stagioni = relationship("HotelSeason", back_populates="hotel", cascade="all, delete-orphan")
     rooms    = relationship("Room", back_populates="hotel", cascade="all, delete-orphan")
