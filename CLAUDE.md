@@ -237,11 +237,14 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   (HTML con `<a href="...">`), trova il file `*CORRISP*.xml` (la cartella contiene anche `*ESITO-{id}.xml`
   e `*ZREPORT.txt`, ignorati) e lo importa. IP risolto via `Hotel.rt_printer_id → RtPrinter.ip`
   (RT1→hotel DPH/CLB, RT2→hotel INT). Risposta include `nome_file`.
-  ⚠️ **Chiamata lato backend, non browser**: il file server `/www/dati-rt/` della stampante non invia le
-  intestazioni CORS necessarie per essere letto via `fetch()` da uno script — la navigazione diretta
-  nel browser funziona sempre (non passa da CORS) ma dà un falso senso di raggiungibilità da JS.
-  `fpmate.cgi` (comandi X/Z/Status in `TabStampanteRT`) invece risulta raggiungibile da `fetch()`,
-  quindi per quello resta valida la chiamata diretta browser→stampante.
+  ⚠️ **Chiamata lato backend, non browser, e via socket grezzo (`_get_raw_http()`), non `httpx`**:
+  il file server `/www/dati-rt/` della stampante invia una risposta HTTP malformata — header
+  `Transfer-Encoding: chunked` duplicato (RFC 7230 §3.3.3), corpo in realtà non chunked — che sia
+  `fetch()` nel browser sia `httpx`/h11 in Python rifiutano come possibile request/response smuggling.
+  La navigazione diretta nel browser funziona comunque (non passa da questa validazione) e dà un falso
+  senso di raggiungibilità da script. `_get_raw_http()` legge i byte grezzi ignorando del tutto
+  `Transfer-Encoding`. `fpmate.cgi` (comandi X/Z/Status in `TabStampanteRT`) invece manda risposte
+  corrette e resta raggiungibile da `fetch()` diretto browser→stampante.
   Un file CORRISP.xml copre un RT intero (RT1 = DPH+CLB, RT2 = INT), non un singolo hotel.
   Formula totale: Σ `Ammontare` (righe con `AliquotaIVA`, solo se >0) + Σ `ImportoParziale` (righe con
   `Natura`, solo se >0). Popola anche i campi legacy `totale_10/22/ts/penali` usati dal confronto per

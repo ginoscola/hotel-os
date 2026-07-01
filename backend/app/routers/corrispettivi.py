@@ -32,12 +32,12 @@ Endpoint:
 
 import os
 import re
+import socket
 import tempfile
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Set, Tuple
 
-import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import func, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -1643,6 +1643,42 @@ RT_STRUTTURE: dict = {
 }
 
 
+def _get_raw_http(ip: str, path: str, timeout: float = 8.0, port: int = 80) -> Tuple[int, bytes]:
+    """
+    GET grezzo via socket verso il file server della stampante RT (porta 80).
+
+    Il file server della stampante (cartella /www/dati-rt/) invia un header
+    'Transfer-Encoding: chunked' duplicato e comunque non rispettato (il corpo
+    è in realtà semplice, non chunked): è una violazione RFC 7230 §3.3.3 che
+    client HTTP conformi — httpx/h11 e i browser via fetch() — rifiutano per
+    prevenire attacchi di request/response smuggling. Bypassiamo il problema
+    leggendo i byte grezzi e ignorando del tutto l'intestazione Transfer-Encoding.
+    """
+    with socket.create_connection((ip, port), timeout=timeout) as sock:
+        sock.sendall(f"GET {path} HTTP/1.1\r\nHost: {ip}\r\nConnection: close\r\n\r\n".encode('ascii'))
+        sock.settimeout(timeout)
+        pezzi = []
+        while True:
+            try:
+                pezzo = sock.recv(65536)
+            except socket.timeout:
+                break
+            if not pezzo:
+                break
+            pezzi.append(pezzo)
+
+    grezzo = b''.join(pezzi)
+    if b'\r\n\r\n' not in grezzo:
+        raise OSError("Risposta HTTP incompleta o vuota dalla stampante")
+    intestazioni, corpo = grezzo.split(b'\r\n\r\n', 1)
+    prima_riga = intestazioni.split(b'\r\n', 1)[0]
+    try:
+        status_code = int(prima_riga.split(b' ')[1])
+    except (IndexError, ValueError):
+        status_code = 0
+    return status_code, corpo
+
+
 def _fmt_rt(r: RtChiusura) -> dict:
     return {
         'id': r.id,
@@ -1792,9 +1828,13 @@ def importa_rt_chiusura_da_stampante(
     utente=Depends(richiedi_admin),
 ):
     """
-    Legge il file CORRISP.xml direttamente dalla cartella della stampante (lato backend,
-    non soggetto a CORS: il file server della stampante non invia le intestazioni necessarie
-    perché il browser possa leggerlo via fetch(), a differenza di fpmate.cgi).
+    Legge il file CORRISP.xml direttamente dalla cartella della stampante, lato backend.
+
+    Il file server della stampante (/www/dati-rt/) invia una risposta HTTP malformata
+    (header Transfer-Encoding: chunked duplicato, corpo in realtà non chunked — violazione
+    RFC 7230 §3.3.3): sia fetch() nel browser sia httpx/h11 in Python la rifiutano come
+    possibile request/response smuggling. Per questo si usa _get_raw_http() (socket grezzo)
+    invece di httpx, e la richiesta parte dal backend anziché dal browser.
 
     Body: { rt_code: "RT1"|"RT2", data: "YYYY-MM-DD", on_conflict: "salta"|"aggiorna" }
     """
@@ -1819,29 +1859,29 @@ def importa_rt_chiusura_da_stampante(
         raise HTTPException(404, f"Nessuna stampante RT configurata per {rt_code} (Admin → Stampanti RT)")
 
     cartella = data.strftime('%Y%m%d')
-    url_cartella = f"http://{printer.ip}/www/dati-rt/{cartella}/"
+    path_cartella = f"/www/dati-rt/{cartella}/"
 
     try:
-        resp_lista = httpx.get(url_cartella, timeout=8.0)
-    except httpx.RequestError as exc:
+        status_lista, corpo_lista = _get_raw_http(printer.ip, path_cartella)
+    except OSError as exc:
         raise HTTPException(502, f"Stampante non raggiungibile ({printer.ip}): {exc}")
-    if resp_lista.status_code != 200:
+    if status_lista != 200:
         raise HTTPException(404, f"Cartella non trovata sulla stampante per il {data.strftime('%d/%m/%Y')}")
 
-    nomi_trovati = re.findall(r'href="([^"]*CORRISP[^"]*\.xml)"', resp_lista.text, re.IGNORECASE)
+    nomi_trovati = re.findall(r'href="([^"]*CORRISP[^"]*\.xml)"', corpo_lista.decode('utf-8', errors='replace'), re.IGNORECASE)
     if not nomi_trovati:
         raise HTTPException(404, f"Nessun file CORRISP.xml trovato per il {data.strftime('%d/%m/%Y')}")
     nome_file = nomi_trovati[-1]
 
     try:
-        resp_file = httpx.get(url_cartella + nome_file, timeout=8.0)
-    except httpx.RequestError as exc:
+        status_file, corpo_file = _get_raw_http(printer.ip, path_cartella + nome_file)
+    except OSError as exc:
         raise HTTPException(502, f"Stampante non raggiungibile ({printer.ip}): {exc}")
-    if resp_file.status_code != 200:
-        raise HTTPException(502, f"Errore lettura file dalla stampante (HTTP {resp_file.status_code})")
+    if status_file != 200:
+        raise HTTPException(502, f"Errore lettura file dalla stampante (HTTP {status_file})")
 
     try:
-        dati = parse_corrisp_xml(resp_file.content)
+        dati = parse_corrisp_xml(corpo_file)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Errore parsing CORRISP.xml: {exc}")
 

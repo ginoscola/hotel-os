@@ -7,6 +7,7 @@ Test per l'import CORRISP.xml in rt_chiusure:
 - Solo admin può importare (viewer riceve 403)
 """
 import os
+import socket
 import sys
 from unittest.mock import patch
 
@@ -244,14 +245,6 @@ class TestImportXmlPermessi:
         assert resp.status_code == 400
 
 
-def _fake_response(status_code, text=None, content=None):
-    resp = type('FakeResp', (), {})()
-    resp.status_code = status_code
-    resp.text = text or ''
-    resp.content = content or b''
-    return resp
-
-
 ELENCO_CARTELLA_HTML = (
     '<html><body><table>'
     '<tr><td><a href="99MEX036593-20260630T210045-0944-CORRISP.xml">...</a></td></tr>'
@@ -262,19 +255,19 @@ ELENCO_CARTELLA_HTML = (
 
 
 class TestImportDaStampante:
-    """httpx.get è mockato: verifica la logica del backend (ricerca file, parsing, upsert),
+    """_get_raw_http è mockata: verifica la logica del backend (ricerca file, parsing, upsert),
     non la reale raggiungibilità della stampante (non testabile in questo ambiente)."""
 
     def test_importa_con_successo(self, client, setup_db):
         with open(FIXTURE_PATH, 'rb') as f:
             contenuto_xml = f.read()
 
-        def _side_effect(url, timeout=None):
-            if url.endswith('/'):
-                return _fake_response(200, text=ELENCO_CARTELLA_HTML)
-            return _fake_response(200, content=contenuto_xml)
+        def _side_effect(ip, path):
+            if path.endswith('/'):
+                return 200, ELENCO_CARTELLA_HTML.encode('utf-8')
+            return 200, contenuto_xml
 
-        with patch('app.routers.corrispettivi.httpx.get', side_effect=_side_effect):
+        with patch('app.routers.corrispettivi._get_raw_http', side_effect=_side_effect):
             resp = client.post(
                 "/corrispettivi/rt-chiusure/import-da-stampante",
                 json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
@@ -288,7 +281,7 @@ class TestImportDaStampante:
 
     def test_nessun_file_corrisp_in_cartella(self, client, setup_db):
         html_senza_corrisp = '<html><body><a href="99MEX036593-20260630T210045-0944-ZREPORT.txt">a</a></body></html>'
-        with patch('app.routers.corrispettivi.httpx.get', return_value=_fake_response(200, text=html_senza_corrisp)):
+        with patch('app.routers.corrispettivi._get_raw_http', return_value=(200, html_senza_corrisp.encode('utf-8'))):
             resp = client.post(
                 "/corrispettivi/rt-chiusure/import-da-stampante",
                 json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
@@ -297,7 +290,7 @@ class TestImportDaStampante:
         assert resp.status_code == 404
 
     def test_cartella_non_trovata(self, client, setup_db):
-        with patch('app.routers.corrispettivi.httpx.get', return_value=_fake_response(404)):
+        with patch('app.routers.corrispettivi._get_raw_http', return_value=(404, b'')):
             resp = client.post(
                 "/corrispettivi/rt-chiusure/import-da-stampante",
                 json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
@@ -320,3 +313,44 @@ class TestImportDaStampante:
             headers=_headers("viewer"),
         )
         assert resp.status_code == 403
+
+
+class TestGetRawHttp:
+    """Riproduce, con un server TCP locale, la risposta malformata reale della stampante
+    (Transfer-Encoding: chunked duplicato, corpo in realtà non chunked) verificando che
+    _get_raw_http() la legga correttamente ignorando l'intestazione."""
+
+    def test_gestisce_transfer_encoding_duplicato(self):
+        import threading
+        from app.routers.corrispettivi import _get_raw_http
+
+        corpo_atteso = b'<html><body>ciao</body></html>'
+        risposta_malformata = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Transfer-Encoding: chunked\r\n"
+            b"Content-Type: text/html; charset=utf-8\r\n"
+            b"Transfer-Encoding: chunked\r\n"
+            b"\r\n" + corpo_atteso
+        )
+
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.bind(('127.0.0.1', 0))
+        server.listen(1)
+        porta = server.getsockname()[1]
+
+        def _servi():
+            conn, _ = server.accept()
+            conn.recv(4096)
+            conn.sendall(risposta_malformata)
+            conn.close()
+
+        t = threading.Thread(target=_servi, daemon=True)
+        t.start()
+        try:
+            status, corpo = _get_raw_http('127.0.0.1', '/qualsiasi', timeout=3.0, port=porta)
+        finally:
+            server.close()
+            t.join(timeout=3.0)
+
+        assert status == 200
+        assert corpo == corpo_atteso
