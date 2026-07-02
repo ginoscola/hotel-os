@@ -1643,6 +1643,24 @@ RT_STRUTTURE: dict = {
     'RT2': ['INT'],
 }
 
+# Tariffa tassa di soggiorno per persona/notte: l'importo Natura N1 (esente_n1) di un
+# giorno deve essere un multiplo esatto di questa cifra, essendo tariffa × persone-notte.
+# Se non lo è, quasi certamente c'è un errore di conteggio da correggere.
+TARIFFA_TS_PER_PERSONA: dict = {
+    'RT1': Decimal('2.50'),
+    'RT2': Decimal('2.00'),
+}
+
+
+def _n1_non_quadra(esente_n1: Optional[Decimal], rt_code: str) -> bool:
+    """True se esente_n1 non è multiplo esatto della tariffa TS per persona del RT."""
+    if esente_n1 is None:
+        return False
+    tariffa = TARIFFA_TS_PER_PERSONA.get(rt_code)
+    if not tariffa:
+        return False
+    return (Decimal(esente_n1) * 100) % (tariffa * 100) != 0
+
 
 def _get_raw_http(ip: str, path: str, timeout: float = 8.0, port: int = 80, tentativi: int = 3) -> Tuple[int, bytes]:
     """
@@ -1986,7 +2004,7 @@ def lista_rt_chiusure(
             penali += v.get('penali', 0.0)
         return {'totale': totale, 'arr': arr, 'shop': shop, 'ts': ts, 'penali': penali}
 
-    def _confronta(rt: Optional[RtChiusura], pms: dict) -> dict:
+    def _confronta(rt: Optional[RtChiusura], pms: dict, rt_code: str) -> dict:
         if rt is None:
             return {'rt': None, 'pms': pms, 'delta': None, 'breakdown': None}
         rt_tot = float(rt.totale_giorno)
@@ -2008,6 +2026,8 @@ def lista_rt_chiusure(
                 'totale_22':     float(rt.totale_22)     if rt.totale_22     is not None else None,
                 'totale_ts':     float(rt.totale_ts)     if rt.totale_ts     is not None else None,
                 'totale_penali': float(rt.totale_penali) if rt.totale_penali is not None else None,
+                'esente_n1':     float(rt.esente_n1)     if rt.esente_n1     is not None else None,
+                'n1_non_quadra': _n1_non_quadra(rt.esente_n1, rt_code),
                 'note':          rt.note,
             },
             'pms': pms,
@@ -2028,8 +2048,8 @@ def lista_rt_chiusure(
             continue
         giorni.append({
             'data': d_iso,
-            'rt1': _confronta(rt1, pms1),
-            'rt2': _confronta(rt2, pms2),
+            'rt1': _confronta(rt1, pms1, 'RT1'),
+            'rt2': _confronta(rt2, pms2, 'RT2'),
         })
 
     n_differenze = sum(

@@ -2702,6 +2702,9 @@ function TabControlloRT() {
                       {/* RT1 */}
                       <td style={tdSt}>
                         {g.rt1.rt ? formatEuro(g.rt1.rt.totale_giorno) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        {g.rt1.rt?.n1_non_quadra && (
+                          <span title={`Tassa di soggiorno (esente N1: ${formatEuro(g.rt1.rt.esente_n1)}) non multiplo di 2,50 € — verifica i conti`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
+                        )}
                       </td>
                       <td style={tdSt}>
                         {g.rt1.pms.totale > 0 ? formatEuro(g.rt1.pms.totale) : <span style={{ color: '#cbd5e1' }}>—</span>}
@@ -2712,6 +2715,9 @@ function TabControlloRT() {
                       {/* RT2 */}
                       <td style={tdSt}>
                         {g.rt2.rt ? formatEuro(g.rt2.rt.totale_giorno) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        {g.rt2.rt?.n1_non_quadra && (
+                          <span title={`Tassa di soggiorno (esente N1: ${formatEuro(g.rt2.rt.esente_n1)}) non multiplo di 2,00 € — verifica i conti`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
+                        )}
                       </td>
                       <td style={tdSt}>
                         {g.rt2.pms.totale > 0 ? formatEuro(g.rt2.pms.totale) : <span style={{ color: '#cbd5e1' }}>—</span>}

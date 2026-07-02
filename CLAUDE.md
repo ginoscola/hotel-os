@@ -271,6 +271,12 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   ⚠️ Nel file XML reale `<Imposta>` è annidato dentro `<IVA>` insieme a `<AliquotaIVA>` (non fratello
   diretto di `<IVA>` sotto `<Riepilogo>` come nell'esempio iniziale): il parser gestisce entrambe le forme.
 
+**Alert tassa di soggiorno**: `esente_n1` (Natura N1) di un giorno deve essere multiplo esatto della
+tariffa per persona/notte (`TARIFFA_TS_PER_PERSONA`: RT1=2,50€, RT2=2,00€), altrimenti c'è quasi
+certamente un errore di conteggio. Flag `n1_non_quadra` calcolato in `_n1_non_quadra()`, incluso nella
+risposta `GET /rt-chiusure` per ogni rt1/rt2. Frontend: icona ⚠️ accanto al totale RT in `TabControlloRT`
+con tooltip che mostra l'importo esente N1.
+
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.
 
