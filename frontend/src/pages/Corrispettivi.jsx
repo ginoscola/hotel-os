@@ -2171,10 +2171,22 @@ function TabFatturati({ lordo }) {
 
 // ── Componente FormRT (sotto-pannello di inserimento per una singola RT) ───────
 
-function FormRT({ label, prefix, form, setForm, onElimina, pms }) {
+function FormRT({ label, prefix, form, setForm, onElimina, pms, resetKey }) {
   // Stato locale per i sotto-campi Importo Parziale e Imposta (solo aliquote con IVA)
-  // Non vengono salvati in DB: servono solo per calcolare il Corrispettivo
+  // Non vengono salvati in DB: servono solo per calcolare il Corrispettivo.
+  // Pre-compilati con imponibile_10/imposta_10 ecc. salvati (es. da import CORRISP.xml)
+  // quando si apre un nuovo giorno (resetKey = data selezionata).
   const [sub, setSub] = useState({ par10: '', imp10: '', par22: '', imp22: '' })
+
+  useEffect(() => {
+    setSub({
+      par10: form[`${prefix}_par10`] ?? '',
+      imp10: form[`${prefix}_imp10`] ?? '',
+      par22: form[`${prefix}_par22`] ?? '',
+      imp22: form[`${prefix}_imp22`] ?? '',
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey, prefix])
 
   const BREAKDOWN_KEYS = ['10', 'ts', 'penali', '22']
 
@@ -2459,12 +2471,20 @@ function TabControlloRT() {
       rt1_ts:      rt1?.totale_ts     ?? '',
       rt1_penali:  rt1?.totale_penali ?? '',
       rt1_id:      rt1?.id            ?? null,
+      rt1_par10:   rt1?.imponibile_10 ?? '',
+      rt1_imp10:   rt1?.imposta_10    ?? '',
+      rt1_par22:   rt1?.imponibile_22 ?? '',
+      rt1_imp22:   rt1?.imposta_22    ?? '',
       rt2_totale:  rt2?.totale_giorno ?? '',
       rt2_10:      rt2?.totale_10     ?? '',
       rt2_22:      rt2?.totale_22     ?? '',
       rt2_ts:      rt2?.totale_ts     ?? '',
       rt2_penali:  rt2?.totale_penali ?? '',
       rt2_id:      rt2?.id            ?? null,
+      rt2_par10:   rt2?.imponibile_10 ?? '',
+      rt2_imp10:   rt2?.imposta_10    ?? '',
+      rt2_par22:   rt2?.imponibile_22 ?? '',
+      rt2_imp22:   rt2?.imposta_22    ?? '',
       note: rt1?.note || rt2?.note || '',
     })
     setErrPannello('')
@@ -2763,6 +2783,7 @@ function TabControlloRT() {
             prefix="rt1"
             form={form}
             setForm={setForm}
+            resetKey={giornoSel}
             onElimina={form.rt1_id ? () => eliminaRT('RT1', form.rt1_id) : null}
             pms={giornoDati?.rt1?.pms}
           />
@@ -2774,6 +2795,7 @@ function TabControlloRT() {
             prefix="rt2"
             form={form}
             setForm={setForm}
+            resetKey={giornoSel}
             onElimina={form.rt2_id ? () => eliminaRT('RT2', form.rt2_id) : null}
             pms={giornoDati?.rt2?.pms}
           />

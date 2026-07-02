@@ -279,6 +279,11 @@ certamente un errore di conteggio. Flag `n1_non_quadra` calcolato in `_n1_non_qu
 risposta `GET /rt-chiusure` per ogni rt1/rt2. Frontend: icona ⚠️ accanto al totale RT in `TabControlloRT`
 con tooltip che mostra l'importo esente N1.
 
+`GET /rt-chiusure` include anche `imponibile_10/22`, `imposta_10/22` per rt1/rt2: il pannello di
+inserimento manuale (`FormRT`) li usa per pre-compilare i sotto-campi "Imposta"/"Importo Parziale"
+delle aliquote quando si apre un giorno già importato da XML (prop `resetKey` = data selezionata,
+altrimenti lo stato locale `sub` resterebbe quello del giorno aperto in precedenza).
+
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.
 
