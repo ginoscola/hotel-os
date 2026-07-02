@@ -245,6 +245,9 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   senso di raggiungibilità da script. `_get_raw_http()` legge i byte grezzi ignorando del tutto
   `Transfer-Encoding`. `fpmate.cgi` (comandi X/Z/Status in `TabStampanteRT`) invece manda risposte
   corrette e resta raggiungibile da `fetch()` diretto browser→stampante.
+  `_get_raw_http()` ritenta fino a 3 volte (pausa 1s) su errori di rete transitori (es. "No route to
+  host" intermittente): il web server integrato nella stampante è hardware limitato e a volte non
+  risponde in tempo, es. se occupato in una stampa.
   Un file CORRISP.xml copre un RT intero (RT1 = DPH+CLB, RT2 = INT), non un singolo hotel.
   Formula totale: Σ `Ammontare` (righe con `AliquotaIVA`, solo se >0) + Σ `ImportoParziale` (righe con
   `Natura`, solo se >0). Popola anche i campi legacy `totale_10/22/ts/penali` usati dal confronto per

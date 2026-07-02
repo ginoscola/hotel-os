@@ -34,6 +34,7 @@ import os
 import re
 import socket
 import tempfile
+import time
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Set, Tuple
@@ -1643,7 +1644,7 @@ RT_STRUTTURE: dict = {
 }
 
 
-def _get_raw_http(ip: str, path: str, timeout: float = 8.0, port: int = 80) -> Tuple[int, bytes]:
+def _get_raw_http(ip: str, path: str, timeout: float = 8.0, port: int = 80, tentativi: int = 3) -> Tuple[int, bytes]:
     """
     GET grezzo via socket verso il file server della stampante RT (porta 80).
 
@@ -1653,21 +1654,36 @@ def _get_raw_http(ip: str, path: str, timeout: float = 8.0, port: int = 80) -> T
     client HTTP conformi — httpx/h11 e i browser via fetch() — rifiutano per
     prevenire attacchi di request/response smuggling. Bypassiamo il problema
     leggendo i byte grezzi e ignorando del tutto l'intestazione Transfer-Encoding.
-    """
-    with socket.create_connection((ip, port), timeout=timeout) as sock:
-        sock.sendall(f"GET {path} HTTP/1.1\r\nHost: {ip}\r\nConnection: close\r\n\r\n".encode('ascii'))
-        sock.settimeout(timeout)
-        pezzi = []
-        while True:
-            try:
-                pezzo = sock.recv(65536)
-            except socket.timeout:
-                break
-            if not pezzo:
-                break
-            pezzi.append(pezzo)
 
-    grezzo = b''.join(pezzi)
+    Il web server integrato nella stampante è hardware molto limitato e a volte
+    non risponde in tempo (es. occupato in una stampa): ritenta su errori di
+    rete transitori invece di fallire al primo colpo.
+    """
+    grezzo = None
+    for tentativo in range(tentativi):
+        try:
+            with socket.create_connection((ip, port), timeout=timeout) as sock:
+                sock.sendall(f"GET {path} HTTP/1.1\r\nHost: {ip}\r\nConnection: close\r\n\r\n".encode('ascii'))
+                sock.settimeout(timeout)
+                pezzi = []
+                while True:
+                    try:
+                        pezzo = sock.recv(65536)
+                    except socket.timeout:
+                        break
+                    if not pezzo:
+                        break
+                    pezzi.append(pezzo)
+            grezzo = b''.join(pezzi)
+            if not grezzo:
+                raise OSError("Risposta vuota dalla stampante")
+            break
+        except OSError:
+            if tentativo < tentativi - 1:
+                time.sleep(1.0)
+                continue
+            raise
+
     if b'\r\n\r\n' not in grezzo:
         raise OSError("Risposta HTTP incompleta o vuota dalla stampante")
     intestazioni, corpo = grezzo.split(b'\r\n\r\n', 1)
