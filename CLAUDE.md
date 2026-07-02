@@ -284,10 +284,14 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   diretto di `<IVA>` sotto `<Riepilogo>` come nell'esempio iniziale): il parser gestisce entrambe le forme.
 
 **Alert tassa di soggiorno**: `esente_n1` (Natura N1) di un giorno deve essere multiplo esatto della
-tariffa per persona/notte (`TARIFFA_TS_PER_PERSONA`: RT1=2,50€, RT2=2,00€), altrimenti c'è quasi
-certamente un errore di conteggio. Flag `n1_non_quadra` calcolato in `_n1_non_quadra()`, incluso nella
-risposta `GET /rt-chiusure` per ogni rt1/rt2. Frontend: icona ⚠️ accanto al totale RT in `TabControlloRT`
-con tooltip che mostra l'importo esente N1.
+tariffa per persona/notte (`TARIFFA_TS_PER_PERSONA`), altrimenti c'è quasi certamente un errore di
+conteggio. RT2 = 2,00€ (solo International, tariffa unica). **RT1 = 0,50€** (non 2,50€!): condivide
+la cassa fiscale tra Du Parc (2,50€/persona) e Club Hotel (2,00€/persona), quindi qualunque
+combinazione di persone-notte tra i due hotel è un totale legittimo (es. 70,50€ = 1 notte Du Parc +
+34 notti Club) — verificabile solo sul MCD tra le due tariffe (0,50€), non su 2,50€ da sola (avrebbe
+dato falsi allarmi su quasi ogni giorno). Flag `n1_non_quadra` calcolato in `_n1_non_quadra()`,
+incluso nella risposta `GET /rt-chiusure` per ogni rt1/rt2. Frontend: icona ⚠️ accanto al totale RT
+in `TabControlloRT` con tooltip che mostra l'importo esente N1.
 
 `GET /rt-chiusure` include anche `imponibile_10/22`, `imposta_10/22` per rt1/rt2: il pannello di
 inserimento manuale (`FormRT`) li usa per pre-compilare i sotto-campi "Imposta"/"Importo Parziale"

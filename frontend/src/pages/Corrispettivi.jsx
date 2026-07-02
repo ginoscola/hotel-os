@@ -2723,7 +2723,7 @@ function TabControlloRT() {
                       <td style={tdSt}>
                         {g.rt1.rt ? formatEuro(g.rt1.rt.totale_giorno) : <span style={{ color: '#cbd5e1' }}>—</span>}
                         {g.rt1.rt?.n1_non_quadra && (
-                          <span title={`Tassa di soggiorno (esente N1: ${formatEuro(g.rt1.rt.esente_n1)}) non multiplo di 2,50 € — verifica i conti`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
+                          <span title={`Tassa di soggiorno (esente N1: ${formatEuro(g.rt1.rt.esente_n1)}) non multiplo di 0,50 € — verifica i conti (RT1 condivide Du Parc 2,50€ e Club 2,00€)`} style={{ marginLeft: 4, cursor: 'help' }}>⚠️</span>
                         )}
                       </td>
                       <td style={tdSt}>

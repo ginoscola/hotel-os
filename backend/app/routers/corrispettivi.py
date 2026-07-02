@@ -1646,8 +1646,12 @@ RT_STRUTTURE: dict = {
 # Tariffa tassa di soggiorno per persona/notte: l'importo Natura N1 (esente_n1) di un
 # giorno deve essere un multiplo esatto di questa cifra, essendo tariffa × persone-notte.
 # Se non lo è, quasi certamente c'è un errore di conteggio da correggere.
+# RT1 è la cassa condivisa da Du Parc (2,50€) e Club Hotel (2,00€): qualunque combinazione
+# di persone-notte tra i due hotel dà un totale valido, quindi il multiplo verificabile è
+# solo il MCD tra le due tariffe (0,50€), non 2,50€ da sola (avrebbe dato falsi allarmi:
+# es. 70,50€ = 1 persona-notte Du Parc + 34 persone-notte Club, combinazione legittima).
 TARIFFA_TS_PER_PERSONA: dict = {
-    'RT1': Decimal('2.50'),
+    'RT1': Decimal('0.50'),
     'RT2': Decimal('2.00'),
 }
 
