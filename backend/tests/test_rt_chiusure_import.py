@@ -129,7 +129,7 @@ class TestImportXmlInserisce:
         assert dati["esito"] == "inserito"
         assert dati["data_chiusura"] == DATA_TEST
         assert dati["rt_code"] == RT_CODE_TEST
-        assert dati["totale_giorno"] == pytest.approx(1955.28)
+        assert dati["totale_giorno"] == pytest.approx(1955.10)
         assert dati["progressivo"] == 944
 
 
@@ -277,7 +277,7 @@ class TestImportDaStampante:
         dati = resp.json()
         assert dati["esito"] == "inserito"
         assert dati["nome_file"] == "99MEX036593-20260630T210045-0944-CORRISP.xml"
-        assert dati["totale_giorno"] == pytest.approx(1955.28)
+        assert dati["totale_giorno"] == pytest.approx(1955.10)
 
     def test_nessun_file_corrisp_in_cartella(self, client, setup_db):
         html_senza_corrisp = '<html><body><a href="99MEX036593-20260630T210045-0944-ZREPORT.txt">a</a></body></html>'

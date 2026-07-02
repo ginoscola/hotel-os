@@ -1,8 +1,15 @@
 """Parser per il file CORRISP.xml prodotto dal registratore telematico (RT) dopo la chiusura Z.
 
 Formula totale giorno:
-  Σ Ammontare (righe con AliquotaIVA, solo se Ammontare > 0)
-  + Σ ImportoParziale (righe con Natura, solo se ImportoParziale > 0)
+  Σ (ImportoParziale + Imposta) per le righe con AliquotaIVA, solo se ImportoParziale > 0
+  + Σ ImportoParziale per le righe con Natura (N1, N2, ...), solo se ImportoParziale > 0
+
+⚠️ <Ammontare> NON è imponibile+imposta come si potrebbe pensare dal nome: verificato sui file
+reali (30/06 e 01/07/2026) che <Ammontare> = <ImportoParziale> + <NonRiscossoServizi> (include
+cioè la tassa di soggiorno "non riscossa", non l'IVA). Va quindi ignorato per il totale fiscale,
+che si ricava da ImportoParziale + Imposta.
+
+Codici Natura noti: N1 = esente (tracciato in esente_n1), N2 = penali (tracciato in totale_penali).
 
 Il namespace AdE (r:DatiCorrispettivi) viene ignorato confrontando i soli
 local-name dei tag: nei file reali solo la radice porta il prefisso, i figli no.
@@ -87,16 +94,16 @@ def parse_corrisp_xml(xml_content: bytes) -> dict:
     totale_giorno = Decimal('0')
     imponibile_10 = Decimal('0')
     imposta_10 = Decimal('0')
-    ammontare_10 = Decimal('0')
+    lordo_10 = Decimal('0')
     imponibile_22 = Decimal('0')
     imposta_22 = Decimal('0')
-    ammontare_22 = Decimal('0')
+    lordo_22 = Decimal('0')
     esente_n1 = Decimal('0')
+    penali = Decimal('0')
     tassa_soggiorno_nrs = Decimal('0')
 
     for r in riepiloghi:
         importo_parziale = _dec(_child_text(r, 'ImportoParziale'))
-        ammontare = _dec(_child_text(r, 'Ammontare'))
         nrs_testo = _child_text(r, 'NonRiscossoServizi')
         if nrs_testo is not None:
             tassa_soggiorno_nrs += _dec(nrs_testo)
@@ -105,21 +112,24 @@ def parse_corrisp_xml(xml_content: bytes) -> dict:
         natura = _child_text(r, 'Natura')
 
         if aliquota is not None:
-            if ammontare > 0:
-                totale_giorno += ammontare
-            if aliquota == ALIQUOTA_10:
-                imponibile_10 += importo_parziale
-                imposta_10 += imposta
-                ammontare_10 += ammontare
-            elif aliquota == ALIQUOTA_22:
-                imponibile_22 += importo_parziale
-                imposta_22 += imposta
-                ammontare_22 += ammontare
+            if importo_parziale > 0:
+                lordo = importo_parziale + imposta
+                totale_giorno += lordo
+                if aliquota == ALIQUOTA_10:
+                    imponibile_10 += importo_parziale
+                    imposta_10 += imposta
+                    lordo_10 += lordo
+                elif aliquota == ALIQUOTA_22:
+                    imponibile_22 += importo_parziale
+                    imposta_22 += imposta
+                    lordo_22 += lordo
         elif natura is not None:
             if importo_parziale > 0:
                 totale_giorno += importo_parziale
             if natura == 'N1':
                 esente_n1 += importo_parziale
+            elif natura == 'N2':
+                penali += importo_parziale
 
     num_documenti = None
     pagato_contanti = Decimal('0')
@@ -144,11 +154,10 @@ def parse_corrisp_xml(xml_content: bytes) -> dict:
         'pagato_contanti': pagato_contanti,
         'pagato_elettronico': pagato_elettronico,
         # Mappatura sui campi legacy usati dal confronto per categoria vs PMS
-        # (GET /rt-chiusure): totale_10/22 = lordo (Ammontare), totale_ts = NRS,
-        # totale_penali = 0 (l'XML non riporta una Natura dedicata alle penali,
-        # che lato PMS sono comunque quasi sempre a valore zero).
-        'totale_10': ammontare_10,
-        'totale_22': ammontare_22,
+        # (GET /rt-chiusure): totale_10/22 = lordo fiscale (ImportoParziale+Imposta),
+        # totale_ts = tassa_soggiorno_nrs (da NonRiscossoServizi), totale_penali = Natura N2.
+        'totale_10': lordo_10,
+        'totale_22': lordo_22,
         'totale_ts': tassa_soggiorno_nrs,
-        'totale_penali': Decimal('0'),
+        'totale_penali': penali,
     }

@@ -27,9 +27,11 @@ class TestParseCorrispXml:
 
     def test_totale_corretto(self):
         dati = parse_corrisp_xml(_carica_fixture())
-        # 1909.27 (IVA 10%, Ammontare) + 46.01 (N1, ImportoParziale) = 1955.28
-        # Le righe con Ammontare/ImportoParziale = 0 (IVA 22/4/5%, N4) sono escluse.
-        assert dati['totale_giorno'] == Decimal('1955.28')
+        # (1735.54 + 173.55) IVA 10% lordo fiscale + 46.01 (N1, ImportoParziale) = 1955.10
+        # Le righe con ImportoParziale = 0 (IVA 22/4/5%, N4) sono escluse.
+        # NB: <Ammontare> NON entra nel calcolo — verificato sui file reali che
+        # Ammontare = ImportoParziale + NonRiscossoServizi, non ImportoParziale + Imposta.
+        assert dati['totale_giorno'] == Decimal('1955.10')
 
     def test_imponibile_e_imposta_10(self):
         dati = parse_corrisp_xml(_carica_fixture())
@@ -71,10 +73,39 @@ class TestParseCorrispXml:
     def test_campi_legacy_breakdown(self):
         """totale_10/22/ts/penali alimentano il confronto per categoria esistente in GET /rt-chiusure."""
         dati = parse_corrisp_xml(_carica_fixture())
-        assert dati['totale_10'] == Decimal('1909.27')    # Ammontare lordo IVA 10%
+        assert dati['totale_10'] == Decimal('1909.09')    # lordo fiscale (ImportoParziale+Imposta) IVA 10%
         assert dati['totale_22'] == Decimal('0')
         assert dati['totale_ts'] == Decimal('181.73')     # = tassa_soggiorno_nrs
-        assert dati['totale_penali'] == Decimal('0')      # nessuna Natura dedicata nell'XML
+        assert dati['totale_penali'] == Decimal('0')      # nessuna riga Natura N2 in questo file
+
+    def test_natura_n2_penali(self):
+        """Natura N2 = penali (cancellazioni), tracciate nel campo legacy totale_penali
+        e incluse nel totale giorno come qualunque altra riga Natura con ImportoParziale > 0."""
+        xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<r:DatiCorrispettivi xmlns:r="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/corrispettivi/dati/v1.0">
+  <DataOraRilevazione>2026-07-03T21:00:00</DataOraRilevazione>
+  <Trasmissione><Progressivo>3</Progressivo></Trasmissione>
+  <DatiRT>
+    <Riepilogo>
+      <IVA><AliquotaIVA>10.00</AliquotaIVA><Imposta>10.00</Imposta></IVA>
+      <ImportoParziale>100.00</ImportoParziale>
+      <Ammontare>110.00</Ammontare>
+    </Riepilogo>
+    <Riepilogo>
+      <Natura>N2</Natura>
+      <ImportoParziale>25.00</ImportoParziale>
+      <Ammontare>25.00</Ammontare>
+    </Riepilogo>
+    <Totali>
+      <NumeroDocCommerciali>2</NumeroDocCommerciali>
+      <PagatoContanti>135.00</PagatoContanti>
+      <PagatoElettronico>0.00</PagatoElettronico>
+    </Totali>
+  </DatiRT>
+</r:DatiCorrispettivi>"""
+        dati = parse_corrisp_xml(xml)
+        assert dati['totale_penali'] == Decimal('25.00')
+        assert dati['totale_giorno'] == Decimal('135.00')  # 110.00 (IVA10 lordo) + 25.00 (N2)
 
     def test_campi_zero_esclusi_dal_totale(self):
         """Una riga con Ammontare o ImportoParziale = 0 non deve alterare il totale."""
