@@ -114,6 +114,13 @@ cd backend && source venv/bin/activate && pytest tests/ -v
 File test: `uploads/PlanningForecast-{CLB,DPH,INT}{1,2}.csv`.
 Test di integrazione che chiamano endpoint protetti falliscono con 401 (TestClient senza auth) — problema pre-esistente, i test unitari passano tutti.
 
+⚠️ **Se il backend non raggiunge più le stampanti RT** (`import-da-stampante` → "No route to host"
+persistente, pur con rete/permessi a posto): il processo uvicorn potrebbe essere acceso da prima che
+un permesso macOS (es. Rete locale per l'app da cui è partito il terminale) fosse concesso o cambiato.
+`--reload` ricarica solo il codice Python, non riavvia il processo del sistema operativo, quindi non
+recepisce cambi di permessi avvenuti dopo l'avvio. Soluzione: killare il processo uvicorn e riavviarlo
+da zero (non basta salvare un file per far scattare il reload).
+
 ## Localizzazione
 `MESI_IT`, `GIORNI_IT`, `formatta_data_it()` definiti SOLO in `locale_it.py`. Non ridefinire nei router.
 UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % (mai €).
