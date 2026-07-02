@@ -9,7 +9,12 @@ reali (30/06 e 01/07/2026) che <Ammontare> = <ImportoParziale> + <NonRiscossoSer
 cioè la tassa di soggiorno "non riscossa", non l'IVA). Va quindi ignorato per il totale fiscale,
 che si ricava da ImportoParziale + Imposta.
 
-Codici Natura noti: N1 = esente (tracciato in esente_n1), N2 = penali (tracciato in totale_penali).
+Codici Natura noti: N1 = tassa di soggiorno (tracciato in esente_n1 e nel campo legacy totale_ts,
+usato nel confronto vs PMS), N2 = penali (tracciato in totale_penali). Solo ImportoParziale per
+entrambi: sono esenti, non generano Imposta.
+
+<NonRiscossoServizi> sono importi sospesi non trasmessi all'Agenzia delle Entrate: tracciati in
+tassa_soggiorno_nrs solo come dettaglio grezzo, non entrano in nessun totale né confronto.
 
 Il namespace AdE (r:DatiCorrispettivi) viene ignorato confrontando i soli
 local-name dei tag: nei file reali solo la radice porta il prefisso, i figli no.
@@ -154,10 +159,13 @@ def parse_corrisp_xml(xml_content: bytes) -> dict:
         'pagato_contanti': pagato_contanti,
         'pagato_elettronico': pagato_elettronico,
         # Mappatura sui campi legacy usati dal confronto per categoria vs PMS
-        # (GET /rt-chiusure): totale_10/22 = lordo fiscale (ImportoParziale+Imposta),
-        # totale_ts = tassa_soggiorno_nrs (da NonRiscossoServizi), totale_penali = Natura N2.
+        # (GET /rt-chiusure): totale_10/22 = lordo fiscale (ImportoParziale+Imposta, unica
+        # componente trasmessa ad AdE); totale_ts = esente_n1 (Natura N1 = tassa di soggiorno,
+        # solo ImportoParziale perché esente da imposta); totale_penali = Natura N2 (idem).
+        # NonRiscossoServizi (tassa_soggiorno_nrs) sono sospesi non trasmessi ad AdE: tracciato
+        # solo come dettaglio, non entra in nessun confronto/totale.
         'totale_10': lordo_10,
         'totale_22': lordo_22,
-        'totale_ts': tassa_soggiorno_nrs,
+        'totale_ts': esente_n1,
         'totale_penali': penali,
     }

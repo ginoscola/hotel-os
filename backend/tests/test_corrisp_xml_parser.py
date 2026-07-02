@@ -75,7 +75,7 @@ class TestParseCorrispXml:
         dati = parse_corrisp_xml(_carica_fixture())
         assert dati['totale_10'] == Decimal('1909.09')    # lordo fiscale (ImportoParziale+Imposta) IVA 10%
         assert dati['totale_22'] == Decimal('0')
-        assert dati['totale_ts'] == Decimal('181.73')     # = tassa_soggiorno_nrs
+        assert dati['totale_ts'] == Decimal('46.01')      # = esente_n1 (tassa di soggiorno), non NonRiscossoServizi
         assert dati['totale_penali'] == Decimal('0')      # nessuna riga Natura N2 in questo file
 
     def test_natura_n2_penali(self):
