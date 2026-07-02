@@ -256,10 +256,14 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   host" intermittente): il web server integrato nella stampante è hardware limitato e a volte non
   risponde in tempo, es. se occupato in una stampa.
   Un file CORRISP.xml copre un RT intero (RT1 = DPH+CLB, RT2 = INT), non un singolo hotel.
-  Formula totale: Σ `Ammontare` (righe con `AliquotaIVA`, solo se >0) + Σ `ImportoParziale` (righe con
-  `Natura`, solo se >0). Popola anche i campi legacy `totale_10/22/ts/penali` usati dal confronto per
-  categoria vs PMS (`totale_10/22` = `Ammontare` lordo, `totale_ts` = `tassa_soggiorno_nrs`,
-  `totale_penali` = 0 — l'XML non ha una Natura dedicata alle penali).
+  **Formula totale**: Σ (`ImportoParziale` + `Imposta`) per le righe con `AliquotaIVA` (10%, 22%, ...,
+  solo se `ImportoParziale` > 0) + Σ `ImportoParziale` per le righe con `Natura` (N1=esente, N2=penali,
+  solo se `ImportoParziale` > 0). ⚠️ `<Ammontare>` **non** è imponibile+imposta come suggerirebbe il nome:
+  verificato sui file reali che `Ammontare = ImportoParziale + NonRiscossoServizi` (include la tassa di
+  soggiorno non riscossa, non l'IVA) — va ignorato nel calcolo del totale fiscale.
+  Popola anche i campi legacy `totale_10/22/ts/penali` usati dal confronto per categoria vs PMS
+  (`totale_10/22` = `ImportoParziale+Imposta` per aliquota, `totale_ts` = `tassa_soggiorno_nrs`,
+  `totale_penali` = `ImportoParziale` di `Natura N2`).
   Protegge sempre `modificato_manualmente=True` anche con `on_conflict=aggiorna` (risponde `esito=saltato`).
   Logica di upsert condivisa tra i due endpoint: `_upsert_rt_chiusura_da_xml()`.
   Frontend: pulsante "Importa CORRISP.xml" in `TabControlloRT` (dentro `Corrispettivi.jsx`), due modalità:
