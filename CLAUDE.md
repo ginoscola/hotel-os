@@ -149,11 +149,21 @@ UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % 
 - SettimanaDashboard include: rooms_sold, rooms_available, occupancy, adr, rmc, revpar, trevpar, revenue_*, inc_rooms, inc_fnb, inc_extra.
 
 ## Dashboard Gruppo
-Due modalità (toggle, `localStorage('gruppo_modalita')`):
+Tre modalità (toggle, `localStorage('gruppo_modalita')`):
 - **Settimana**: `GET /dashboard/gruppo?modalita=settimana&settimana=&snapshot=`
 - **Stagione intera**: `GET /dashboard/gruppo?modalita=stagione&snapshot=`; 3 grafici trend (RevPAR/TRevPAR, Revenue, Occupazione).
+- **Ritmo prenotazioni** (`SezionePace` in `DashboardGruppo.jsx`): crescita OTB di un mese target
+  (frecce ◀▶ mese/anno) attraverso tutti gli snapshot, un `LineChart` con una linea per hotel
+  (`COLORI_HOTEL`). Dati da `GET /forecast/pace-gruppo?anno=&mese=` — stessa logica di
+  `/forecast/pace` (singolo hotel) ma per tutti gli hotel in un'unica risposta, fattorizzata in
+  `_pace_punti()` in `routers/forecast.py`. Il merge dei punti per `snapshot_date` avviene client-side
+  (`chartData` in `SezionePace`), assumendo che gli snapshot siano allineati tra hotel (verificato:
+  lo sono, stesso `snapshot_date` per import contemporanei).
 - `GET /dashboard/gruppo/snapshots` → lista snapshot aggregate.
 - Merge confronto per chiave `week_start` (non indice) per evitare sfasamenti tra stagioni diverse.
+- `Hotel` (model) non ha un campo `attivo`: `_hotels_per_codice("all", ...)` in `forecast.py` restituisce
+  tutti gli hotel in anagrafica (bug preesistente corretto — filtrava su un campo inesistente,
+  mai eseguito finché non è servito da `/forecast/pace-gruppo`).
 
 ## Export
 - Hotel: `GET /export/hotel/{code}/settimanale|giornaliero?snapshot=&da=&a=&formato=xlsx|csv|pdf`

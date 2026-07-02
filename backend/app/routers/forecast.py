@@ -90,6 +90,18 @@ class PaceChartResponse(BaseModel):
     maturato_al: Optional[str]
 
 
+class PaceStruttura(BaseModel):
+    hotel_code: str
+    punti: List[PacePunto]
+
+
+class PaceGruppoResponse(BaseModel):
+    anno: int
+    mese: int
+    mese_label: str
+    strutture: List[PaceStruttura]
+
+
 class MaturatInput(BaseModel):
     hotel_code: str
     anno: int
@@ -142,7 +154,8 @@ def _get_hotel_o_404(hotel_code: str, db: Session) -> Hotel:
 
 def _hotels_per_codice(hotel_code: str, db: Session) -> List[Hotel]:
     if hotel_code.lower() == "all":
-        return db.query(Hotel).filter(Hotel.attivo == True).order_by(Hotel.code).all()
+        # Hotel non ha un campo "attivo": tutti gli hotel in anagrafica sono operativi.
+        return db.query(Hotel).order_by(Hotel.code).all()
     return [_get_hotel_o_404(hotel_code, db)]
 
 
@@ -407,6 +420,37 @@ def get_summary(
 # Endpoint: pace chart
 # ---------------------------------------------------------------------------
 
+def _pace_punti(db: Session, hotel_code: str, anno: int, mese: int) -> List[PacePunto]:
+    """Un punto per snapshot_date: totale revenue/room-nights OTB del mese in quell'istantanea."""
+    da = date(anno, mese, 1)
+    a = date(anno, mese, monthrange(anno, mese)[1])
+
+    righe = (
+        db.query(
+            DailyRevenue.snapshot_date,
+            func.sum(DailyRevenue.revenue_total).label("otb_revenue"),
+            func.sum(DailyRevenue.rooms_sold).label("otb_room_nights"),
+        )
+        .filter(
+            DailyRevenue.hotel_code == hotel_code,
+            DailyRevenue.data.between(da, a),
+            DailyRevenue.is_test == False,
+        )
+        .group_by(DailyRevenue.snapshot_date)
+        .order_by(DailyRevenue.snapshot_date.asc())
+        .all()
+    )
+
+    return [
+        PacePunto(
+            snapshot_date=r.snapshot_date.isoformat(),
+            otb_revenue=round(float(r.otb_revenue), 2),
+            otb_room_nights=int(r.otb_room_nights or 0),
+        )
+        for r in righe
+    ]
+
+
 @router.get(
     "/pace",
     response_model=PaceChartResponse,
@@ -423,34 +467,7 @@ def get_pace(
     Ogni upload settimanale del modulo Revenue genera un punto nel grafico.
     """
     hotel = _get_hotel_o_404(hotel_code, db)
-    da = date(anno, mese, 1)
-    a = date(anno, mese, monthrange(anno, mese)[1])
-
-    # Un punto per snapshot_date: totale revenue del mese in quell'istantanea
-    righe = (
-        db.query(
-            DailyRevenue.snapshot_date,
-            func.sum(DailyRevenue.revenue_total).label("otb_revenue"),
-            func.sum(DailyRevenue.rooms_sold).label("otb_room_nights"),
-        )
-        .filter(
-            DailyRevenue.hotel_code == hotel.code,
-            DailyRevenue.data.between(da, a),
-            DailyRevenue.is_test == False,
-        )
-        .group_by(DailyRevenue.snapshot_date)
-        .order_by(DailyRevenue.snapshot_date.asc())
-        .all()
-    )
-
-    punti = [
-        PacePunto(
-            snapshot_date=r.snapshot_date.isoformat(),
-            otb_revenue=round(float(r.otb_revenue), 2),
-            otb_room_nights=int(r.otb_room_nights or 0),
-        )
-        for r in righe
-    ]
+    punti = _pace_punti(db, hotel.code, anno, mese)
 
     budget = db.query(ForecastBudget).filter_by(hotel_id=hotel.id, anno=anno, mese=mese).first()
     pickup = db.query(ForecastPickupConfig).filter_by(hotel_id=hotel.id, anno=anno, mese=mese).first()
@@ -477,6 +494,30 @@ def get_pace(
         pickup_rate=pickup_rate,
         maturato_revenue=float(mat.maturato_revenue) if mat else None,
         maturato_al=mat.data_riferimento.isoformat() if mat else None,
+    )
+
+
+@router.get(
+    "/pace-gruppo",
+    response_model=PaceGruppoResponse,
+    dependencies=[Depends(richiedi_utente_attivo)],
+)
+def get_pace_gruppo(
+    anno: int = Query(...),
+    mese: int = Query(..., ge=1, le=12),
+    db: Session = Depends(get_db),
+):
+    """Crescita OTB per un mese target attraverso gli snapshot, una serie per hotel attivo."""
+    hotels = _hotels_per_codice("all", db)
+    strutture = [
+        PaceStruttura(hotel_code=h.code, punti=_pace_punti(db, h.code, anno, mese))
+        for h in hotels
+    ]
+    return PaceGruppoResponse(
+        anno=anno,
+        mese=mese,
+        mese_label=MESI_IT[mese - 1],
+        strutture=strutture,
     )
 
 

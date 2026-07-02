@@ -92,6 +92,7 @@ export default function DashboardGruppo() {
   }, [modalita, confrontaPrevSett, confrontaPrevAnno, currentSnap, snapshots, snapIdx])
 
   const caricaDati = useCallback(async () => {
+    if (modalita === 'pace') return
     if (modalita === 'settimana' && !currentWeek) return
     if (modalita === 'stagione' && !currentSnap) return
     setLoading(true)
@@ -197,10 +198,15 @@ export default function DashboardGruppo() {
         <button style={styleToggle(modalita === 'stagione')} onClick={() => setModalita('stagione')}>
           Stagione intera
         </button>
+        <button style={styleToggle(modalita === 'pace')} onClick={() => setModalita('pace')}>
+          Ritmo prenotazioni
+        </button>
       </div>
 
+      {modalita === 'pace' && <SezionePace />}
+
       {/* Navigazione + confronti */}
-      {navItems.length > 0 && (
+      {modalita !== 'pace' && navItems.length > 0 && (
         <div className="card" style={{ marginBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
             <button
@@ -257,8 +263,8 @@ export default function DashboardGruppo() {
         </div>
       )}
 
-      {loading && <p>Caricamento…</p>}
-      {errore && (
+      {modalita !== 'pace' && loading && <p>Caricamento…</p>}
+      {modalita !== 'pace' && errore && (
         <div style={{
           padding: '1rem', background: '#fee2e2',
           borderRadius: 8, color: '#991b1b', marginBottom: '1rem',
@@ -267,7 +273,7 @@ export default function DashboardGruppo() {
         </div>
       )}
 
-      {dati && (
+      {modalita !== 'pace' && dati && (
         <ContenutoDashboardGruppo
           dati={dati}
           datiComp={compDisponibile ? datiComp : null}
@@ -277,6 +283,97 @@ export default function DashboardGruppo() {
           settimanePerHotel={settimanePerHotel}
           snapshotDate={currentSnap?.snapshot_date}
         />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Ritmo prenotazioni (booking pace) — crescita OTB di un mese target
+// attraverso tutti gli snapshot, una linea per hotel
+// ---------------------------------------------------------------------------
+
+const MESI_PACE = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+                    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
+
+function SezionePace() {
+  const oggi = new Date()
+  const [mese, setMese] = useState(oggi.getMonth() + 1)
+  const [anno, setAnno] = useState(oggi.getFullYear())
+  const [dati, setDati] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [errore, setErrore] = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setErrore(null)
+    api.get(`/forecast/pace-gruppo?anno=${anno}&mese=${mese}`)
+      .then(({ data }) => setDati(data))
+      .catch(err => { setErrore(mostraErrore(err)); setDati(null) })
+      .finally(() => setLoading(false))
+  }, [anno, mese])
+
+  const mesePrec = () => { if (mese === 1) { setMese(12); setAnno(a => a - 1) } else setMese(m => m - 1) }
+  const meseSucc = () => { if (mese === 12) { setMese(1); setAnno(a => a + 1) } else setMese(m => m + 1) }
+
+  // Unisce i punti di ogni struttura in righe per snapshot_date: { snapshot_date, DPH, CLB, INT }
+  const chartData = useMemo(() => {
+    if (!dati) return []
+    const perData = {}
+    dati.strutture.forEach(s => {
+      s.punti.forEach(p => {
+        if (!perData[p.snapshot_date]) perData[p.snapshot_date] = { snapshot_date: p.snapshot_date }
+        perData[p.snapshot_date][s.hotel_code] = p.otb_revenue
+      })
+    })
+    return Object.values(perData).sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
+  }, [dati])
+
+  const codiciHotel = dati ? dati.strutture.map(s => s.hotel_code) : []
+  const nessunDato = dati && chartData.length === 0
+
+  return (
+    <div className="card sezione" style={{ marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+        <button onClick={mesePrec} style={{ padding: '4px 12px', fontSize: 13 }}>← Prec.</button>
+        <div style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 15 }}>
+          {MESI_PACE[mese]} {anno}
+        </div>
+        <button onClick={meseSucc} style={{ padding: '4px 12px', fontSize: 13 }}>Succ. →</button>
+      </div>
+
+      {loading && <p>Caricamento…</p>}
+      {errore && (
+        <div style={{ padding: '1rem', background: '#fee2e2', borderRadius: 8, color: '#991b1b', marginBottom: '1rem' }}>
+          {errore}
+        </div>
+      )}
+      {nessunDato && !loading && !errore && (
+        <p style={{ color: '#6b7280', fontSize: 13 }}>Nessuno snapshot disponibile per questo mese.</p>
+      )}
+
+      {chartData.length > 0 && (
+        <ResponsiveContainer width="100%" height={320}>
+          <LineChart data={chartData} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="snapshot_date" tick={{ fontSize: 10 }} tickFormatter={formatData} />
+            <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
+            <Tooltip labelFormatter={formatData} formatter={v => formatEuro(v)} />
+            <Legend />
+            {codiciHotel.map(code => (
+              <Line
+                key={code}
+                type="monotone"
+                dataKey={code}
+                stroke={COLORI_HOTEL[code] || '#999'}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                connectNulls
+                name={code}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
       )}
     </div>
   )
