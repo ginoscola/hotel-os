@@ -238,7 +238,7 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
 **Confronto RT**: usare colonna `tassa_soggiorno` (TS embedded in arrangiamenti) + `categoria='tassa_soggiorno'` (standalone). Non usare solo `totale_lordo WHERE categoria='tassa_soggiorno'`.
 
 ### Tabelle DB principali
-- `corrispettivi_documenti`: UNIQUE(struttura_code, data_documento, numero, suffisso, camera, codice_prenotazione); audit trail (`modificato_manualmente`, `*_originale`); `camera` e `codice_prenotazione` TEXT (prenotazioni gruppo = liste lunghe).
+- `corrispettivi_documenti`: UNIQUE(struttura_code, data_documento, numero, suffisso, camera, codice_prenotazione, numero_scontrino); audit trail (`modificato_manualmente`, `*_originale`); `camera` e `codice_prenotazione` TEXT (prenotazioni gruppo = liste lunghe).
   ⚠️ Welcome PMS assegna `numero=0` a **tutte** le righe di storno/annullo non numerate emesse
   in un giorno per una struttura (non è un identificativo). Con ≥2 annullamenti nello stesso
   giorno/struttura, la vecchia chiave (senza camera/codice_prenotazione) li considerava lo
@@ -250,6 +250,14 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   sulla vecchia tabella `fiscal_documents` (precursore, ora dismessa) — qui invece si è
   preferito estendere la chiave (camera+codice_prenotazione distinguono storni diversi)
   per mantenere l'idempotenza per-documento su cui si basa `on_conflict=salta|aggiorna`.
+  Non basta però quando la **stessa** prenotazione/camera ha più scontrini annullati nello
+  stesso giorno (es. 20/06/2026 INT, camera I418/prenotazione 4858: due storni -476 e -28
+  per due scontrini diversi, stesso numero=0/camera/prenotazione) — collidevano ancora tra
+  loro. Aggiunta `numero_scontrino` (numero fiscale di stampa, es. "177-18") alla chiave:
+  distingue eventi di storno diversi anche a parità di camera/prenotazione. Migrazione
+  `corrfix002_2026`. Assente nel formato Excel base (18 colonne): lì resta solo la
+  protezione camera+codice_prenotazione, teoricamente ancora vulnerabile allo stesso
+  scenario (mai riscontrato finora in quel formato).
 - `corrispettivi_manuali`: UNIQUE(data_giorno, struttura_code).
 - `rt_chiusure`: UNIQUE(data_chiusura, rt_code); RT1→[DPH,CLB], RT2→[INT]. Audit trail `modificato_manualmente`
   (come `corrispettivi_documenti`): tutte le righe inserite prima di luglio 2026 sono marcate `True` (protette).

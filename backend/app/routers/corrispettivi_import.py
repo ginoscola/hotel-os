@@ -9,7 +9,7 @@ import os
 import tempfile
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -75,12 +75,14 @@ def importa_excel(
     tutti = risultato.documenti
 
     # Pre-check: quali chiavi esistono già in DB?
-    # camera + codice_prenotazione in chiave: Welcome PMS assegna numero=0 a tutte
-    # le righe di storno/annullo non numerate di un giorno — senza questi due campi
-    # più storni nello stesso giorno/struttura collidono sulla stessa chiave e solo
-    # il primo verrebbe importato (bug reale: storno 27/06/2026 CLB perso).
+    # camera + codice_prenotazione + numero_scontrino in chiave: Welcome PMS assegna
+    # numero=0 a tutte le righe di storno/annullo non numerate di un giorno — senza
+    # questi campi più storni nello stesso giorno/struttura (anche sulla STESSA
+    # prenotazione/camera, distinti solo da numero_scontrino) collidono sulla stessa
+    # chiave e solo il primo verrebbe importato (bug reale: storni 27/06/2026 CLB e
+    # 20/06/2026 INT persi).
     chiavi_tutti = [
-        (d.struttura_code, d.data_documento, d.numero, d.suffisso, d.camera or '', d.codice_prenotazione or '')
+        (d.struttura_code, d.data_documento, d.numero, d.suffisso, d.camera or '', d.codice_prenotazione or '', d.numero_scontrino or '')
         for d in tutti
     ]
     strutture_set = {d.struttura_code for d in tutti}
@@ -94,6 +96,7 @@ def importa_excel(
             CorrispettiviDocumento.suffisso,
             CorrispettiviDocumento.camera,
             CorrispettiviDocumento.codice_prenotazione,
+            CorrispettiviDocumento.numero_scontrino,
             CorrispettiviDocumento.modificato_manualmente,
         ).filter(
             CorrispettiviDocumento.struttura_code.in_(strutture_set),
@@ -101,7 +104,7 @@ def importa_excel(
         ).all()
 
         chiavi_esistenti: dict = {
-            (r.struttura_code, r.data_documento, r.numero, r.suffisso, r.camera or '', r.codice_prenotazione or ''): r.modificato_manualmente
+            (r.struttura_code, r.data_documento, r.numero, r.suffisso, r.camera or '', r.codice_prenotazione or '', r.numero_scontrino or ''): r.modificato_manualmente
             for r in esistenti_q
         }
     else:
@@ -112,7 +115,7 @@ def importa_excel(
     protetti = []
 
     for d in tutti:
-        chiave = (d.struttura_code, d.data_documento, d.numero, d.suffisso, d.camera or '', d.codice_prenotazione or '')
+        chiave = (d.struttura_code, d.data_documento, d.numero, d.suffisso, d.camera or '', d.codice_prenotazione or '', d.numero_scontrino or '')
         if chiave not in chiavi_esistenti:
             nuovi.append(d)
         elif chiavi_esistenti[chiave]:   # modificato_manualmente=True
@@ -214,6 +217,7 @@ def importa_excel(
                         CorrispettiviDocumento.suffisso == d.suffisso,
                         CorrispettiviDocumento.camera == (d.camera or ''),
                         CorrispettiviDocumento.codice_prenotazione == (d.codice_prenotazione or ''),
+                        func.coalesce(CorrispettiviDocumento.numero_scontrino, '') == (d.numero_scontrino or ''),
                         CorrispettiviDocumento.modificato_manualmente == False,
                     )
                     .values(

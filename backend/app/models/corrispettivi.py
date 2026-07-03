@@ -107,12 +107,13 @@ class CorrispettiviDocumento(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        # camera + codice_prenotazione: Welcome PMS assegna numero=0 a tutte le righe
-        # di storno/annullo non numerate di un giorno — senza questi due campi più
-        # storni nello stesso giorno/struttura collidono sulla stessa chiave (vedi
-        # migrazione corrfix001_2026).
+        # camera + codice_prenotazione + numero_scontrino: Welcome PMS assegna
+        # numero=0 a tutte le righe di storno/annullo non numerate di un giorno —
+        # senza questi campi più storni nello stesso giorno/struttura (anche sulla
+        # STESSA prenotazione/camera, distinti solo da numero_scontrino) collidono
+        # sulla stessa chiave (vedi migrazioni corrfix001_2026, corrfix002_2026).
         UniqueConstraint('struttura_code', 'data_documento', 'numero', 'suffisso',
-                         'camera', 'codice_prenotazione', name='uq_documento'),
+                         'camera', 'codice_prenotazione', 'numero_scontrino', name='uq_documento'),
     )
 
     importazione = relationship("CorrispettiviImport", back_populates="documenti",
