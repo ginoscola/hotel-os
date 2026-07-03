@@ -159,11 +159,19 @@ def upsert_rt_chiusura(
         RtChiusura.rt_code == rt_code,
     ).first()
 
+    # esente_n1 è popolato normalmente solo dall'import CORRISP.xml, ma è la stessa
+    # grandezza fiscale di totale_ts (coerente con l'etichetta "Esente N1 (T. Soggiorno)"
+    # nel form manuale — vedi CLAUDE.md). Va tenuto sincronizzato anche qui, altrimenti un
+    # salvataggio manuale che corregge totale_ts lascia l'alert n1_non_quadra basato su un
+    # esente_n1 non più aggiornato (importato in precedenza da XML).
+    totale_ts = _dec(body.get('totale_ts'))
+
     if esistente:
         esistente.totale_giorno = _dec(body['totale_giorno'])
         esistente.totale_10 = _dec(body.get('totale_10'))
         esistente.totale_22 = _dec(body.get('totale_22'))
-        esistente.totale_ts = _dec(body.get('totale_ts'))
+        esistente.totale_ts = totale_ts
+        esistente.esente_n1 = totale_ts
         esistente.totale_penali = _dec(body.get('totale_penali'))
         esistente.note = body.get('note')
         esistente.updated_by = utente.id
@@ -178,7 +186,8 @@ def upsert_rt_chiusura(
         totale_giorno=_dec(body['totale_giorno']),
         totale_10=_dec(body.get('totale_10')),
         totale_22=_dec(body.get('totale_22')),
-        totale_ts=_dec(body.get('totale_ts')),
+        totale_ts=totale_ts,
+        esente_n1=totale_ts,
         totale_penali=_dec(body.get('totale_penali')),
         note=body.get('note'),
         created_by=utente.id,

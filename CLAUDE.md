@@ -304,6 +304,12 @@ combinazione di persone-notte tra i due hotel è un totale legittimo (es. 70,50�
 dato falsi allarmi su quasi ogni giorno). Flag `n1_non_quadra` calcolato in `_n1_non_quadra()`,
 incluso nella risposta `GET /rt-chiusure` per ogni rt1/rt2. Frontend: icona ⚠️ accanto al totale RT
 in `TabControlloRT` con tooltip che mostra l'importo esente N1.
+⚠️ `esente_n1` va tenuto sincronizzato con `totale_ts` anche sul salvataggio manuale
+(`POST /rt-chiusure`, non solo sull'import XML): altrimenti dopo una correzione manuale della tassa
+di soggiorno (`totale_ts`) l'alert continua a basarsi sul vecchio `esente_n1` importato da XML, non
+più aggiornato — bug reale scoperto e corretto (luglio 2026), con backfill una tantum sulle righe
+`modificato_manualmente=True` già in DB (`esente_n1 = totale_ts`, quest'ultimo come fonte di verità
+essendo l'ultimo valore confermato dall'utente).
 
 `GET /rt-chiusure` include anche `imponibile_10/22`, `imposta_10/22` per rt1/rt2: il pannello di
 inserimento manuale (`FormRT`) li usa per pre-compilare i sotto-campi "Imposta"/"Importo Parziale"
