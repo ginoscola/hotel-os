@@ -16,7 +16,7 @@ from decimal import Decimal
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy import func, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import richiedi_admin, richiedi_utente_attivo
@@ -484,22 +484,36 @@ def _range_stagione(strutture: list, anno: int, db: Session) -> Optional[Tuple[d
 
 
 def _somma_rt_pms(rt_code: str, da: date, a: date, db: Session) -> dict:
+    """
+    Somma RT vs PMS solo sui giorni in cui esiste una chiusura RT — stessa logica del
+    confronto giornaliero in `lista_rt_chiusure` (dove un giorno senza RT ha delta=None,
+    escluso dalla somma). Sommare il PMS su TUTTO l'intervallo di date, a prescindere
+    dalla presenza della chiusura RT, include giorni "orfani" (PMS con corrispettivi ma
+    nessuna chiusura RT importata) che gonfiano artificialmente la differenza — bug
+    scoperto confrontando la somma stagionale con la somma dei delta mese per mese.
+    """
     strutture = RT_STRUTTURE[rt_code]
-    somma_rt = db.query(func.sum(RtChiusura.totale_giorno)).filter(
+    rt_rows = db.query(RtChiusura.data_chiusura, RtChiusura.totale_giorno).filter(
         RtChiusura.rt_code == rt_code,
         RtChiusura.data_chiusura >= da,
         RtChiusura.data_chiusura <= a,
-    ).scalar()
-    somma_pms = db.execute(text("""
-        SELECT SUM(totale_lordo) AS s FROM corrispettivi_documenti
-        WHERE tipo = 'scontrino' AND struttura_code = ANY(:strutture)
-          AND data_documento BETWEEN :da AND :a
-    """), {'strutture': strutture, 'da': da, 'a': a}).scalar()
-    somma_rt = float(somma_rt or 0)
-    somma_pms = float(somma_pms or 0)
+    ).all()
+    somma_rt = sum(float(r.totale_giorno) for r in rt_rows)
+    giorni_rt = [r.data_chiusura for r in rt_rows]
+
+    somma_pms = 0.0
+    if giorni_rt:
+        somma_pms = db.execute(text("""
+            SELECT SUM(totale_lordo) AS s FROM corrispettivi_documenti
+            WHERE tipo = 'scontrino' AND struttura_code = ANY(:strutture)
+              AND data_documento = ANY(:giorni)
+        """), {'strutture': strutture, 'giorni': giorni_rt}).scalar()
+        somma_pms = float(somma_pms or 0)
+
     return {
         'da': da.isoformat(),
         'a': a.isoformat(),
+        'giorni_con_rt': len(giorni_rt),
         'somma_rt': round(somma_rt, 2),
         'somma_pms': round(somma_pms, 2),
         'somma_differenza': round(somma_rt - somma_pms, 2),

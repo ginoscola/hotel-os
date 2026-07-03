@@ -540,12 +540,14 @@ export default function TabControlloRT() {
                 {riepilogoStagione.RT1 && (
                   <strong style={{ color: fmtSomma(riepilogoStagione.RT1.somma_differenza).color }}>
                     RT1 {fmtSomma(riepilogoStagione.RT1.somma_differenza).label}
+                    <span style={{ fontWeight: 400, color: '#94a3b8' }}> ({riepilogoStagione.RT1.giorni_con_rt} gg)</span>
                   </strong>
                 )}
                 {riepilogoStagione.RT1 && riepilogoStagione.RT2 && ' · '}
                 {riepilogoStagione.RT2 && (
                   <strong style={{ color: fmtSomma(riepilogoStagione.RT2.somma_differenza).color }}>
                     RT2 {fmtSomma(riepilogoStagione.RT2.somma_differenza).label}
+                    <span style={{ fontWeight: 400, color: '#94a3b8' }}> ({riepilogoStagione.RT2.giorni_con_rt} gg)</span>
                   </strong>
                 )}
               </span>

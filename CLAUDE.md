@@ -329,6 +329,12 @@ quella cassa fiscale (RT1 = DPH+CLB con aperture sfasate: usa apertura Du Parc +
 Stesso criterio di calcolo del confronto giornaliero (somma `totale_lordo` scontrini PMS, **include**
 gli annullati, coerente con `_pms_agg()` esistente — non filtrare qui altrimenti i due numeri
 diventerebbero incoerenti tra vista giornaliera e vista aggregata).
+⚠️ `_somma_rt_pms()` somma il PMS **solo sui giorni in cui esiste una chiusura RT** (`giorni_con_rt`,
+incluso nella risposta), mai su tutto l'intervallo di date della stagione: un giorno con corrispettivi
+PMS ma senza chiusura RT (es. import saltato) andrebbe altrimenti a gonfiare la differenza in modo
+artificiale (bug reale scoperto confrontando la somma stagionale con la somma dei delta mese per
+mese — un solo giorno "orfano" da 5.382€ falsava l'intera stagione). Stessa semantica del confronto
+giornaliero, dove un giorno senza RT ha `delta=None` ed è escluso dalla somma.
 
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.
