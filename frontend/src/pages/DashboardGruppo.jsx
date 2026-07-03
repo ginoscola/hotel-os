@@ -295,6 +295,7 @@ export default function DashboardGruppo() {
 
 const MESI_PACE = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
                     'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
+const PACE_VISTA_KEY = 'pace_vista'
 
 function SezionePace() {
   const oggi = new Date()
@@ -303,6 +304,9 @@ function SezionePace() {
   const [dati, setDati] = useState(null)
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState(null)
+  const [vista, setVista] = useState(() => localStorage.getItem(PACE_VISTA_KEY) || 'assoluto')
+
+  const cambiaVista = (v) => { setVista(v); localStorage.setItem(PACE_VISTA_KEY, v) }
 
   useEffect(() => {
     setLoading(true)
@@ -332,15 +336,54 @@ function SezionePace() {
   const codiciHotel = dati ? dati.strutture.map(s => s.hotel_code) : []
   const nessunDato = dati && chartData.length === 0
 
+  // Vista indicizzata (base 100 alla prima snapshot disponibile per hotel): confronta la
+  // FORMA della crescita a prescindere dal volume assoluto, per capire chi sta accelerando
+  // di più nel pickup, indipendentemente dalla dimensione/fatturato complessivo dell'hotel.
+  const chartDataIndicizzato = useMemo(() => {
+    const basi = {}
+    codiciHotel.forEach(code => {
+      const primo = chartData.find(d => d[code] != null && d[code] !== 0)
+      basi[code] = primo ? primo[code] : null
+    })
+    return chartData.map(d => {
+      const row = { snapshot_date: d.snapshot_date }
+      codiciHotel.forEach(code => {
+        const base = basi[code]
+        row[code] = (d[code] != null && base) ? (d[code] / base) * 100 : null
+      })
+      return row
+    })
+  }, [chartData, codiciHotel])
+
+  const datiGrafico = vista === 'indicizzato' ? chartDataIndicizzato : chartData
+
   return (
     <div className="card sezione" style={{ marginBottom: '1rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <button onClick={mesePrec} style={{ padding: '4px 12px', fontSize: 13 }}>← Prec.</button>
         <div style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 15 }}>
           {MESI_PACE[mese]} {anno}
         </div>
         <button onClick={meseSucc} style={{ padding: '4px 12px', fontSize: 13 }}>Succ. →</button>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {[['assoluto', 'Valore assoluto'], ['indicizzato', 'Crescita indicizzata']].map(([v, l]) => (
+            <button key={v} onClick={() => cambiaVista(v)} style={{
+              padding: '4px 12px', borderRadius: 6, border: '1px solid', fontSize: 13,
+              cursor: 'pointer', fontWeight: vista === v ? 700 : 400,
+              background: vista === v ? '#1e3a5f' : '#f8fafc',
+              color: vista === v ? '#fff' : '#64748b',
+              borderColor: vista === v ? '#1e3a5f' : '#e2e8f0',
+            }}>{l}</button>
+          ))}
+        </div>
       </div>
+
+      {vista === 'indicizzato' && (
+        <p style={{ color: '#6b7280', fontSize: 12.5, margin: '-0.5rem 0 0.75rem' }}>
+          Ogni linea parte da 100 alla prima snapshot disponibile: mostra la velocità di crescita del
+          pickup a prescindere dal volume assoluto di ciascun hotel.
+        </p>
+      )}
 
       {loading && <p>Caricamento…</p>}
       {errore && (
@@ -354,12 +397,18 @@ function SezionePace() {
 
       {chartData.length > 0 && (
         <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={chartData} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+          <LineChart data={datiGrafico} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="snapshot_date" tick={{ fontSize: 10 }} tickFormatter={formatData} />
-            <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip labelFormatter={formatData} formatter={v => formatEuro(v)} />
+            <YAxis tickFormatter={vista === 'indicizzato' ? (v => v.toFixed(0)) : (v => `${(v / 1000).toFixed(0)}k`)} />
+            <Tooltip
+              labelFormatter={formatData}
+              formatter={vista === 'indicizzato' ? (v => v != null ? v.toFixed(1) : '—') : (v => formatEuro(v))}
+            />
             <Legend />
+            {vista === 'indicizzato' && (
+              <ReferenceLine y={100} stroke="#94a3b8" strokeDasharray="4 4" />
+            )}
             {codiciHotel.map(code => (
               <Line
                 key={code}

@@ -159,6 +159,12 @@ Tre modalità (toggle, `localStorage('gruppo_modalita')`):
   `_pace_punti()` in `routers/forecast.py`. Il merge dei punti per `snapshot_date` avviene client-side
   (`chartData` in `SezionePace`), assumendo che gli snapshot siano allineati tra hotel (verificato:
   lo sono, stesso `snapshot_date` per import contemporanei).
+  Toggle **Valore assoluto / Crescita indicizzata** (`localStorage('pace_vista')`): la vista assoluta
+  mostra il revenue OTB cumulativo (utile per il volume totale) ma penalizza visivamente un hotel con
+  fatturato complessivo inferiore anche quando sta accelerando di più — la sua curva resta comunque
+  sotto le altre. La vista indicizzata (`chartDataIndicizzato`) porta ogni hotel a base 100 sulla prima
+  snapshot disponibile, con `ReferenceLine` a y=100: mostra la FORMA della crescita (pickup relativo)
+  a prescindere dal volume assoluto, per confrontare correttamente chi sta accelerando di più.
 - `GET /dashboard/gruppo/snapshots` → lista snapshot aggregate.
 - Merge confronto per chiave `week_start` (non indice) per evitare sfasamenti tra stagioni diverse.
 - `Hotel` (model) non ha un campo `attivo`: `_hotels_per_codice("all", ...)` in `forecast.py` restituisce
