@@ -9,7 +9,7 @@ Tutti i test sono unitari (nessun endpoint HTTP, nessun DB).
 """
 from decimal import Decimal
 
-from app.routers.corrispettivi import _n1_non_quadra
+from app.routers.corrispettivi_rt import _n1_non_quadra
 
 
 class TestN1NonQuadra:

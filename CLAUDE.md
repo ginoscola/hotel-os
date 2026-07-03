@@ -204,6 +204,12 @@ File test: `uploads/202604_costi  aziendali .pdf` (8 dipendenti, aprile 2026).
 
 ## Modulo Corrispettivi
 
+**Backend diviso per dominio** (stesso prefix `/corrispettivi`, `main.py` invariato):
+`routers/corrispettivi.py` (aggregatore sottile, solo `include_router`), `corrispettivi_shared.py`
+(costanti/helper comuni: `STRUTTURE_HOTEL`, `NOME_STRUTTURA`, `_to_float`, `_d`, ecc.),
+`corrispettivi_import.py`, `corrispettivi_documenti.py`, `corrispettivi_report.py`, `corrispettivi_rt.py`.
+Prima di aggiungere un endpoint: importare le costanti da `corrispettivi_shared`, non ridefinirle.
+
 ### Contesto fiscale (non modificare senza capire)
 - **Scontrini e fatture sono registri separati per legge** (SC/SCA → cassa RT + AdE; F → SDI).
 - **Imponibile = lordo / (1 + aliquota)** — MAI `lordo - iva` (errori arrotondamento).

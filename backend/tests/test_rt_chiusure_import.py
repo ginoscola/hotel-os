@@ -267,7 +267,7 @@ class TestImportDaStampante:
                 return 200, ELENCO_CARTELLA_HTML.encode('utf-8')
             return 200, contenuto_xml
 
-        with patch('app.routers.corrispettivi._get_raw_http', side_effect=_side_effect):
+        with patch('app.routers.corrispettivi_rt._get_raw_http', side_effect=_side_effect):
             resp = client.post(
                 "/corrispettivi/rt-chiusure/import-da-stampante",
                 json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
@@ -281,7 +281,7 @@ class TestImportDaStampante:
 
     def test_nessun_file_corrisp_in_cartella(self, client, setup_db):
         html_senza_corrisp = '<html><body><a href="99MEX036593-20260630T210045-0944-ZREPORT.txt">a</a></body></html>'
-        with patch('app.routers.corrispettivi._get_raw_http', return_value=(200, html_senza_corrisp.encode('utf-8'))):
+        with patch('app.routers.corrispettivi_rt._get_raw_http', return_value=(200, html_senza_corrisp.encode('utf-8'))):
             resp = client.post(
                 "/corrispettivi/rt-chiusure/import-da-stampante",
                 json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
@@ -290,7 +290,7 @@ class TestImportDaStampante:
         assert resp.status_code == 404
 
     def test_cartella_non_trovata(self, client, setup_db):
-        with patch('app.routers.corrispettivi._get_raw_http', return_value=(404, b'')):
+        with patch('app.routers.corrispettivi_rt._get_raw_http', return_value=(404, b'')):
             resp = client.post(
                 "/corrispettivi/rt-chiusure/import-da-stampante",
                 json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
@@ -322,7 +322,7 @@ class TestGetRawHttp:
 
     def test_gestisce_transfer_encoding_duplicato(self):
         import threading
-        from app.routers.corrispettivi import _get_raw_http
+        from app.routers.corrispettivi_rt import _get_raw_http
 
         corpo_atteso = b'<html><body>ciao</body></html>'
         risposta_malformata = (
