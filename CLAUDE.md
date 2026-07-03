@@ -328,6 +328,16 @@ Import | Corrispettivi giornalieri (drawer cella→documenti) | Scontrini | Fatt
 `PerHotelView`: generico per scontrini/fatture, `localStorage('scontrini_vista'|'fatture_vista')`.
 Tab attiva: `localStorage('corrispettivi_tab')`.
 
+**Diviso per file** (stesso pattern dello split backend — `Corrispettivi.jsx` è solo tab bar + routing,
+~130 righe invece di ~3000): `frontend/src/utils/corrispettiviHelpers.js` (costanti/helper condivisi:
+`STRUTTURE_HOTEL`, `NOMI`, `NOME_CAT`, `thSt`/`tdSt`/`inpSt`, `isAdmin`, `fmtD`, `meseNome`,
+`primoGiorno`/`ultimoGiorno`, `giornoSettimana`, `applyToggle`/`fmtToggle` — import da qui, non
+ridefinire), `TabImport.jsx`, `TabDocumenti.jsx` (+ `ModalModifica`, `PerHotelView`, `CameraCell` —
+componenti privati usati solo da scontrini/fatture), `TabGiornalieri.jsx` (+ `DrawerDocumenti`),
+`TabTest.jsx`, `TabFatturati.jsx`, `TabControlloRT.jsx` (+ `FormRT`). `TabAnalisiRicavi.jsx` e
+`TabStampanteRT.jsx` erano già file separati da prima. Prima di aggiungere codice a un tab: verificare
+se l'helper serve anche altrove — se sì va in `corrispettiviHelpers.js`, non duplicato nel file del tab.
+
 ⚠️ "Controllo RT" (tab id `rt`, riconciliazione scontrini vs `rt_chiusure` trasmesse ad AdE) e "Stampante RT"
 (tab id `rt-stampante`, comandi hardware Epson) sono due sezioni distinte — nomi simili ma nessuna relazione.
 
