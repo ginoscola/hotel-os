@@ -38,6 +38,7 @@ Endpoint:
   POST   /corrispettivi/rt-chiusure/import-xml → import CORRISP.xml caricato dall'utente (admin)
   POST   /corrispettivi/rt-chiusure/import-da-stampante → legge CORRISP.xml dalla stampante (admin)
   GET    /corrispettivi/rt-chiusure           → lista mese con delta vs PMS
+  GET    /corrispettivi/rt-chiusure/riepilogo-stagione → somma differenze RT vs PMS su tutta la stagione
   DELETE /corrispettivi/rt-chiusure/{id}      → elimina chiusura RT (admin)
 """
 from fastapi import APIRouter

@@ -310,6 +310,20 @@ inserimento manuale (`FormRT`) li usa per pre-compilare i sotto-campi "Imposta"/
 delle aliquote quando si apre un giorno già importato da XML (prop `resetKey` = data selezionata,
 altrimenti lo stato locale `sub` resterebbe quello del giorno aperto in precedenza).
 
+**Colonna Δ (differenza RT-PMS)**: positivo = verde, negativo = rosso, ≈0 (±0,01€) = ✓ verde
+(`fmtDelta` in `TabControlloRT.jsx`, `deltaInfo` nel pannello `FormRT` — stessa convenzione).
+
+**Somma differenze mese/stagione** (`TabControlloRT.jsx`): riga sotto la nav mese che mostra la somma
+algebrica delle Δ giornaliere per RT1/RT2, per capire se le differenze si compensano nel tempo (somma
+vicina a zero) o indicano un bias sistematico. Somma mese calcolata client-side da `dati.giorni` già
+caricato (`sommaMese`); somma stagione da `GET /rt-chiusure/riepilogo-stagione?anno=` (nuovo endpoint,
+`riepilogo_stagione_rt()` in `corrispettivi_rt.py`) — riletta solo al cambio anno, non ad ogni mese.
+Range di stagione per RT: il più ampio tra le stagioni (`hotel_seasons`) degli hotel che condividono
+quella cassa fiscale (RT1 = DPH+CLB con aperture sfasate: usa apertura Du Parc + chiusura più tardiva).
+Stesso criterio di calcolo del confronto giornaliero (somma `totale_lordo` scontrini PMS, **include**
+gli annullati, coerente con `_pms_agg()` esistente — non filtrare qui altrimenti i due numeri
+diventerebbero incoerenti tra vista giornaliera e vista aggregata).
+
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.
 

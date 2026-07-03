@@ -5,6 +5,7 @@ Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
   POST   /rt-chiusure/import-xml         → import CORRISP.xml caricato dall'utente (admin)
   POST   /rt-chiusure/import-da-stampante → legge CORRISP.xml dalla stampante (admin)
   GET    /rt-chiusure                    → lista mese con delta vs PMS
+  GET    /rt-chiusure/riepilogo-stagione → somma differenze RT vs PMS sull'intera stagione
   DELETE /rt-chiusure/{id}               → elimina chiusura RT (admin)
 """
 import re
@@ -15,13 +16,13 @@ from decimal import Decimal
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
 from app.models.corrispettivi import RtChiusura
-from app.models.revenue import Hotel, RtPrinter
+from app.models.revenue import Hotel, HotelSeason, RtPrinter
 from app.services.corrisp_xml_parser import parse_corrisp_xml
 from app.routers.corrispettivi_shared import STRUTTURE_HOTEL
 
@@ -457,6 +458,71 @@ def lista_rt_chiusure(
     )
 
     return {'mese': mese, 'anno': anno, 'giorni': giorni, 'n_differenze': n_differenze}
+
+
+def _range_stagione(strutture: list, anno: int, db: Session) -> Optional[Tuple[date, date]]:
+    """Range più ampio tra le stagioni degli hotel del gruppo RT (es. RT1 = DPH+CLB con
+    date di apertura diverse: usa l'apertura più anticipata e la chiusura più tardiva)."""
+    stagioni = (
+        db.query(HotelSeason)
+        .join(Hotel, Hotel.id == HotelSeason.hotel_id)
+        .filter(Hotel.code.in_(strutture), HotelSeason.season_year == anno)
+        .all()
+    )
+    if not stagioni:
+        return None
+    return min(s.open_date for s in stagioni), max(s.close_date for s in stagioni)
+
+
+def _somma_rt_pms(rt_code: str, da: date, a: date, db: Session) -> dict:
+    strutture = RT_STRUTTURE[rt_code]
+    somma_rt = db.query(func.sum(RtChiusura.totale_giorno)).filter(
+        RtChiusura.rt_code == rt_code,
+        RtChiusura.data_chiusura >= da,
+        RtChiusura.data_chiusura <= a,
+    ).scalar()
+    somma_pms = db.execute(text("""
+        SELECT SUM(totale_lordo) AS s FROM corrispettivi_documenti
+        WHERE tipo = 'scontrino' AND struttura_code = ANY(:strutture)
+          AND data_documento BETWEEN :da AND :a
+    """), {'strutture': strutture, 'da': da, 'a': a}).scalar()
+    somma_rt = float(somma_rt or 0)
+    somma_pms = float(somma_pms or 0)
+    return {
+        'da': da.isoformat(),
+        'a': a.isoformat(),
+        'somma_rt': round(somma_rt, 2),
+        'somma_pms': round(somma_pms, 2),
+        'somma_differenza': round(somma_rt - somma_pms, 2),
+    }
+
+
+@router.get(
+    "/rt-chiusure/riepilogo-stagione",
+    dependencies=[Depends(richiedi_utente_attivo)],
+)
+def riepilogo_stagione_rt(
+    anno: int = Query(..., ge=2020),
+    db: Session = Depends(get_db),
+):
+    """
+    Somma delle differenze RT vs PMS sull'intera stagione operativa, per RT1 e RT2.
+
+    Serve a valutare se le differenze giornaliere (arrotondamenti, disallineamenti di
+    conteggio) si compensano nel tempo (somma netta vicina a zero) oppure indicano un
+    bias sistematico. Il range di date per ogni RT è quello più ampio tra le stagioni
+    degli hotel che condividono quella cassa fiscale (es. RT1: da apertura Du Parc a
+    chiusura Club Hotel, essendo le due stagioni sfasate).
+    """
+    risultato = {}
+    for rt_code, strutture in RT_STRUTTURE.items():
+        range_stagione = _range_stagione(strutture, anno, db)
+        if range_stagione is None:
+            risultato[rt_code] = None
+            continue
+        da, a = range_stagione
+        risultato[rt_code] = _somma_rt_pms(rt_code, da, a, db)
+    return {'anno': anno, **risultato}
 
 
 @router.delete("/rt-chiusure/{chiusura_id}")

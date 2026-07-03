@@ -68,7 +68,7 @@ function FormRT({ label, prefix, form, setForm, onElimina, pms, resetKey }) {
     if (rt === null) return { label: '—', color: '#94a3b8' }
     const d = rt - (pmsV || 0)
     if (Math.abs(d) <= 0.01) return { label: '✓', color: '#16a34a' }
-    return { label: (d > 0 ? '+' : '') + formatEuro(d), color: '#dc2626' }
+    return { label: (d > 0 ? '+' : '') + formatEuro(d), color: d > 0 ? '#16a34a' : '#dc2626' }
   }
 
   const tdL = { fontSize: '0.74rem', color: '#475569', padding: '2px 4px' }
@@ -261,6 +261,7 @@ export default function TabControlloRT() {
   const [errore, setErrore] = useState('')
   const [msgOk, setMsgOk] = useState('')
   const [dataManualeInput, setDataManualeInput] = useState('')
+  const [riepilogoStagione, setRiepilogoStagione] = useState(null)
 
   // Import CORRISP.xml
   const [dialogImport, setDialogImport] = useState(false)
@@ -286,6 +287,19 @@ export default function TabControlloRT() {
   }, [mese, anno])
 
   useEffect(() => { carica() }, [carica])
+
+  // Somma stagione (RT vs PMS su tutto il periodo operativo): riletta solo al cambio anno,
+  // non ad ogni mese — la somma mese invece si ricava client-side da `dati.giorni` già caricato.
+  useEffect(() => {
+    api.get(`/corrispettivi/rt-chiusure/riepilogo-stagione?anno=${anno}`)
+      .then(r => setRiepilogoStagione(r.data))
+      .catch(() => setRiepilogoStagione(null))
+  }, [anno])
+
+  const sommaMese = dati?.giorni ? {
+    RT1: dati.giorni.reduce((s, g) => s + (g.rt1.delta ?? 0), 0),
+    RT2: dati.giorni.reduce((s, g) => s + (g.rt2.delta ?? 0), 0),
+  } : null
 
   const mesePrecedente = () => {
     if (mese === 1) { setMese(12); setAnno(a => a - 1) } else setMese(m => m - 1)
@@ -436,7 +450,15 @@ export default function TabControlloRT() {
   const fmtDelta = (delta) => {
     if (delta === null) return { label: '—', color: '#94a3b8' }
     if (Math.abs(delta) <= 0.01) return { label: '✓', color: '#16a34a' }
-    return { label: `${delta > 0 ? '+' : ''}${formatEuro(delta)}`, color: '#dc2626' }
+    return { label: `${delta > 0 ? '+' : ''}${formatEuro(delta)}`, color: delta > 0 ? '#16a34a' : '#dc2626' }
+  }
+
+  // Come fmtDelta ma mostra sempre l'importo (anche se trascurabile): per una somma
+  // cumulata su mese/stagione l'utente vuole vedere il residuo netto, non solo un ✓.
+  const fmtSomma = (v) => {
+    if (v === null || v === undefined) return { label: '—', color: '#94a3b8' }
+    const color = Math.abs(v) <= 0.01 ? '#16a34a' : v > 0 ? '#16a34a' : '#dc2626'
+    return { label: `${v > 0 ? '+' : ''}${formatEuro(v)}`, color }
   }
 
   const giornoDati = giornoSel ? dati?.giorni?.find(g => g.data === giornoSel) : null
@@ -499,6 +521,37 @@ export default function TabControlloRT() {
             </div>
           )}
         </div>
+
+        {/* Somma differenze mese/stagione: verifica se si compensano nel tempo o c'è un bias */}
+        {(sommaMese || riepilogoStagione) && (
+          <div style={{ display: 'flex', gap: '0.5rem 1.5rem', flexWrap: 'wrap', alignItems: 'baseline', marginBottom: '1rem', fontSize: '0.8rem', color: '#64748b' }}>
+            <span style={{ fontWeight: 600 }}>Somma differenze (RT − PMS):</span>
+            {sommaMese && (
+              <span>
+                Mese:{' '}
+                <strong style={{ color: fmtSomma(sommaMese.RT1).color }}>RT1 {fmtSomma(sommaMese.RT1).label}</strong>
+                {' · '}
+                <strong style={{ color: fmtSomma(sommaMese.RT2).color }}>RT2 {fmtSomma(sommaMese.RT2).label}</strong>
+              </span>
+            )}
+            {riepilogoStagione && (
+              <span>
+                Stagione ({fmtD(riepilogoStagione.RT1?.da || riepilogoStagione.RT2?.da)}–{fmtD(riepilogoStagione.RT1?.a || riepilogoStagione.RT2?.a)}):{' '}
+                {riepilogoStagione.RT1 && (
+                  <strong style={{ color: fmtSomma(riepilogoStagione.RT1.somma_differenza).color }}>
+                    RT1 {fmtSomma(riepilogoStagione.RT1.somma_differenza).label}
+                  </strong>
+                )}
+                {riepilogoStagione.RT1 && riepilogoStagione.RT2 && ' · '}
+                {riepilogoStagione.RT2 && (
+                  <strong style={{ color: fmtSomma(riepilogoStagione.RT2.somma_differenza).color }}>
+                    RT2 {fmtSomma(riepilogoStagione.RT2.somma_differenza).label}
+                  </strong>
+                )}
+              </span>
+            )}
+          </div>
+        )}
 
         {caricamento && <p style={{ color: '#64748b', fontSize: '0.85rem' }}>Caricamento…</p>}
         {errore && <p style={{ color: '#dc2626', fontSize: '0.85rem' }}>{errore}</p>}
