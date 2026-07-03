@@ -238,7 +238,18 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
 **Confronto RT**: usare colonna `tassa_soggiorno` (TS embedded in arrangiamenti) + `categoria='tassa_soggiorno'` (standalone). Non usare solo `totale_lordo WHERE categoria='tassa_soggiorno'`.
 
 ### Tabelle DB principali
-- `corrispettivi_documenti`: UNIQUE(struttura_code, data_documento, numero, suffisso); audit trail (`modificato_manualmente`, `*_originale`); `camera` e `codice_prenotazione` TEXT (prenotazioni gruppo = liste lunghe).
+- `corrispettivi_documenti`: UNIQUE(struttura_code, data_documento, numero, suffisso, camera, codice_prenotazione); audit trail (`modificato_manualmente`, `*_originale`); `camera` e `codice_prenotazione` TEXT (prenotazioni gruppo = liste lunghe).
+  ⚠️ Welcome PMS assegna `numero=0` a **tutte** le righe di storno/annullo non numerate emesse
+  in un giorno per una struttura (non è un identificativo). Con ≥2 annullamenti nello stesso
+  giorno/struttura, la vecchia chiave (senza camera/codice_prenotazione) li considerava lo
+  stesso documento: solo il primo veniva inserito, il secondo scartato in silenzio da
+  `ON CONFLICT DO NOTHING` nello stesso import — causa di un delta RT-PMS reale (27/06/2026,
+  CLB, -1.274€: storno perso della prenotazione 4406, coesisteva con lo storno della
+  prenotazione 338 stesso giorno/numero=0/suffisso). Migrazione `corrfix001_2026`.
+  Stesso pattern già incontrato ed erroneamente "risolto" rimuovendo del tutto il vincolo
+  sulla vecchia tabella `fiscal_documents` (precursore, ora dismessa) — qui invece si è
+  preferito estendere la chiave (camera+codice_prenotazione distinguono storni diversi)
+  per mantenere l'idempotenza per-documento su cui si basa `on_conflict=salta|aggiorna`.
 - `corrispettivi_manuali`: UNIQUE(data_giorno, struttura_code).
 - `rt_chiusure`: UNIQUE(data_chiusura, rt_code); RT1→[DPH,CLB], RT2→[INT]. Audit trail `modificato_manualmente`
   (come `corrispettivi_documenti`): tutte le righe inserite prima di luglio 2026 sono marcate `True` (protette).

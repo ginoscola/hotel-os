@@ -75,8 +75,12 @@ def importa_excel(
     tutti = risultato.documenti
 
     # Pre-check: quali chiavi esistono già in DB?
+    # camera + codice_prenotazione in chiave: Welcome PMS assegna numero=0 a tutte
+    # le righe di storno/annullo non numerate di un giorno — senza questi due campi
+    # più storni nello stesso giorno/struttura collidono sulla stessa chiave e solo
+    # il primo verrebbe importato (bug reale: storno 27/06/2026 CLB perso).
     chiavi_tutti = [
-        (d.struttura_code, d.data_documento, d.numero, d.suffisso)
+        (d.struttura_code, d.data_documento, d.numero, d.suffisso, d.camera or '', d.codice_prenotazione or '')
         for d in tutti
     ]
     strutture_set = {d.struttura_code for d in tutti}
@@ -88,6 +92,8 @@ def importa_excel(
             CorrispettiviDocumento.data_documento,
             CorrispettiviDocumento.numero,
             CorrispettiviDocumento.suffisso,
+            CorrispettiviDocumento.camera,
+            CorrispettiviDocumento.codice_prenotazione,
             CorrispettiviDocumento.modificato_manualmente,
         ).filter(
             CorrispettiviDocumento.struttura_code.in_(strutture_set),
@@ -95,7 +101,7 @@ def importa_excel(
         ).all()
 
         chiavi_esistenti: dict = {
-            (r.struttura_code, r.data_documento, r.numero, r.suffisso): r.modificato_manualmente
+            (r.struttura_code, r.data_documento, r.numero, r.suffisso, r.camera or '', r.codice_prenotazione or ''): r.modificato_manualmente
             for r in esistenti_q
         }
     else:
@@ -106,7 +112,7 @@ def importa_excel(
     protetti = []
 
     for d in tutti:
-        chiave = (d.struttura_code, d.data_documento, d.numero, d.suffisso)
+        chiave = (d.struttura_code, d.data_documento, d.numero, d.suffisso, d.camera or '', d.codice_prenotazione or '')
         if chiave not in chiavi_esistenti:
             nuovi.append(d)
         elif chiavi_esistenti[chiave]:   # modificato_manualmente=True
@@ -206,6 +212,8 @@ def importa_excel(
                         CorrispettiviDocumento.data_documento == d.data_documento,
                         CorrispettiviDocumento.numero == d.numero,
                         CorrispettiviDocumento.suffisso == d.suffisso,
+                        CorrispettiviDocumento.camera == (d.camera or ''),
+                        CorrispettiviDocumento.codice_prenotazione == (d.codice_prenotazione or ''),
                         CorrispettiviDocumento.modificato_manualmente == False,
                     )
                     .values(
