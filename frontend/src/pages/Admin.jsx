@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api/client.js'
+import { mostraErrore } from '../utils/format.js'
 
 export default function Admin() {
   return (
@@ -658,11 +659,11 @@ function GestioneCorrispettivi() {
   function fb(msg) { setFeedback(msg); setTimeout(() => setFeedback(''), 2500) }
 
   async function toggleDoc(t) {
-    await api.put(`/corrispettivi/config/tipi-documento/${t.id}`, { attivo: !t.attivo }).catch(e => {
-      fb('Errore: ' + (e.response?.data?.detail || e.message)); return
-    })
-    fb(t.attivo ? 'Tipo disattivato' : 'Tipo attivato')
-    carica()
+    try {
+      await api.put(`/corrispettivi/config/tipi-documento/${t.id}`, { attivo: !t.attivo })
+      fb(t.attivo ? 'Tipo disattivato' : 'Tipo attivato')
+      carica()
+    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
   }
 
   async function aggiungiPagamento() {
@@ -672,7 +673,7 @@ function GestioneCorrispettivi() {
       setNuovoPagCode(''); setNuovoPagName('')
       fb('Tipo pagamento aggiunto')
       carica()
-    } catch (e) { fb('Errore: ' + (e.response?.data?.detail || e.message)) }
+    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
   }
 
   async function aggiungiPrefisso() {
@@ -686,13 +687,13 @@ function GestioneCorrispettivi() {
       setNuovoPrePrefisso(''); setNuovoPreStruttura(''); setNuovoPreTipo('lettera_iniziale')
       fb('Prefisso aggiunto')
       carica()
-    } catch (e) { fb('Errore: ' + (e.response?.data?.detail || e.message)) }
+    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
   }
 
   async function eliminaPrefisso(id) {
     if (!confirm('Eliminare questo prefisso?')) return
     try { await api.delete(`/corrispettivi/config/prefissi-struttura/${id}`); fb('Eliminato'); carica() }
-    catch (e) { fb('Errore: ' + (e.response?.data?.detail || e.message)) }
+    catch (e) { fb('Errore: ' + mostraErrore(e)) }
   }
 
   const inputSm = { fontSize: 12, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4 }

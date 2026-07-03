@@ -326,14 +326,16 @@ function DrawerDocumenti({ info, onClose }) {
   // info: { data, struttura_code, tipo ('scontrini'|'fatture'), categoria }
   const [docs, setDocs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [errore, setErrore] = useState('')
 
   useEffect(() => {
     if (!info) return
     setLoading(true)
+    setErrore('')
     const endpoint = info.tipo === 'fatture' ? '/corrispettivi/fatture' : '/corrispettivi/scontrini'
     api.get(endpoint, { params: { data_da: info.data, data_a: info.data, struttura_code: info.struttura_code, per_page: 100 } })
       .then(r => setDocs(r.data.documenti || []))
-      .catch(() => setDocs([]))
+      .catch(e => { setDocs([]); setErrore(mostraErrore(e)) })
       .finally(() => setLoading(false))
   }, [info])
 
@@ -361,6 +363,8 @@ function DrawerDocumenti({ info, onClose }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1rem' }}>
         {loading ? (
           <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>
+        ) : errore ? (
+          <p style={{ color: '#dc2626', fontSize: '0.85rem' }}>{errore}</p>
         ) : docsFiltrati.length === 0 ? (
           <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Nessun documento per questa selezione.</p>
         ) : docsFiltrati.map(d => (
@@ -458,7 +462,7 @@ function ModalModifica({ doc, tipo, onSalva, onChiudi }) {
           }))
         }
       }
-    }).catch(() => {})
+    }).catch(e => setErr(mostraErrore(e)))
   }, [])
 
   if (!doc) return null

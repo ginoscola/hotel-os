@@ -24,6 +24,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 from app.database import get_db
 from app.models.revenue import DailyRevenue, Hotel
+from app.routers.dashboard import _carica_righe, _db_a_riga
 from app.services.file_parser import RigaRevenue
 from app.services.kpi_calculator import calcola_kpi
 from app.services.weekly_aggregator import AggregatoSettimanale, aggrega_settimane
@@ -56,7 +57,7 @@ def export_hotel_settimanale(
 ):
     """Esporta gli aggregati settimanali di un hotel in Excel, CSV o PDF."""
     hotel_code = hotel_code.upper()
-    righe = _carica_righe(db, hotel_code, da, a, snapshot)
+    righe = _carica_righe(db, hotel_code=hotel_code, snapshot_date=snapshot, da=da, a=a)
     if not righe:
         raise HTTPException(status_code=404, detail="Nessun dato nel periodo selezionato.")
     settimane = aggrega_settimane(righe)
@@ -79,7 +80,7 @@ def export_hotel_giornaliero(
 ):
     """Esporta i dati giornalieri di un hotel in Excel, CSV o PDF."""
     hotel_code = hotel_code.upper()
-    righe = _carica_righe(db, hotel_code, da, a, snapshot)
+    righe = _carica_righe(db, hotel_code=hotel_code, snapshot_date=snapshot, da=da, a=a)
     if not righe:
         raise HTTPException(status_code=404, detail="Nessun dato nel periodo selezionato.")
     nome = f"{hotel_code}_giornaliero"
@@ -653,42 +654,9 @@ def _costruisci_pdf(titolo: str, intestazioni: list, righe: list,
 
 
 # ---------------------------------------------------------------------------
-# Utility condivise
+# Utility condivise: _carica_righe/_db_a_riga importate da dashboard.py
+# (unica fonte di verità per la lettura di daily_revenue, vedi CLAUDE.md)
 # ---------------------------------------------------------------------------
-
-def _carica_righe(
-    db: Session,
-    hotel_code: str,
-    da: Optional[date],
-    a: Optional[date],
-    snapshot: Optional[date] = None,
-) -> List[RigaRevenue]:
-    q = (
-        select(DailyRevenue)
-        .where(DailyRevenue.hotel_code == hotel_code)
-        .order_by(DailyRevenue.data)
-    )
-    if snapshot:
-        q = q.where(DailyRevenue.snapshot_date == snapshot)
-    if da:
-        q = q.where(DailyRevenue.data >= da)
-    if a:
-        q = q.where(DailyRevenue.data <= a)
-    return [_db_a_riga(r) for r in db.execute(q).scalars().all()]
-
-
-def _db_a_riga(row: DailyRevenue) -> RigaRevenue:
-    return RigaRevenue(
-        hotel_code=row.hotel_code,
-        data=row.data,
-        rooms_sold=row.rooms_sold,
-        rooms_available=row.rooms_available,
-        pax=row.pax,
-        revenue_rooms=row.revenue_rooms,
-        revenue_fnb=row.revenue_fnb,
-        revenue_extra=row.revenue_extra,
-        revenue_total=row.revenue_total,
-    )
 
 
 def _calcola_contributi(per_hotel: dict, hotel_nomi: dict) -> list:
