@@ -383,6 +383,11 @@ per la riga Aliquota 10% (`pms.arr + menu_diretto`). Incide anche su `_somma_rt_
 mese/stagione), sommando `menu_diretto` sul periodo — altrimenti la somma stagionale non
 tornerebbe coerente col confronto giornaliero. `sommaMese` (client-side) non richiede modifiche:
 somma `g.rt1.delta`, già calcolato server-side con l'aggiustamento.
+Sotto "Somma differenze" c'è anche una riga "Inserimenti da Menu (RT1)" con il totale mese
+(`menuMese`, client-side da `dati.giorni`) e stagione (`riepilogoStagione.RT1.somma_menu`) — utile
+per vedere quanto incasso extra-Welcome è stato dichiarato, non solo la differenza residua.
+Verificato in campo (luglio 2026): dopo aver inserito gli importi noti su una decina di giorni di
+maggio, la stagione RT1 è tornata a somma_differenza=0,00€ esatta (prima +252,50€ "inspiegati").
 
 ⚠️ **Chiusura fatta "il giorno dopo" disallinea i sotto-campi XML**: se la chiusura RT di un
 giorno viene fatta la mattina successiva, i campi dettaglio (`imponibile_10/22`, `imposta_10/22`,

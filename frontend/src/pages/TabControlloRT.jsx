@@ -324,6 +324,11 @@ export default function TabControlloRT() {
     RT2: dati.giorni.reduce((s, g) => s + (g.rt2.delta ?? 0), 0),
   } : null
 
+  // Totale Inserimenti da Menu (solo RT1) — quanto incasso extra-Welcome è stato dichiarato
+  const menuMese = dati?.giorni
+    ? dati.giorni.reduce((s, g) => s + (g.rt1.rt?.menu_diretto ?? 0), 0)
+    : null
+
   const mesePrecedente = () => {
     if (mese === 1) { setMese(12); setAnno(a => a - 1) } else setMese(m => m - 1)
     setGiornoSel(null)
@@ -575,6 +580,22 @@ export default function TabControlloRT() {
                     <span style={{ fontWeight: 400, color: '#94a3b8' }}> ({riepilogoStagione.RT2.giorni_con_rt} gg)</span>
                   </strong>
                 )}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Totale Inserimenti da Menu (solo RT1): quanto incasso extra-Welcome dichiarato */}
+        {((menuMese ?? 0) > 0 || (riepilogoStagione?.RT1?.somma_menu ?? 0) > 0) && (
+          <div style={{ display: 'flex', gap: '0.5rem 1.5rem', flexWrap: 'wrap', alignItems: 'baseline', marginBottom: '1rem', fontSize: '0.8rem', color: '#64748b' }}>
+            <span style={{ fontWeight: 600 }}>Inserimenti da Menu (RT1):</span>
+            {menuMese != null && (
+              <span>Mese: <strong style={{ color: '#0891b2' }}>{formatEuro(menuMese)}</strong></span>
+            )}
+            {riepilogoStagione?.RT1 && (
+              <span>
+                Stagione ({fmtD(riepilogoStagione.RT1.da)}–{fmtD(riepilogoStagione.RT1.a)}):{' '}
+                <strong style={{ color: '#0891b2' }}>{formatEuro(riepilogoStagione.RT1.somma_menu)}</strong>
               </span>
             )}
           </div>
