@@ -145,6 +145,7 @@ class EmployeeOut(BaseModel):
     attivo: bool
     centro_di_costo: Optional[str] = None
     centro_di_costo_id: Optional[int] = None
+    centri_di_costo: list[CCDefaultOut] = []
 
     class Config:
         from_attributes = True
@@ -489,9 +490,38 @@ def lista_dipendenti(
         )
         q = q.filter(Employee.id.in_(emp_ids_anno))
     dipendenti = q.order_by(Employee.cognome).all()
+
+    # Tutti i CC default attivi per tutti i dipendenti in un'unica query (evita N+1),
+    # arricchiti una sola volta con struttura/parent invece che per dipendente.
+    emp_ids = [emp.id for emp in dipendenti]
+    righe_cc = (
+        db.query(EmployeeCCDefault)
+        .filter(EmployeeCCDefault.employee_id.in_(emp_ids), EmployeeCCDefault.anno_fine == None)  # noqa: E711
+        .order_by(EmployeeCCDefault.anno_inizio, EmployeeCCDefault.mese_inizio)
+        .all()
+    ) if emp_ids else []
+    cc_per_dipendente: dict[int, list[dict]] = {}
+    for r in righe_cc:
+        cc = r.cost_center
+        cc_per_dipendente.setdefault(r.employee_id, []).append({
+            "id": r.id,
+            "cost_center_id": r.cost_center_id,
+            "cost_center_code": cc.code,
+            "cost_center_name": cc.name,
+            "cost_center_tipo": cc.tipo,
+            "parent_id": cc.parent_id,
+            "percentuale": float(r.percentuale),
+            "anno_inizio": r.anno_inizio,
+            "mese_inizio": r.mese_inizio,
+            "anno_fine": r.anno_fine,
+            "mese_fine": r.mese_fine,
+        })
+    _arricchisci_parent_code([r for lista in cc_per_dipendente.values() for r in lista], db)
+
     risultato = []
     for emp in dipendenti:
-        cc = _cc_attivo(db, emp.id)
+        centri = cc_per_dipendente.get(emp.id, [])
+        primo = centri[0] if centri else None
         risultato.append(EmployeeOut(
             id=emp.id,
             codice_fiscale=emp.codice_fiscale,
@@ -503,8 +533,9 @@ def lista_dipendenti(
             email=emp.email,
             cellulare=emp.cellulare,
             attivo=emp.attivo,
-            centro_di_costo=cc.name if cc else None,
-            centro_di_costo_id=cc.id if cc else None,
+            centro_di_costo=primo["cost_center_name"] if primo else None,
+            centro_di_costo_id=primo["cost_center_id"] if primo else None,
+            centri_di_costo=centri,
         ))
     return risultato
 

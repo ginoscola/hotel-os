@@ -749,7 +749,9 @@ export default function Dipendenti() {
 
 function AnagraficaCard({ d, idx, anno, albero }) {
   const [espanso, setEspanso] = useState(false)
-  const [ccDefaults, setCcDefaults] = useState(null)  // null = non ancora caricati
+  // Precompilato con d.centri_di_costo (già nella lista) cosi la riga riassuntiva mostra
+  // subito tutti i CC senza dover espandere; null solo se la lista non li aveva ancora.
+  const [ccDefaults, setCcDefaults] = useState(d.centri_di_costo?.length ? d.centri_di_costo : null)
   const [editandoDefault, setEditandoDefault] = useState(false)
   const [ricalcolando, setRicalcolando] = useState(false)
   const [esitoRicalcolo, setEsitoRicalcolo] = useState(null)
