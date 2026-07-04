@@ -373,6 +373,30 @@ artificiale (bug reale scoperto confrontando la somma stagionale con la somma de
 mese — un solo giorno "orfano" da 5.382€ falsava l'intera stagione). Stessa semantica del confronto
 giornaliero, dove un giorno senza RT ha `delta=None` ed è escluso dalla somma.
 
+**Inserimenti da Menu** (solo RT1, campo `rt_chiusure.menu_diretto`): a volte il software del
+ristorante di Du Parc/Club Hotel — non collegato a Welcome — stampa un pagamento diretto sulla
+stessa cassa fiscale RT1. Quell'incasso è reale e nel totale RT, ma non comparirà **mai** in
+Welcome/PMS. Campo manuale nel pannello `FormRT` (solo RT1), valore **lordo** (compresa IVA),
+aliquota 10%. Si somma al lato **PMS** del confronto in `_confronta()` (non al lato RT, che resta
+il dato letto dal registro): `delta = totale_giorno − (pms.totale + menu_diretto)`, stesso criterio
+per la riga Aliquota 10% (`pms.arr + menu_diretto`). Incide anche su `_somma_rt_pms()` (somma
+mese/stagione), sommando `menu_diretto` sul periodo — altrimenti la somma stagionale non
+tornerebbe coerente col confronto giornaliero. `sommaMese` (client-side) non richiede modifiche:
+somma `g.rt1.delta`, già calcolato server-side con l'aggiustamento.
+
+⚠️ **Chiusura fatta "il giorno dopo" disallinea i sotto-campi XML**: se la chiusura RT di un
+giorno viene fatta la mattina successiva, i campi dettaglio (`imponibile_10/22`, `imposta_10/22`,
+`tassa_soggiorno_nrs` — non `totale_10/22/ts/penali` né `esente_n1`, quelli restano sul giorno
+giusto) possono finire salvati sotto la data sbagliata (quella della chiusura, non quella
+dell'incasso). Sintomo: `imponibile_10+imposta_10` del giorno D coincide con `totale_10` di
+**D-1**, non con quello proprio di D. Bug reale scoperto e corretto (luglio 2026) su un blocco
+di giorni RT1 di maggio 2026 (06-08, 11-13, 17-28) inseriti "shiftati" — corretto ricopiando i
+sotto-campi sul giorno giusto; l'ultimo giorno di ogni blocco (08, 13, 28) è rimasto senza dato
+sorgente per il giorno successivo ed è stato azzerato. Diagnosi: confrontare
+`imponibile_10+imposta_10` di ogni giorno con `totale_10` del giorno precedente, non con il
+proprio — se combacia sistematicamente su più giorni consecutivi è questo bug, non un errore
+puntuale.
+
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.
 

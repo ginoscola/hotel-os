@@ -57,6 +57,10 @@ function FormRT({ label, prefix, form, setForm, onElimina, pms, resetKey }) {
     setBreakdown(formKey, corr)
   }
 
+  // Inserimenti da Menu (solo RT1): incassi diretti dal software ristorante, non
+  // collegato a Welcome — mai presenti nel PMS. Si sommano al lato PMS del confronto.
+  const menuVal = prefix === 'rt1' ? (pNum(form.rt1_menu) || 0) : 0
+
   const totaleNum = pNum(form[`${prefix}_totale`])
   const breakdownVals = BREAKDOWN_KEYS.map(k => pNum(form[`${prefix}_${k}`]))
   const almenoUnBreakdown = breakdownVals.some(v => v !== null)
@@ -108,7 +112,7 @@ function FormRT({ label, prefix, form, setForm, onElimina, pms, resetKey }) {
 
           {/* ── Totale giorno (auto-calcolato) ── */}
           {(() => {
-            const d = deltaInfo('totale', pms?.totale)
+            const d = deltaInfo('totale', (pms?.totale || 0) + menuVal)
             return (
               <tr style={{ background: totaleAuto ? '#f0fdf4' : '#fffbeb' }}>
                 <td style={{ ...tdL, fontWeight: 600 }}>
@@ -127,7 +131,10 @@ function FormRT({ label, prefix, form, setForm, onElimina, pms, resetKey }) {
                         onChange={e => setForm(f => ({ ...f, [`${prefix}_totale`]: e.target.value }))}
                         placeholder="0,00" style={inputStyle} />}
                 </td>
-                <td style={tdR}>{pms?.totale > 0 ? formatEuro(pms.totale) : '—'}</td>
+                <td style={tdR}>
+                  {pms?.totale > 0 ? formatEuro(pms.totale) : '—'}
+                  {menuVal > 0 && <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>+ {formatEuro(menuVal)} menu</div>}
+                </td>
                 <td style={{ ...tdR, fontWeight: 700, color: d.color }}>{d.label}</td>
               </tr>
             )
@@ -137,13 +144,16 @@ function FormRT({ label, prefix, form, setForm, onElimina, pms, resetKey }) {
 
           {/* ── Aliquota 10%: Importo Parziale + Imposta → Corrispettivo auto ── */}
           {(() => {
-            const d = deltaInfo('10', pms?.arr)
+            const d = deltaInfo('10', (pms?.arr || 0) + menuVal)
             return (
               <>
                 <tr>
                   <td style={{ ...tdL, fontWeight: 600 }}>Aliquota 10%</td>
                   <td style={{ padding: '2px 4px', textAlign: 'right' }}>{corrDisplay('10')}</td>
-                  <td style={tdR}>{pms?.arr > 0 ? formatEuro(pms.arr) : '—'}</td>
+                  <td style={tdR}>
+                    {pms?.arr > 0 ? formatEuro(pms.arr) : '—'}
+                    {menuVal > 0 && <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>+ {formatEuro(menuVal)} menu</div>}
+                  </td>
                   <td style={{ ...tdR, fontWeight: 700, color: d.color }}>{d.label}</td>
                 </tr>
                 <tr>
@@ -164,6 +174,18 @@ function FormRT({ label, prefix, form, setForm, onElimina, pms, resetKey }) {
                   </td>
                   <td /><td />
                 </tr>
+                {prefix === 'rt1' && (
+                  <tr>
+                    <td style={{ ...subLbl, color: '#0891b2' }}>Inserimenti da Menu (lordo)</td>
+                    <td style={{ padding: '2px 4px' }}>
+                      <input type="text" inputMode="decimal"
+                        value={form.rt1_menu ?? ''}
+                        onChange={e => setForm(f => ({ ...f, rt1_menu: e.target.value }))}
+                        placeholder="0,00" style={inputStyle} />
+                    </td>
+                    <td /><td />
+                  </tr>
+                )}
               </>
             )
           })()}
@@ -324,6 +346,7 @@ export default function TabControlloRT() {
       rt1_imp10:   rt1?.imposta_10    ?? '',
       rt1_par22:   rt1?.imponibile_22 ?? '',
       rt1_imp22:   rt1?.imposta_22    ?? '',
+      rt1_menu:    rt1?.menu_diretto  ?? '',
       rt2_totale:  rt2?.totale_giorno ?? '',
       rt2_10:      rt2?.totale_10     ?? '',
       rt2_22:      rt2?.totale_22     ?? '',
@@ -364,6 +387,7 @@ export default function TabControlloRT() {
       totale_22:     parseNum(form[`${pref}_22`]),
       totale_ts:     parseNum(form[`${pref}_ts`]),
       totale_penali: parseNum(form[`${pref}_penali`]),
+      menu_diretto: pref === 'rt1' ? parseNum(form.rt1_menu) : null,
       note: form.note || null,
     })
     try {

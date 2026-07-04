@@ -166,6 +166,10 @@ class RtChiusura(Base):
     num_documenti = Column(Integer, nullable=True)
     pagato_contanti = Column(Numeric(12, 2), nullable=True)
     pagato_elettronico = Column(Numeric(12, 2), nullable=True)
+    # Incassi a pagamento diretto dal software del ristorante (non collegato a Welcome),
+    # che possono transitare sulla stessa cassa RT1 — valore lordo aliquota 10%, escluso
+    # dal PMS/Welcome per definizione. Sommato al lato PMS del confronto in _confronta().
+    menu_diretto = Column(Numeric(12, 2), nullable=True)
     # True per righe inserite/corrette a mano: l'import XML non le sovrascrive mai
     modificato_manualmente = Column(Boolean, nullable=False, default=False)
     note = Column(Text, nullable=True)

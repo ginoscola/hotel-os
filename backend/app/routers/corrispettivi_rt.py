@@ -128,6 +128,7 @@ def _fmt_rt(r: RtChiusura) -> dict:
         'num_documenti': r.num_documenti,
         'pagato_contanti': float(r.pagato_contanti) if r.pagato_contanti is not None else None,
         'pagato_elettronico': float(r.pagato_elettronico) if r.pagato_elettronico is not None else None,
+        'menu_diretto': float(r.menu_diretto) if r.menu_diretto is not None else None,
         'modificato_manualmente': r.modificato_manualmente,
         'note': r.note,
         'created_at': r.created_at.isoformat() if r.created_at else None,
@@ -166,6 +167,8 @@ def upsert_rt_chiusura(
     # esente_n1 non più aggiornato (importato in precedenza da XML).
     totale_ts = _dec(body.get('totale_ts'))
 
+    menu_diretto = _dec(body.get('menu_diretto'))
+
     if esistente:
         esistente.totale_giorno = _dec(body['totale_giorno'])
         esistente.totale_10 = _dec(body.get('totale_10'))
@@ -173,6 +176,7 @@ def upsert_rt_chiusura(
         esistente.totale_ts = totale_ts
         esistente.esente_n1 = totale_ts
         esistente.totale_penali = _dec(body.get('totale_penali'))
+        esistente.menu_diretto = menu_diretto
         esistente.note = body.get('note')
         esistente.updated_by = utente.id
         esistente.modificato_manualmente = True
@@ -189,6 +193,7 @@ def upsert_rt_chiusura(
         totale_ts=totale_ts,
         esente_n1=totale_ts,
         totale_penali=_dec(body.get('totale_penali')),
+        menu_diretto=menu_diretto,
         note=body.get('note'),
         created_by=utente.id,
         modificato_manualmente=True,
@@ -412,12 +417,16 @@ def lista_rt_chiusure(
         if rt is None:
             return {'rt': None, 'pms': pms, 'delta': None, 'breakdown': None}
         rt_tot = float(rt.totale_giorno)
-        delta = round(rt_tot - pms['totale'], 2)
+        # Inserimenti da Menu: incassi a pagamento diretto dal software del ristorante,
+        # non collegato a Welcome — mai presenti nel PMS per definizione. Si sommano al
+        # lato PMS del confronto (non al lato RT, che resta il dato letto dal registro).
+        menu = float(rt.menu_diretto) if rt.menu_diretto is not None else 0.0
+        delta = round(rt_tot - (pms['totale'] + menu), 2)
         # Breakdown analitico solo se tutti i 4 campi natura IVA sono compilati
         breakdown = None
         if all(v is not None for v in [rt.totale_10, rt.totale_22, rt.totale_ts, rt.totale_penali]):
             breakdown = {
-                '10':     {'rt': float(rt.totale_10),     'pms': pms['arr'],    'delta': round(float(rt.totale_10)     - pms['arr'],    2)},
+                '10':     {'rt': float(rt.totale_10),     'pms': pms['arr'],    'delta': round(float(rt.totale_10)     - (pms['arr'] + menu), 2)},
                 '22':     {'rt': float(rt.totale_22),     'pms': pms['shop'],   'delta': round(float(rt.totale_22)     - pms['shop'],   2)},
                 'ts':     {'rt': float(rt.totale_ts),     'pms': pms['ts'],     'delta': round(float(rt.totale_ts)     - pms['ts'],     2)},
                 'penali': {'rt': float(rt.totale_penali), 'pms': pms['penali'], 'delta': round(float(rt.totale_penali) - pms['penali'], 2)},
@@ -436,6 +445,7 @@ def lista_rt_chiusure(
                 'imposta_10':    float(rt.imposta_10)    if rt.imposta_10    is not None else None,
                 'imponibile_22': float(rt.imponibile_22) if rt.imponibile_22 is not None else None,
                 'imposta_22':    float(rt.imposta_22)    if rt.imposta_22    is not None else None,
+                'menu_diretto':  float(rt.menu_diretto)  if rt.menu_diretto  is not None else None,
                 'note':          rt.note,
             },
             'pms': pms,
@@ -493,12 +503,13 @@ def _somma_rt_pms(rt_code: str, da: date, a: date, db: Session) -> dict:
     scoperto confrontando la somma stagionale con la somma dei delta mese per mese.
     """
     strutture = RT_STRUTTURE[rt_code]
-    rt_rows = db.query(RtChiusura.data_chiusura, RtChiusura.totale_giorno).filter(
+    rt_rows = db.query(RtChiusura.data_chiusura, RtChiusura.totale_giorno, RtChiusura.menu_diretto).filter(
         RtChiusura.rt_code == rt_code,
         RtChiusura.data_chiusura >= da,
         RtChiusura.data_chiusura <= a,
     ).all()
     somma_rt = sum(float(r.totale_giorno) for r in rt_rows)
+    somma_menu = sum(float(r.menu_diretto) for r in rt_rows if r.menu_diretto is not None)
     giorni_rt = [r.data_chiusura for r in rt_rows]
 
     somma_pms = 0.0
@@ -516,7 +527,8 @@ def _somma_rt_pms(rt_code: str, da: date, a: date, db: Session) -> dict:
         'giorni_con_rt': len(giorni_rt),
         'somma_rt': round(somma_rt, 2),
         'somma_pms': round(somma_pms, 2),
-        'somma_differenza': round(somma_rt - somma_pms, 2),
+        'somma_menu': round(somma_menu, 2),
+        'somma_differenza': round(somma_rt - (somma_pms + somma_menu), 2),
     }
 
 
