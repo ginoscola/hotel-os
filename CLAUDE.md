@@ -113,6 +113,26 @@ cd backend && source venv/bin/activate && pytest tests/ -v
 ```
 File test: `uploads/PlanningForecast-{CLB,DPH,INT}{1,2}.csv`.
 Test di integrazione che chiamano endpoint protetti falliscono con 401 (TestClient senza auth) — problema pre-esistente, i test unitari passano tutti.
+⚠️ Alcuni test (`test_parser_e_bulk.py`, `test_navigazione_confronto_export.py`, `test_upload_endpoint.py`)
+falliscono con traceback che punta a `/Users/ginoscola/revenue-master/` invece di `hotel-os` — sono
+un'altra directory di progetto, non file di questo repo: ignorare, non nel nostro ambito.
+
+⚠️ **`app/models/__init__.py` importa tutti i moduli modello attivi** (revenue, rooms, corrispettivi,
+analisi_ricavi, usali, shared — non `fiscal.py`, dismesso) per registrare in SQLAlchemy le
+`relationship()` che referenziano una classe per stringa (es. `Hotel.rooms` → `"Room"`, definita in
+un modulo diverso da dove viene dichiarata la relationship). Senza questo, uno script/test che importa
+solo `app.models.revenue` fallisce con `InvalidRequestError: ... failed to locate a name ('Room')` —
+bug reale che nascondeva un problema più serio in `test_dipendenti.py` (vedi sotto).
+
+⚠️ **`tests/test_dipendenti.py` usa CF_TEST/ANNO_TEST sintetici, mai i CF/anno reali del PDF di test**:
+non esiste un DB di test separato (nessun `conftest.py`, i test girano sullo stesso database di
+sviluppo/produzione). Il fixture `_pulisci_db()` cancellava Employee/EmployeeMonthly/PayrollEntry per
+codice fiscale SENZA distinguere test da produzione — dato che i CF nel PDF fixture sono di dipendenti
+reali (Balducci Annie, Sanchioni Manuel, Palazzi Alice, ecc.), eseguire questi test ha azzerato i loro
+dati reali su tutti i mesi (incidente reale, luglio 2026, recuperato nella stessa sessione — mascherato
+per mesi dal bug del mapper sopra, che falliva prima di arrivare al cleanup). Fix: `dati_pdf_isolato`
+(fixture) sostituisce CF e anno con valori sintetici (`ZZTEST00NA01A000A`, anno 1901) prima di
+chiamare `importa_payroll()` — mai passare `dati_pdf` grezzo a `importa_payroll()` in un test.
 
 ⚠️ **Se il backend non raggiunge più le stampanti RT** (`import-da-stampante` → "No route to host"
 persistente, pur con rete/permessi a posto): il processo uvicorn potrebbe essere acceso da prima che

@@ -53,6 +53,21 @@ COSTI_AZ_ATTESI = {
     "DGNMDO77D27Z343D": 84.38,
 }
 
+# I codici fiscali in CF_ATTESI sono di persone reali (i dipendenti effettivi del PDF di
+# aprile 2026) — usarli per creare/cancellare Employee nella stessa istanza di database
+# usata in produzione (non c'è un DB di test separato: vedi assenza di conftest.py) ha
+# causato un incidente reale: _pulisci_db cancellava Employee/EmployeeMonthly/PayrollEntry
+# per questi CF SENZA distinguere test da produzione, azzerando i dati reali di quegli
+# 8 dipendenti su tutti i mesi (luglio 2026, scoperto e recuperato nella stessa sessione
+# in cui è stato introdotto). I test di import/DB usano quindi CF_TEST e ANNO_TEST,
+# sintetici e impossibili da collidere con dati reali — mai i CF_ATTESI/anno reali del
+# PDF. I test sul solo parser (nessun tocco al DB) continuano a usare CF_ATTESI perché
+# verificano che il parser estragga correttamente i CF reali dal file.
+CF_TEST = [f"ZZTEST{i:03d}A01A000A" for i in range(1, len(CF_ATTESI) + 1)]
+ANNO_TEST = 1901
+MESE_TEST = 4
+_MAPPA_CF_TEST = dict(zip(CF_ATTESI, CF_TEST))
+
 
 @pytest.fixture
 def dati_pdf():
@@ -60,6 +75,18 @@ def dati_pdf():
     if not os.path.exists(PDF_PATH):
         pytest.skip(f"PDF di test non trovato: {PDF_PATH}")
     return parse_pdf(PDF_PATH)
+
+
+@pytest.fixture
+def dati_pdf_isolato(dati_pdf):
+    """Come dati_pdf ma con CF e anno sostituiti da valori sintetici (vedi nota sopra
+    su CF_TEST) — l'unica versione da passare a importa_payroll()."""
+    isolato = {**dati_pdf, "anno": ANNO_TEST}
+    isolato["dipendenti"] = [
+        {**d, "codice_fiscale": _MAPPA_CF_TEST.get(d["codice_fiscale"], d["codice_fiscale"])}
+        for d in dati_pdf["dipendenti"]
+    ]
+    return isolato
 
 
 # ---------------------------------------------------------------------------
@@ -119,19 +146,23 @@ def test_parser_tutte_le_voci_presenti(dati_pdf):
 # ---------------------------------------------------------------------------
 
 def _pulisci_db(db):
-    """Elimina dati di test in ordine sicuro rispettando i FK."""
+    """Elimina dati di test in ordine sicuro rispettando i FK.
+
+    Usa esclusivamente CF_TEST/ANNO_TEST (sintetici, mai i CF/anno reali del PDF) —
+    vedi nota su CF_TEST per il motivo (incidente reale altrimenti).
+    """
     # 1. Trova gli ID dei dipendenti di test
     emp_ids = [
         r.id for r in db.query(Employee.id).filter(
-            Employee.codice_fiscale.in_(CF_ATTESI)
+            Employee.codice_fiscale.in_(CF_TEST)
         ).all()
     ]
 
-    # 2. Trova solo gli import di TEST KM DI MARE aprile 2026
+    # 2. Trova solo gli import di TEST KM DI MARE anno/mese sintetici
     import_ids = [
         r.id for r in db.query(PayrollImport.id).filter(
-            PayrollImport.anno == 2026,
-            PayrollImport.mese == 4,
+            PayrollImport.anno == ANNO_TEST,
+            PayrollImport.mese == MESE_TEST,
             PayrollImport.societa.like("KM DI MARE%"),
             PayrollImport.is_test == True,  # noqa: E712
         ).all()
@@ -179,43 +210,43 @@ def db_pulito():
         db.close()
 
 
-def test_import_crea_dipendenti_nuovi(dati_pdf, db_pulito):
+def test_import_crea_dipendenti_nuovi(dati_pdf_isolato, db_pulito):
     """L'import deve creare employees per tutti i CF non presenti."""
     db = db_pulito
-    report = importa_payroll(db, dati_pdf, "test_aprile_2026.pdf", user_id=None, is_test=True)
+    report = importa_payroll(db, dati_pdf_isolato, "test_aprile_2026.pdf", user_id=None, is_test=True)
     assert len(report["nuovi_dipendenti"]) == 8
     # Verifica che siano stati inseriti nel DB
-    for cf in CF_ATTESI:
+    for cf in CF_TEST:
         emp = db.query(Employee).filter(Employee.codice_fiscale == cf).first()
         assert emp is not None, f"Employee con CF {cf} non creato"
 
 
-def test_import_totale_costo_aziendale(dati_pdf, db_pulito):
+def test_import_totale_costo_aziendale(dati_pdf_isolato, db_pulito):
     """Il totale costo aziendale deve corrispondere alla somma dei valori attesi."""
     db = db_pulito
-    report = importa_payroll(db, dati_pdf, "test_aprile_2026.pdf", user_id=None, is_test=True)
+    report = importa_payroll(db, dati_pdf_isolato, "test_aprile_2026.pdf", user_id=None, is_test=True)
     totale_atteso = sum(COSTI_AZ_ATTESI.values())
     assert abs(report["totale_costo_aziendale"] - totale_atteso) < 0.10
 
 
-def test_import_duplicato_errore(dati_pdf, db_pulito):
+def test_import_duplicato_errore(dati_pdf_isolato, db_pulito):
     """Un secondo import per lo stesso mese/anno/società deve sollevare ValueError."""
     db = db_pulito
-    importa_payroll(db, dati_pdf, "test_aprile_2026.pdf", user_id=None, is_test=True)
+    importa_payroll(db, dati_pdf_isolato, "test_aprile_2026.pdf", user_id=None, is_test=True)
     with pytest.raises(ValueError, match="già presente"):
-        importa_payroll(db, dati_pdf, "test_aprile_2026_dup.pdf", user_id=None, is_test=True)
+        importa_payroll(db, dati_pdf_isolato, "test_aprile_2026_dup.pdf", user_id=None, is_test=True)
 
 
-def test_import_assegna_kmdimare_senza_cc(dati_pdf, db_pulito):
+def test_import_assegna_kmdimare_senza_cc(dati_pdf_isolato, db_pulito):
     """Dipendenti senza CC default devono ricevere KMDIMARE come fallback con warning."""
     db = db_pulito
-    report = importa_payroll(db, dati_pdf, "test_aprile_2026.pdf", user_id=None, is_test=True)
+    report = importa_payroll(db, dati_pdf_isolato, "test_aprile_2026.pdf", user_id=None, is_test=True)
     # Tutti i dipendenti nuovi non hanno CC → tutti warning
     assert len(report["warnings"]) > 0
     # Le assegnazioni mensili devono puntare a KMDIMARE
     cc_kmdimare = db.query(CostCenter).filter(CostCenter.code == "KMDIMARE").first()
     assert cc_kmdimare is not None, "CC KMDIMARE non trovato — migrazioni non applicate?"
-    imp = db.query(PayrollImport).filter(PayrollImport.mese == 4, PayrollImport.anno == 2026).first()
+    imp = db.query(PayrollImport).filter(PayrollImport.mese == MESE_TEST, PayrollImport.anno == ANNO_TEST).first()
     # Verifica tramite employee_cost_center_monthly
     mensili = db.query(EmployeeCostCenterMonthly).filter(
         EmployeeCostCenterMonthly.import_id == imp.id
@@ -225,12 +256,12 @@ def test_import_assegna_kmdimare_senza_cc(dati_pdf, db_pulito):
         assert ma.cost_center_id == cc_kmdimare.id
 
 
-def test_override_manuale_cc(dati_pdf, db_pulito):
+def test_override_manuale_cc(dati_pdf_isolato, db_pulito):
     """L'override manuale del centro di costo deve impostare override_manuale=True."""
     db = db_pulito
-    importa_payroll(db, dati_pdf, "test_aprile_2026.pdf", user_id=None, is_test=True)
+    importa_payroll(db, dati_pdf_isolato, "test_aprile_2026.pdf", user_id=None, is_test=True)
 
-    imp = db.query(PayrollImport).filter(PayrollImport.mese == 4, PayrollImport.anno == 2026).first()
+    imp = db.query(PayrollImport).filter(PayrollImport.mese == MESE_TEST, PayrollImport.anno == ANNO_TEST).first()
     monthly = db.query(EmployeeMonthly).filter(EmployeeMonthly.import_id == imp.id).first()
 
     # Trova un CC diverso da COMUNE
@@ -247,13 +278,13 @@ def test_override_manuale_cc(dati_pdf, db_pulito):
     assert monthly.override_manuale is True
 
 
-def test_report_mensile_totali(dati_pdf, db_pulito):
+def test_report_mensile_totali(dati_pdf_isolato, db_pulito):
     """Il report mensile deve restituire i totali corretti."""
     db = db_pulito
-    report_import = importa_payroll(db, dati_pdf, "test_aprile_2026.pdf", user_id=None, is_test=True)
+    report_import = importa_payroll(db, dati_pdf_isolato, "test_aprile_2026.pdf", user_id=None, is_test=True)
 
     # Simula la query del report
-    imp = db.query(PayrollImport).filter(PayrollImport.mese == 4, PayrollImport.anno == 2026).first()
+    imp = db.query(PayrollImport).filter(PayrollImport.mese == MESE_TEST, PayrollImport.anno == ANNO_TEST).first()
     assert imp is not None
     assert imp.n_dipendenti == 8
     assert abs(float(imp.totale_costo_aziendale) - sum(COSTI_AZ_ATTESI.values())) < 0.10
