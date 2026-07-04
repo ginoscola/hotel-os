@@ -109,10 +109,15 @@ class TestCategoria:
         aliq = _calcola_aliquota(0, 0)
         assert _determina_categoria(aliq, 0) == 'penali'
 
-    def test_altro_aliquota_fuori_tolleranza(self):
-        """8.8% IVA è fuori tolleranza da 10% (diff=1.2% > 0.5%)."""
+    def test_arrangiamenti_mix_tassa_soggiorno(self):
+        """8.8% (tra 0% e 9.5%, esclusi) è un mix arrangiamenti+tassa soggiorno → arrangiamenti."""
         aliq = _calcola_aliquota(41.36, 3.64)  # ≈ 8.8%
-        assert _determina_categoria(aliq, 41.36) == 'altro'
+        assert _determina_categoria(aliq, 41.36) == 'arrangiamenti'
+
+    def test_altro_aliquota_fuori_range(self):
+        """15% non è vicino a 10%/22%/0% né nel range mix 0-9.5% → altro."""
+        aliq = _calcola_aliquota(100, 15)  # 15%
+        assert _determina_categoria(aliq, 100) == 'altro'
 
     def test_negativo_trattato_come_categorie_normali(self):
         """Valori negativi (storni): la categoria viene determinata normalmente."""
@@ -211,11 +216,11 @@ class TestParserExcel:
         assert sc276.categoria == 'penali'
         assert sc276.totale_lordo == 0.0
 
-    def test_scontrino_277_altro(self):
-        """SC 277: imponibile=41.36, iva=3.64 → aliq≈8.8% (fuori tolleranza) → altro."""
+    def test_scontrino_277_arrangiamenti_mix_ts(self):
+        """SC 277: imponibile=41.36, iva=3.64 → aliq≈8.8%, mix arrangiamenti+tassa soggiorno → arrangiamenti."""
         sc277 = next((s for s in self.r.scontrini if s.numero == 277), None)
         assert sc277 is not None
-        assert sc277.categoria == 'altro'
+        assert sc277.categoria == 'arrangiamenti'
 
     def test_caparre_escluse(self):
         """Nessun tipo CP o FD deve entrare in scontrini o fatture."""
