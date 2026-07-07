@@ -17,17 +17,21 @@ Parser con filtro stagionale: date fuori range → WARNING (non errore), contato
 
 ## Struttura cartelle
 ```
-backend/app/
-  services/   → logica business (parser, calculator, aggregator)
-  routers/    → endpoint FastAPI (vedi sezioni moduli)
-  models/     → SQLAlchemy (revenue.py, corrispettivi.py, analisi_ricavi.py, rooms.py, shared.py)
-  schemas/    → Pydantic
-  utils/
-    locale_it.py  → MESI_IT, GIORNI_IT, formatta_data_it() — UNICA sorgente localizzazione
+backend/
+  app/
+    services/   → logica business (parser, calculator, aggregator)
+    routers/    → endpoint FastAPI (vedi sezioni moduli)
+    models/     → SQLAlchemy (revenue.py, corrispettivi.py, analisi_ricavi.py, rooms.py, shared.py)
+    schemas/    → Pydantic
+    utils/
+      locale_it.py  → MESI_IT, GIORNI_IT, formatta_data_it() — UNICA sorgente localizzazione
+  alembic/versions/ → migrazioni (ordine cronologico via down_revision, non per nome file)
 frontend/src/
   pages/      → pagine React
+    admin/    → sotto-pagine sezione Admin (es. AdminBackup.jsx)
   components/ → componenti riutilizzabili
   utils/format.js → utility formattazione (vedi sezione)
+scripts/      → script operativi (es. backup automatico, vedi sezione dedicata)
 uploads/      → CSV/PDF caricati (non committare)
 ```
 
@@ -95,7 +99,7 @@ Placeholder: `WorkInProgress.jsx`.
 **Comune**: `utenti` (CRUD), `stagioni` (stagioni operative), `moduli` (attiva/disattiva/permessi)
 **Revenue**: `revenue-import` (bulk import), `revenue-test` (cancella is_test)
 **Dipendenti**: `dip-cc` (AdminCentriDiCosto), `dip-colori` (colori CC), `dip-test`
-**Corrispettivi**: `corr-tipi-doc`, `corr-pagamenti`, `corr-prefissi` ⚠️ tabelle droppate — da rimuovere; `corr-classificazione` (CorrClassificazioneTrattamenti)
+**Corrispettivi**: `corr-tipi-doc`, `corr-pagamenti`, `corr-classificazione` (CorrClassificazioneTrattamenti)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
 Dati test: flag `is_test`; `GET|DELETE /admin/test-stats|test-data`, `GET|DELETE /dipendenti/admin/test-stats|test-data`.
 
@@ -112,7 +116,12 @@ cd frontend && npm run dev
 cd backend && source venv/bin/activate && pytest tests/ -v
 ```
 File test: `uploads/PlanningForecast-{CLB,DPH,INT}{1,2}.csv`.
-Test di integrazione che chiamano endpoint protetti falliscono con 401 (TestClient senza auth) — problema pre-esistente, i test unitari passano tutti.
+⚠️ La fixture `client` nei test di integrazione deve sovrascrivere anche `richiedi_admin`/
+`richiedi_utente_attivo` (non solo `get_db`), altrimenti gli endpoint protetti rispondono 401 e i
+fallimenti a cascata mascherano bug reali — vedi Modulo Budget più sotto, dove questo mascheramento
+ha nascosto per mesi che il salvataggio budget non funzionava mai. Pattern corretto in tutti i file
+test a luglio 2026: `app.dependency_overrides[richiedi_admin] = lambda: SimpleNamespace(id=None)`
+(id=None se il codice usa `utente.id` per popolare FK verso `users`, altrimenti `lambda: None` basta).
 ⚠️ Alcuni test (`test_parser_e_bulk.py`, `test_navigazione_confronto_export.py`, `test_upload_endpoint.py`)
 falliscono con traceback che punta a `/Users/ginoscola/revenue-master/` invece di `hotel-os` — sono
 un'altra directory di progetto, non file di questo repo: ignorare, non nel nostro ambito.
@@ -277,25 +286,15 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
 
 ### Tabelle DB principali
 - `corrispettivi_documenti`: UNIQUE(struttura_code, data_documento, numero, suffisso, camera, codice_prenotazione, numero_scontrino); audit trail (`modificato_manualmente`, `*_originale`); `camera` e `codice_prenotazione` TEXT (prenotazioni gruppo = liste lunghe).
-  ⚠️ Welcome PMS assegna `numero=0` a **tutte** le righe di storno/annullo non numerate emesse
-  in un giorno per una struttura (non è un identificativo). Con ≥2 annullamenti nello stesso
-  giorno/struttura, la vecchia chiave (senza camera/codice_prenotazione) li considerava lo
-  stesso documento: solo il primo veniva inserito, il secondo scartato in silenzio da
-  `ON CONFLICT DO NOTHING` nello stesso import — causa di un delta RT-PMS reale (27/06/2026,
-  CLB, -1.274€: storno perso della prenotazione 4406, coesisteva con lo storno della
-  prenotazione 338 stesso giorno/numero=0/suffisso). Migrazione `corrfix001_2026`.
-  Stesso pattern già incontrato ed erroneamente "risolto" rimuovendo del tutto il vincolo
-  sulla vecchia tabella `fiscal_documents` (precursore, ora dismessa) — qui invece si è
-  preferito estendere la chiave (camera+codice_prenotazione distinguono storni diversi)
-  per mantenere l'idempotenza per-documento su cui si basa `on_conflict=salta|aggiorna`.
-  Non basta però quando la **stessa** prenotazione/camera ha più scontrini annullati nello
-  stesso giorno (es. 20/06/2026 INT, camera I418/prenotazione 4858: due storni -476 e -28
-  per due scontrini diversi, stesso numero=0/camera/prenotazione) — collidevano ancora tra
-  loro. Aggiunta `numero_scontrino` (numero fiscale di stampa, es. "177-18") alla chiave:
-  distingue eventi di storno diversi anche a parità di camera/prenotazione. Migrazione
-  `corrfix002_2026`. Assente nel formato Excel base (18 colonne): lì resta solo la
-  protezione camera+codice_prenotazione, teoricamente ancora vulnerabile allo stesso
-  scenario (mai riscontrato finora in quel formato).
+  ⚠️ Welcome PMS assegna `numero=0` a **tutte** le righe di storno/annullo non numerate emesse in un
+  giorno per una struttura (non è un identificativo): con ≥2 annullamenti nello stesso giorno/struttura,
+  una chiave troppo corta li tratta come lo stesso documento e ne scarta uno in silenzio
+  (`ON CONFLICT DO NOTHING`) — causa di delta RT-PMS reali già osservati in campo. Non rimuovere il
+  vincolo per "risolvere" (già fatto per errore sul precursore `fiscal_documents`, ora dismesso):
+  estendere invece la chiave. Storia: prima aggiunte camera+codice_prenotazione (`corrfix001_2026`),
+  poi — non bastavano quando la stessa prenotazione/camera ha più scontrini annullati lo stesso giorno —
+  aggiunto anche `numero_scontrino`, il numero fiscale di stampa (`corrfix002_2026`). Assente nel
+  formato Excel base (18 colonne): lì resta solo la protezione camera+codice_prenotazione.
 - `corrispettivi_manuali`: UNIQUE(data_giorno, struttura_code).
 - `rt_chiusure`: UNIQUE(data_chiusura, rt_code); RT1→[DPH,CLB], RT2→[INT]. Audit trail `modificato_manualmente`
   (come `corrispettivi_documenti`): tutte le righe inserite prima di luglio 2026 sono marcate `True` (protette).
@@ -356,17 +355,14 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
 tariffa per persona/notte (`TARIFFA_TS_PER_PERSONA`), altrimenti c'è quasi certamente un errore di
 conteggio. RT2 = 2,00€ (solo International, tariffa unica). **RT1 = 0,50€** (non 2,50€!): condivide
 la cassa fiscale tra Du Parc (2,50€/persona) e Club Hotel (2,00€/persona), quindi qualunque
-combinazione di persone-notte tra i due hotel è un totale legittimo (es. 70,50€ = 1 notte Du Parc +
-34 notti Club) — verificabile solo sul MCD tra le due tariffe (0,50€), non su 2,50€ da sola (avrebbe
-dato falsi allarmi su quasi ogni giorno). Flag `n1_non_quadra` calcolato in `_n1_non_quadra()`,
-incluso nella risposta `GET /rt-chiusure` per ogni rt1/rt2. Frontend: icona ⚠️ accanto al totale RT
-in `TabControlloRT` con tooltip che mostra l'importo esente N1.
-⚠️ `esente_n1` va tenuto sincronizzato con `totale_ts` anche sul salvataggio manuale
-(`POST /rt-chiusure`, non solo sull'import XML): altrimenti dopo una correzione manuale della tassa
-di soggiorno (`totale_ts`) l'alert continua a basarsi sul vecchio `esente_n1` importato da XML, non
-più aggiornato — bug reale scoperto e corretto (luglio 2026), con backfill una tantum sulle righe
-`modificato_manualmente=True` già in DB (`esente_n1 = totale_ts`, quest'ultimo come fonte di verità
-essendo l'ultimo valore confermato dall'utente).
+combinazione di persone-notte tra i due hotel è un totale legittimo — verificabile solo sul MCD tra
+le due tariffe (0,50€), non su 2,50€ da sola (avrebbe dato falsi allarmi su quasi ogni giorno). Flag
+`n1_non_quadra` calcolato in `_n1_non_quadra()`, incluso nella risposta `GET /rt-chiusure` per ogni
+rt1/rt2. Frontend: icona ⚠️ accanto al totale RT in `TabControlloRT` con tooltip sull'importo esente N1.
+⚠️ `esente_n1` va tenuto sincronizzato con `totale_ts` anche sul salvataggio manuale (`POST /rt-chiusure`,
+non solo sull'import XML): altrimenti dopo una correzione manuale di `totale_ts` l'alert continua a
+basarsi sul vecchio `esente_n1` da XML, non aggiornato (bug corretto luglio 2026, con backfill
+`esente_n1 = totale_ts` sulle righe `modificato_manualmente=True` già in DB).
 
 `GET /rt-chiusure` include anche `imponibile_10/22`, `imposta_10/22` per rt1/rt2: il pannello di
 inserimento manuale (`FormRT`) li usa per pre-compilare i sotto-campi "Imposta"/"Importo Parziale"
@@ -389,9 +385,9 @@ diventerebbero incoerenti tra vista giornaliera e vista aggregata).
 ⚠️ `_somma_rt_pms()` somma il PMS **solo sui giorni in cui esiste una chiusura RT** (`giorni_con_rt`,
 incluso nella risposta), mai su tutto l'intervallo di date della stagione: un giorno con corrispettivi
 PMS ma senza chiusura RT (es. import saltato) andrebbe altrimenti a gonfiare la differenza in modo
-artificiale (bug reale scoperto confrontando la somma stagionale con la somma dei delta mese per
-mese — un solo giorno "orfano" da 5.382€ falsava l'intera stagione). Stessa semantica del confronto
-giornaliero, dove un giorno senza RT ha `delta=None` ed è escluso dalla somma.
+artificiale (bug reale, scoperto confrontando la somma stagionale con la somma dei delta mese per
+mese). Stessa semantica del confronto giornaliero, dove un giorno senza RT ha `delta=None` ed è
+escluso dalla somma.
 
 **Inserimenti da Menu** (solo RT1, campo `rt_chiusure.menu_diretto`): a volte il software del
 ristorante di Du Parc/Club Hotel — non collegato a Welcome — stampa un pagamento diretto sulla
@@ -406,21 +402,16 @@ somma `g.rt1.delta`, già calcolato server-side con l'aggiustamento.
 Sotto "Somma differenze" c'è anche una riga "Inserimenti da Menu (RT1)" con il totale mese
 (`menuMese`, client-side da `dati.giorni`) e stagione (`riepilogoStagione.RT1.somma_menu`) — utile
 per vedere quanto incasso extra-Welcome è stato dichiarato, non solo la differenza residua.
-Verificato in campo (luglio 2026): dopo aver inserito gli importi noti su una decina di giorni di
-maggio, la stagione RT1 è tornata a somma_differenza=0,00€ esatta (prima +252,50€ "inspiegati").
 
 ⚠️ **Chiusura fatta "il giorno dopo" disallinea i sotto-campi XML**: se la chiusura RT di un
 giorno viene fatta la mattina successiva, i campi dettaglio (`imponibile_10/22`, `imposta_10/22`,
 `tassa_soggiorno_nrs` — non `totale_10/22/ts/penali` né `esente_n1`, quelli restano sul giorno
 giusto) possono finire salvati sotto la data sbagliata (quella della chiusura, non quella
 dell'incasso). Sintomo: `imponibile_10+imposta_10` del giorno D coincide con `totale_10` di
-**D-1**, non con quello proprio di D. Bug reale scoperto e corretto (luglio 2026) su un blocco
-di giorni RT1 di maggio 2026 (06-08, 11-13, 17-28) inseriti "shiftati" — corretto ricopiando i
-sotto-campi sul giorno giusto; l'ultimo giorno di ogni blocco (08, 13, 28) è rimasto senza dato
-sorgente per il giorno successivo ed è stato azzerato. Diagnosi: confrontare
-`imponibile_10+imposta_10` di ogni giorno con `totale_10` del giorno precedente, non con il
-proprio — se combacia sistematicamente su più giorni consecutivi è questo bug, non un errore
-puntuale.
+**D-1**, non con quello proprio di D — se combacia sistematicamente su più giorni consecutivi è
+questo bug, non un errore puntuale. Diagnosi: confrontare `imponibile_10+imposta_10` di ogni giorno
+con `totale_10` del giorno precedente, non con il proprio. Fix: ricopiare i sotto-campi sul giorno
+giusto (l'ultimo giorno di un blocco "shiftato" resta senza dato sorgente e va azzerato).
 
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.

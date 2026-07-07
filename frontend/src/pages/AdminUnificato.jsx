@@ -36,7 +36,6 @@ const SEZIONI = [
     voci: [
       { id: 'corr-tipi-doc',        label: 'Tipi documento' },
       { id: 'corr-pagamenti',       label: 'Tipi pagamento' },
-      { id: 'corr-prefissi',        label: 'Prefissi struttura' },
       { id: 'corr-classificazione', label: 'Classif. trattamenti' },
       { id: 'corr-rt-stampanti',    label: 'Stampanti RT' },
     ],
@@ -150,7 +149,6 @@ function Contenuto({ sezione }) {
   if (sezione === 'dip-test')         return <DipDatiTest />
   if (sezione === 'corr-tipi-doc')    return <CorrTipiDocumento />
   if (sezione === 'corr-pagamenti')   return <CorrTipiPagamento />
-  if (sezione === 'corr-prefissi')        return <CorrPrefissiStruttura />
   if (sezione === 'corr-classificazione') return <CorrClassificazioneTrattamenti />
   if (sezione === 'corr-rt-stampanti')    return <CorrStampantiRT />
   if (sezione === 'usali-kpi')            return <UsaliKpiConfig />
@@ -1187,92 +1185,6 @@ function CorrClassificazioneTrattamenti() {
           })}
         </tbody>
       </table>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Corrispettivi — Prefissi struttura
-// ---------------------------------------------------------------------------
-
-function CorrPrefissiStruttura() {
-  const [prefissi, setPrefissi] = useState([])
-  const [hotels, setHotels] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [nuovoPrefisso, setNuovoPrefisso] = useState('')
-  const [nuovaStruttura, setNuovaStruttura] = useState('')
-  const [nuovoTipo, setNuovoTipo] = useState('lettera_iniziale')
-  const [msg, fb] = useFeedback()
-
-  const carica = useCallback(async () => {
-    setLoading(true)
-    const [dPre, dH] = await Promise.all([
-      api.get('/corrispettivi/config/prefissi-struttura').then(r => r.data).catch(() => []),
-      api.get('/hotels/').then(r => r.data).catch(() => []),
-    ])
-    setPrefissi(dPre); setHotels(dH); setLoading(false)
-  }, [])
-  useEffect(() => { carica() }, [carica])
-
-  async function aggiungi() {
-    if (!nuovoPrefisso || !nuovaStruttura) { fb('Prefisso e struttura obbligatori'); return }
-    try {
-      await api.post('/corrispettivi/config/prefissi-struttura', { prefisso: nuovoPrefisso, struttura_code: nuovaStruttura, tipo: nuovoTipo })
-      setNuovoPrefisso(''); setNuovaStruttura(''); setNuovoTipo('lettera_iniziale')
-      fb('Prefisso aggiunto'); carica()
-    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
-  }
-
-  async function elimina(id) {
-    if (!confirm('Eliminare questo prefisso?')) return
-    try { await api.delete(`/corrispettivi/config/prefissi-struttura/${id}`); fb('Eliminato'); carica() }
-    catch (e) { fb('Errore: ' + mostraErrore(e)) }
-  }
-
-  return (
-    <div>
-      <h2 style={{ marginTop: 0, marginBottom: 20 }}>Prefissi struttura — Corrispettivi</h2>
-      {msg && <div style={{ marginBottom: 12, padding: '6px 12px', background: '#d1fae5', borderRadius: 6, color: '#065f46', fontSize: 13, fontWeight: 600 }}>{msg}</div>}
-      {loading ? <p style={{ color: '#9ca3af' }}>Caricamento…</p> : (
-        <>
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', marginBottom: 20 }}>
-            <thead>
-              <tr style={{ background: '#fee2e2' }}>
-                {['Prefisso', 'Struttura', 'Tipo', ''].map(h => (
-                  <th key={h} style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 600 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {prefissi.map(p => (
-                <tr key={p.id} style={{ borderTop: '1px solid #fecaca' }}>
-                  <td style={{ padding: '6px 10px', fontWeight: 600 }}>{p.prefisso}</td>
-                  <td style={{ padding: '6px 10px' }}>{p.struttura_code}</td>
-                  <td style={{ padding: '6px 10px', color: '#6b7280' }}>{p.tipo}</td>
-                  <td style={{ padding: '6px 10px' }}>
-                    <button onClick={() => elimina(p.id)} style={{ ...btnSm, background: '#fca5a5', color: '#7f1d1d' }}>Elimina</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Aggiungi:</span>
-            <input value={nuovoPrefisso} onChange={e => setNuovoPrefisso(e.target.value)}
-              placeholder="Prefisso (es. C)" style={{ ...inputSm, width: 120 }} />
-            <select value={nuovaStruttura} onChange={e => setNuovaStruttura(e.target.value)} style={inputSm}>
-              <option value="">— Struttura —</option>
-              {hotels.map(h => <option key={h.code} value={h.code}>{h.code} — {h.name}</option>)}
-            </select>
-            <select value={nuovoTipo} onChange={e => setNuovoTipo(e.target.value)} style={inputSm}>
-              <option value="lettera_iniziale">lettera_iniziale</option>
-              <option value="nome_esatto">nome_esatto</option>
-              <option value="contiene">contiene</option>
-            </select>
-            <button onClick={aggiungi} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
-          </div>
-        </>
-      )}
     </div>
   )
 }
