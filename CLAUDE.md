@@ -519,6 +519,33 @@ Router: `GET|POST|PUT /lookup/tipi-pagamento`.
 
 ---
 
+## Sistema di backup automatico notturno
+**3 copie**: locale (Mac Mini) → Raspberry Pi (rsync via SSH) → repository GitHub privato `hotelos-backup`.
+- Script principale: `scripts/hotelos-backup.sh` (pg_dump formato custom `-F c`, legge `DB_NAME`/`DB_USER`
+  da `backend/.env` con lo stesso parsing usato dal router `backup.py` — non duplicare la logica altrove).
+- Installazione (una tantum): `bash scripts/installa-backup.sh` → copia `scripts/it.hotelos.backup.plist`
+  in `~/Library/LaunchAgents/`, `launchctl load`. Label `it.hotelos.backup` (coerente con
+  `it.hotelos.backend`/`it.hotelos.frontend` già presenti), esecuzione ogni notte alle 03:00.
+- Test manuale: `bash scripts/test-backup.sh` (esegue un backup reale con output verbose).
+- Stato senza eseguire nulla: `bash scripts/verifica-backup.sh`.
+- Log: `~/hotelos-backups/logs/backup_log.jsonl` (una riga JSON per esecuzione: esito
+  success/partial/error, dimensione dump, esito Raspberry/GitHub, durata).
+- Retention: 7 copie locale, 7 su Raspberry, 3 su GitHub (repository dedicato, push con `--force`
+  ogni notte — accettato: il repo esiste solo per questo scopo, force-push sovrascrive la history
+  a ogni esecuzione invece di farla crescere indefinitamente con dump binari).
+- Repository GitHub: `hotelos-backup` (privato, da creare manualmente — lo script non lo crea).
+  Contiene i `.dump` binari committati direttamente + un `README.md` con la data ultimo backup.
+- Endpoint (prefix `/admin/backup`, tutti `richiedi_admin`, sola lettura — nessuno tocca il DB):
+  `GET status|logs|files`, `POST esegui-ora` (lancia lo script in background via `subprocess.Popen`),
+  `POST ripristina/{nome_file}` (restituisce solo i comandi `pg_restore`/`psql`, non esegue nulla).
+- Admin: `?s=backup` in `AdminUnificato.jsx` → `frontend/src/pages/admin/AdminBackup.jsx`
+  (card stato, tabella log filtrabile, lista dump con istruzioni di ripristino in modale, accordion setup).
+- Test: `backend/tests/test_backup.py` — `subprocess` sempre mockato (nessun pg_dump/rsync reale nei
+  test), auth verificata via override diretto di `richiedi_admin` (non tramite il bug noto del 401
+  su TestClient senza login, citato sopra — evitato qui perché non serve un utente reale in DB).
+
+---
+
 ## Principi di progettazione
 
 ### Riusabilità tra moduli

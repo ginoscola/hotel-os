@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import AdminUtenti from './AdminUtenti.jsx'
 import AdminCentriDiCosto from './AdminCentriDiCosto.jsx'
+import AdminBackup from './admin/AdminBackup.jsx'
 import api from '../api/client.js'
 import { mostraErrore } from '../utils/format.js'
 import { APP_VERSION, APP_VERSION_DATE } from '../version.js'
@@ -51,6 +52,7 @@ const SEZIONI = [
     gruppo: 'Sistema',
     voci: [
       { id: 'sistema-debug', label: 'Debug & diagnostica' },
+      { id: 'backup',        label: 'Backup' },
     ],
   },
 ]
@@ -154,6 +156,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'usali-kpi')            return <UsaliKpiConfig />
   if (sezione === 'usali-cc')             return <UsaliCCMapping />
   if (sezione === 'sistema-debug')        return <SistemaDebug />
+  if (sezione === 'backup')               return <AdminBackup />
   return <Placeholder sezione={sezione} />
 }
 
