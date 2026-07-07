@@ -19,6 +19,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from starlette.testclient import TestClient
 
+from app.auth import richiedi_utente_attivo
 from app.database import Base, get_db
 from app.main import app
 from app.models.revenue import DailyRevenue, Hotel  # noqa: F401 — per Base.metadata
@@ -58,6 +59,7 @@ def client(test_engine, TestSession):
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[richiedi_utente_attivo] = lambda: None
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

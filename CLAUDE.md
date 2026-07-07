@@ -505,6 +505,27 @@ Endpoint: `GET /forecast/summary?anno=&hotel_code=` (hotel_code=all → aggregat
 Endpoint chiave: `PUT /budget/{hotel}/{year}/{week_start}`, `GET /budget/{hotel}/{year}/confronto[/mensile]`, `GET /budget/{hotel}/{year}/proiezione`, `POST /budget/{hotel}/{year}/import-excel`, `GET /budget/gruppo/{year}/confronto|proiezione`.
 Frontend: 4 tab (Inserimento / Confronto Actual vs Budget / Proiezione / Gruppo).
 
+⚠️ **3 bug reali scoperti e corretti (luglio 2026)**, trovati risolvendo i 401 mascherati nei test
+di integrazione (`test_budget.py`/`test_config.py`/`test_dashboard_gruppo_modalita.py`: le fixture
+`client` sovrascrivevano solo `get_db`, non l'autenticazione — override diretto di `richiedi_admin`/
+`richiedi_utente_attivo` ora applicato ovunque, come già in `test_backup.py`). Tolto quel mascheramento,
+sono emersi fallimenti reali — **`budget_entries` aveva 0 righe nel database di produzione**, il
+salvataggio di una singola settimana non aveva mai funzionato dal 25/05/2026:
+1. `PUT /budget/{hotel}/{year}/{week_start}` richiedeva `week_start` anche nel body JSON (schema
+   condiviso con l'endpoint bulk, dove serve davvero). Il frontend (`Budget.jsx`) non lo manda mai →
+   422 sistematico. Fix: `BudgetSettimanaSingolaInput` (senza `week_start`) solo per l'endpoint singolo.
+2. `occupancy_budget`/`inc_rooms_budget`/`inc_fnb_budget`/`inc_extra_budget` erano `Numeric(5,4)`
+   (max 9,9999) ma l'app vi salva percentuali 0-100 → overflow garantito su ogni valore realistico.
+   Migrazione `budgetfix001_2026` → `Numeric(5,2)` (come le gemelle `pct_fnb_budget`/`pct_extra_budget`
+   nella stessa migrazione originale, già corrette). Aggiornato anche il modello SQLAlchemy.
+3. L'endpoint di clonazione versione (`POST /budget/{hotel}/{year}/version`) referenziava ancora
+   `pct_fnb_budget`/`pct_extra_budget`: colonne rimosse dalla migrazione `y5z6a7b8c9d0` (26/05/2026,
+   sostituite da `adr_fnb_budget`/`adr_extra_budget`), mai aggiornato di conseguenza. Corretto a
+   `adr_fnb_budget`/`adr_extra_budget`.
+   ⚠️ I test di questo modulo creano lo schema con `Base.metadata.create_all()` dal modello SQLAlchemy,
+   non dalla catena di migrazioni Alembic: non rilevano drift modello↔migrazioni↔DB reale come questo.
+   Verificare a vista con `alembic current`/`\d budget_entries` se si sospetta disallineamento.
+
 ---
 
 ## Modulo Camere (Rooms)

@@ -58,6 +58,18 @@ class BudgetSettimanaInput(BaseModel):
     camere_vendute: Optional[int] = None
 
 
+class BudgetSettimanaSingolaInput(BaseModel):
+    """Come BudgetSettimanaInput ma senza week_start: nel PUT della singola settimana
+    week_start arriva già dal path e la funzione usa quello, mai il campo nel body."""
+    version: str = 'v1'
+    occupancy: Optional[float] = None
+    adr: Optional[float] = None
+    adr_fnb: Optional[float] = None
+    adr_extra: Optional[float] = None
+    notes: Optional[str] = None
+    camere_vendute: Optional[int] = None
+
+
 class BudgetSettimanaOutput(BaseModel):
     id: int
     hotel_id: Optional[int]
@@ -499,7 +511,7 @@ def salva_settimana(
     hotel_code: str,
     season_year: int,
     week_start: date,
-    body: BudgetSettimanaInput,
+    body: BudgetSettimanaSingolaInput,
     db: Session = Depends(get_db),
     utente=Depends(richiedi_admin),
 ):
@@ -616,8 +628,8 @@ def crea_versione(
             version=body.new_version,
             rooms_sold_budget=s.rooms_sold_budget,
             adr_budget=s.adr_budget,
-            pct_fnb_budget=s.pct_fnb_budget,
-            pct_extra_budget=s.pct_extra_budget,
+            adr_fnb_budget=s.adr_fnb_budget,
+            adr_extra_budget=s.adr_extra_budget,
             rooms_available_budget=s.rooms_available_budget,
             revenue_rooms_budget=s.revenue_rooms_budget,
             revenue_fnb_budget=s.revenue_fnb_budget,

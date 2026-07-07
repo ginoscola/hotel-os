@@ -270,13 +270,13 @@ class BudgetEntry(Base):
     revenue_total_budget = Column(Numeric(12, 2), nullable=True)
 
     # KPI calcolati
-    occupancy_budget = Column(Numeric(5, 4), nullable=True)
+    occupancy_budget = Column(Numeric(5, 2), nullable=True)
     revpar_budget = Column(Numeric(10, 2), nullable=True)
     trevpar_budget = Column(Numeric(10, 2), nullable=True)
     rmc_budget = Column(Numeric(10, 2), nullable=True)
-    inc_rooms_budget = Column(Numeric(5, 4), nullable=True)
-    inc_fnb_budget = Column(Numeric(5, 4), nullable=True)
-    inc_extra_budget = Column(Numeric(5, 4), nullable=True)
+    inc_rooms_budget = Column(Numeric(5, 2), nullable=True)
+    inc_fnb_budget = Column(Numeric(5, 2), nullable=True)
+    inc_extra_budget = Column(Numeric(5, 2), nullable=True)
 
     # Mese contabile (mese con più giorni nella settimana commerciale)
     mese_contabile = Column(Integer, nullable=True)

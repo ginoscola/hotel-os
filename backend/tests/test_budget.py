@@ -7,6 +7,7 @@ Usa lo stesso DB di test (revenue_master_test) degli altri test suite.
 import os
 import sys
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +17,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from starlette.testclient import TestClient
 
+from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import Base, get_db
 from app.main import app
 from app.models.revenue import BudgetConfig, BudgetEntry, DailyRevenue, Hotel  # noqa: F401
@@ -51,7 +53,11 @@ def client(test_engine, TestSession):
         finally:
             db.close()
 
+    # id=None: nullable in DB, evita violazioni FK verso users (nessun utente reale nel DB di test)
+    utente_finto = SimpleNamespace(id=None)
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[richiedi_utente_attivo] = lambda: utente_finto
+    app.dependency_overrides[richiedi_admin] = lambda: utente_finto
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -200,8 +206,8 @@ def test_put_budget_calcola_kpi(client):
 
 
 def test_put_budget_mese_contabile_luglio(client):
-    """week 27/06–03/07 → mese contabile luglio (4 giorni)."""
-    resp = client.put("/budget/DPH/2026/2026-06-27", json={
+    """week 28/06–04/07: luglio=4 giorni → mese contabile luglio."""
+    resp = client.put("/budget/DPH/2026/2026-06-28", json={
         'occupancy': 50.0, 'adr': 70.0,
     })
     d = resp.json()
