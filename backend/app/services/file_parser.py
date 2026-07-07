@@ -307,6 +307,12 @@ class ParserCSV:
         dati_a, scartate_a = _parse_righe(righe_raw1)
         dati_b, scartate_b = _parse_righe(righe_raw2)
 
+        if dati_a == dati_b:
+            raise ValueError(
+                "file1 e file2 sono identici: sembra che lo stesso file sia stato caricato due "
+                "volte invece della coppia file1 (comprensivo ristorante) + file2 (solo alloggio)."
+            )
+
         self.righe_scartate = max(scartate_a, scartate_b)
 
         # Auto-detect: il file con ricavi_trat totali maggiori è quello con ristorante (file1).

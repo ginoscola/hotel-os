@@ -152,6 +152,30 @@ class TestParserCLB:
 
 
 # ---------------------------------------------------------------------------
+# Test: stesso file caricato due volte come file1 e file2 (bug reale, luglio 2026:
+# import CLB del 13/04/2026 con file2 duplicato di file1 → revenue_fnb=0 su tutte le righe)
+# ---------------------------------------------------------------------------
+
+class TestParserFileDuplicato:
+    def test_stesso_file_come_file1_e_file2_solleva_errore(self):
+        parser = ParserCSV(hotel_code="CLB")
+        with pytest.raises(ValueError, match="identici"):
+            parser.parse_coppia(
+                path_file1=percorso_csv("PlanningForecast-CLB1.csv"),
+                path_file2=percorso_csv("PlanningForecast-CLB1.csv"),
+            )
+
+    def test_file_distinti_non_sollevano_errore(self):
+        """Controllo di non-regressione: la coppia corretta continua a funzionare."""
+        parser = ParserCSV(hotel_code="CLB")
+        righe = parser.parse_coppia(
+            path_file1=percorso_csv("PlanningForecast-CLB1.csv"),
+            path_file2=percorso_csv("PlanningForecast-CLB2.csv"),
+        )
+        assert len(righe) == 113
+
+
+# ---------------------------------------------------------------------------
 # Test parser DPH (Hotel Du Parc, 43 camere, maggio-agosto 2026)
 # ---------------------------------------------------------------------------
 

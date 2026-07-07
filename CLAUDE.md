@@ -44,7 +44,15 @@ File sempre in coppia: file1 = RICAVI TRAT comprensivi ristorante, file2 = solo 
 
 Scartare righe con "(SDLY)" o "(LY)" nel campo DATA, o senza data dd/mm/yyyy.
 Numeri: virgola decimale. Date: dd/mm/yyyy (es. 30/05/2026 sab).
-Convenzione nome file: `YYYYMMDD_PlanningForecast-HOTELCODE[12].xlsx/csv`
+Convenzione nome file: `YYYYMMDD_PlanningForecast-HOTELCODE[12].xlsx/csv` — il suffisso `[12]` è
+solo estetico, **ignorato dal parser**: `parse_coppia()` auto-rileva quale file è il "comprensivo
+ristorante" confrontando la somma dei ricavi tra i due file (quello con somma maggiore è file1).
+⚠️ **`parse_coppia()` rifiuta con `ValueError` se i due file sono identici riga per riga**
+(`dati_a == dati_b`, confronto strutturale su tutti i campi, non solo sulla somma — evita falsi
+positivi nel raro caso di zero F&B legittimo): bug reale (luglio 2026) in cui lo stesso file era
+stato caricato due volte come file1 e file2 per CLB, producendo `revenue_fnb=0` su ogni riga
+dell'import (F&B azzerato, ricavi camere gonfiati) e un calo innaturale nel grafico Ritmo
+prenotazioni di gruppo. Non serve controllare i nomi file: il controllo è sul contenuto.
 
 ## KPI — regole invarianti
 **MAI fare medie semplici — usare sempre i totali aggregati.**
