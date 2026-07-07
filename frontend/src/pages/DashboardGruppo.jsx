@@ -597,7 +597,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={occupazioneComparativa} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} width={42} />
               <Tooltip formatter={(v, name) => [v != null ? `${v.toFixed(1)}%` : '—', name]} />
               <Legend />
@@ -627,7 +627,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
               <YAxis tickFormatter={v => formatEuro(v)} />
               <Tooltip formatter={v => formatEuro(v)} />
               <Legend />
@@ -651,7 +651,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
               <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={v => formatEuro(v)} />
               <Legend />
@@ -673,7 +673,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
               <YAxis tickFormatter={v => `${v.toFixed(1)}%`} domain={[0, 100]} />
               <Tooltip formatter={(v, n) => [v != null ? `${Number(v).toFixed(1)}%` : '—', n]} />
               <Legend />
