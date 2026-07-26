@@ -2,8 +2,10 @@
 
 Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
   POST   /rt-chiusure                    → upsert chiusura RT giornaliera (admin)
-  POST   /rt-chiusure/import-xml         → import CORRISP.xml caricato dall'utente (admin)
-  POST   /rt-chiusure/import-da-stampante → legge CORRISP.xml dalla stampante (admin)
+  POST   /rt-chiusure/import-xml         → import di uno o più CORRISP.xml caricati dall'utente,
+                                            sommati se più chiusure stesso giorno (admin)
+  POST   /rt-chiusure/import-da-stampante → legge dalla stampante tutti i CORRISP.xml del giorno
+                                            e li somma se più di uno (admin)
   GET    /rt-chiusure                    → lista mese con delta vs PMS
   GET    /rt-chiusure/riepilogo-stagione → somma differenze RT vs PMS sull'intera stagione
   DELETE /rt-chiusure/{id}               → elimina chiusura RT (admin)
@@ -13,7 +15,7 @@ import socket
 import time
 from datetime import date
 from decimal import Decimal
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import text
@@ -23,7 +25,7 @@ from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
 from app.models.corrispettivi import RtChiusura
 from app.models.revenue import Hotel, HotelSeason, RtPrinter
-from app.services.corrisp_xml_parser import parse_corrisp_xml
+from app.services.corrisp_xml_parser import parse_corrisp_xml, somma_dati_corrisp
 from app.routers.corrispettivi_shared import STRUTTURE_HOTEL
 
 router = APIRouter()
@@ -241,27 +243,43 @@ def _upsert_rt_chiusura_da_xml(dati: dict, rt_code: str, on_conflict: str, db: S
 
 @router.post("/rt-chiusure/import-xml")
 def importa_rt_chiusura_xml(
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(...),
     rt_code: str = Query(..., description="RT1 (DPH+CLB) o RT2 (INT)"),
     on_conflict: str = Query('salta', description="'salta' (non tocca righe già presenti) o 'aggiorna' (rispetta modificato_manualmente)"),
     db: Session = Depends(get_db),
     utente=Depends(richiedi_admin),
 ):
-    """Importa un file CORRISP.xml caricato dall'utente e popola/aggiorna rt_chiusure."""
+    """
+    Importa uno o più file CORRISP.xml caricati dall'utente e popola/aggiorna rt_chiusure.
+
+    Più file (stessa giornata) → tipicamente più chiusure Z nello stesso giorno solare
+    (es. riapertura per un problema e nuova chiusura): i totali vengono sommati, non solo
+    quelli dell'ultimo, altrimenti la giornata non quadra con gli scontrini PMS.
+    """
     if rt_code not in RT_STRUTTURE:
         raise HTTPException(400, f"rt_code non valido: usa {list(RT_STRUTTURE.keys())}")
     if on_conflict not in ('salta', 'aggiorna'):
         raise HTTPException(400, "on_conflict deve essere 'salta' o 'aggiorna'")
-    if not file.filename.lower().endswith('.xml'):
-        raise HTTPException(400, "Solo file .xml accettati")
+    for file in files:
+        if not file.filename.lower().endswith('.xml'):
+            raise HTTPException(400, "Solo file .xml accettati")
 
-    contenuto = file.file.read()
+    lista_dati = []
+    for file in files:
+        contenuto = file.file.read()
+        try:
+            lista_dati.append(parse_corrisp_xml(contenuto))
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Errore parsing {file.filename}: {exc}")
+
     try:
-        dati = parse_corrisp_xml(contenuto)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Errore parsing CORRISP.xml: {exc}")
+        dati = somma_dati_corrisp(lista_dati)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
-    return _upsert_rt_chiusura_da_xml(dati, rt_code, on_conflict, db, utente)
+    risultato = _upsert_rt_chiusura_da_xml(dati, rt_code, on_conflict, db, utente)
+    risultato['n_chiusure'] = len(lista_dati)
+    return risultato
 
 
 @router.post("/rt-chiusure/import-da-stampante")
@@ -314,22 +332,31 @@ def importa_rt_chiusura_da_stampante(
     nomi_trovati = re.findall(r'href="([^"]*CORRISP[^"]*\.xml)"', corpo_lista.decode('utf-8', errors='replace'), re.IGNORECASE)
     if not nomi_trovati:
         raise HTTPException(404, f"Nessun file CORRISP.xml trovato per il {data.strftime('%d/%m/%Y')}")
-    nome_file = nomi_trovati[-1]
+
+    # Più file nella stessa cartella-giorno = più chiusure Z nello stesso giorno solare
+    # (es. riapertura per un problema e nuova chiusura): vanno sommati tutti, non solo
+    # l'ultimo, altrimenti la giornata non quadra con gli scontrini PMS.
+    lista_dati = []
+    for nome_file in nomi_trovati:
+        try:
+            status_file, corpo_file = _get_raw_http(printer.ip, path_cartella + nome_file)
+        except OSError as exc:
+            raise HTTPException(502, f"Stampante non raggiungibile ({printer.ip}): {exc}")
+        if status_file != 200:
+            raise HTTPException(502, f"Errore lettura file dalla stampante (HTTP {status_file})")
+        try:
+            lista_dati.append(parse_corrisp_xml(corpo_file))
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Errore parsing {nome_file}: {exc}")
 
     try:
-        status_file, corpo_file = _get_raw_http(printer.ip, path_cartella + nome_file)
-    except OSError as exc:
-        raise HTTPException(502, f"Stampante non raggiungibile ({printer.ip}): {exc}")
-    if status_file != 200:
-        raise HTTPException(502, f"Errore lettura file dalla stampante (HTTP {status_file})")
-
-    try:
-        dati = parse_corrisp_xml(corpo_file)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Errore parsing CORRISP.xml: {exc}")
+        dati = somma_dati_corrisp(lista_dati)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     risultato = _upsert_rt_chiusura_da_xml(dati, rt_code, on_conflict, db, utente)
-    risultato['nome_file'] = nome_file
+    risultato['nome_file'] = ', '.join(nomi_trovati)
+    risultato['n_chiusure'] = len(nomi_trovati)
     return risultato
 
 

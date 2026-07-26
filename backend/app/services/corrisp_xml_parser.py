@@ -169,3 +169,45 @@ def parse_corrisp_xml(xml_content: bytes) -> dict:
         'totale_ts': esente_n1,
         'totale_penali': penali,
     }
+
+
+_CAMPI_DECIMAL_SOMMA = (
+    'totale_giorno', 'imponibile_10', 'imposta_10', 'imponibile_22', 'imposta_22',
+    'esente_n1', 'tassa_soggiorno_nrs', 'pagato_contanti', 'pagato_elettronico',
+    'totale_10', 'totale_22', 'totale_ts', 'totale_penali',
+)
+
+
+def somma_dati_corrisp(lista_dati: list) -> dict:
+    """Unisce più CORRISP.xml dello stesso giorno solare (più chiusure Z nello stesso giorno,
+    es. per un problema che ha richiesto una riapertura e una seconda chiusura) in un unico
+    dict pronto per l'upsert su rt_chiusure — stessa forma restituita da parse_corrisp_xml().
+
+    Ogni file rappresenta UNA chiusura: sommare i totali (non prendere solo l'ultima) è
+    l'unico modo per far quadrare il totale del giorno con gli scontrini PMS.
+    """
+    if not lista_dati:
+        raise ValueError("Nessun dato da sommare")
+    if len(lista_dati) == 1:
+        return lista_dati[0]
+
+    prima_data = lista_dati[0]['data_chiusura']
+    for dati in lista_dati[1:]:
+        if dati['data_chiusura'] != prima_data:
+            raise ValueError(
+                f"I file CORRISP.xml non appartengono allo stesso giorno "
+                f"({prima_data.isoformat()} vs {dati['data_chiusura'].isoformat()})"
+            )
+
+    risultato = {
+        'data_chiusura': prima_data,
+        'progressivo': max(
+            (d['progressivo'] for d in lista_dati if d['progressivo'] is not None),
+            default=None,
+        ),
+    }
+    for campo in _CAMPI_DECIMAL_SOMMA:
+        risultato[campo] = sum((d[campo] for d in lista_dati), Decimal('0'))
+    numeri_doc = [d['num_documenti'] for d in lista_dati if d['num_documenti'] is not None]
+    risultato['num_documenti'] = sum(numeri_doc) if numeri_doc else None
+    return risultato

@@ -288,7 +288,7 @@ export default function TabControlloRT() {
   // Import CORRISP.xml
   const [dialogImport, setDialogImport] = useState(false)
   const [importRt, setImportRt] = useState('RT1')
-  const [importFile, setImportFile] = useState(null)
+  const [importFiles, setImportFiles] = useState([])   // array File — più chiusure Z stesso giorno
   const [importOnConflict, setImportOnConflict] = useState('salta')
   const [importInCorso, setImportInCorso] = useState(false)
   const [importMsg, setImportMsg] = useState(null)   // { tipo: 'success'|'warning'|'info', testo }
@@ -427,7 +427,7 @@ export default function TabControlloRT() {
   }
 
   const apriDialogImport = () => {
-    setImportRt('RT1'); setImportFile(null); setImportOnConflict('salta'); setImportMsg(null)
+    setImportRt('RT1'); setImportFiles([]); setImportOnConflict('salta'); setImportMsg(null)
     setImportModalita('cartella'); setImportDataCartella(addDays(new Date().toISOString().slice(0, 10), -1))
     setDialogImport(true)
   }
@@ -439,7 +439,7 @@ export default function TabControlloRT() {
   }
 
   const eseguiImport = async () => {
-    if (importModalita === 'locale' && !importFile) return
+    if (importModalita === 'locale' && importFiles.length === 0) return
     setImportInCorso(true)
     setImportMsg(null)
     try {
@@ -448,13 +448,15 @@ export default function TabControlloRT() {
         // Il backend legge il file direttamente dalla cartella della stampante:
         // il file server della stampante non invia le intestazioni CORS necessarie
         // per essere letto via fetch() dal browser, quindi la ricerca avviene lato server.
+        // Se in quel giorno ci sono più chiusure Z (es. dopo una riapertura per un problema),
+        // il backend le trova e le somma tutte da solo — non serve indicarne il numero qui.
         const resp = await api.post('/corrispettivi/rt-chiusure/import-da-stampante', {
           rt_code: importRt, data: importDataCartella, on_conflict: importOnConflict,
         })
         data = resp.data
       } else {
         const formData = new FormData()
-        formData.append('file', importFile)
+        importFiles.forEach(f => formData.append('files', f))
         const resp = await api.post(
           `/corrispettivi/rt-chiusure/import-xml?rt_code=${importRt}&on_conflict=${importOnConflict}`,
           formData,
@@ -462,10 +464,11 @@ export default function TabControlloRT() {
         data = resp.data
       }
       const suffisso = data.nome_file ? ` — ${data.nome_file}` : ''
+      const nChiusure = data.n_chiusure > 1 ? ` (${data.n_chiusure} chiusure sommate)` : ''
       if (data.esito === 'inserito') {
-        setImportMsg({ tipo: 'success', testo: `Chiusura del ${fmtD(data.data_chiusura)} importata correttamente (${data.rt_code}${suffisso})` })
+        setImportMsg({ tipo: 'success', testo: `Chiusura del ${fmtD(data.data_chiusura)} importata correttamente (${data.rt_code}${suffisso})${nChiusure}` })
       } else if (data.esito === 'aggiornato') {
-        setImportMsg({ tipo: 'info', testo: `Chiusura del ${fmtD(data.data_chiusura)} aggiornata (${data.rt_code}${suffisso})` })
+        setImportMsg({ tipo: 'info', testo: `Chiusura del ${fmtD(data.data_chiusura)} aggiornata (${data.rt_code}${suffisso})${nChiusure}` })
       } else {
         setImportMsg({ tipo: 'warning', testo: data.warning || 'Riga già presente — saltata' })
       }
@@ -771,7 +774,7 @@ export default function TabControlloRT() {
             <label style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 4 }}>Registratore telematico</label>
             <select
               value={importRt}
-              onChange={e => { setImportRt(e.target.value); setImportFile(null); setImportMsg(null) }}
+              onChange={e => { setImportRt(e.target.value); setImportFiles([]); setImportMsg(null) }}
               style={{ ...inpSt, width: '100%', marginBottom: 14, boxSizing: 'border-box' }}
             >
               <option value="RT1">RT1 — Du Parc + Club Hotel</option>
@@ -780,7 +783,7 @@ export default function TabControlloRT() {
 
             <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
               <button
-                onClick={() => { setImportModalita('cartella'); setImportFile(null); setImportMsg(null) }}
+                onClick={() => { setImportModalita('cartella'); setImportFiles([]); setImportMsg(null) }}
                 style={{
                   flex: 1, padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600,
                   border: `1px solid ${importModalita === 'cartella' ? '#1e3a5f' : '#e2e8f0'}`,
@@ -789,7 +792,7 @@ export default function TabControlloRT() {
                 }}
               >Dalla cartella stampante</button>
               <button
-                onClick={() => { setImportModalita('locale'); setImportFile(null); setImportMsg(null) }}
+                onClick={() => { setImportModalita('locale'); setImportFiles([]); setImportMsg(null) }}
                 style={{
                   flex: 1, padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600,
                   border: `1px solid ${importModalita === 'locale' ? '#1e3a5f' : '#e2e8f0'}`,
@@ -819,17 +822,22 @@ export default function TabControlloRT() {
                 <input
                   type="file"
                   accept=".xml"
-                  onChange={e => setImportFile(e.target.files?.[0] || null)}
+                  multiple
+                  onChange={e => setImportFiles(Array.from(e.target.files || []))}
                   style={{ ...inpSt, width: '100%', marginBottom: 6, boxSizing: 'border-box' }}
                 />
-                {importFile && (
+                <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '0 0 6px' }}>
+                  Seleziona più file se nello stesso giorno ci sono state più chiusure Z (es. dopo
+                  una riapertura per un problema): i totali vengono sommati.
+                </p>
+                {importFiles.length > 0 && (
                   <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 6px' }}>
-                    {importFile.name}{dataDaNomeFile(importFile.name) ? ` — data ${dataDaNomeFile(importFile.name)}` : ''}
+                    {importFiles.map(f => f.name + (dataDaNomeFile(f.name) ? ` (${dataDaNomeFile(f.name)})` : '')).join(', ')}
                   </p>
                 )}
-                {importFile && !importFile.name.toUpperCase().includes('CORRISP') && (
+                {importFiles.some(f => !f.name.toUpperCase().includes('CORRISP')) && (
                   <p style={{ fontSize: '0.75rem', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '5px 8px', margin: '0 0 10px' }}>
-                    Verifica che sia un file CORRISP.xml dell'RT
+                    Verifica che siano file CORRISP.xml dell'RT
                   </p>
                 )}
               </>
@@ -860,11 +868,11 @@ export default function TabControlloRT() {
               </button>
               <button
                 onClick={eseguiImport}
-                disabled={(importModalita === 'locale' && !importFile) || importInCorso}
+                disabled={(importModalita === 'locale' && importFiles.length === 0) || importInCorso}
                 style={{
                   padding: '9px 16px', borderRadius: 8, border: 'none', color: '#fff', fontSize: '0.85rem', fontWeight: 700,
-                  background: ((importModalita === 'locale' && !importFile) || importInCorso) ? '#93c5fd' : '#1e3a5f',
-                  cursor: ((importModalita === 'locale' && !importFile) || importInCorso) ? 'not-allowed' : 'pointer',
+                  background: ((importModalita === 'locale' && importFiles.length === 0) || importInCorso) ? '#93c5fd' : '#1e3a5f',
+                  cursor: ((importModalita === 'locale' && importFiles.length === 0) || importInCorso) ? 'not-allowed' : 'pointer',
                 }}
               >
                 {importInCorso ? 'Importazione in corso…' : 'Importa'}

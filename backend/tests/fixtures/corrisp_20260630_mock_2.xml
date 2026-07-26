@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<r:DatiCorrispettivi xmlns:r="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/corrispettivi/dati/v1.0" versione="COR10">
+<Trasmissione>
+<Progressivo>945</Progressivo>
+<Formato>COR10</Formato>
+</Trasmissione>
+<DataOraRilevazione>2026-06-30T23:15:00</DataOraRilevazione>
+<DatiRT>
+<Riepilogo>
+<IVA>
+<AliquotaIVA>10.00</AliquotaIVA>
+<Imposta>10.00</Imposta>
+</IVA>
+<Ammontare>100.00</Ammontare>
+<ImportoParziale>100.00</ImportoParziale>
+</Riepilogo>
+<Totali>
+<NumeroDocCommerciali>2</NumeroDocCommerciali>
+<PagatoContanti>50.00</PagatoContanti>
+<PagatoElettronico>60.00</PagatoElettronico>
+</Totali>
+</DatiRT>
+</r:DatiCorrispettivi>

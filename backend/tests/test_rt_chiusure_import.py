@@ -111,9 +111,22 @@ def _headers(ruolo: str) -> dict:
     return {"Authorization": f"Bearer {_token(ruolo)}"}
 
 
+FIXTURE_PATH_2 = os.path.join(os.path.dirname(__file__), 'fixtures', 'corrisp_20260630_mock_2.xml')
+
+
 def _file_xml():
+    """Un solo file — usato dalla maggior parte dei test (comportamento invariato)."""
     with open(FIXTURE_PATH, 'rb') as f:
-        return {'file': ('99MEX036593-20260630T210045-0944-CORRISP.xml', f.read(), 'text/xml')}
+        return [('files', ('99MEX036593-20260630T210045-0944-CORRISP.xml', f.read(), 'text/xml'))]
+
+
+def _file_xml_doppio():
+    """Due chiusure Z dello stesso giorno solare — verifica che vengano sommate."""
+    with open(FIXTURE_PATH, 'rb') as f1, open(FIXTURE_PATH_2, 'rb') as f2:
+        return [
+            ('files', ('99MEX036593-20260630T210045-0944-CORRISP.xml', f1.read(), 'text/xml')),
+            ('files', ('99MEX036593-20260630T231500-0945-CORRISP.xml', f2.read(), 'text/xml')),
+        ]
 
 
 class TestImportXmlInserisce:
@@ -131,6 +144,26 @@ class TestImportXmlInserisce:
         assert dati["rt_code"] == RT_CODE_TEST
         assert dati["totale_giorno"] == pytest.approx(1955.10)
         assert dati["progressivo"] == 944
+
+
+class TestImportXmlSommaChiusureMultiple:
+    """Due chiusure Z nello stesso giorno solare (es. riapertura per un problema e nuova
+    chiusura) devono essere sommate, non solo l'ultima considerata."""
+
+    def test_somma_due_chiusure(self, client, setup_db):
+        resp = client.post(
+            "/corrispettivi/rt-chiusure/import-xml",
+            params={"rt_code": RT_CODE_TEST, "on_conflict": "salta"},
+            files=_file_xml_doppio(),
+            headers=_headers("admin"),
+        )
+        assert resp.status_code == 200
+        dati = resp.json()
+        assert dati["esito"] == "inserito"
+        assert dati["n_chiusure"] == 2
+        # 1955.10 (prima chiusura) + 110.00 (seconda: 100.00 imponibile + 10.00 imposta)
+        assert dati["totale_giorno"] == pytest.approx(2065.10)
+        assert dati["progressivo"] == 945
 
 
 class TestImportXmlSaltaSeEsiste:
@@ -278,6 +311,40 @@ class TestImportDaStampante:
         assert dati["esito"] == "inserito"
         assert dati["nome_file"] == "99MEX036593-20260630T210045-0944-CORRISP.xml"
         assert dati["totale_giorno"] == pytest.approx(1955.10)
+
+    def test_somma_due_chiusure_stesso_giorno(self, client, setup_db):
+        """La cartella-giorno sulla stampante può contenere più CORRISP.xml (una per
+        chiusura Z): vanno sommati tutti, non solo l'ultimo — bug reale (luglio 2026)."""
+        html_due_chiusure = (
+            '<html><body><table>'
+            '<tr><td><a href="99MEX036593-20260630T210045-0944-CORRISP.xml">...</a></td></tr>'
+            '<tr><td><a href="99MEX036593-20260630T210045-0944-ESITO-123.xml">...</a></td></tr>'
+            '<tr><td><a href="99MEX036593-20260630T231500-0945-CORRISP.xml">...</a></td></tr>'
+            '</table></body></html>'
+        )
+        with open(FIXTURE_PATH, 'rb') as f:
+            contenuto_1 = f.read()
+        with open(FIXTURE_PATH_2, 'rb') as f:
+            contenuto_2 = f.read()
+
+        def _side_effect(ip, path):
+            if path.endswith('/'):
+                return 200, html_due_chiusure.encode('utf-8')
+            if '0944' in path:
+                return 200, contenuto_1
+            return 200, contenuto_2
+
+        with patch('app.routers.corrispettivi_rt._get_raw_http', side_effect=_side_effect):
+            resp = client.post(
+                "/corrispettivi/rt-chiusure/import-da-stampante",
+                json={"rt_code": RT_CODE_TEST, "data": DATA_TEST, "on_conflict": "salta"},
+                headers=_headers("admin"),
+            )
+        assert resp.status_code == 200
+        dati = resp.json()
+        assert dati["esito"] == "inserito"
+        assert dati["n_chiusure"] == 2
+        assert dati["totale_giorno"] == pytest.approx(2065.10)
 
     def test_nessun_file_corrisp_in_cartella(self, client, setup_db):
         html_senza_corrisp = '<html><body><a href="99MEX036593-20260630T210045-0944-ZREPORT.txt">a</a></body></html>'

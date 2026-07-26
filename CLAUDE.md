@@ -355,9 +355,19 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   Protegge sempre `modificato_manualmente=True` anche con `on_conflict=aggiorna` (risponde `esito=saltato`).
   Logica di upsert condivisa tra i due endpoint: `_upsert_rt_chiusura_da_xml()`.
   Frontend: pulsante "Importa CORRISP.xml" in `TabControlloRT` (dentro `Corrispettivi.jsx`), due modalità:
-  **Dalla cartella stampante** (default, sceglie solo RT + data) e **Carica da PC** (selezione manuale file).
+  **Dalla cartella stampante** (default, sceglie solo RT + data) e **Carica da PC** (selezione manuale file,
+  multi-file).
   ⚠️ Nel file XML reale `<Imposta>` è annidato dentro `<IVA>` insieme a `<AliquotaIVA>` (non fratello
   diretto di `<IVA>` sotto `<Riepilogo>` come nell'esempio iniziale): il parser gestisce entrambe le forme.
+  ⚠️ **Più chiusure Z nello stesso giorno solare vanno sommate, non solo l'ultima considerata**: bug
+  reale (luglio 2026) — un giorno con un problema che ha richiesto riapertura e nuova chiusura produce
+  due file `*CORRISP*.xml` nella stessa cartella-giorno della stampante (`/www/dati-rt/{YYYYMMDD}/`),
+  ma `import-da-stampante` prendeva solo l'ultimo (`nomi_trovati[-1]`), scartando il totale della prima
+  chiusura → la giornata non quadrava vs PMS. Fix: entrambi gli endpoint (`import-da-stampante` e
+  `import-xml`, quest'ultimo ora accetta `files` multipli) leggono/parsano tutti i CORRISP.xml trovati
+  e li sommano con `somma_dati_corrisp()` (`corrisp_xml_parser.py`) — somma tutti i campi Decimal e
+  `num_documenti`, tiene il `progressivo` più alto, verifica che tutti i file siano dello stesso
+  `data_chiusura`. Risposta include `n_chiusure`. Frontend "Carica da PC": input file con `multiple`.
 
 **Alert tassa di soggiorno**: `esente_n1` (Natura N1) di un giorno deve essere multiplo esatto della
 tariffa per persona/notte (`TARIFFA_TS_PER_PERSONA`), altrimenti c'è quasi certamente un errore di
