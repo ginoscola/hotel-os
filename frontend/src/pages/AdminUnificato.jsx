@@ -45,6 +45,14 @@ const SEZIONI = [
     voci: [
       { id: 'usali-kpi', label: 'Range KPI' },
       { id: 'usali-cc',  label: 'Mappatura costi lavoro' },
+      { id: 'usali-movimenti', label: 'Righe Movimenti Attivi' },
+    ],
+  },
+  {
+    gruppo: 'Statistiche Produzione',
+    voci: [
+      { id: 'prod-categorie', label: 'Categorie' },
+      { id: 'prod-mapping',   label: 'Mapping dettagli' },
     ],
   },
   {
@@ -56,9 +64,52 @@ const SEZIONI = [
   },
 ]
 
+const LS_COLLASSATE = 'admin_sidebar_collassate'
+
+function gruppoDi(sezione) {
+  return SEZIONI.find(s => s.voci.some(v => v.id === sezione))?.gruppo
+}
+
 export default function AdminUnificato() {
   const [params, setParams] = useSearchParams()
   const sezione = params.get('s') || 'utenti'
+
+  const [collassate, setCollassate] = useState(() => {
+    const salvato = localStorage.getItem(LS_COLLASSATE)
+    if (salvato !== null) {
+      try { return new Set(JSON.parse(salvato)) } catch { /* ignora e usa il default sotto */ }
+    }
+    // Default: tutti i gruppi chiusi tranne quello della sezione corrente (così la voce
+    // attiva resta visibile anche al primo accesso, prima che l'utente tocchi qualcosa).
+    return new Set(SEZIONI.map(s => s.gruppo).filter(g => g !== gruppoDi(sezione)))
+  })
+
+  const salvaCollassate = (set) => {
+    setCollassate(set)
+    localStorage.setItem(LS_COLLASSATE, JSON.stringify([...set]))
+  }
+
+  // Se si arriva a una sezione il cui gruppo è chiuso (es. link diretto da un'altra pagina),
+  // lo riapre — senza toccare lo stato aperto/chiuso degli altri gruppi.
+  useEffect(() => {
+    const gruppo = gruppoDi(sezione)
+    if (gruppo && collassate.has(gruppo)) {
+      const next = new Set(collassate)
+      next.delete(gruppo)
+      salvaCollassate(next)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sezione])
+
+  const toggleGruppo = (gruppo) => {
+    const next = new Set(collassate)
+    if (next.has(gruppo)) next.delete(gruppo)
+    else next.add(gruppo)
+    salvaCollassate(next)
+  }
+
+  const espandiTutto = () => salvaCollassate(new Set())
+  const comprimiTutto = () => salvaCollassate(new Set(SEZIONI.map(s => s.gruppo)))
 
   function vai(id) {
     setParams({ s: id })
@@ -77,44 +128,73 @@ export default function AdminUnificato() {
         display: 'flex',
         flexDirection: 'column',
       }}>
-        {SEZIONI.map(({ gruppo, voci }) => (
+        <div style={{ display: 'flex', gap: 6, padding: '0 18px 10px' }}>
+          <button type="button" onClick={espandiTutto} style={{
+            flex: 1, padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1',
+            background: '#fff', color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+          }}>Espandi</button>
+          <button type="button" onClick={comprimiTutto} style={{
+            flex: 1, padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1',
+            background: '#fff', color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+          }}>Comprimi</button>
+        </div>
 
-          <div key={gruppo} style={{ marginBottom: 4 }}>
-            <div style={{
-              padding: '10px 18px 4px',
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: '#94a3b8',
-            }}>
-              {gruppo}
-            </div>
-            {voci.map(({ id, label }) => (
+        {SEZIONI.map(({ gruppo, voci }) => {
+          const aperto = !collassate.has(gruppo)
+          return (
+            <div key={gruppo} style={{ marginBottom: 4 }}>
               <button
-                key={id}
                 type="button"
-                onClick={() => vai(id)}
+                onClick={() => toggleGruppo(gruppo)}
                 style={{
-                  display: 'block',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
                   width: '100%',
-                  textAlign: 'left',
-                  padding: '8px 18px',
+                  padding: '10px 18px 4px',
                   border: 'none',
+                  background: 'none',
                   cursor: 'pointer',
-                  fontSize: 14,
-                  background: sezione === id ? '#e0f2fe' : 'transparent',
-                  color: sezione === id ? '#0369a1' : '#374151',
-                  fontWeight: sezione === id ? 600 : 400,
-                  borderRight: sezione === id ? '3px solid #0369a1' : '3px solid transparent',
-                  transition: 'background 0.1s',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: '#94a3b8',
                 }}
               >
-                {label}
+                <span>{gruppo}</span>
+                <span style={{
+                  fontSize: 9,
+                  transform: aperto ? 'rotate(90deg)' : 'none',
+                  transition: 'transform 0.15s',
+                }}>▶</span>
               </button>
-            ))}
-          </div>
-        ))}
+              {aperto && voci.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => vai(id)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '8px 18px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    background: sezione === id ? '#e0f2fe' : 'transparent',
+                    color: sezione === id ? '#0369a1' : '#374151',
+                    fontWeight: sezione === id ? 600 : 400,
+                    borderRight: sezione === id ? '3px solid #0369a1' : '3px solid transparent',
+                    transition: 'background 0.1s',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )
+        })}
 
         {/* ── Versione ── */}
         <div style={{
@@ -153,6 +233,9 @@ function Contenuto({ sezione }) {
   if (sezione === 'corr-rt-stampanti')    return <CorrStampantiRT />
   if (sezione === 'usali-kpi')            return <UsaliKpiConfig />
   if (sezione === 'usali-cc')             return <UsaliCCMapping />
+  if (sezione === 'usali-movimenti')       return <UsaliMovimentiRighe />
+  if (sezione === 'prod-categorie')       return <ProdCategorie />
+  if (sezione === 'prod-mapping')         return <ProdMappingDettagli />
   if (sezione === 'sistema-debug')        return <SistemaDebug />
   if (sezione === 'backup')               return <AdminBackup />
   return <Placeholder sezione={sezione} />
@@ -1190,6 +1273,506 @@ function CorrClassificazioneTrattamenti() {
 }
 
 // ---------------------------------------------------------------------------
+// USALI / Produzione — Categorie
+// ---------------------------------------------------------------------------
+
+function ProdCategorie() {
+  const [righe, setRighe] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState({}) // id → {name, descrizione, includi_report, colore, attivo}
+  const [saving, setSaving] = useState(null)
+  const [nuovo, setNuovo] = useState({ code: '', name: '' })
+  const [msg, fb] = useFeedback()
+
+  const carica = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await api.get('/produzione/categorie')
+      setRighe(r.data)
+    } catch (e) {
+      fb(mostraErrore(e), 'err')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { carica() }, [carica])
+
+  const avviaEdit = (r) => {
+    setEditing(prev => ({
+      ...prev,
+      [r.id]: {
+        name: r.name, descrizione: r.descrizione || '', includi_report: r.includi_report,
+        colore: r.colore || '', attivo: r.attivo,
+        tariffa_riferimento: r.tariffa_riferimento != null ? String(r.tariffa_riferimento) : '',
+      },
+    }))
+  }
+  const cancellaEdit = (id) => setEditing(prev => { const n = { ...prev }; delete n[id]; return n })
+  const aggiornaEdit = (id, campo, valore) => setEditing(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valore } }))
+
+  const salva = async (id) => {
+    setSaving(id)
+    try {
+      const body = editing[id]
+      await api.put(`/produzione/categorie/${id}`, {
+        ...body, colore: body.colore || null,
+        tariffa_riferimento: body.tariffa_riferimento === '' ? null : Number(body.tariffa_riferimento),
+      })
+      fb('Categoria salvata', 'ok')
+      cancellaEdit(id)
+      carica()
+    } catch (e) {
+      fb(mostraErrore(e), 'err')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const toggleAttivo = async (r) => {
+    try {
+      await api.put(`/produzione/categorie/${r.id}`, { attivo: !r.attivo })
+      fb(r.attivo ? 'Categoria disattivata' : 'Categoria attivata', 'ok')
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  const sposta = async (idx, delta) => {
+    const altro = righe[idx + delta]
+    const questo = righe[idx]
+    if (!altro) return
+    try {
+      await Promise.all([
+        api.put(`/produzione/categorie/${questo.id}`, { ordine: altro.ordine }),
+        api.put(`/produzione/categorie/${altro.id}`, { ordine: questo.ordine }),
+      ])
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  const creaCategoria = async () => {
+    if (!nuovo.code || !nuovo.name) { fb('Codice e nome obbligatori', 'err'); return }
+    try {
+      await api.post('/produzione/categorie', {
+        code: nuovo.code.trim().toLowerCase().replace(/\s+/g, '_'),
+        name: nuovo.name.trim(),
+        ordine: righe.length ? Math.max(...righe.map(r => r.ordine)) + 1 : 0,
+      })
+      setNuovo({ code: '', name: '' })
+      fb('Categoria creata', 'ok')
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  if (loading) return <p style={{ color: '#64748b' }}>Caricamento...</p>
+
+  return (
+    <div>
+      <h2 style={{ marginTop: 0 }}>Categorie Produzione</h2>
+      <p style={{ color: '#64748b', fontSize: 14 }}>
+        Categorie di ricavo usate nell'import di Statistiche Produzione (Quota Alloggio, Colazione, ecc.).
+        Le categorie disattivate vengono mappate su "altro" nei nuovi import. "Includi nei report" = false
+        salva comunque la riga nel DB ma la esclude da tutte le aggregazioni (usato per Riassetto).
+        "Tariffa €" è usata solo dalle voci di mapping "assegna per prezzo" (es. Parcheggio Hotel/Esterno):
+        se cambia la tariffa stagionale, si aggiorna qui senza toccare codice.
+      </p>
+
+      {msg && (
+        <div style={{ padding: '8px 14px', borderRadius: 6, marginBottom: 16,
+                      background: msg.tipo === 'ok' ? '#d1fae5' : '#fee2e2',
+                      color: msg.tipo === 'ok' ? '#065f46' : '#991b1b', fontSize: 14 }}>
+          {msg.testo}
+        </div>
+      )}
+
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: '#1e293b', color: '#fff' }}>
+            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Ordine</th>
+            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Codice</th>
+            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Nome</th>
+            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Includi report</th>
+            <th style={{ padding: '9px 12px', textAlign: 'right' }}>Tariffa €</th>
+            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Colore</th>
+            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Attivo</th>
+            <th style={{ padding: '9px 12px' }} />
+          </tr>
+        </thead>
+        <tbody>
+          {righe.map((r, i) => {
+            const ed = editing[r.id]
+            return (
+              <tr key={r.id} style={{ background: i % 2 === 0 ? '#f8fafc' : '#fff', opacity: r.attivo ? 1 : 0.55 }}>
+                <td style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                  <button onClick={() => sposta(i, -1)} disabled={i === 0} style={{ ...btnSm, padding: '2px 6px', marginRight: 3 }}>▲</button>
+                  <button onClick={() => sposta(i, 1)} disabled={i === righe.length - 1} style={{ ...btnSm, padding: '2px 6px' }}>▼</button>
+                </td>
+                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{r.code}</td>
+                <td style={{ padding: '8px 12px' }}>
+                  {ed ? (
+                    <input value={ed.name} onChange={e => aggiornaEdit(r.id, 'name', e.target.value)}
+                      style={{ width: '90%', padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1' }} />
+                  ) : r.name}
+                </td>
+                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                  {ed ? (
+                    <input type="checkbox" checked={ed.includi_report} onChange={e => aggiornaEdit(r.id, 'includi_report', e.target.checked)} />
+                  ) : (r.includi_report ? '✓' : <span style={{ color: '#94a3b8' }}>—</span>)}
+                </td>
+                <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                  {ed ? (
+                    <input type="number" step="0.01" min="0" value={ed.tariffa_riferimento}
+                      onChange={e => aggiornaEdit(r.id, 'tariffa_riferimento', e.target.value)}
+                      placeholder="—" title="Tariffa unitaria per l'assegnazione a prezzo (es. 20.00 €/notte)"
+                      style={{ width: 70, padding: '4px 6px', borderRadius: 5, border: '1px solid #cbd5e1', textAlign: 'right' }} />
+                  ) : (
+                    r.tariffa_riferimento != null ? `${r.tariffa_riferimento.toFixed(2)} €` : <span style={{ color: '#94a3b8' }}>—</span>
+                  )}
+                </td>
+                <td style={{ padding: '8px 12px' }}>
+                  {ed ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <label style={{ cursor: 'pointer', display: 'inline-flex' }} title="Seleziona colore">
+                        <span style={{ width: 20, height: 20, borderRadius: 4, display: 'inline-block',
+                                       background: ed.colore || '#e2e8f0', border: '1px solid #cbd5e1' }} />
+                        <input type="color" value={ed.colore || '#6366f1'}
+                               onChange={e => aggiornaEdit(r.id, 'colore', e.target.value)}
+                               style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
+                      </label>
+                      <input type="text" value={ed.colore} onChange={e => aggiornaEdit(r.id, 'colore', e.target.value)}
+                        placeholder="#rrggbb" maxLength={7} spellCheck={false}
+                        style={{ width: 72, padding: '4px 6px', borderRadius: 5, fontSize: 12, fontFamily: 'monospace', border: '1px solid #cbd5e1' }} />
+                    </span>
+                  ) : (
+                    r.colore
+                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ width: 14, height: 14, borderRadius: 3, background: r.colore, border: '1px solid #cbd5e1', display: 'inline-block' }} />
+                          <code style={{ fontSize: 12 }}>{r.colore}</code>
+                        </span>
+                      : <span style={{ color: '#94a3b8', fontSize: 12 }}>auto</span>
+                  )}
+                </td>
+                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                  <button onClick={() => toggleAttivo(r)} style={{ ...btnSm, background: r.attivo ? '#d1fae5' : '#fca5a5', color: r.attivo ? '#065f46' : '#7f1d1d' }}>
+                    {r.attivo ? 'Attiva' : 'Disattiva'}
+                  </button>
+                </td>
+                <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                  {ed ? (
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button onClick={() => salva(r.id)} disabled={saving === r.id}
+                        style={{ padding: '4px 12px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>
+                        {saving === r.id ? '...' : 'Salva'}
+                      </button>
+                      <button onClick={() => cancellaEdit(r.id)}
+                        style={{ padding: '4px 10px', background: '#e2e8f0', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>✕</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => avviaEdit(r)}
+                      style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#475569' }}>
+                      Modifica
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+
+      <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Nuova categoria:</span>
+        <input value={nuovo.code} onChange={e => setNuovo(v => ({ ...v, code: e.target.value }))}
+          placeholder="Codice (es. spiaggia)" style={{ ...inputSm, width: 160 }} />
+        <input value={nuovo.name} onChange={e => setNuovo(v => ({ ...v, name: e.target.value }))}
+          placeholder="Nome (es. Spiaggia)" style={{ ...inputSm, width: 180 }} />
+        <button onClick={creaCategoria} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// USALI / Produzione — Mapping dettaglio -> categoria
+// ---------------------------------------------------------------------------
+
+function ProdMappingDettagli() {
+  const [righe, setRighe] = useState([])
+  const [categorie, setCategorie] = useState([])
+  const [daSmistare, setDaSmistare] = useState([])
+  const [loadingSmistare, setLoadingSmistare] = useState(true)
+  const [smistaCat, setSmistaCat] = useState({}) // dettaglio_originale → categoria_id scelta
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState({}) // id → {categoria_id, categoria_da_prezzo}
+  const [nuovo, setNuovo] = useState({ dettaglio_originale: '', categoria_id: '', categoria_da_prezzo: false })
+  const [ricalcolando, setRicalcolando] = useState(false)
+  const [msg, fb] = useFeedback()
+
+  const carica = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [rMap, rCat] = await Promise.all([
+        api.get('/produzione/mapping-dettagli'),
+        api.get('/produzione/categorie'),
+      ])
+      setRighe(rMap.data)
+      setCategorie(rCat.data.filter(c => c.attivo))
+    } catch (e) {
+      fb(mostraErrore(e), 'err')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const caricaSmistare = useCallback(async () => {
+    setLoadingSmistare(true)
+    try {
+      const r = await api.get('/produzione/altro-da-smistare')
+      setDaSmistare(r.data)
+    } catch (e) {
+      fb(mostraErrore(e), 'err')
+    } finally {
+      setLoadingSmistare(false)
+    }
+  }, [])
+
+  useEffect(() => { carica(); caricaSmistare() }, [carica, caricaSmistare])
+
+  const salvaCategoria = async (r) => {
+    const ed = editing[r.id]
+    try {
+      await api.put(`/produzione/mapping-dettagli/${r.id}`, {
+        dettaglio_originale: r.dettaglio_originale,
+        categoria_id: Number(ed.categoria_id),
+        categoria_da_prezzo: ed.categoria_da_prezzo,
+      })
+      fb('Mapping aggiornato', 'ok')
+      setEditing(prev => { const n = { ...prev }; delete n[r.id]; return n })
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  const elimina = async (r) => {
+    if (!window.confirm(`Rimuovere il mapping per "${r.dettaglio_originale}"? Le nuove righe con questo testo ricadranno su "Altro".`)) return
+    try {
+      await api.delete(`/produzione/mapping-dettagli/${r.id}`)
+      fb('Mapping rimosso', 'ok')
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  const crea = async () => {
+    if (!nuovo.dettaglio_originale || !nuovo.categoria_id) { fb('Testo e categoria obbligatori', 'err'); return }
+    try {
+      await api.post('/produzione/mapping-dettagli', {
+        dettaglio_originale: nuovo.dettaglio_originale.trim(),
+        categoria_id: Number(nuovo.categoria_id),
+        categoria_da_prezzo: nuovo.categoria_da_prezzo,
+      })
+      setNuovo({ dettaglio_originale: '', categoria_id: '', categoria_da_prezzo: false })
+      fb('Mapping creato', 'ok')
+      carica()
+      caricaSmistare()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  const ricalcolaCategorie = async () => {
+    if (!window.confirm(
+      'Riassegna la categoria di TUTTE le righe già importate in base al mapping attuale ' +
+      '(utile dopo aver smistato una voce da "Altro" a una categoria specifica). Procedere?'
+    )) return
+    setRicalcolando(true)
+    try {
+      const { data } = await api.post('/produzione/ricalcola-categorie')
+      fb(`Ricalcolo completato: ${data.n_righe_aggiornate} righe aggiornate su ${data.n_righe_esaminate} esaminate.`, 'ok')
+      caricaSmistare()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+    finally { setRicalcolando(false) }
+  }
+
+  const assegnaSmistata = async (voce) => {
+    const categoria_id = smistaCat[voce.dettaglio_originale]
+    if (!categoria_id) { fb('Seleziona una categoria prima di assegnare', 'err'); return }
+    try {
+      await api.post('/produzione/mapping-dettagli', {
+        dettaglio_originale: voce.dettaglio_originale,
+        categoria_id: Number(categoria_id),
+        categoria_da_prezzo: false,
+      })
+      fb(`"${voce.dettaglio_originale}" smistata`, 'ok')
+      carica()
+      caricaSmistare()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  if (loading) return <p style={{ color: '#64748b' }}>Caricamento...</p>
+
+  return (
+    <div>
+      <h2 style={{ marginTop: 0 }}>Mapping Dettagli Produzione</h2>
+      <p style={{ color: '#64748b', fontSize: 14 }}>
+        Collega il testo esatto della colonna "Articolo" dell'export Welcome (StatisticheProduzione.xlsx)
+        alla categoria di ricavo. Il confronto è case-insensitive. Un testo non presente in questa lista
+        ricade automaticamente su "Altro" — nessuna modifica al codice necessaria per aggiungere,
+        rimuovere o rimappare una voce (es. se Welcome rinomina "Parcheggio Area Hotel" l'anno prossimo).
+        "Assegna per prezzo" ignora il testo e sceglie la categoria in base a un multiplo esatto
+        della "Tariffa €" della categoria (vedi tab Categorie) — usato per "Parcheggio extra", dove
+        lo stesso testo può indicare sia Parcheggio Hotel (20€) sia Esterno (13€) a seconda dei giorni.
+      </p>
+
+      <div style={{ marginBottom: 20 }}>
+        <button onClick={ricalcolaCategorie} disabled={ricalcolando}
+          style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#1e3a5f', color: '#fff',
+                   fontWeight: 600, fontSize: 13, cursor: ricalcolando ? 'not-allowed' : 'pointer' }}>
+          {ricalcolando ? 'Ricalcolo in corso…' : 'Ricalcola categorie righe esistenti'}
+        </button>
+        <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
+          Il mapping si applica automaticamente solo alle righe importate DOPO la modifica. Usa questo
+          bottone per applicarlo retroattivamente anche alle righe già in archivio.
+        </p>
+      </div>
+
+      {msg && (
+        <div style={{ padding: '8px 14px', borderRadius: 6, marginBottom: 16,
+                      background: msg.tipo === 'ok' ? '#d1fae5' : '#fee2e2',
+                      color: msg.tipo === 'ok' ? '#065f46' : '#991b1b', fontSize: 14 }}>
+          {msg.testo}
+        </div>
+      )}
+
+      <div style={{ border: '1.5px solid #fcd34d', background: '#fffbeb', borderRadius: 8, padding: '1rem 1.25rem', marginBottom: 20 }}>
+        <h3 style={{ margin: '0 0 8px', fontSize: 15, color: '#92400e' }}>Da smistare — voci ancora in "Altro"</h3>
+        <p style={{ margin: '0 0 10px', fontSize: 13, color: '#78350f' }}>
+          Ordinate per importo totale (dati reali, tutti gli import), così si parte da quelle che
+          valgono di più.
+        </p>
+        {loadingSmistare ? (
+          <p style={{ color: '#92400e', fontSize: 13 }}>Caricamento...</p>
+        ) : daSmistare.length === 0 ? (
+          <p style={{ color: '#166534', fontSize: 13, fontWeight: 600 }}>✓ Nessuna voce da smistare.</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr>
+                <th style={{ padding: '6px 10px', textAlign: 'left', color: '#92400e' }}>Testo Welcome</th>
+                <th style={{ padding: '6px 10px', textAlign: 'right', color: '#92400e' }}>N. righe</th>
+                <th style={{ padding: '6px 10px', textAlign: 'right', color: '#92400e' }}>Totale lordo</th>
+                <th style={{ padding: '6px 10px', color: '#92400e' }} />
+              </tr>
+            </thead>
+            <tbody>
+              {daSmistare.slice(0, 30).map(v => (
+                <tr key={v.dettaglio_originale} style={{ borderTop: '1px solid #fde68a' }}>
+                  <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{v.dettaglio_originale}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>{v.n_righe}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600 }}>{v.totale_lordo.toFixed(2)} €</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+                    <span style={{ display: 'inline-flex', gap: 6 }}>
+                      <select value={smistaCat[v.dettaglio_originale] || ''}
+                        onChange={e => setSmistaCat(prev => ({ ...prev, [v.dettaglio_originale]: e.target.value }))}
+                        style={{ padding: '3px 6px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: 12 }}>
+                        <option value="">— categoria —</option>
+                        {categorie.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <button onClick={() => assegnaSmistata(v)} style={{ ...btnSm, background: '#1e293b', color: '#fff', fontSize: 12, padding: '3px 10px' }}>
+                        Assegna
+                      </button>
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: '#1e293b', color: '#fff' }}>
+            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Testo Welcome (Articolo)</th>
+            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Categoria</th>
+            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Assegna per prezzo</th>
+            <th style={{ padding: '9px 12px' }} />
+          </tr>
+        </thead>
+        <tbody>
+          {righe.map((r, i) => {
+            const ed = editing[r.id]
+            return (
+              <tr key={r.id} style={{ background: i % 2 === 0 ? '#f8fafc' : '#fff' }}>
+                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{r.dettaglio_originale}</td>
+                <td style={{ padding: '8px 12px' }}>
+                  {ed ? (
+                    <select value={ed.categoria_id} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], categoria_id: e.target.value } }))}
+                      style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1' }}>
+                      {categorie.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  ) : (
+                    <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                      {r.categoria_name}
+                    </span>
+                  )}
+                </td>
+                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                  {ed ? (
+                    <input type="checkbox" checked={ed.categoria_da_prezzo}
+                      onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], categoria_da_prezzo: e.target.checked } }))} />
+                  ) : (
+                    r.categoria_da_prezzo
+                      ? <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>per prezzo</span>
+                      : <span style={{ color: '#94a3b8' }}>—</span>
+                  )}
+                </td>
+                <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                  {ed ? (
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button onClick={() => salvaCategoria(r)}
+                        style={{ padding: '4px 12px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>
+                        Salva
+                      </button>
+                      <button onClick={() => setEditing(prev => { const n = { ...prev }; delete n[r.id]; return n })}
+                        style={{ padding: '4px 10px', background: '#e2e8f0', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button onClick={() => setEditing(prev => ({ ...prev, [r.id]: { categoria_id: r.categoria_id, categoria_da_prezzo: r.categoria_da_prezzo } }))}
+                        style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#475569' }}>
+                        Modifica
+                      </button>
+                      <button onClick={() => elimina(r)}
+                        style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #fca5a5', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#dc2626' }}>
+                        Rimuovi
+                      </button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+
+      <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Nuovo mapping:</span>
+        <input value={nuovo.dettaglio_originale} onChange={e => setNuovo(v => ({ ...v, dettaglio_originale: e.target.value }))}
+          placeholder='Testo esatto (es. "Servizio Spiaggia")' style={{ ...inputSm, width: 220 }} />
+        <select value={nuovo.categoria_id} onChange={e => setNuovo(v => ({ ...v, categoria_id: e.target.value }))}
+          style={{ ...inputSm, width: 160 }}>
+          <option value="">— categoria —</option>
+          {categorie.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#374151' }}>
+          <input type="checkbox" checked={nuovo.categoria_da_prezzo}
+            onChange={e => setNuovo(v => ({ ...v, categoria_da_prezzo: e.target.checked }))} />
+          assegna per prezzo
+        </label>
+        <button onClick={crea} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Corrispettivi — Stampanti RT
 // ---------------------------------------------------------------------------
 
@@ -1576,6 +2159,268 @@ function UsaliKpiConfig() {
             {msg.testo}
           </span>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// USALI — Righe Movimenti Attivi (per struttura)
+// ---------------------------------------------------------------------------
+
+const STRUTTURE_MOVIMENTI = [
+  { code: 'DPH', label: 'Du Parc' },
+  { code: 'CLB', label: 'Club Hotel' },
+  { code: 'INT', label: 'International' },
+  { code: 'BON', label: 'Buona Onda' },
+]
+const TIPI_RIGA = [
+  { value: 'manuale', label: 'Manuale' },
+  { value: 'auto_produzione', label: 'Auto — categoria Produzione' },
+  { value: 'auto_corrispettivi_penali', label: 'Auto — Penali Corrispettivi' },
+  { value: 'auto_maremosso', label: 'Auto — Maremosso Hotel (redirect, solo DPH)' },
+  { value: 'auto_maremosso_esterni', label: 'Auto — Maremosso Clienti Esterni (Corrispettivi MMS, solo DPH)' },
+]
+
+function UsaliMovimentiRighe() {
+  const [struttura, setStruttura] = useState('DPH')
+  const [righe, setRighe] = useState([])
+  const [categorie, setCategorie] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState({}) // id → {reparto, conto, tipo, categoria_produzione}
+  const [nuovo, setNuovo] = useState({ reparto: '', conto: '', riga_code: '', tipo: 'manuale', categoria_produzione: '', aliquota_iva: '10' })
+  const [msg, fb] = useFeedback()
+
+  const carica = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [rRighe, rCat] = await Promise.all([
+        api.get('/usali/movimenti-righe', { params: { struttura } }),
+        api.get('/produzione/categorie'),
+      ])
+      setRighe(rRighe.data)
+      setCategorie(rCat.data.filter(c => c.attivo))
+    } catch (e) {
+      fb(mostraErrore(e), 'err')
+    } finally {
+      setLoading(false)
+    }
+  }, [struttura])
+
+  useEffect(() => { carica() }, [carica])
+
+  const avviaEdit = (r) => setEditing(prev => ({
+    ...prev,
+    [r.id]: {
+      reparto: r.reparto, conto: r.conto, tipo: r.tipo,
+      categoria_produzione: r.categoria_produzione || '', aliquota_iva: String(r.aliquota_iva),
+    },
+  }))
+  const annullaEdit = (id) => setEditing(prev => { const n = { ...prev }; delete n[id]; return n })
+
+  const salva = async (r) => {
+    const ed = editing[r.id]
+    try {
+      await api.put(`/usali/movimenti-righe/${r.id}`, {
+        reparto: ed.reparto, conto: ed.conto, tipo: ed.tipo,
+        categoria_produzione: ed.tipo === 'auto_produzione' ? ed.categoria_produzione : null,
+        aliquota_iva: Number(ed.aliquota_iva) || 0,
+      })
+      fb('Riga salvata', 'ok')
+      annullaEdit(r.id)
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  const toggleAttivo = async (r) => {
+    try {
+      await api.put(`/usali/movimenti-righe/${r.id}`, { attivo: !r.attivo })
+      fb(r.attivo ? 'Riga disattivata' : 'Riga attivata', 'ok')
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  const sposta = async (idx, delta) => {
+    const altra = righe[idx + delta]
+    const questa = righe[idx]
+    if (!altra) return
+    try {
+      await Promise.all([
+        api.put(`/usali/movimenti-righe/${questa.id}`, { ordine: altra.ordine }),
+        api.put(`/usali/movimenti-righe/${altra.id}`, { ordine: questa.ordine }),
+      ])
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  const elimina = async (r) => {
+    if (!window.confirm(`Eliminare la riga "${r.reparto} / ${r.conto}"?`)) return
+    try {
+      await api.delete(`/usali/movimenti-righe/${r.id}`)
+      fb('Riga eliminata', 'ok')
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  const crea = async () => {
+    if (!nuovo.reparto || !nuovo.conto || !nuovo.riga_code) { fb('Reparto, conto e codice riga obbligatori', 'err'); return }
+    if (nuovo.tipo === 'auto_produzione' && !nuovo.categoria_produzione) { fb('Seleziona una categoria Produzione', 'err'); return }
+    try {
+      await api.post('/usali/movimenti-righe', {
+        struttura_code: struttura, reparto: nuovo.reparto.trim(), conto: nuovo.conto.trim(),
+        riga_code: nuovo.riga_code.trim(), tipo: nuovo.tipo,
+        categoria_produzione: nuovo.tipo === 'auto_produzione' ? nuovo.categoria_produzione : null,
+        aliquota_iva: Number(nuovo.aliquota_iva) || 10,
+      })
+      setNuovo({ reparto: '', conto: '', riga_code: '', tipo: 'manuale', categoria_produzione: '', aliquota_iva: '10' })
+      fb('Riga creata', 'ok')
+      carica()
+    } catch (e) { fb(mostraErrore(e), 'err') }
+  }
+
+  return (
+    <div>
+      <h2 style={{ marginTop: 0 }}>Righe Movimenti Attivi</h2>
+      <p style={{ color: '#64748b', fontSize: 14 }}>
+        Le voci di "Movimenti Attivi" (Reparto/Conto) non sono le stesse per ogni struttura — es. il
+        Du Parc ha il Ristorante Mare Mosso (redirect automatico), Club Hotel e International hanno
+        un Ristorante proprio, Buona Onda ha un set minimo tutto manuale. Gestisci qui quali righe
+        esistono per ciascuna struttura, senza bisogno di modifiche al codice.
+      </p>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {STRUTTURE_MOVIMENTI.map(s => (
+          <button key={s.code} onClick={() => setStruttura(s.code)} style={{
+            ...btnSm, padding: '6px 14px',
+            background: struttura === s.code ? '#1e293b' : '#f1f5f9',
+            color: struttura === s.code ? '#fff' : '#374151',
+          }}>{s.label}</button>
+        ))}
+      </div>
+
+      {msg && (
+        <div style={{ padding: '8px 14px', borderRadius: 6, marginBottom: 16,
+                      background: msg.tipo === 'ok' ? '#d1fae5' : '#fee2e2',
+                      color: msg.tipo === 'ok' ? '#065f46' : '#991b1b', fontSize: 14 }}>
+          {msg.testo}
+        </div>
+      )}
+
+      {loading ? <p style={{ color: '#64748b' }}>Caricamento...</p> : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: '#1e293b', color: '#fff' }}>
+              <th style={{ padding: '9px 12px', textAlign: 'center' }}>Ordine</th>
+              <th style={{ padding: '9px 12px', textAlign: 'left' }}>Reparto</th>
+              <th style={{ padding: '9px 12px', textAlign: 'left' }}>Conto</th>
+              <th style={{ padding: '9px 12px', textAlign: 'left' }}>Tipo</th>
+              <th style={{ padding: '9px 12px', textAlign: 'center' }}>Aliquota IVA %</th>
+              <th style={{ padding: '9px 12px', textAlign: 'center' }}>Attivo</th>
+              <th style={{ padding: '9px 12px' }} />
+            </tr>
+          </thead>
+          <tbody>
+            {righe.map((r, i) => {
+              const ed = editing[r.id]
+              return (
+                <tr key={r.id} style={{ background: i % 2 === 0 ? '#f8fafc' : '#fff', opacity: r.attivo ? 1 : 0.55 }}>
+                  <td style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => sposta(i, -1)} disabled={i === 0} style={{ ...btnSm, padding: '2px 6px', marginRight: 3 }}>▲</button>
+                    <button onClick={() => sposta(i, 1)} disabled={i === righe.length - 1} style={{ ...btnSm, padding: '2px 6px' }}>▼</button>
+                  </td>
+                  <td style={{ padding: '8px 12px' }}>
+                    {ed ? (
+                      <input value={ed.reparto} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], reparto: e.target.value } }))}
+                        style={{ width: 140, padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1' }} />
+                    ) : r.reparto}
+                  </td>
+                  <td style={{ padding: '8px 12px' }}>
+                    {ed ? (
+                      <input value={ed.conto} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], conto: e.target.value } }))}
+                        style={{ width: 220, padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1' }} />
+                    ) : r.conto}
+                  </td>
+                  <td style={{ padding: '8px 12px' }}>
+                    {ed ? (
+                      <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <select value={ed.tipo} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], tipo: e.target.value } }))}
+                          style={{ padding: '4px 6px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: 12 }}>
+                          {TIPI_RIGA.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                        {ed.tipo === 'auto_produzione' && (
+                          <select value={ed.categoria_produzione} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], categoria_produzione: e.target.value } }))}
+                            style={{ padding: '4px 6px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: 12 }}>
+                            <option value="">— categoria —</option>
+                            {categorie.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                          </select>
+                        )}
+                      </span>
+                    ) : (
+                      <span>
+                        {TIPI_RIGA.find(t => t.value === r.tipo)?.label || r.tipo}
+                        {r.categoria_produzione && <span style={{ color: '#94a3b8' }}> ({r.categoria_produzione})</span>}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    {ed ? (
+                      <input type="number" step="0.01" value={ed.aliquota_iva}
+                        onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], aliquota_iva: e.target.value } }))}
+                        style={{ width: 60, padding: '4px 6px', borderRadius: 5, border: '1px solid #cbd5e1', textAlign: 'center' }} />
+                    ) : r.tipo === 'manuale' ? (
+                      `${r.aliquota_iva}%`
+                    ) : (
+                      <span style={{ color: '#94a3b8' }} title="Righe auto usano l'IVA reale dai dati sorgente, questa aliquota non è applicata">n/d</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    <button onClick={() => toggleAttivo(r)} style={{ ...btnSm, background: r.attivo ? '#d1fae5' : '#fca5a5', color: r.attivo ? '#065f46' : '#7f1d1d' }}>
+                      {r.attivo ? 'Attiva' : 'Disattiva'}
+                    </button>
+                  </td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                    {ed ? (
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <button onClick={() => salva(r)} style={{ padding: '4px 12px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Salva</button>
+                        <button onClick={() => annullaEdit(r.id)} style={{ padding: '4px 10px', background: '#e2e8f0', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>✕</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <button onClick={() => avviaEdit(r)} style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#475569' }}>Modifica</button>
+                        <button onClick={() => elimina(r)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #fca5a5', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#dc2626' }}>Rimuovi</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+
+      <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Nuova riga ({STRUTTURE_MOVIMENTI.find(s => s.code === struttura)?.label}):</span>
+        <input value={nuovo.reparto} onChange={e => setNuovo(v => ({ ...v, reparto: e.target.value }))}
+          placeholder="Reparto" style={{ ...inputSm, width: 140 }} />
+        <input value={nuovo.conto} onChange={e => setNuovo(v => ({ ...v, conto: e.target.value }))}
+          placeholder="Conto" style={{ ...inputSm, width: 200 }} />
+        <input value={nuovo.riga_code} onChange={e => setNuovo(v => ({ ...v, riga_code: e.target.value }))}
+          placeholder="Codice (es. mov_xyz)" style={{ ...inputSm, width: 140 }} />
+        <select value={nuovo.tipo} onChange={e => setNuovo(v => ({ ...v, tipo: e.target.value }))} style={{ ...inputSm, width: 200 }}>
+          {TIPI_RIGA.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+        {nuovo.tipo === 'auto_produzione' && (
+          <select value={nuovo.categoria_produzione} onChange={e => setNuovo(v => ({ ...v, categoria_produzione: e.target.value }))} style={{ ...inputSm, width: 160 }}>
+            <option value="">— categoria —</option>
+            {categorie.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+          </select>
+        )}
+        {nuovo.tipo === 'manuale' && (
+          <input type="number" step="0.01" value={nuovo.aliquota_iva}
+            onChange={e => setNuovo(v => ({ ...v, aliquota_iva: e.target.value }))}
+            placeholder="Aliquota IVA %" style={{ ...inputSm, width: 100 }} />
+        )}
+        <button onClick={crea} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
       </div>
     </div>
   )

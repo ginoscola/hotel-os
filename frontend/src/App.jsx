@@ -9,6 +9,7 @@ import DashboardGruppo from './pages/DashboardGruppo.jsx'
 import AdminUtenti from './pages/AdminUtenti.jsx'
 import Budget from './pages/Budget.jsx'
 import Usali from './pages/Usali.jsx'
+import StatisticheProduzione from './pages/StatisticheProduzione.jsx'
 import Dipendenti from './pages/Dipendenti.jsx'
 import Corrispettivi from './pages/Corrispettivi.jsx'
 import AdminCentriDiCosto from './pages/AdminCentriDiCosto.jsx'
@@ -53,6 +54,9 @@ export default function App() {
           } />
 
           {/* ── Altri moduli ── */}
+          <Route path="/statistiche-produzione" element={
+            <ProtectedRoute moduleCode="produzione"><StatisticheProduzione /></ProtectedRoute>
+          } />
           <Route path="/budget" element={
             <ProtectedRoute moduleCode="budget"><Budget /></ProtectedRoute>
           } />

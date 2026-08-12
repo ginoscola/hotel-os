@@ -1,5 +1,5 @@
 /**
- * TabStampanteRT — invio comandi X/Z/STATUS al registratore telematico Epson FP-81 II.
+ * TabStampanteRT — invio comandi X/Z e verifica raggiungibilità al registratore telematico Epson FP-81 II.
  * Chiamata diretta browser → stampante (nessun proxy backend): l'IP è letto da GET /rt-printers/,
  * dove più hotel possono condividere la stessa stampante (es. Du Parc + Club Hotel).
  * Il controllo "solo admin per Z" è applicato solo lato interfaccia (nessuna enforcement server-side,
@@ -10,9 +10,9 @@ import api from '../api/client'
 import { mostraErrore } from '../utils/format'
 
 const CONFERMA_Z_DELAY_MS = 2000
+const PING_TIMEOUT_MS = 3000
 
 function buildSOAP(command) {
-  // STATUS riusa la lettura X: l'Epson FP-81 II non espone un comando di stato dedicato via fpmate.cgi.
   const inner = command === 'Z' ? '<printZReport operator="1"/>' : '<printXReport operator="1"/>'
   return `<?xml version="1.0" encoding="utf-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
@@ -74,9 +74,7 @@ export default function TabStampanteRT({ isAdmin }) {
         const code = risposta.getAttribute('code')
         const status = risposta.getAttribute('status')
         if (success === 'true') {
-          const msg = cmd === 'Z' ? 'Chiusura fiscale completata'
-            : cmd === 'STATUS' ? 'Stampante raggiungibile e operativa'
-            : 'Report X stampato correttamente'
+          const msg = cmd === 'Z' ? 'Chiusura fiscale completata' : 'Report X stampato correttamente'
           aggiungiLog(`✅ ${msg}`, 'success')
         } else {
           aggiungiLog(`❌ Errore RT: ${code || 'sconosciuto'} (status ${status || '—'})`, 'error')
@@ -87,6 +85,26 @@ export default function TabStampanteRT({ isAdmin }) {
     } catch (err) {
       aggiungiLog(`❌ RT non raggiungibile — verifica rete/VPN (${err.message})`, 'error')
     } finally {
+      setComandoInCorso(null)
+    }
+  }
+
+  async function verificaStato() {
+    if (!stampante) return
+    setComandoInCorso('STATUS')
+    aggiungiLog(`→ Verifica raggiungibilità ${stampante.nome} (${stampante.ip})…`, 'info')
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS)
+    try {
+      // 'no-cors': non serve leggere la risposta, solo sapere se la connessione TCP va a buon fine —
+      // niente comandi SOAP inviati, quindi nessuna stampa fisica generata sull'RT.
+      await fetch(`http://${stampante.ip}/`, { mode: 'no-cors', signal: controller.signal })
+      aggiungiLog('✅ Stampante raggiungibile', 'success')
+    } catch (err) {
+      const motivo = err.name === 'AbortError' ? 'timeout' : err.message
+      aggiungiLog(`❌ Stampante non raggiungibile — verifica rete/VPN (${motivo})`, 'error')
+    } finally {
+      clearTimeout(timer)
       setComandoInCorso(null)
     }
   }
@@ -168,7 +186,7 @@ export default function TabStampanteRT({ isAdmin }) {
         <button disabled={!stampante || !!comandoInCorso} onClick={() => inviaComando('X')} style={btnSt('#e8f4fd', '#1565c0', !stampante || !!comandoInCorso)}>
           📊 {comandoInCorso === 'X' ? 'Invio…' : 'Report X — Lettura giornaliera'}
         </button>
-        <button disabled={!stampante || !!comandoInCorso} onClick={() => inviaComando('STATUS')} style={btnSt('#f0f4ff', '#3949ab', !stampante || !!comandoInCorso)}>
+        <button disabled={!stampante || !!comandoInCorso} onClick={verificaStato} style={btnSt('#f0f4ff', '#3949ab', !stampante || !!comandoInCorso)}>
           🔍 {comandoInCorso === 'STATUS' ? 'Verifica…' : 'Stato stampante'}
         </button>
         {isAdmin && (
