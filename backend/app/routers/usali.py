@@ -5,6 +5,8 @@ Router USALI — Conto Economico per struttura (formato USALI).
   PUT  /usali/voce                 → upsert voce manuale
   GET  /usali/kpi-config           → range KPI configurati (hotel + ristoranti)
   PUT  /usali/kpi-config           → salva range KPI in app_config
+  GET  /usali/movimenti-attivi?anno=&mese=   → tabella Reparto/Conto/Imponibile (auto + manuale)
+  PUT  /usali/movimenti-attivi               → upsert valore di una riga manuale
 """
 import calendar
 import json
@@ -18,12 +20,13 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth import richiedi_admin, richiedi_utente_attivo
-from app.models.usali import UsaliVoceManuali
+from app.models.usali import UsaliMovimentoRiga, UsaliVoceManuali
 from app.models.revenue import (
     AppConfig, CostCenter, DailyRevenue,
     EmployeeCostCenterMonthly, EmployeeMonthly, PayrollImport,
 )
 from app.models.corrispettivi import CorrispettiviDocumento, CorrispettiviManuale
+from app.models.produzione import ProdCategoria, ProdRiga
 
 router = APIRouter(prefix="/usali", tags=["usali"])
 
@@ -685,3 +688,319 @@ def put_cc_mapping(
     mapping = {k: v for k, v in body.items() if v in ('camere', 'fnb')}
     _salva_cc_mapping(db, mapping)
     return {'ok': True, 'n_mapping': len(mapping)}
+
+
+# ── Movimenti Attivi ─────────────────────────────────────────────────────────────
+# Tabella mensile Reparto/Conto/Imponibile, PER STRUTTURA (DPH/CLB/INT/BON — non Maremosso,
+# inglobato dentro DPH come suo ristorante esterno). Le righe (quali Reparto/Conto esistono per
+# quale struttura, e se sono auto o manuali) sono in usali_movimenti_righe, NON hardcoded:
+# le voci non sono uguali per tutte le strutture (DPH ha Maremosso, CLB/INT hanno un Ristorante
+# proprio, BON — come Maremosso, nessun dato Welcome/PMS — ha un set minimo tutto manuale) e
+# admin deve poter aggiustarle senza deploy. Righe "auto" lette da Produzione/Corrispettivi a
+# query-time (mai salvate), righe "manuale" salvate in usali_voci_manuali (namespace di
+# voce_code distinto con prefisso 'mov_', quindi nessuna collisione con le voci del Conto
+# Economico che usa la stessa tabella).
+
+STRUTTURE_MOVIMENTI = ['DPH', 'CLB', 'INT', 'BON']
+
+
+def _somma_produzione_categoria(db: Session, categoria_code: str, struttura_code: str, da: date, a: date) -> dict:
+    imp, iva = (
+        db.query(func.sum(ProdRiga.imponibile), func.sum(ProdRiga.iva))
+        .join(ProdCategoria, ProdCategoria.id == ProdRiga.categoria_id)
+        .filter(
+            ProdCategoria.code == categoria_code,
+            ProdRiga.struttura_code == struttura_code,
+            ProdRiga.data_riferimento.between(da, a),
+            ProdRiga.is_test.is_(False),
+            ProdRiga.is_riassetto.is_(False),
+        )
+        .one()
+    )
+    return {'imponibile': round(_fl(imp), 2), 'iva': round(_fl(iva), 2)}
+
+
+def _somma_penali_corrispettivi(db: Session, struttura_code: str, da: date, a: date) -> dict:
+    imp, iva = (
+        db.query(func.sum(CorrispettiviDocumento.imponibile), func.sum(CorrispettiviDocumento.iva))
+        .filter(
+            CorrispettiviDocumento.struttura_code == struttura_code,
+            CorrispettiviDocumento.categoria == 'penali',
+            CorrispettiviDocumento.data_documento.between(da, a),
+            CorrispettiviDocumento.annullato.is_(False),
+            CorrispettiviDocumento.is_test.is_(False),
+        )
+        .one()
+    )
+    return {'imponibile': round(_fl(imp), 2), 'iva': round(_fl(iva), 2)}
+
+
+def _somma_maremosso(db: Session, da: date, a: date) -> dict:
+    """Maremosso ha una gestione mista: righe Welcome già attribuite esplicitamente al Reparto
+    'Maremosso' (qualunque struttura/camera) + Pranzo e Cena del Du Parc, che i clienti Du Parc
+    consumano fisicamente al Maremosso e quindi vanno ai ricavi del Maremosso, non del Du Parc.
+    Tutto confluisce per ora in un'unica voce "Alimenti -> Altri Alimenti" (non ancora
+    scorporato per Vino/Alcolici/Analcolici — verrà fatto in un secondo momento)."""
+    imp_reparto, iva_reparto = (
+        db.query(func.sum(ProdRiga.imponibile), func.sum(ProdRiga.iva))
+        .filter(
+            ProdRiga.descrizione == 'Maremosso',
+            ProdRiga.data_riferimento.between(da, a),
+            ProdRiga.is_test.is_(False),
+            ProdRiga.is_riassetto.is_(False),
+        )
+        .one()
+    )
+    imp_redirect, iva_redirect = (
+        db.query(func.sum(ProdRiga.imponibile), func.sum(ProdRiga.iva))
+        .join(ProdCategoria, ProdCategoria.id == ProdRiga.categoria_id)
+        .filter(
+            ProdRiga.struttura_code == 'DPH',
+            ProdCategoria.code.in_(['pranzo', 'cena']),
+            ProdRiga.data_riferimento.between(da, a),
+            ProdRiga.is_test.is_(False),
+            ProdRiga.is_riassetto.is_(False),
+        )
+        .one()
+    )
+    return {
+        'imponibile': round(_fl(imp_reparto) + _fl(imp_redirect), 2),
+        'iva': round(_fl(iva_reparto) + _fl(iva_redirect), 2),
+    }
+
+
+def _somma_maremosso_esterni(db: Session, da: date, a: date) -> dict:
+    """Clienti che pagano direttamente al Maremosso (non ospiti dell'hotel, quindi mai in
+    Welcome/PMS) — tracciati come inserimento manuale in Corrispettivi per MMS, esattamente come
+    BON (nessun dato PMS per queste due strutture). corrispettivi_manuali.arrangiamenti_lordo è
+    lordo; imponibile = lordo / 1.10 (IVA 10%, stessa convenzione già in uso per MMS/BON altrove
+    in questo file — _ricavi_ristorante — e in Corrispettivi: mai lordo - iva, sempre lordo/(1+aliquota))."""
+    lordo_tot = (
+        db.query(func.sum(CorrispettiviManuale.arrangiamenti_lordo))
+        .filter(
+            CorrispettiviManuale.struttura_code == 'MMS',
+            CorrispettiviManuale.data_giorno.between(da, a),
+            CorrispettiviManuale.is_test.is_(False),
+        )
+        .scalar()
+    )
+    lordo_tot = _fl(lordo_tot)
+    imponibile = round(lordo_tot / 1.10, 2)
+    return {'imponibile': imponibile, 'iva': round(lordo_tot - imponibile, 2)}
+
+
+@router.get("/movimenti-attivi")
+def get_movimenti_attivi(
+    struttura: str = Query(..., description="DPH|CLB|INT|BON"),
+    anno: int = Query(..., ge=2020, le=2035),
+    mese: int = Query(..., ge=1, le=12),
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_utente_attivo),
+):
+    """Tabella Reparto/Conto/Imponibile per struttura e mese: righe auto calcolate da
+    Produzione/Corrispettivi a query-time, righe manuali lette da usali_voci_manuali.
+    Le righe stesse (quali esistono per questa struttura) vengono da usali_movimenti_righe."""
+    struttura = struttura.upper()
+    if struttura not in STRUTTURE_MOVIMENTI:
+        raise HTTPException(400, f"Struttura '{struttura}' non valida")
+
+    da = date(anno, mese, 1)
+    a = date(anno, mese, calendar.monthrange(anno, mese)[1])
+
+    definizioni = (
+        db.query(UsaliMovimentoRiga)
+        .filter(UsaliMovimentoRiga.struttura_code == struttura, UsaliMovimentoRiga.attivo.is_(True))
+        .order_by(UsaliMovimentoRiga.ordine)
+        .all()
+    )
+
+    manuali = {
+        r.voce_code: _fl(r.valore)
+        for r in db.query(UsaliVoceManuali).filter(
+            UsaliVoceManuali.struttura_code == struttura,
+            UsaliVoceManuali.anno == anno,
+            UsaliVoceManuali.mese == mese,
+        ).all()
+    }
+
+    righe_out = []
+    totale_imponibile = 0.0
+    totale_lordo = 0.0
+    for riga in definizioni:
+        if riga.tipo == 'auto_produzione':
+            somma = _somma_produzione_categoria(db, riga.categoria_produzione, struttura, da, a)
+        elif riga.tipo == 'auto_corrispettivi_penali':
+            somma = _somma_penali_corrispettivi(db, struttura, da, a)
+        elif riga.tipo == 'auto_maremosso':
+            somma = _somma_maremosso(db, da, a)
+        elif riga.tipo == 'auto_maremosso_esterni':
+            somma = _somma_maremosso_esterni(db, da, a)
+        else:
+            # Righe manuali: nessuna IVA per-movimento salvata, si calcola dall'aliquota
+            # configurata sulla riga (usali_movimenti_righe.aliquota_iva) — le righe auto
+            # invece usano l'IVA reale già presente nei dati sorgente, sopra.
+            imponibile = manuali.get(riga.riga_code, 0.0)
+            somma = {'imponibile': imponibile, 'iva': round(imponibile * float(riga.aliquota_iva) / 100, 2)}
+
+        imponibile = somma['imponibile']
+        iva = somma['iva']
+        lordo = round(imponibile + iva, 2)
+        totale_imponibile += imponibile
+        totale_lordo += lordo
+        righe_out.append({
+            'riga_code': riga.riga_code,
+            'reparto': riga.reparto,
+            'conto': riga.conto,
+            'auto': riga.tipo != 'manuale',
+            'imponibile': round(imponibile, 2),
+            'iva': round(iva, 2),
+            'lordo': lordo,
+        })
+
+    return {
+        'struttura': struttura, 'anno': anno, 'mese': mese, 'righe': righe_out,
+        'totale': round(totale_imponibile, 2),
+        'totale_imponibile': round(totale_imponibile, 2),
+        'totale_lordo': round(totale_lordo, 2),
+    }
+
+
+@router.put("/movimenti-attivi")
+def put_movimento_attivo(
+    body: dict,
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    """Upsert del valore di una riga manuale. Body: { struttura, anno, mese, riga_code, imponibile }."""
+    struttura = (body.get('struttura') or '').upper()
+    anno = body.get('anno')
+    mese = body.get('mese')
+    riga_code = body.get('riga_code', '')
+    imponibile = body.get('imponibile')
+
+    if struttura not in STRUTTURE_MOVIMENTI:
+        raise HTTPException(400, f"Struttura '{struttura}' non valida")
+
+    riga_def = db.query(UsaliMovimentoRiga).filter(
+        UsaliMovimentoRiga.struttura_code == struttura,
+        UsaliMovimentoRiga.riga_code == riga_code,
+    ).first()
+    if not riga_def:
+        raise HTTPException(400, f"Riga '{riga_code}' non valida per {struttura}")
+    if riga_def.tipo != 'manuale':
+        raise HTTPException(400, f"Riga '{riga_code}' è calcolata automaticamente, non modificabile")
+    if not anno or not mese:
+        raise HTTPException(400, "anno e mese obbligatori")
+
+    stmt = pg_insert(UsaliVoceManuali).values(
+        struttura_code=struttura,
+        anno=anno,
+        mese=mese,
+        voce_code=riga_code,
+        valore=float(imponibile or 0),
+    ).on_conflict_do_update(
+        constraint='uq_usali_struttura_anno_mese_voce',
+        set_={'valore': float(imponibile or 0), 'updated_at': func.now()},
+    )
+    db.execute(stmt)
+    db.commit()
+    return {'ok': True, 'struttura': struttura, 'riga_code': riga_code, 'imponibile': float(imponibile or 0)}
+
+
+# ── CRUD righe Movimenti Attivi (admin) ───────────────────────────────────────────
+
+@router.get("/movimenti-righe")
+def lista_movimenti_righe(
+    struttura: str = Query(..., description="DPH|CLB|INT|BON"),
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    struttura = struttura.upper()
+    if struttura not in STRUTTURE_MOVIMENTI:
+        raise HTTPException(400, f"Struttura '{struttura}' non valida")
+    righe = (
+        db.query(UsaliMovimentoRiga)
+        .filter(UsaliMovimentoRiga.struttura_code == struttura)
+        .order_by(UsaliMovimentoRiga.ordine)
+        .all()
+    )
+    return [
+        {
+            'id': r.id, 'struttura_code': r.struttura_code, 'reparto': r.reparto, 'conto': r.conto,
+            'riga_code': r.riga_code, 'tipo': r.tipo, 'categoria_produzione': r.categoria_produzione,
+            'ordine': r.ordine, 'attivo': r.attivo, 'aliquota_iva': float(r.aliquota_iva),
+        }
+        for r in righe
+    ]
+
+
+@router.post("/movimenti-righe")
+def crea_movimento_riga(
+    body: dict,
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    struttura = (body.get('struttura_code') or '').upper()
+    if struttura not in STRUTTURE_MOVIMENTI:
+        raise HTTPException(400, f"Struttura '{struttura}' non valida")
+    tipo = body.get('tipo', 'manuale')
+    if tipo not in ('manuale', 'auto_produzione', 'auto_corrispettivi_penali', 'auto_maremosso', 'auto_maremosso_esterni'):
+        raise HTTPException(400, f"Tipo '{tipo}' non valido")
+    reparto = (body.get('reparto') or '').strip()
+    conto = (body.get('conto') or '').strip()
+    riga_code = (body.get('riga_code') or '').strip()
+    if not reparto or not conto or not riga_code:
+        raise HTTPException(400, "reparto, conto e riga_code obbligatori")
+
+    esiste = db.query(UsaliMovimentoRiga).filter(
+        UsaliMovimentoRiga.struttura_code == struttura,
+        UsaliMovimentoRiga.riga_code == riga_code,
+    ).first()
+    if esiste:
+        raise HTTPException(400, f"Riga '{riga_code}' già esistente per {struttura}")
+
+    max_ordine = db.query(func.max(UsaliMovimentoRiga.ordine)).filter(
+        UsaliMovimentoRiga.struttura_code == struttura
+    ).scalar() or 0
+
+    riga = UsaliMovimentoRiga(
+        struttura_code=struttura, reparto=reparto, conto=conto, riga_code=riga_code,
+        tipo=tipo, categoria_produzione=body.get('categoria_produzione') if tipo == 'auto_produzione' else None,
+        ordine=max_ordine + 1, aliquota_iva=body.get('aliquota_iva', 10.00),
+    )
+    db.add(riga)
+    db.commit()
+    return {'id': riga.id}
+
+
+@router.put("/movimenti-righe/{riga_id}")
+def aggiorna_movimento_riga(
+    riga_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    riga = db.query(UsaliMovimentoRiga).filter(UsaliMovimentoRiga.id == riga_id).first()
+    if not riga:
+        raise HTTPException(404, "Riga non trovata")
+    for campo in ('reparto', 'conto', 'tipo', 'categoria_produzione', 'ordine', 'attivo', 'aliquota_iva'):
+        if campo in body:
+            setattr(riga, campo, body[campo])
+    if riga.tipo != 'auto_produzione':
+        riga.categoria_produzione = None
+    db.commit()
+    return {'id': riga.id}
+
+
+@router.delete("/movimenti-righe/{riga_id}")
+def elimina_movimento_riga(
+    riga_id: int,
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    riga = db.query(UsaliMovimentoRiga).filter(UsaliMovimentoRiga.id == riga_id).first()
+    if not riga:
+        raise HTTPException(404, "Riga non trovata")
+    db.delete(riga)
+    db.commit()
+    return {'eliminato': riga_id}
