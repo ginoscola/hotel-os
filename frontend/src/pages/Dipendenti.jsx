@@ -57,7 +57,7 @@ export default function Dipendenti() {
   const handleRicalcolaTutto = async () => {
     if (!window.confirm(
       `Ricalcola le ripartizioni CC di tutti i dipendenti per l'anno ${anno}?\n\n` +
-      'Verranno sovrascritte anche le impostazioni manuali.'
+      'I mesi con eccezione manuale rimarranno invariati.'
     )) return
     setRicalcolandoTutto(true)
     setEsitoRicalcoloTutto(null)
@@ -1293,6 +1293,7 @@ function AnalisiCC() {
 
   const [granularita, setGranularita] = useState('reparto') // 'reparto' | 'categoria'
   const [barStruttureSel, setBarStruttureSel] = useState(new Set())
+  const [categorieSel, setCategorieSel] = useState(new Set())
   const [barRaggruppa, setBarRaggruppa] = useState(false)
   const [barDettaglio, setBarDettaglio] = useState(null)
   const [dettaglioDip, setDettaglioDip] = useState(null)
@@ -1323,6 +1324,9 @@ function AnalisiCC() {
         // Inizializza selezione strutture con tutte quelle disponibili
         const tutte = new Set(r1.data.centri.filter(c => c.struttura_code).map(c => c.struttura_code))
         setBarStruttureSel(tutte)
+        // Inizializza selezione categorie con tutte quelle disponibili
+        const tutteCategorie = new Set(r1.data.centri.filter(c => c.parent_name).map(c => c.parent_name))
+        setCategorieSel(tutteCategorie)
       })
       .catch(() => setErrore('Errore caricamento dati'))
       .finally(() => setCaricando(false))
@@ -1337,6 +1341,23 @@ function AnalisiCC() {
       .filter(c => c.struttura_code)
       .map(c => [c.struttura_code, { code: c.struttura_code, name: c.struttura_name }])
   ).values()].sort((a, b) => a.name.localeCompare(b.name, 'it'))
+
+  // Macrocategorie disponibili dai dati caricati (ordine fisso quando presenti, poi alfabetico)
+  const ORDINE_CATEGORIE = ['Camere', 'Food & Beverage', 'Struttura', 'Amministrazione']
+  const categorieDisponibili = [...new Set(
+    [...(dati?.centri || []), ...(datiPrec?.centri || [])]
+      .map(c => c.parent_name)
+      .filter(Boolean)
+  )].sort((a, b) => {
+    const ia = ORDINE_CATEGORIE.indexOf(a), ib = ORDINE_CATEGORIE.indexOf(b)
+    if (ia !== -1 && ib !== -1) return ia - ib
+    if (ia !== -1) return -1
+    if (ib !== -1) return 1
+    return a.localeCompare(b, 'it')
+  })
+
+  // Filtra i centri grezzi in base alla selezione categorie (righe senza macrocategoria sempre incluse)
+  const filtraCategorie = (centri) => (centri || []).filter(c => !c.parent_name || categorieSel.has(c.parent_name))
 
   // Aggrega un array di centri per chiave
   const _aggrega = (arr, keyFn, extraFn) => {
@@ -1398,8 +1419,8 @@ function AnalisiCC() {
     return base.sort((a, b) => b.totale - a.totale)
   }
 
-  const centriVis = trasformaCentri(dati?.centri)
-  const centriPrecVis = trasformaCentri(datiPrec?.centri)
+  const centriVis = trasformaCentri(filtraCategorie(dati?.centri))
+  const centriPrecVis = trasformaCentri(filtraCategorie(datiPrec?.centri))
 
   // Ricalcola totali per i centri visibili
   const totaliMeseVis = {}
@@ -1486,6 +1507,28 @@ function AnalisiCC() {
             }}>{label}</button>
           ))}
         </div>
+        {/* Filtro categorie */}
+        {categorieDisponibili.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 10px' }}>
+            <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Categorie:</span>
+            {categorieDisponibili.map(cat => (
+              <label key={cat} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={categorieSel.has(cat)}
+                  onChange={() => {
+                    const next = new Set(categorieSel)
+                    if (next.has(cat)) next.delete(cat); else next.add(cat)
+                    setCategorieSel(next)
+                    setBarDettaglio(null)
+                  }}
+                  style={{ width: 13, height: 13 }}
+                />
+                <span style={{ fontSize: 12, color: '#1e293b' }}>{cat}</span>
+              </label>
+            ))}
+          </div>
+        )}
         <h2 style={{ ...h2Style, margin: 0 }}>Analisi costi per centro di costo</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
           <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Anno:</label>
@@ -1814,7 +1857,7 @@ function AnalisiCC() {
           {/* ── Grafico a barre full-width: totale annuo per CC ── */}
           {(() => {
             // Base: centri grezzi (non aggregati) per il grafico a barre
-            const tuttiCentriGrezzi = (dati?.centri || []).filter(cc => cc.totale > 0)
+            const tuttiCentriGrezzi = filtraCategorie(dati?.centri).filter(cc => cc.totale > 0)
             const struttureDispo = [...new Set(tuttiCentriGrezzi.filter(c => c.struttura_code).map(c => c.struttura_code))].sort()
             if (tuttiCentriGrezzi.length === 0) return null
 
