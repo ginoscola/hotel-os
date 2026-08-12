@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RT Control">
+  <meta name="theme-color" content="#0f1923">
+  <title>RT Control — KM di Mare</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1923;
+      --surface:   #1a2736;
+      --surface2:  #223040;
+      --border:    #2d4156;
+      --text:      #e8f0f7;
+      --muted:     #7a9ab5;
+      --accent:    #3b9eff;
+      --accent-dim:#1a4a7a;
+      --green:     #22c55e;
+      --green-dim: #14532d;
+      --amber:     #f59e0b;
+      --amber-dim: #78350f;
+      --red:       #ef4444;
+      --red-dim:   #7f1d1d;
+      --radius:    14px;
+      --radius-sm: 8px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+      padding: env(safe-area-inset-top, 12px) 0 env(safe-area-inset-bottom, 0) 0;
+    }
+
+    /* Header */
+    .header {
+      padding: 16px 20px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .logo {
+      width: 34px; height: 34px;
+      background: var(--accent);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px;
+    }
+    .header-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+    .header-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .status-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+    .status-dot.online  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-dot.offline { background: var(--red); }
+
+    /* Scroll area */
+    .scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 16px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* RT Selector */
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 6px;
+      padding-left: 2px;
+    }
+
+    .rt-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .rt-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .rt-card.active {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .rt-radio {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: border-color 0.15s;
+    }
+    .rt-card.active .rt-radio { border-color: var(--accent); }
+    .rt-radio-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .rt-card.active .rt-radio-dot { opacity: 1; }
+    .rt-info { flex: 1; }
+    .rt-name { font-size: 15px; font-weight: 600; }
+    .rt-ip { font-size: 12px; color: var(--muted); font-family: 'SF Mono', 'Fira Code', monospace; margin-top: 2px; }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+    .badge-lan { background: var(--accent-dim); color: var(--accent); }
+    .badge-vpn { background: var(--green-dim); color: var(--green); }
+
+    /* Buttons */
+    .btn-group { display: flex; flex-direction: column; gap: 10px; }
+
+    .btn {
+      width: 100%;
+      padding: 18px 20px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .btn-x {
+      background: linear-gradient(135deg, #1e40af, #2563eb);
+      color: white;
+    }
+    .btn-status {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1.5px solid var(--border);
+    }
+
+    .btn-icon { font-size: 22px; flex-shrink: 0; }
+    .btn-content { text-align: left; flex: 1; }
+    .btn-desc { font-size: 12px; font-weight: 400; opacity: 0.75; display: block; margin-top: 2px; }
+
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    .btn-status .spinner {
+      border-color: rgba(120,160,190,0.3);
+      border-top-color: var(--muted);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Log */
+    .log-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .log-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .log-clear {
+      font-size: 10px;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .log-clear:hover { color: var(--text); }
+    .log-body {
+      padding: 10px 14px;
+      min-height: 90px;
+      max-height: 160px;
+      overflow-y: auto;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .log-empty { color: var(--muted); }
+    .log-line { display: flex; gap: 8px; }
+    .log-time { color: var(--muted); flex-shrink: 0; }
+    .log-msg { flex: 1; }
+    .log-line.ok   .log-msg { color: var(--green); }
+    .log-line.err  .log-msg { color: var(--red); }
+    .log-line.info .log-msg { color: var(--amber); }
+    .log-line.muted .log-msg { color: var(--muted); }
+
+    /* Toast */
+    .toast-area {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - 32px);
+      max-width: 400px;
+      z-index: 100;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 14px 18px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none;
+      backdrop-filter: blur(12px);
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.ok   { background: rgba(20, 83, 45, 0.95); color: var(--green); border: 1px solid var(--green-dim); }
+    .toast.err  { background: rgba(127, 29, 29, 0.95); color: #fca5a5; border: 1px solid var(--red-dim); }
+    .toast.warn { background: rgba(120, 53, 15, 0.95); color: var(--amber); border: 1px solid var(--amber-dim); }
+
+    /* Install hint */
+    .install-hint {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      display: none;
+    }
+    .install-hint.show { display: block; }
+    .install-hint strong { color: var(--text); }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">🖨</div>
+      <div>
+        <div class="header-title">RT Control</div>
+        <div class="header-sub">KM di Mare S.r.l.</div>
+      </div>
+    </div>
+    <div class="status-dot" id="statusDot" title="Stato connessione"></div>
+  </div>
+
+  <div class="scroll">
+
+    <!-- RT Selector -->
+    <div>
+      <div class="section-label">Registratore</div>
+      <div class="rt-list" id="rtList">
+        <div class="rt-card active" onclick="selectRT(0)">
+          <div class="rt-radio"><div class="rt-radio-dot"></div></div>
+          <div class="rt-info">
+            <div class="rt-name">Du Parc + Club Hotel</div>
+            <div class="rt-ip">192.168.100.134</div>
+          </div>
+          <span class="badge badge-lan">LAN</span>
+        </div>
+        <div class="rt-card" onclick="selectRT(1)">
+          <div class="rt-radio"><div class="rt-radio-dot"></div></div>
+          <div class="rt-info">
+            <div class="rt-name">Hotel International</div>
+            <div class="rt-ip">192.168.10.110</div>
+          </div>
+          <span class="badge badge-vpn">RETE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comandi -->
+    <div>
+      <div class="section-label">Comandi</div>
+      <div class="btn-group">
+        <button class="btn btn-x" id="btnX" onclick="sendX()">
+          <span class="btn-icon" id="iconX">📊</span>
+          <div class="btn-content">
+            Report X
+            <span class="btn-desc">Stampa totali senza azzerare</span>
+          </div>
+        </button>
+        <button class="btn btn-status" id="btnStatus" onclick="sendPing()">
+          <span class="btn-icon" id="iconStatus">🔌</span>
+          <div class="btn-content">
+            Ping
+            <span class="btn-desc">Verifica connessione senza stampare</span>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="log-wrap">
+      <div class="log-header">
+        Log
+        <button class="log-clear" onclick="clearLog()">Pulisci</button>
+      </div>
+      <div class="log-body" id="logBody">
+        <span class="log-empty">In attesa di comandi…</span>
+      </div>
+    </div>
+
+    <!-- Install hint (iOS) -->
+    <div class="install-hint" id="installHint">
+      <strong>💡 Aggiungi alla schermata Home</strong><br>
+      Tocca <strong>Condividi</strong> → <strong>Aggiungi a Home</strong> per usarla come app.
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-area">
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+  const RTS = [
+    { name: 'Du Parc + Club Hotel', ip: '192.168.100.134' },
+    { name: 'Hotel International',  ip: '192.168.10.110'  }
+  ];
+
+  let currentRT = 0;
+  let busy = false;
+  let logLines = [];
+
+  // Show install hint on iOS Safari
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone;
+  if (isIOS && !isStandalone) {
+    document.getElementById('installHint').classList.add('show');
+  }
+
+  function selectRT(i) {
+    currentRT = i;
+    document.querySelectorAll('.rt-card').forEach((el, idx) => {
+      el.classList.toggle('active', idx === i);
+    });
+    setStatusDot('idle');
+    addLog(`RT selezionato: ${RTS[i].name}`, 'info');
+  }
+
+  function getURL() {
+    return `http://${RTS[currentRT].ip}/cgi-bin/fpmate.cgi?devid=local_printer&timeout=10000`;
+  }
+
+  function buildSOAP(cmd) {
+    const inner = cmd === 'Z'
+      ? '<printZReport operator="1"/>'
+      : '<printXReport operator="1"/>';
+    return `<?xml version="1.0" encoding="utf-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><printerFiscalReport>${inner}</printerFiscalReport></soapenv:Body></soapenv:Envelope>`;
+  }
+
+  function setStatusDot(state) {
+    const dot = document.getElementById('statusDot');
+    dot.className = 'status-dot' + (state === 'online' ? ' online' : state === 'offline' ? ' offline' : '');
+  }
+
+  function setLoading(btnId, iconId, loading) {
+    const btn = document.getElementById(btnId);
+    const icon = document.getElementById(iconId);
+    busy = loading;
+    document.querySelectorAll('.btn').forEach(b => b.disabled = loading);
+    if (loading) {
+      icon.outerHTML = `<div class="spinner" id="${iconId}"></div>`;
+    } else {
+      const spinner = document.getElementById(iconId);
+      if (spinner) {
+        const emoji = btnId === 'btnX' ? '📊' : '🔌';
+        spinner.outerHTML = `<span class="btn-icon" id="${iconId}">${emoji}</span>`;
+      }
+      document.querySelectorAll('.btn').forEach(b => b.disabled = false);
+    }
+  }
+
+  function addLog(msg, type = '') {
+    const body = document.getElementById('logBody');
+    if (logLines.length === 0) body.innerHTML = '';
+    const ts = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    logLines.push({ msg, type, ts });
+    if (logLines.length > 30) { logLines.shift(); }
+    renderLog();
+  }
+
+  function renderLog() {
+    const body = document.getElementById('logBody');
+    body.innerHTML = logLines.map(l =>
+      `<div class="log-line ${l.type}"><span class="log-time">${l.ts}</span><span class="log-msg">${l.msg}</span></div>`
+    ).join('');
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function clearLog() {
+    logLines = [];
+    document.getElementById('logBody').innerHTML = '<span class="log-empty">In attesa di comandi…</span>';
+  }
+
+  function showToast(msg, type = 'ok', duration = 3000) {
+    const t = document.getElementById('toast');
+    const icons = { ok: '✅', err: '❌', warn: '⚠️' };
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span>${icons[type]}</span> ${msg}`;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), duration);
+  }
+
+  async function sendCommand(cmd, btnId, iconId) {
+    if (busy) return;
+    const rt = RTS[currentRT];
+    setLoading(btnId, iconId, true);
+    addLog(`→ ${cmd} su ${rt.name} (${rt.ip})`, 'info');
+
+    try {
+      const resp = await fetch(getURL(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: buildSOAP(cmd)
+      });
+
+      const text = await resp.text();
+      const xml = new DOMParser().parseFromString(text, 'text/xml');
+      const response = xml.querySelector('response');
+
+      if (response) {
+        const success = response.getAttribute('success');
+        const code = response.getAttribute('code') || '';
+        if (success === 'true') {
+          setStatusDot('online');
+          if (cmd === 'X') {
+            addLog('✅ Report X stampato', 'ok');
+            showToast('Report X stampato', 'ok');
+          } else {
+            addLog('✅ Stampante raggiungibile', 'ok');
+            showToast(`${rt.name} — operativa`, 'ok');
+          }
+        } else {
+          setStatusDot('offline');
+          addLog(`❌ Errore RT: ${code || 'sconosciuto'}`, 'err');
+          showToast(`Errore RT: ${code}`, 'err');
+        }
+      } else {
+        setStatusDot('offline');
+        addLog('❌ Risposta non valida', 'err');
+        showToast('Risposta non valida', 'err');
+      }
+    } catch (err) {
+      setStatusDot('offline');
+      const msg = err.message.includes('fetch') || err.message.includes('network')
+        ? 'RT non raggiungibile — verifica rete'
+        : err.message;
+      addLog(`❌ ${msg}`, 'err');
+      showToast('RT non raggiungibile', 'err');
+    } finally {
+      setLoading(btnId, iconId, false);
+    }
+  }
+
+  function sendX() { sendCommand('X', 'btnX', 'iconX'); }
+
+  async function sendPing() {
+    if (busy) return;
+    const rt = RTS[currentRT];
+    setLoading('btnStatus', 'iconStatus', true);
+    addLog(`→ Ping ${rt.name} (${rt.ip})`, 'info');
+    const payload = `<?xml version="1.0" encoding="utf-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body><printerFiscalReport><queryPrinterStatus operator="1"/></printerFiscalReport></soapenv:Body></soapenv:Envelope>`;
+    try {
+      const resp = await fetch(getURL(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: payload,
+        signal: AbortSignal.timeout(5000)
+      });
+      const text = await resp.text();
+      // Se fpmate risponde (qualsiasi XML) → stampante raggiungibile
+      if (text && text.includes('soapenv')) {
+        setStatusDot('online');
+        addLog('✅ Stampante raggiungibile', 'ok');
+        showToast(`${rt.name} — online`, 'ok');
+      } else {
+        setStatusDot('online');
+        addLog('✅ Risposta ricevuta', 'ok');
+        showToast(`${rt.name} — online`, 'ok');
+      }
+    } catch (err) {
+      setStatusDot('offline');
+      addLog('❌ Non raggiungibile — verifica rete', 'err');
+      showToast('RT non raggiungibile', 'err');
+    } finally {
+      setLoading('btnStatus', 'iconStatus', false);
+    }
+  }
+</script>
+</body>
+</html>
