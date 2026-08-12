@@ -55,6 +55,12 @@ TIPI_FATTURA: Set[str] = {'F'}
 
 TOLLERANZA_ALIQUOTA = 0.5
 
+# La tassa di soggiorno per singolo documento non supera mai questa cifra nella pratica
+# reale del gruppo (confermato dall'utente, agosto 2026) — oltre questa soglia un importo
+# esente (0% IVA) è quasi certamente una penale, non tassa di soggiorno. Verificato sui
+# dati storici: il documento tassa_soggiorno più alto mai importato è 70€.
+SOGLIA_MAX_TASSA_SOGGIORNO = 100.0
+
 # Tipi pagamento noti, dal più specifico al meno specifico (per il matching startsWith).
 # Usati per pulire la stringa grezza della colonna "Pagamenti" che include l'importo.
 _TIPI_PAG_NOTI = [
@@ -260,18 +266,25 @@ def _determina_categoria(
 
     arrangiamenti   ≈ 10%  (include mix arrangiamenti+tassa soggiorno: 0 < aliq < 10)
     shop            ≈ 22%
-    tassa_soggiorno = 0% con imponibile > 0 E colonna TS > 0 (formato esteso)
-                      oppure 0% con imponibile > 0 (formato base, ambiguo)
+    tassa_soggiorno = 0% con 0 < imponibile ≤ SOGLIA_MAX_TASSA_SOGGIORNO E colonna TS
+                      nello stesso range (formato esteso) — oppure 0% con imponibile nel
+                      range (formato base, ambiguo)
     penali          = 0% con imponibile = 0
                     — oppure 0% con causale_cancellazione valorizzata
                     — oppure 0% con imponibile > 0 MA colonna TS = 0/assente (formato esteso)
+                    — oppure 0% con imponibile > SOGLIA_MAX_TASSA_SOGGIORNO (in entrambi i
+                      formati: la tassa di soggiorno per documento non supera mai questa
+                      cifra nella pratica reale, quindi un importo esente più alto è quasi
+                      certamente una penale, anche se la colonna TS del formato esteso
+                      riportasse per errore un valore diverso da zero)
 
     Meccanismo per distinguere TS da penale (Welcome PMS compila imponibile anche
     per documenti fuori campo IVA):
     - Formato esteso: la colonna "Tassa di soggiorno" è la fonte di verità.
-      TS > 0 → tassa_soggiorno; TS = 0/vuoto → penale.
+      TS > 0 e ≤ soglia → tassa_soggiorno; TS = 0/vuoto o > soglia → penale.
     - causale_cancellazione valorizzata → penale certa (segnale aggiuntivo).
-    - Formato base (colonna assente): non distinguibile, assume tassa_soggiorno.
+    - Formato base (colonna assente): non distinguibile dalla sola aliquota, ma la soglia
+      sull'imponibile resta un segnale valido comunque.
 
     Nota: fatture con mix arrangiamenti (10%) + tassa soggiorno (0%) hanno aliquota
     effettiva tra 0% e 10%. Vengono categorizzate come 'arrangiamenti' — il report
@@ -286,8 +299,11 @@ def _determina_categoria(
             return 'penali'
         # Usa abs: un annullo (-6€) si categorizza come l'originale (+6€)
         if imponibile and abs(imponibile) > 0:
+            if abs(imponibile) > SOGLIA_MAX_TASSA_SOGGIORNO:
+                return 'penali'
             if colonna_ts_presente:
-                return 'tassa_soggiorno' if tassa_soggiorno_col else 'penali'
+                is_ts = bool(tassa_soggiorno_col) and abs(tassa_soggiorno_col) <= SOGLIA_MAX_TASSA_SOGGIORNO
+                return 'tassa_soggiorno' if is_ts else 'penali'
             return 'tassa_soggiorno'
         return 'penali'
     # Aliquota tra 0% e 10% (esclusivo): mix arrangiamenti + tassa soggiorno

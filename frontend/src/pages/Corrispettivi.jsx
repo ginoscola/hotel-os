@@ -4,6 +4,7 @@ import TabStampanteRT from './TabStampanteRT'
 import TabControlloRT from './TabControlloRT'
 import TabImport from './TabImport'
 import TabDocumenti from './TabDocumenti'
+import TabPenali from './TabPenali'
 import TabGiornalieri from './TabGiornalieri'
 import TabTest from './TabTest'
 import TabFatturati from './TabFatturati'
@@ -20,6 +21,7 @@ const TABS_BASE = [
   { id: 'giornalieri', label: 'Corrispettivi giornalieri' },
   { id: 'scontrini', label: 'Scontrini' },
   { id: 'fatture', label: 'Fatture' },
+  { id: 'penali', label: 'Penali' },
   { id: 'fatturati', label: 'Riepilogo Fatturati' },
   { id: 'rt', label: 'Controllo RT' },
   { id: 'rt-stampante', label: 'Stampante RT' },
@@ -110,6 +112,9 @@ export default function Corrispettivi() {
           lordo={lordo}
           refreshKey={refreshKey}
         />
+      )}
+      {tab === 'penali' && (
+        <TabPenali key={`pen_${refreshKey}`} refreshKey={refreshKey} />
       )}
       {tab === 'fatturati' && (
         <TabFatturati lordo={lordo} />

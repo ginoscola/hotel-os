@@ -110,7 +110,7 @@ export default function TabGiornalieri({ lordo }) {
       const [rGG, rMan, rCheck] = await Promise.all([
         api.get('/corrispettivi/report/giornaliero', { params: { data_da: da, data_a: a, tipo } }),
         api.get('/corrispettivi/manuali', { params: { data_da: da, data_a: a } }),
-        api.get('/corrispettivi/check', { params: { data_da: da, data_a: a } }),
+        api.get('/corrispettivi/check', { params: { data_da: da, data_a: a, lordo } }),
       ])
       setDatiGG(rGG.data)
       setManualiDB(rMan.data)
@@ -263,6 +263,29 @@ export default function TabGiornalieri({ lordo }) {
             }}>{l}</button>
           ))}
         </div>
+
+        <button onClick={async () => {
+          try {
+            const res = await api.get('/corrispettivi/export/giornaliero', {
+              params: { anno, mese, tipo, lordo },
+              responseType: 'blob',
+            })
+            const url = URL.createObjectURL(res.data)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `corrispettivi_giornaliero_${anno}_${String(mese).padStart(2, '0')}.xlsx`
+            a.click()
+            URL.revokeObjectURL(url)
+          } catch (e) {
+            alert(mostraErrore(e, 'Errore export'))
+          }
+        }} style={{
+          marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '5px 14px', borderRadius: 6, background: '#16a34a', color: '#fff',
+          fontWeight: 600, fontSize: '0.82rem', border: 'none', cursor: 'pointer',
+        }}>
+          ⬇ Esporta Excel
+        </button>
       </div>
 
       {loading && <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>}

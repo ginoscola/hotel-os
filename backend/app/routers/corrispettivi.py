@@ -16,9 +16,11 @@ Endpoint:
   GET    /corrispettivi/documenti             → lista unificata con filtri e paginazione
   GET    /corrispettivi/scontrini             → alias documenti tipo=scontrino
   GET    /corrispettivi/fatture               → alias documenti tipo=fattura
+  GET    /corrispettivi/penali                → alias documenti categoria=penali, esclusi importo=0
   PUT    /corrispettivi/documenti/{id}        → correzione manuale unificata
   PUT    /corrispettivi/scontrini/{id}        → alias → PUT /documenti/{id}
   PUT    /corrispettivi/fatture/{id}          → alias → PUT /documenti/{id}
+  GET    /corrispettivi/export/penali         → export tabella Penali (xlsx/csv/pdf)
 
   POST   /corrispettivi/manuali               → inserimento MMS/BON
   PUT    /corrispettivi/manuali/{id}          → modifica MMS/BON

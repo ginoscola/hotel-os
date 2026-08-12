@@ -10,6 +10,8 @@ Endpoint:
   GET    /analisi-ricavi/reparti               → ?hotel_code=&anno=&mese=
   PUT    /analisi-ricavi/reparti/{id}          → modifica manuale valore
   GET    /analisi-ricavi/gruppo                → ?anno=&mese= (tutti gli hotel aggregati)
+  GET    /analisi-ricavi/export                → ?hotel_code=&anno=&mese=&mese_fine=&vista_dettaglio=
+                                                   export Excel della vista corrente (hotel o GRUPPO)
 
   GET    /analisi-ricavi/classificazione       → lista mapping codici
   POST   /analisi-ricavi/classificazione       → aggiunge nuovo codice
@@ -608,6 +610,210 @@ def get_gruppo(
         'totale_trattamenti': round(totale_finale, 2),
         'totale_reparti': round(totale_rep, 2),
     }
+
+
+def _aggrega_per_categoria(trattamenti: list, hotels: Optional[List[str]] = None) -> list:
+    """Vista 'macrocategorie': aggrega i trattamenti per categoria sommando valore (e per_hotel
+    se presente in vista gruppo), ricalcolando pct sul nuovo totale — stessa logica di
+    TabAnalisiRicavi.jsx (bycat) quando il toggle 'Dettaglio' è spento, replicata qui per l'export."""
+    bycat: dict = {}
+    for t in trattamenti:
+        k = t.get('categoria') or 'Non classificato'
+        entry = bycat.setdefault(k, {'categoria': k, 'valore': 0.0, 'per_hotel': {}})
+        entry['valore'] += t['valore']
+        if hotels:
+            for h in hotels:
+                entry['per_hotel'][h] = entry['per_hotel'].get(h, 0.0) + (t.get('per_hotel', {}).get(h) or 0.0)
+    tot = sum(e['valore'] for e in bycat.values())
+    righe = list(bycat.values())
+    for r in righe:
+        r['pct'] = round(r['valore'] / tot * 100, 2) if tot > 0 else 0
+    righe.sort(key=lambda r: -r['valore'])
+    return righe
+
+
+@router.get("/export")
+def export_analisi_ricavi(
+    hotel_code: str = Query(..., description="Codice hotel, oppure 'GRUPPO'"),
+    anno: int = Query(...),
+    mese: int = Query(..., ge=1, le=12),
+    mese_fine: Optional[int] = Query(None, ge=1, le=12),
+    vista_dettaglio: bool = Query(True),
+    db: Session = Depends(get_db),
+    _u=Depends(richiedi_utente_attivo),
+):
+    """Esporta in Excel esattamente la vista corrente di TabAnalisiRicavi.jsx: singolo hotel
+    (2 fogli, Trattamenti + Reparti) o Gruppo (2 fogli con una colonna per hotel). Rispetta il
+    toggle Dettaglio/Macrocategorie (solo sui Trattamenti: i Reparti non hanno questo toggle
+    a schermo, sempre dettaglio). Riusa get_trattamenti()/get_reparti()/get_gruppo() invece di
+    riaggregare da capo.
+
+    Non esporta la colonna 'Δ Revenue' dei Trattamenti: a schermo è solo un placeholder ('—',
+    mai calcolato), non c'è nulla di reale da esportare lì. Il confronto Reparti vs Revenue
+    module invece è reale (revenue_module) ed è incluso quando disponibile (solo mese singolo,
+    non range — stessa condizione di get_reparti())."""
+    import io
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    hotel_code = hotel_code.upper()
+    mese_fine_eff = mese_fine or mese
+
+    HDR_FILL = PatternFill('solid', fgColor='1E293B')
+    HDR_FONT = Font(bold=True, color='FFFFFF', size=9)
+    TOT_FILL = PatternFill('solid', fgColor='1E293B')
+    TOT_FONT = Font(bold=True, color='FFFFFF', size=9)
+    ALT_FILL = PatternFill('solid', fgColor='F8FAFC')
+    TITOLO_FILL = PatternFill('solid', fgColor='0F172A')
+    TITOLO_FONT = Font(bold=True, color='FFFFFF', size=11)
+    NUM_FMT = '#,##0.00 "€"'
+    PCT_FMT = '0.0"%"'
+
+    label_periodo = MESI_IT[mese] if mese == mese_fine_eff else f"{MESI_IT[mese]}–{MESI_IT[mese_fine_eff]} {anno}"
+    label_vista = 'Dettaglio' if vista_dettaglio else 'Macrocategorie'
+    # I valori del file Passbi (Dashboard Analisi Ricavi) sono sempre IVA inclusa: nessun toggle
+    # a schermo (a differenza di Corrispettivi/Produzione), dicitura fissa non uno stato dinamico.
+    label_iva = 'IVA inclusa'
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    def _titolo(ws, testo, n_col):
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_col)
+        c = ws.cell(row=1, column=1, value=testo)
+        c.font = TITOLO_FONT
+        c.fill = TITOLO_FILL
+        c.alignment = Alignment(horizontal='center')
+
+    def _hdr(ws, row, cols):
+        for i, val in enumerate(cols, 1):
+            c = ws.cell(row=row, column=i, value=val)
+            c.font = HDR_FONT
+            c.fill = HDR_FILL
+            c.alignment = Alignment(horizontal='center')
+
+    def _riga(ws, row, vals, alt=False, pct_cols=()):
+        for i, val in enumerate(vals, 1):
+            c = ws.cell(row=row, column=i, value=val)
+            if alt:
+                c.fill = ALT_FILL
+            if isinstance(val, (int, float)):
+                c.number_format = PCT_FMT if i in pct_cols else NUM_FMT
+                c.alignment = Alignment(horizontal='right')
+
+    def _riga_tot(ws, row, vals, pct_cols=()):
+        for i, val in enumerate(vals, 1):
+            c = ws.cell(row=row, column=i, value=val)
+            c.font = TOT_FONT
+            c.fill = TOT_FILL
+            if isinstance(val, (int, float)):
+                c.number_format = PCT_FMT if i in pct_cols else NUM_FMT
+                c.alignment = Alignment(horizontal='right')
+
+    def _autowidth(ws):
+        for col in ws.columns:
+            max_len = max((len(str(cell.value or '')) for cell in col), default=8)
+            ws.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 2, 30)
+
+    if hotel_code == 'GRUPPO':
+        dati = get_gruppo(anno=anno, mese=mese, mese_fine=mese_fine, db=db, _u=None)
+        hotels = dati['hotel_codes']
+
+        # ── Foglio Trattamenti — Gruppo ───────────────────────────────────────
+        ws1 = wb.create_sheet('Trattamenti Gruppo')
+        n_col = (2 if vista_dettaglio else 1) + len(hotels) + 2
+        _titolo(ws1, f"Analisi Ricavi — Trattamenti Gruppo — {label_periodo} — Vista: {label_vista} — {label_iva}", n_col)
+        if vista_dettaglio:
+            _hdr(ws1, 2, ['Codice', 'Categoria'] + hotels + ['Totale', '%'])
+            righe = dati['trattamenti']
+            get_label = lambda t: [t['codice'], t.get('categoria') or '—']
+        else:
+            _hdr(ws1, 2, ['Categoria'] + hotels + ['Totale', '%'])
+            righe = _aggrega_per_categoria(dati['trattamenti'], hotels)
+            get_label = lambda t: [t['categoria']]
+        pct_col = n_col
+        for i, t in enumerate(righe):
+            vals = get_label(t) + [t.get('per_hotel', {}).get(h) or 0.0 for h in hotels] + [t['valore'], t['pct']]
+            _riga(ws1, i + 3, vals, alt=i % 2 == 1, pct_cols=(pct_col,))
+        tot_vals = (['TOTALE', ''] if vista_dettaglio else ['TOTALE']) + \
+                   [round(sum(t.get('per_hotel', {}).get(h) or 0.0 for t in righe), 2) for h in hotels] + \
+                   [dati['totale_trattamenti'], 100.0]
+        _riga_tot(ws1, len(righe) + 3, tot_vals, pct_cols=(pct_col,))
+        _autowidth(ws1)
+
+        # ── Foglio Reparti — Gruppo (sempre dettaglio, nessun toggle a schermo) ──
+        ws2 = wb.create_sheet('Reparti Gruppo')
+        n_col2 = 1 + len(hotels) + 2
+        _titolo(ws2, f"Analisi Ricavi — Reparti Gruppo — {label_periodo} — {label_iva}", n_col2)
+        _hdr(ws2, 2, ['Reparto'] + hotels + ['Totale', '%'])
+        for i, r in enumerate(dati['reparti']):
+            vals = [r['reparto']] + [r.get('per_hotel', {}).get(h) or 0.0 for h in hotels] + [r['valore'], r['pct']]
+            _riga(ws2, i + 3, vals, alt=i % 2 == 1, pct_cols=(n_col2,))
+        tot_vals2 = ['TOTALE'] + [round(sum(r.get('per_hotel', {}).get(h) or 0.0 for r in dati['reparti']), 2) for h in hotels] + \
+                    [dati['totale_reparti'], 100.0]
+        _riga_tot(ws2, len(dati['reparti']) + 3, tot_vals2, pct_cols=(n_col2,))
+        _autowidth(ws2)
+
+        filename = f"analisi_ricavi_gruppo_{anno}_{mese:02d}.xlsx"
+    else:
+        dati_t = get_trattamenti(hotel_code=hotel_code, anno=anno, mese=mese, mese_fine=mese_fine, db=db, _u=None)
+        dati_r = get_reparti(hotel_code=hotel_code, anno=anno, mese=mese, mese_fine=mese_fine, db=db, _u=None)
+
+        # ── Foglio Trattamenti ────────────────────────────────────────────────
+        ws1 = wb.create_sheet('Trattamenti')
+        if vista_dettaglio:
+            n_col = 4
+            _titolo(ws1, f"Analisi Ricavi — Trattamenti {hotel_code} — {label_periodo} — Vista: {label_vista} — {label_iva}", n_col)
+            _hdr(ws1, 2, ['Codice', 'Nome', 'Valore', '%'])
+            righe = dati_t['trattamenti']
+            for i, t in enumerate(righe):
+                _riga(ws1, i + 3, [t['codice'], t['nome_display'], t['valore'], t['pct']], alt=i % 2 == 1, pct_cols=(4,))
+            _riga_tot(ws1, len(righe) + 3, ['TOTALE', '', dati_t['totale'], 100.0], pct_cols=(4,))
+        else:
+            n_col = 3
+            _titolo(ws1, f"Analisi Ricavi — Trattamenti {hotel_code} — {label_periodo} — Vista: {label_vista} — {label_iva}", n_col)
+            _hdr(ws1, 2, ['Categoria', 'Valore', '%'])
+            righe = _aggrega_per_categoria(dati_t['trattamenti'])
+            for i, t in enumerate(righe):
+                _riga(ws1, i + 3, [t['categoria'], t['valore'], t['pct']], alt=i % 2 == 1, pct_cols=(3,))
+            _riga_tot(ws1, len(righe) + 3, ['TOTALE', dati_t['totale'], 100.0], pct_cols=(3,))
+        _autowidth(ws1)
+
+        # ── Foglio Reparti (sempre dettaglio) ─────────────────────────────────
+        ws2 = wb.create_sheet('Reparti')
+        rev = dati_r.get('revenue_module')
+        _titolo(ws2, f"Analisi Ricavi — Reparti {hotel_code} — {label_periodo} — {label_iva}", 3)
+        _hdr(ws2, 2, ['Reparto', 'Valore', '%'])
+        for i, r in enumerate(dati_r['reparti']):
+            _riga(ws2, i + 3, [r['reparto'], r['valore'], r['pct']], alt=i % 2 == 1, pct_cols=(3,))
+        row_tot = len(dati_r['reparti']) + 3
+        _riga_tot(ws2, row_tot, ['TOTALE', dati_r['totale'], 100.0], pct_cols=(3,))
+        if rev:
+            ws2.cell(row=row_tot + 2, column=1, value='Confronto Revenue module').font = Font(bold=True)
+            for j, (label, val) in enumerate([
+                ('Ricavi Camere', rev['revenue_rooms']), ('Ricavi F&B', rev['revenue_fnb']),
+                ('Extra', rev['revenue_extra']), ('Totale Revenue', rev['revenue_totale']),
+                ('Δ (Analisi Ricavi − Revenue)', round(dati_r['totale'] - rev['revenue_totale'], 2)),
+            ]):
+                r = row_tot + 3 + j
+                ws2.cell(row=r, column=1, value=label)
+                c = ws2.cell(row=r, column=2, value=val)
+                c.number_format = NUM_FMT
+                c.alignment = Alignment(horizontal='right')
+        _autowidth(ws2)
+
+        filename = f"analisi_ricavi_{hotel_code}_{anno}_{mese:02d}.xlsx"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Classificazione trattamenti (Admin) ───────────────────────────────────────

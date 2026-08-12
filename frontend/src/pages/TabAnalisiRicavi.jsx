@@ -903,6 +903,28 @@ export default function TabAnalisiRicavi({ hotels, isAdmin }) {
                 Δ Revenue
               </label>
             )}
+
+            <button onClick={async () => {
+              try {
+                const params = { hotel_code: hotelSel, anno, mese, vista_dettaglio: vistaDettaglio }
+                if (rangeMode && meseFineEff !== mese) params.mese_fine = meseFineEff
+                const res = await api.get('/analisi-ricavi/export', { params, responseType: 'blob' })
+                const url = URL.createObjectURL(res.data)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `analisi_ricavi_${hotelSel}_${anno}_${String(mese).padStart(2, '0')}.xlsx`
+                a.click()
+                URL.revokeObjectURL(url)
+              } catch (e) {
+                alert(mostraErrore(e, 'Errore export'))
+              }
+            }} style={{
+              marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '5px 14px', borderRadius: 6, background: '#16a34a', color: '#fff',
+              fontWeight: 600, fontSize: '0.82rem', border: 'none', cursor: 'pointer',
+            }}>
+              ⬇ Esporta Excel
+            </button>
           </div>
 
           {/* Contenuto */}

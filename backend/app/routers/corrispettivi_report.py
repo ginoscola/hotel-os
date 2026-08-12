@@ -9,6 +9,7 @@ Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
   GET    /admin/test-stats      → conteggio record is_test
   DELETE /admin/test-data       → cancella tutti i record is_test
   GET    /export/fatturati      → export Excel riepilogo fatturati
+  GET    /export/giornaliero    → export Excel tabella mensile Corrispettivi giornalieri
 """
 from datetime import date
 from typing import List, Optional, Set
@@ -701,6 +702,202 @@ def elimina_test_data(
 
     db.commit()
     return {'eliminati': True}
+
+
+@router.get("/export/giornaliero")
+def export_giornaliero(
+    anno: int = Query(..., ge=2020, le=2030),
+    mese: int = Query(..., ge=1, le=12),
+    tipo: str = Query('tutti', description="'scontrini'|'fatture'|'tutti'"),
+    lordo: bool = Query(True),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """Esporta in Excel la tabella mensile di 'Corrispettivi giornalieri' — stessa struttura
+    mostrata a schermo in TabGiornalieri.jsx: per DPH/CLB/INT le 4 categorie visibili
+    (Arrangiamenti/Tassa Soggiorno/Penali/Shop) + Tot. (che include anche 'altro', non mostrato
+    come colonna propria — stessa scelta già fatta a schermo), poi MMS/BON (valore manuale) e
+    TOT. GIORNO. Riusa report_giornaliero() invece di riaggregare da capo (stesso pattern di
+    export_fatturati/report_fatturati). Bordo verticale marcato tra un blocco struttura e l'altro
+    (replica il borderLeft già a schermo) + riga di titolo con mese/anno e IVA inclusa/esclusa,
+    altrimenti il file non è autoesplicativo fuori dal contesto dell'app."""
+    import calendar
+    import io
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from app.utils.locale_it import MESI_IT
+
+    GIORNI_IT_DOM0 = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab']
+
+    da = date(anno, mese, 1)
+    a = date(anno, mese, calendar.monthrange(anno, mese)[1])
+
+    dati = report_giornaliero(
+        data_da=da, data_a=a, struttura_code=None, tipo=tipo, lordo=lordo, is_test=is_test,
+        db=db, _=None,
+    )
+    by_data = {g['data']: g for g in dati}
+
+    CATEGORIE_VISIBILI = [('arrangiamenti', 'Arrangiamenti'), ('tassa_soggiorno', 'Tassa di Soggiorno'),
+                          ('penali', 'Penali'), ('shop', 'Shop/ricariche')]
+
+    HDR_FILL = PatternFill('solid', fgColor='1E3A5F')
+    HDR_FONT = Font(bold=True, color='FFFFFF', size=9)
+    SUBHDR_FILL = PatternFill('solid', fgColor='2D4F7C')
+    SUBHDR_FONT = Font(bold=True, color='CBD5E1', size=8)
+    TOT_FILL = PatternFill('solid', fgColor='1E3A5F')
+    TOT_FONT = Font(bold=True, color='FFFFFF', size=9)
+    ALT_FILL = PatternFill('solid', fgColor='F8FAFC')
+    TITOLO_FILL = PatternFill('solid', fgColor='0F172A')
+    TITOLO_FONT = Font(bold=True, color='FFFFFF', size=11)
+    NUM_FMT = '#,##0.00 "€"'
+    BORDO_BLOCCO = Border(left=Side(style='medium', color='1E3A5F'))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Corrispettivi giornalieri'
+
+    n_col_hotel = len(CATEGORIE_VISIBILI) + 1  # + Tot.
+    col = 2  # colonna 1 = Data
+
+    # ── Riga 1: titolo — mese/anno + IVA inclusa/esclusa (il file deve restare
+    # comprensibile anche aperto fuori dall'app, senza il contesto del toggle a schermo) ──
+    RIGA_HEADER = 2
+    RIGA_SUBHEADER = 3
+    RIGA_DATI_INIZIO = 4
+
+    # ── Intestazioni (2 righe, a partire da RIGA_HEADER) ─────────────────────
+    cell = ws.cell(row=RIGA_HEADER, column=1, value='Data')
+    cell.font = HDR_FONT
+    cell.fill = HDR_FILL
+    ws.merge_cells(start_row=RIGA_HEADER, start_column=1, end_row=RIGA_SUBHEADER, end_column=1)
+
+    col_blocco = [2]  # colonne dove inizia un nuovo blocco struttura (per il bordo verticale)
+    for sc in STRUTTURE_HOTEL:
+        ws.merge_cells(start_row=RIGA_HEADER, start_column=col, end_row=RIGA_HEADER, end_column=col + n_col_hotel - 1)
+        c = ws.cell(row=RIGA_HEADER, column=col, value=sc)
+        c.font = HDR_FONT
+        c.fill = HDR_FILL
+        c.alignment = Alignment(horizontal='center')
+        for i, (_, label) in enumerate(CATEGORIE_VISIBILI + [(None, 'Tot.')]):
+            sc2 = ws.cell(row=RIGA_SUBHEADER, column=col + i, value=label)
+            sc2.font = SUBHDR_FONT
+            sc2.fill = SUBHDR_FILL
+            sc2.alignment = Alignment(horizontal='center')
+        col_blocco.append(col)
+        col += n_col_hotel
+
+    col_mms, col_bon, col_tot = col, col + 1, col + 2
+    col_blocco += [col_mms, col_bon, col_tot]
+    for c_idx, label in ((col_mms, 'MMS'), (col_bon, 'BON'), (col_tot, 'TOT. GIORNO')):
+        c = ws.cell(row=RIGA_HEADER, column=c_idx, value=label)
+        c.font = HDR_FONT
+        c.fill = HDR_FILL
+        c.alignment = Alignment(horizontal='center')
+        ws.merge_cells(start_row=RIGA_HEADER, start_column=c_idx, end_row=RIGA_SUBHEADER, end_column=c_idx)
+
+    n_col_tot = col_tot
+
+    titolo = (f"Corrispettivi giornalieri — {MESI_IT[mese - 1].capitalize()} {anno} — "
+              f"Valori: {'IVA INCLUSA' if lordo else 'IVA ESCLUSA'}")
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_col_tot)
+    tc = ws.cell(row=1, column=1, value=titolo)
+    tc.font = TITOLO_FONT
+    tc.fill = TITOLO_FILL
+    tc.alignment = Alignment(horizontal='center')
+
+    # ── Righe giornaliere ─────────────────────────────────────────────────────
+    giorni = []
+    cur = da
+    while cur <= a:
+        giorni.append(cur)
+        cur = date.fromordinal(cur.toordinal() + 1)
+
+    tot_mese = [0.0] * (n_col_tot - 1)  # colonne 2..n_col_tot (Data esclusa)
+
+    for i, giorno in enumerate(giorni):
+        row = RIGA_DATI_INIZIO + i
+        dkey = giorno.isoformat()
+        g = by_data.get(dkey)
+        alt = i % 2 == 1
+
+        c = ws.cell(row=row, column=1, value=f"{giorno.strftime('%d/%m/%Y')} {GIORNI_IT_DOM0[(giorno.weekday() + 1) % 7]}")
+        if alt:
+            c.fill = ALT_FILL
+
+        strutture_by_code = {s['struttura_code']: s for s in (g['strutture'] if g else [])}
+        col = 2
+        for sc in STRUTTURE_HOTEL:
+            s = strutture_by_code.get(sc)
+            valori = []
+            for cat, _ in CATEGORIE_VISIBILI:
+                v = ((s['scontrini'].get(cat, 0.0) if s else 0.0) + (s['fatture'].get(cat, 0.0) if s else 0.0))
+                valori.append(round(v, 2))
+            valori.append(round(s['totale'], 2) if s else 0.0)  # Tot. (include anche 'altro')
+            for j, v in enumerate(valori):
+                cc = ws.cell(row=row, column=col + j, value=v)
+                cc.number_format = NUM_FMT
+                cc.alignment = Alignment(horizontal='right')
+                if alt:
+                    cc.fill = ALT_FILL
+                tot_mese[col + j - 2] += v
+            col += n_col_hotel
+
+        for sc, c_idx in ((('MMS'), col_mms), (('BON'), col_bon)):
+            s = strutture_by_code.get(sc)
+            v = round(s['totale'], 2) if s else 0.0
+            cc = ws.cell(row=row, column=c_idx, value=v)
+            cc.number_format = NUM_FMT
+            cc.alignment = Alignment(horizontal='right')
+            if alt:
+                cc.fill = ALT_FILL
+            tot_mese[c_idx - 2] += v
+
+        v_tot = round(g['totale_giorno'], 2) if g else 0.0
+        cc = ws.cell(row=row, column=col_tot, value=v_tot)
+        cc.number_format = NUM_FMT
+        cc.font = Font(bold=True)
+        cc.alignment = Alignment(horizontal='right')
+        if alt:
+            cc.fill = ALT_FILL
+        tot_mese[col_tot - 2] += v_tot
+
+    # ── Riga TOTALE MESE ──────────────────────────────────────────────────────
+    row_tot = RIGA_DATI_INIZIO + len(giorni)
+    c = ws.cell(row=row_tot, column=1, value='TOTALE MESE')
+    c.font = TOT_FONT
+    c.fill = TOT_FILL
+    for j, v in enumerate(tot_mese):
+        cc = ws.cell(row=row_tot, column=j + 2, value=round(v, 2))
+        cc.font = TOT_FONT
+        cc.fill = TOT_FILL
+        cc.number_format = NUM_FMT
+        cc.alignment = Alignment(horizontal='right')
+
+    # ── Bordo verticale marcato all'inizio di ogni blocco struttura (DPH/CLB/INT/MMS/BON/
+    # TOT. GIORNO), su tutte le righe (intestazioni + dati + totale) — a schermo la stessa
+    # separazione esiste già come borderLeft più spesso a inizio blocco.
+    for c_idx in col_blocco:
+        for r in range(RIGA_HEADER, row_tot + 1):
+            ws.cell(row=r, column=c_idx).border = BORDO_BLOCCO
+
+    ws.column_dimensions['A'].width = 16
+    for c_idx in range(2, n_col_tot + 1):
+        ws.column_dimensions[get_column_letter(c_idx)].width = 13
+    ws.freeze_panes = f'B{RIGA_DATI_INIZIO}'
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f'corrispettivi_giornaliero_{anno}_{mese:02d}.xlsx'
+    return StreamingResponse(
+        buf,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/export/fatturati")

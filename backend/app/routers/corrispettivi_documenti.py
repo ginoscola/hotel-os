@@ -4,6 +4,7 @@ Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
   GET    /documenti             → lista unificata con filtri e paginazione
   GET    /scontrini             → alias documenti tipo=scontrino
   GET    /fatture                → alias documenti tipo=fattura
+  GET    /penali                 → alias documenti categoria=penali, esclusi importo=0
   PUT    /documenti/{id}        → correzione manuale unificata
   PUT    /scontrini/{id}        → alias → PUT /documenti/{id}
   PUT    /fatture/{id}          → alias → PUT /documenti/{id}
@@ -11,11 +12,23 @@ Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
   POST   /manuali               → inserimento MMS/BON
   PUT    /manuali/{id}          → modifica MMS/BON
   GET    /manuali               → lista con filtri
+
+  GET    /export/penali         → export tabella Penali (xlsx/csv/pdf)
 """
+import csv
+import io
 from datetime import date, datetime
 from typing import Optional
 
+import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -160,6 +173,7 @@ def _lista_documenti(
     db: Session,
     numero: Optional[str] = None,
     camera: Optional[str] = None,
+    escludi_zero: bool = False,
 ):
     q = db.query(CorrispettiviDocumento).filter(CorrispettiviDocumento.is_test == is_test)
     if tipo:
@@ -178,6 +192,8 @@ def _lista_documenti(
         q = q.filter(CorrispettiviDocumento.numero.ilike(f'%{numero}%'))
     if camera:
         q = q.filter(CorrispettiviDocumento.camera.ilike(f'%{camera}%'))
+    if escludi_zero:
+        q = q.filter(CorrispettiviDocumento.totale_lordo != 0)
 
     totale = q.count()
     totale_importo = float(
@@ -249,6 +265,31 @@ def lista_fatture(
 ):
     return _lista_documenti('fattura', data_da, data_a, struttura_code, categoria,
                              annullato, is_test, page, per_page, db, numero, camera)
+
+
+@router.get("/penali")
+def lista_penali(
+    data_da: Optional[date] = Query(None),
+    data_a: Optional[date] = Query(None),
+    struttura_code: Optional[str] = Query(None),
+    numero: Optional[str] = Query(None),
+    is_test: bool = Query(False),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """Alias documenti categoria=penali, esclusi gli importi a zero.
+
+    I documenti a importo 0 finiscono nella categoria 'penali' solo per il meccanismo
+    di fallback di _determina_categoria() (aliquota≈0% + imponibile=0 → penali quando
+    non è distinguibile una vera tassa di soggiorno) — non sono penali reali, sono
+    scontrini/fatture regolari con saldo a zero (es. gestito su altro documento della
+    stessa prenotazione). Esclusi qui per non confondere l'elenco con voci non reali.
+    """
+    return _lista_documenti(None, data_da, data_a, struttura_code, 'penali',
+                             None, is_test, page, per_page, db, numero, None,
+                             escludi_zero=True)
 
 
 def _modifica_documento(doc_id: int, body: dict, db: Session, utente) -> dict:
@@ -411,3 +452,115 @@ def lista_manuali(
         q = q.filter(CorrispettiviManuale.struttura_code == struttura_code.upper())
     manuali = q.order_by(CorrispettiviManuale.data_giorno.desc()).all()
     return [_fmt_manuale(m) for m in manuali]
+
+
+# ── Export tabellare generico (xlsx/csv/pdf) — usato da /export/penali ────────
+
+_BLU = "1e3a5f"
+_GRIGIO = "f1f5f9"
+
+
+def _xlsx_tabella(intestazioni: list, righe: list) -> io.BytesIO:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(intestazioni)
+    for c in range(1, len(intestazioni) + 1):
+        cella = ws.cell(row=1, column=c)
+        cella.font = Font(bold=True, color="FFFFFF")
+        cella.fill = PatternFill("solid", fgColor=_BLU)
+        cella.alignment = Alignment(horizontal="center")
+    for i, riga in enumerate(righe, start=2):
+        ws.append(riga)
+        if i % 2 == 0:
+            for c in range(1, len(intestazioni) + 1):
+                ws.cell(row=i, column=c).fill = PatternFill("solid", fgColor=_GRIGIO)
+    for c in range(1, len(intestazioni) + 1):
+        letter = get_column_letter(c)
+        larghezza = max(12, min(30, max(len(str(r[c - 1])) for r in [intestazioni] + righe) + 2))
+        ws.column_dimensions[letter].width = larghezza
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def _csv_tabella(intestazioni: list, righe: list) -> io.BytesIO:
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=';')
+    w.writerow(intestazioni)
+    w.writerows(righe)
+    return io.BytesIO(buf.getvalue().encode('utf-8-sig'))
+
+
+def _pdf_tabella(intestazioni: list, righe: list, titolo: str) -> io.BytesIO:
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20, bottomMargin=20)
+    stili = getSampleStyleSheet()
+    elementi = [Paragraph(titolo, stili['Heading2']), Spacer(1, 10)]
+    dati = [intestazioni] + [[str(x) for x in r] for r in righe]
+    tabella = Table(dati, repeatRows=1)
+    tabella.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(f'#{_BLU}')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor(f'#{_GRIGIO}')]),
+    ]))
+    elementi.append(tabella)
+    doc.build(elementi)
+    buf.seek(0)
+    return buf
+
+
+def _risposta_tabella(formato: str, nome: str, titolo: str, intestazioni: list, righe: list) -> StreamingResponse:
+    if formato == 'csv':
+        buf, media = _csv_tabella(intestazioni, righe), 'text/csv; charset=utf-8-sig'
+    elif formato == 'pdf':
+        buf, media = _pdf_tabella(intestazioni, righe, titolo), 'application/pdf'
+    else:
+        buf, media = _xlsx_tabella(intestazioni, righe), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    return StreamingResponse(buf, media_type=media, headers={
+        'Content-Disposition': f'attachment; filename="{nome}.{formato}"',
+    })
+
+
+@router.get("/export/penali")
+def export_penali(
+    data_da: Optional[date] = Query(None),
+    data_a: Optional[date] = Query(None),
+    struttura_code: Optional[str] = Query(None),
+    numero: Optional[str] = Query(None),
+    formato: str = Query('xlsx', pattern="^(xlsx|csv|pdf)$"),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """Export della tabella Penali (stessi filtri della tab, nessuna paginazione)."""
+    q = db.query(CorrispettiviDocumento).filter(
+        CorrispettiviDocumento.is_test == is_test,
+        CorrispettiviDocumento.categoria == 'penali',
+        CorrispettiviDocumento.totale_lordo != 0,
+    )
+    if data_da:
+        q = q.filter(CorrispettiviDocumento.data_documento >= data_da)
+    if data_a:
+        q = q.filter(CorrispettiviDocumento.data_documento <= data_a)
+    if struttura_code:
+        q = q.filter(CorrispettiviDocumento.struttura_code == struttura_code.upper())
+    if numero:
+        q = q.filter(CorrispettiviDocumento.numero.ilike(f'%{numero}%'))
+    docs = q.order_by(CorrispettiviDocumento.data_documento.desc(),
+                       CorrispettiviDocumento.numero.desc()).all()
+
+    intestazioni = ['Data', 'N. Documento', 'Tipo', 'Struttura', 'Intestatario', 'Importo €', 'Annullato']
+    righe = [[
+        d.data_documento.strftime('%d/%m/%Y') if d.data_documento else '',
+        f"{d.numero or ''}{(' ' + d.suffisso) if d.suffisso else ''}",
+        {'scontrino': 'Scontrino', 'fattura': 'Fattura'}.get(d.tipo, d.tipo),
+        d.struttura_code,
+        d.intestazione or '',
+        _to_float(d.totale_lordo),
+        'Sì' if d.annullato else '',
+    ] for d in docs]
+
+    return _risposta_tabella(formato, 'corrispettivi_penali', 'Corrispettivi — Penali', intestazioni, righe)
