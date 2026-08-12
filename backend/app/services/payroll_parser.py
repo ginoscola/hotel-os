@@ -8,12 +8,14 @@ Struttura attesa per pagina (un dipendente per pagina):
   riga 5  : mese e anno  (es. "APRILE 2026")
   riga 6  : codice interno dipendente
   riga 7  : cognome nome codice_fiscale
-  riga 8  : indirizzo dipendente
-  riga 9  : qualifica
-  riga 10 : mansione + livello (ultimo token = livello)
-  riga 11 : retribuzione_netta  costo_aziendale  (es. "97,00 108,06")
-  riga 12 : incidenza%
-  righe 13-25 : 13 valori numerici in ordine fisso:
+  riga 8+ : indirizzo dipendente (0+ righe, opzionale — assente sul PDF per alcuni
+            tirocinanti/stagisti; posizione successiva localizzata dinamicamente
+            cercando la riga sommario, non per indice fisso)
+  riga    : qualifica
+  riga    : mansione + livello (ultimo token = livello)
+  riga    : retribuzione_netta  costo_aziendale  (es. "97,00 108,06")
+  riga    : incidenza% (opzionale)
+  righe successive : 13 valori numerici in ordine fisso:
       [dipendente]  ret_netta, contr_prev_dip, contr_san_dip,
                     irpef, altre_trattenute, anticipi_inps, tot_lordo
       [azienda]     contr_prev_az, contr_san_az, inail,
@@ -50,9 +52,17 @@ MESI_IT = {
 
 
 def _parse_numero(s: str) -> float:
-    """Converte stringa italiana (es. '2.030,00') in float."""
+    """Converte stringa italiana (es. '2.030,00' o '396,53-' per un negativo) in float.
+
+    Il gestionale paghe stampa i negativi (es. IRPEF a credito) con il segno meno in coda
+    invece che davanti: '396,53-', non '-396,53'.
+    """
     s = s.strip().replace(".", "").replace(",", ".")
-    return float(s)
+    negativo = s.endswith("-")
+    if negativo:
+        s = s[:-1]
+    valore = float(s)
+    return -valore if negativo else valore
 
 
 def _parse_pagina(righe: list[str], numero_pagina: int) -> dict[str, Any]:
@@ -97,14 +107,28 @@ def _parse_pagina(righe: list[str], numero_pagina: int) -> dict[str, Any]:
     risultato["cognome"] = tokens_dipendente[0].title()
     risultato["nome"] = " ".join(tokens_dipendente[1:-1]).title()
 
-    # riga 8: indirizzo dipendente
-    risultato["indirizzo"] = righe[7].strip().title()
+    # riga 8+: indirizzo dipendente (0+ righe — assente sul PDF per alcuni tirocinanti/stagisti),
+    # poi qualifica, poi mansione+livello, poi riga sommario (2 numeri). Posizione variabile:
+    # localizzata cercando la prima riga con due numeri decimali separati da spazio dopo la riga
+    # cognome/CF, invece di assumere indici fissi (altrimenti l'assenza dell'indirizzo scala tutte
+    # le righe successive di una posizione e "ruba" uno dei 13 valori finali).
+    pattern_sommario = re.compile(r'^[\d.]+,\d{2}\s+[\d.]+,\d{2}$')
+    idx_sommario = None
+    for idx in range(7, len(righe)):
+        if pattern_sommario.match(righe[idx].strip()):
+            idx_sommario = idx
+            break
+    if idx_sommario is None or idx_sommario < 9:
+        raise ValueError(f"Pagina {numero_pagina}: riga sommario retribuzione non trovata")
 
-    # riga 9: qualifica
-    risultato["qualifica"] = righe[8].strip().title()
+    # riga 8 (variabile): indirizzo dipendente (può essere vuoto)
+    risultato["indirizzo"] = " ".join(r.strip() for r in righe[7:idx_sommario - 2]).title()
 
-    # riga 10: mansione + livello (ultimo token = livello)
-    tokens_mansione = righe[9].strip().split()
+    # qualifica (riga prima di mansione)
+    risultato["qualifica"] = righe[idx_sommario - 2].strip().title()
+
+    # mansione + livello (ultimo token = livello)
+    tokens_mansione = righe[idx_sommario - 1].strip().split()
     if tokens_mansione:
         risultato["livello"] = tokens_mansione[-1]
         risultato["mansione"] = " ".join(tokens_mansione[:-1]).title() if len(tokens_mansione) > 1 else ""
@@ -112,29 +136,31 @@ def _parse_pagina(righe: list[str], numero_pagina: int) -> dict[str, Any]:
         risultato["livello"] = ""
         risultato["mansione"] = ""
 
-    # riga 11: ret_netta e costo_aziendale (sommario)
-    numeri_sommario = righe[10].strip().split()
-    if len(numeri_sommario) >= 2:
-        try:
-            risultato["ret_netta_sommario"] = _parse_numero(numeri_sommario[0])
-            risultato["costo_az_sommario"] = _parse_numero(numeri_sommario[1])
-        except ValueError:
-            risultato["ret_netta_sommario"] = None
-            risultato["costo_az_sommario"] = None
-    else:
+    # riga sommario: ret_netta e costo_aziendale
+    numeri_sommario = righe[idx_sommario].strip().split()
+    try:
+        risultato["ret_netta_sommario"] = _parse_numero(numeri_sommario[0])
+        risultato["costo_az_sommario"] = _parse_numero(numeri_sommario[1])
+    except ValueError:
         risultato["ret_netta_sommario"] = None
         risultato["costo_az_sommario"] = None
 
-    # riga 12: incidenza percentuale (es. "111,40%")
-    incidenza_str = righe[11].strip().rstrip("%")
-    try:
-        risultato["incidenza_percentuale"] = _parse_numero(incidenza_str)
-    except ValueError:
+    # riga successiva: incidenza percentuale (es. "111,40%"), se presente
+    idx_dopo_sommario = idx_sommario + 1
+    if idx_dopo_sommario < len(righe) and "%" in righe[idx_dopo_sommario]:
+        incidenza_str = righe[idx_dopo_sommario].strip().rstrip("%")
+        try:
+            risultato["incidenza_percentuale"] = _parse_numero(incidenza_str)
+        except ValueError:
+            risultato["incidenza_percentuale"] = None
+        idx_voci_start = idx_dopo_sommario + 1
+    else:
         risultato["incidenza_percentuale"] = None
+        idx_voci_start = idx_dopo_sommario
 
-    # righe 13+: 13 voci numeriche in ordine fisso
+    # righe successive: 13 voci numeriche in ordine fisso
     valori_numerici = []
-    for riga in righe[12:]:
+    for riga in righe[idx_voci_start:]:
         riga = riga.strip()
         if not riga:
             continue
