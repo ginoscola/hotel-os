@@ -631,6 +631,9 @@ function ContenutoDashboard({
         </ResponsiveContainer>
       </div>
 
+      {/* Aggregati mensili — intera stagione */}
+      <TabellaAggregatiMensili mesi={mesiAggregati} />
+
       {/* Tabella aggregati settimanali — intera stagione */}
       {settimane.length > 0 && (
         <div className="card sezione">
@@ -697,9 +700,6 @@ function ContenutoDashboard({
           </div>
         </div>
       )}
-
-      {/* Aggregati mensili — intera stagione */}
-      <TabellaAggregatiMensili mesi={mesiAggregati} />
 
       {/* Tabella giornaliera — collassabile */}
       {giorni.length > 0 && (
