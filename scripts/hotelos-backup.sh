@@ -5,9 +5,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/../backend/.env"
 
-# Legge DB_NAME e DB_USER da backend/.env
+# Legge DB_NAME e DB_USER da backend/.env. DB_USER si ferma al primo tra ':' (password), '@' (host)
+# o '/' — gestisce sia "user@host/db" (nessuna password, il caso reale) sia "user:pass@host/db":
+# la vecchia regex si fermava solo al ':' e, senza password, catturava "user@host" per intero,
+# causando "role \"ginoscola@localhost\" does not exist" (bug reale, presente dal commit iniziale
+# del sistema di backup: pg_dump falliva ogni notte, mai un backup riuscito). Stessa logica già
+# corretta in backup.py (_leggi_db_config), da cui questa regex era divergente.
 DB_NAME=$(grep '^DATABASE_URL' "$ENV_FILE" | sed 's/.*\/\([^?]*\).*/\1/')
-DB_USER=$(grep '^DATABASE_URL' "$ENV_FILE" | sed 's/.*:\/\/\([^:]*\):.*/\1/')
+DB_USER=$(grep '^DATABASE_URL' "$ENV_FILE" | sed -E 's#.*://([^:@/]+).*#\1#')
 
 BACKUP_BASE="$HOME/hotelos-backups"
 BACKUP_DB="$BACKUP_BASE/db"

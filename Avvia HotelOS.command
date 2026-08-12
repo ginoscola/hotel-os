@@ -40,7 +40,7 @@ fi
 
 if ! pg_isready -h localhost -q 2>/dev/null; then
   echo "Avvio PostgreSQL..."
-  brew services start postgresql@16
+  HOMEBREW_NO_AUTO_UPDATE=1 brew services start postgresql@16
   for i in {1..15}; do
     sleep 1
     pg_isready -h localhost -q 2>/dev/null && break
