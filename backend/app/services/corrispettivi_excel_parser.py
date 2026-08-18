@@ -61,24 +61,6 @@ TOLLERANZA_ALIQUOTA = 0.5
 # dati storici: il documento tassa_soggiorno più alto mai importato è 70€.
 SOGLIA_MAX_TASSA_SOGGIORNO = 100.0
 
-# Tipi pagamento noti, dal più specifico al meno specifico (per il matching startsWith).
-# Usati per pulire la stringa grezza della colonna "Pagamenti" che include l'importo.
-_TIPI_PAG_NOTI = [
-    'Bonifico/Vaglia', 'XPAY-Nexi', 'Carta Credito',
-    'Bancomat', 'Bonifico', 'Contante', 'Satispay', 'Assegno', 'xpay',
-]
-
-def _estrai_tipo_pagamento(raw: str) -> str:
-    """Da 'Contante 8,00 € / Carta Credito 12,00 € /' estrae il primo tipo noto.
-    Se non trova corrispondenza restituisce la stringa originale."""
-    if not raw:
-        return raw
-    raw_l = raw.lower()
-    for tipo in _TIPI_PAG_NOTI:
-        if raw_l.startswith(tipo.lower()):
-            return tipo
-    return raw
-
 
 # ── Strutture dati ────────────────────────────────────────────────────────────
 
@@ -449,7 +431,11 @@ def parse_excel(file_path: str) -> RisultatoParsing:
         # Annullato: colonna 'Annullato' (base) o 'Data annullamento' (esteso)
         annullato = _to_bool(_val('Annullato')) or bool(_val('Data annullamento'))
 
-        tipo_pagamento   = _estrai_tipo_pagamento(str(_val('Pagamenti') or '').strip())
+        # Testo grezzo completo (non troncato al primo metodo): report_pagamenti() in
+        # corrispettivi_report.py scompone per metodo/importo a query-time e ha bisogno
+        # del testo intero (es. "Contante 8,00 € / Bancomat 300,00 € /"), non solo del
+        # primo tipo citato — vedi nota bug in corrispettivi_report.py.
+        tipo_pagamento   = str(_val('Pagamenti') or '').strip()
         conto_anticipato = _to_bool(_val('Conto anticipato'))
         acconto          = _to_bool(_val('Acconto'))
 

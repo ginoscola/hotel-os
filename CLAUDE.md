@@ -514,6 +514,30 @@ centesimo con `SUM(totale_lordo)`. Diverge intenzionalmente dal totale di `repor
 (quello esclude la tassa di soggiorno, essendo un pass-through verso il Comune; questo la
 include, perché il denaro fisico è comunque arrivato tramite un metodo di pagamento).
 
+⚠️ **Il fix sopra (distribuzione per metodo) era codice morto finché `tipo_pagamento` veniva
+troncato in fase di import**: `_estrai_tipo_pagamento()` in `corrispettivi_excel_parser.py`
+riduceva il testo grezzo della colonna Pagamenti al solo primo metodo citato ("Contante 2.450,00 €
+/ Carta Credito 1.940,00 € /" → "Contante"), **scartando importi e metodi secondari prima ancora
+che arrivassero al DB**. `report_pagamenti()` si aspettava il testo completo per la distribuzione
+per metodo, ma non lo trovava mai (quasi tutti i documenti con più metodi cadevano nel fallback
+`pagato` = intero importo, attribuito al primo metodo) — bug reale (agosto 2026, scoperto perché
+l'utente, confrontando con un'analisi indipendente sul file grezzo Welcome, segnalava "Contante"
+2026 ~96.000€ contro i 148.225,97€ mostrati dall'app). Verificato su documenti reali: es. scontrino
+D-SC 1278 (12/08, totale 4.890€) salvato come "Contante" puro → intero importo contato come
+contante, mentre il testo originale era "Contante 2.450,00 € / Carta Credito 1.940,00 € /"; altri
+casi (C-SC 449, I-SC 405, I-SC 344) avevano `tipo_pagamento` salvato come "Contante" quando il
+pagamento reale era **Carta Credito** — non solo un problema di granularità, il metodo salvato
+poteva essere proprio sbagliato. Fix: rimossa `_estrai_tipo_pagamento()`, il parser salva ora il
+testo grezzo completo in `tipo_pagamento` (nessun altro punto del codice ne dipendeva dalla forma
+troncata). Backfill una tantum eseguito sui documenti 2026 già in DB, riconciliando `tipo_pagamento`
+con `Conti 2026.xlsx` (stesso formato esteso, mai troncato) per chiave (struttura, data, numero,
+suffisso) — esclusi `numero=0` (storni/annulli non numerati con chiave ambigua, stesso motivo di
+corrfix001/002 sopra) e righe `modificato_manualmente=True`. Contante 2026 dopo il fix: 94.927,20€.
+Se in futuro riemerge uno scarto vistoso tra Contante atteso e mostrato, controllare per prima cosa
+se `tipo_pagamento` in DB contiene testo completo con importi ("Contante 8,00 € / ...") o solo il
+nome del metodo — quest'ultimo indica che la riga proviene da un import precedente al fix e non è
+mai stata corretta dal backfill.
+
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.
 ⚠️ **Eccezione**: `GET /corrispettivi/check` fa il calcolo netto **lato server** (accetta `lordo` come
