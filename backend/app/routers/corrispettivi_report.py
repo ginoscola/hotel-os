@@ -541,9 +541,37 @@ def report_pagamenti(
 ):
     """Riepilogo fatturati per tipo di pagamento e mese nell'anno.
 
-    Normalizza il testo grezzo della colonna Pagamenti (es. 'Contante 8,00 € /')
-    estraendo solo il nome del tipo.  Restituisce sempre valori lordi.
+    Ogni documento fiscale (scontrino/fattura — solo questi, non 'escluso') si divide in:
+      pagato  = totale_lordo + deposito - sospeso
+      caparra = deposito
+      sospeso = sospeso
+
+    ⚠️ `deposito` è quasi sempre <= 0 (verificato: 459 righe negative contro 2 sole positive,
+    su tutto il 2026): rappresenta una caparra incassata su un documento PRECEDENTE (con la
+    sua propria forma di pagamento già registrata allora) e qui applicata in detrazione sul
+    conto attuale — confermato dall'utente (agosto 2026). La vecchia formula sottraeva
+    `deposito` (`totale_lordo - sospeso - deposito - tassa_soggiorno`): sottrarre un valore
+    già negativo lo RIAGGIUNGE, riconteggiando come "pagato oggi" una caparra già incassata
+    mesi prima — bug reale che gonfiava sistematicamente il totale (Contante 2026: 178.793€
+    invece di ~148.226€). La stessa vecchia formula sottraeva anche `tassa_soggiorno`, che
+    invece va lasciata dentro: se il cliente la paga in contanti è contante vero.
+    Il campo `incassato` di Welcome NON è un'alternativa affidabile: risultava a 0 su 1.681
+    documenti su 3.254 (51,6%) del 2026 pur totalmente pagati (es. scontrino da 4.890€
+    "Contante" con incassato=0) — non riflette "è stato pagato" in questo dataset.
+    Formula verificata sui dati reali: 0 scarti su tutti i 3.254 documenti 2026 confrontando
+    `pagato` con la somma degli importi espliciti nel testo Pagamenti (vedi sotto).
+
+    ⚠️ Un documento può elencare più metodi di pagamento nel testo grezzo della colonna
+    Pagamenti (es. 'Contante 8,00 € / Bancomat 300,00 € /'): la vecchia normalizzazione
+    (`_normalizza`, ancora usata per il caso di riga con un solo metodo senza importo)
+    attribuiva l'INTERO `pagato` al primo tipo citato — bug reale, stesso import (agosto
+    2026): un documento con "Contante 238,00€ / Bancomat 247,00€" (incasso reale 485€)
+    veniva contato per intero (945€, dopo il bug del deposito) come Contante. Fix: quando il
+    testo riporta importi per metodo, si distribuisce `pagato` tra i metodi effettivamente
+    citati (`_estrai_importi_per_metodo`), non tutto al primo.
     """
+    import re as _re
+    from decimal import Decimal
     from app.utils.locale_it import MESI_IT
 
     TIPI_NOTI = [
@@ -560,32 +588,32 @@ def report_pagamenti(
                 return tipo
         return raw.strip()
 
-    mese_col = func.extract('month', CorrispettiviDocumento.data_documento).label('mese')
-    # Ogni documento si divide in tre componenti:
-    #   pagato (tipo_pagamento) = totale_lordo - sospeso - deposito - tassa_soggiorno
-    #   caparra (deposito)      = deposito
-    #   sospeso                 = sospeso
-    # Totale = pagato + caparra + sospeso = totale_lordo - TS  →  pareggia con report_fatturati.
-    from sqlalchemy import func as sqlfunc
-    pagato_col  = func.sum(
-        CorrispettiviDocumento.totale_lordo
-        - CorrispettiviDocumento.sospeso
-        - CorrispettiviDocumento.deposito
-        - sqlfunc.coalesce(CorrispettiviDocumento.tassa_soggiorno, 0)
-    ).label('totale_pagato')
-    sospeso_col = func.sum(CorrispettiviDocumento.sospeso).label('totale_sospeso')
-    deposito_col = func.sum(CorrispettiviDocumento.deposito).label('totale_deposito')
+    _PATTERN_IMPORTO = r'\s+(-?[\d.]+,\d{2})\s*€'
+
+    def _estrai_importi_per_metodo(raw: str) -> List[tuple]:
+        """Da 'Contante 8,00 € / Bancomat 300,00 € /' estrae [('Contante', 8.00), ('Bancomat', 300.00)].
+        Lista vuota se il testo non riporta importi per metodo (caso a singolo metodo)."""
+        trovati = []
+        for tipo in TIPI_NOTI:
+            for m in _re.finditer(_re.escape(tipo) + _PATTERN_IMPORTO, raw, _re.IGNORECASE):
+                val = float(Decimal(m.group(1).replace('.', '').replace(',', '.')))
+                trovati.append((tipo, val))
+        return trovati
 
     righe = (
-        db.query(mese_col, CorrispettiviDocumento.tipo_pagamento,
-                 pagato_col, sospeso_col, deposito_col)
+        db.query(
+            func.extract('month', CorrispettiviDocumento.data_documento).label('mese'),
+            CorrispettiviDocumento.tipo_pagamento,
+            CorrispettiviDocumento.totale_lordo,
+            CorrispettiviDocumento.sospeso,
+            CorrispettiviDocumento.deposito,
+        )
         .filter(
             func.extract('year', CorrispettiviDocumento.data_documento) == anno,
             CorrispettiviDocumento.tipo.in_(['scontrino', 'fattura']),
             CorrispettiviDocumento.annullato == False,
             CorrispettiviDocumento.is_test == is_test,
         )
-        .group_by(mese_col, CorrispettiviDocumento.tipo_pagamento)
         .all()
     )
 
@@ -618,15 +646,27 @@ def report_pagamenti(
     for r in righe:
         m = int(r.mese)
         mesi_set.add(m)
+        raw = str(r.tipo_pagamento or '')
 
-        val_pag  = round(float(r.totale_pagato  or 0), 2)
-        val_sosp = round(float(r.totale_sospeso or 0), 2)
-        val_dep  = round(float(r.totale_deposito or 0), 2)
+        totale = float(r.totale_lordo or 0)
+        sospeso = float(r.sospeso or 0)
+        deposito = float(r.deposito or 0)
+        pagato = totale + deposito - sospeso
 
-        if val_pag != 0:
-            _acc(_normalizza(str(r.tipo_pagamento or '')), m, val_pag)
-        _acc('Caparra', m, val_dep)
-        _acc('Sospeso', m, val_sosp)
+        importi = _estrai_importi_per_metodo(raw)
+        if importi:
+            for tipo, val in importi:
+                _acc(tipo, m, round(val, 2))
+        elif pagato != 0:
+            _acc(_normalizza(raw), m, round(pagato, 2))
+
+        # Riga 'Caparra' = -deposito (positivo, essendo deposito quasi sempre <= 0): mostra
+        # quanto di questo mese è coperto da caparre già incassate prima, come importo
+        # leggibile. Col segno invertito la somma pagato+Caparra+Sospeso ricostruisce
+        # esattamente totale_lordo (pagato = totale_lordo + deposito - sospeso già lo
+        # sottrae una volta; sommarlo di nuovo con lo stesso segno lo conterebbe due volte).
+        _acc('Caparra', m, round(-deposito, 2))
+        _acc('Sospeso', m, round(sospeso, 2))
 
     for r in righe_man:
         m = int(r.mese)

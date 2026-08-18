@@ -134,6 +134,68 @@ class TestParseCorrispXml:
         dati = parse_corrisp_xml(xml)
         assert dati['totale_giorno'] == Decimal('0')
 
+    def test_totale_ammontare_annulli_sottratto(self):
+        """<TotaleAmmontareAnnulli> = imponibile degli scontrini annullati lo stesso giorno
+        fiscale: va sottratto da ImportoParziale prima di calcolare imponibile/imposta/totale
+        netti — bug reale del 14/08/2026 (RT1), numeri presi da quel file (solo aggregati
+        fiscali, nessun dato personale). Prima del fix il campo non veniva letto affatto,
+        importando il lordo pre-annullo (7.806,18) invece del netto (6.332,68)."""
+        xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<r:DatiCorrispettivi xmlns:r="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/corrispettivi/dati/v1.0">
+  <DataOraRilevazione>2026-08-14T20:44:25</DataOraRilevazione>
+  <Trasmissione><Progressivo>990</Progressivo></Trasmissione>
+  <DatiRT>
+    <Riepilogo>
+      <IVA><AliquotaIVA>10.00</AliquotaIVA><Imposta>694.65</Imposta></IVA>
+      <Ammontare>8949.38</Ammontare>
+      <ImportoParziale>6946.53</ImportoParziale>
+      <TotaleAmmontareAnnulli>1307.73</TotaleAmmontareAnnulli>
+      <NonRiscossoServizi>695.13</NonRiscossoServizi>
+    </Riepilogo>
+    <Riepilogo>
+      <Natura>N1</Natura>
+      <Ammontare>200.00</Ammontare>
+      <ImportoParziale>165.00</ImportoParziale>
+      <TotaleAmmontareAnnulli>35.00</TotaleAmmontareAnnulli>
+    </Riepilogo>
+    <Totali>
+      <NumeroDocCommerciali>29</NumeroDocCommerciali>
+      <PagatoContanti>794.14</PagatoContanti>
+      <PagatoElettronico>8485.54</PagatoElettronico>
+    </Totali>
+  </DatiRT>
+</r:DatiCorrispettivi>"""
+        dati = parse_corrisp_xml(xml)
+        assert dati['imponibile_10'] == Decimal('5638.80')   # 6946.53 - 1307.73
+        assert dati['imposta_10'] == Decimal('563.88')       # 5638.80 x 10%
+        assert dati['esente_n1'] == Decimal('130.00')        # 165.00 - 35.00
+        assert dati['totale_giorno'] == Decimal('6332.68')   # 5638.80 + 563.88 + 130.00
+
+    def test_senza_totale_ammontare_annulli_comportamento_invariato(self):
+        """Righe senza <TotaleAmmontareAnnulli> (file senza annullamenti quel giorno,
+        come i mock esistenti) devono dare lo stesso risultato di prima del fix."""
+        xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<r:DatiCorrispettivi xmlns:r="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/corrispettivi/dati/v1.0">
+  <DataOraRilevazione>2026-07-04T21:00:00</DataOraRilevazione>
+  <Trasmissione><Progressivo>4</Progressivo></Trasmissione>
+  <DatiRT>
+    <Riepilogo>
+      <IVA><AliquotaIVA>10.00</AliquotaIVA></IVA>
+      <ImportoParziale>100.00</ImportoParziale>
+      <Ammontare>110.00</Ammontare>
+    </Riepilogo>
+    <Totali>
+      <NumeroDocCommerciali>1</NumeroDocCommerciali>
+      <PagatoContanti>110.00</PagatoContanti>
+      <PagatoElettronico>0.00</PagatoElettronico>
+    </Totali>
+  </DatiRT>
+</r:DatiCorrispettivi>"""
+        dati = parse_corrisp_xml(xml)
+        assert dati['imponibile_10'] == Decimal('100.00')
+        assert dati['imposta_10'] == Decimal('10.00')
+        assert dati['totale_giorno'] == Decimal('110.00')
+
     def test_imposta_come_fratello_diretto_di_iva(self):
         """Variante con <Imposta> fratello diretto di <IVA> sotto <Riepilogo> (non annidato):
         il parser deve gestire entrambe le forme, non solo quella annidata del file reale."""

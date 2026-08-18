@@ -402,6 +402,21 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   multi-file).
   ⚠️ Nel file XML reale `<Imposta>` è annidato dentro `<IVA>` insieme a `<AliquotaIVA>` (non fratello
   diretto di `<IVA>` sotto `<Riepilogo>` come nell'esempio iniziale): il parser gestisce entrambe le forme.
+  ⚠️ **`<TotaleAmmontareAnnulli>` non veniva letto affatto fino ad agosto 2026**: bug reale (trovato
+  14/08/2026, RT1) — il campo, presente in ogni `<Riepilogo>` (aliquota IVA o Natura), è l'imponibile
+  degli scontrini annullati lo stesso giorno fiscale prima della chiusura Z (lo stesso importo
+  stampato come "Totale giorno annullamenti" sullo scontrino di chiusura). Il parser calcolava il
+  totale giorno dal solo `ImportoParziale` (lordo, pre-annullo): un giorno con annullamenti importava
+  un totale sistematicamente più alto del PMS, di un importo pari esattamente all'annullato (caso
+  reale: 7.806,18€ importati invece di 6.332,68€, +1.473,50€ = imponibile annullato lordizzato).
+  Sembrava un problema di cassa (storno non registrato sul registratore), mentre il dato era nel file
+  fin dall'inizio, solo non letto. Fix: `imponibile_netto = ImportoParziale - TotaleAmmontareAnnulli`;
+  l'imposta si ricalcola da `imponibile_netto × aliquota/100` (`<Imposta>` non riporta mai il valore
+  già al netto dell'annullato, ma corrisponde sempre esattamente a `ImportoParziale × aliquota/100`,
+  quindi ricalcolare dal netto non introduce scostamenti). Riguarda ogni chiusura storica con
+  annullamenti lo stesso giorno: da riverificare/correggere le altre giornate della stagione con
+  delta sospetto (richiede il file `CORRISP.xml` originale di quel giorno, non ricostruibile dai
+  soli dati già salvati in `rt_chiusure`, che non conserva l'XML grezzo).
   ⚠️ **Più chiusure Z nello stesso giorno solare vanno sommate, non solo l'ultima considerata**: bug
   reale (luglio 2026) — un giorno con un problema che ha richiesto riapertura e nuova chiusura produce
   due file `*CORRISP*.xml` nella stessa cartella-giorno della stampante (`/www/dati-rt/{YYYYMMDD}/`),
@@ -473,6 +488,31 @@ dell'incasso). Sintomo: `imponibile_10+imposta_10` del giorno D coincide con `to
 questo bug, non un errore puntuale. Diagnosi: confrontare `imponibile_10+imposta_10` di ogni giorno
 con `totale_10` del giorno precedente, non con il proprio. Fix: ricopiare i sotto-campi sul giorno
 giusto (l'ultimo giorno di un blocco "shiftato" resta senza dato sorgente e va azzerato).
+
+**`GET /report/pagamenti` (tab Riepilogo Fatturati → Forme di pagamento)**: per ogni documento
+fiscale (solo scontrino/fattura), `pagato = totale_lordo + deposito - sospeso` (tassa_soggiorno
+NON sottratta: se pagata in contanti è contante vero). ⚠️ **`deposito` è quasi sempre <= 0**
+(verificato 2026: 459 righe negative contro 2 sole positive): è una caparra incassata su un
+documento PRECEDENTE (con la sua forma di pagamento già registrata allora) e applicata in
+detrazione sul conto attuale — confermato dall'utente. Bug reale (agosto 2026, scoperto perché
+"Contante" 2026 risultava 178.793€ invece di ~148.226€ reali): la vecchia formula sottraeva
+`deposito`, e sottrarre un negativo lo riaggiunge, riconteggiando come "pagato oggi" una caparra
+già incassata mesi prima. Il campo `incassato` di Welcome NON è un'alternativa affidabile:
+0 su 1.681 documenti su 3.254 (51,6%, dati 2026) pur totalmente pagati — non riflette "è stato
+pagato" in questo dataset, va ignorato per questo report.
+⚠️ **Un documento può elencare più metodi nel testo grezzo della colonna Pagamenti** (es.
+"Contante 8,00€ / Bancomat 300,00€ /"): la vecchia normalizzazione (prefix-match sull'inizio
+stringa) attribuiva l'intero `pagato` al primo metodo citato. Fix: quando il testo riporta
+importi per metodo, `pagato` si distribuisce tra i metodi effettivamente citati (parsing per
+tipo); il prefix-match resta solo per righe a singolo metodo senza importo nel testo (es.
+"Contante" da sola). Verificato sui 3.254 documenti 2026: 0 scarti tra `pagato` calcolato e
+somma degli importi espliciti nel testo.
+Riga "Caparra" nella tabella mostra **`-deposito`** (segno invertito, quindi quasi sempre
+positivo): sommando pagato + Caparra + Sospeso si ricostruisce esattamente `totale_lordo` (di
+scontrini/fatture + manuali MMS/BON) — verificato che il totale del report ora coincide al
+centesimo con `SUM(totale_lordo)`. Diverge intenzionalmente dal totale di `report/fatturati`
+(quello esclude la tassa di soggiorno, essendo un pass-through verso il Comune; questo la
+include, perché il denaro fisico è comunque arrivato tramite un metodo di pagamento).
 
 Toggle IVA: backend restituisce SEMPRE lordi; `applyToggle()` client-side; `localStorage('corrispettivi_lordo')`.
 Correzione manuale: `PUT /documenti/{id}` → `modificato_manualmente=true`, salva valori originali in `*_originale`.

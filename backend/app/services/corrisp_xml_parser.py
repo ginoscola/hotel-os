@@ -1,13 +1,24 @@
 """Parser per il file CORRISP.xml prodotto dal registratore telematico (RT) dopo la chiusura Z.
 
-Formula totale giorno:
-  Σ (ImportoParziale + Imposta) per le righe con AliquotaIVA, solo se ImportoParziale > 0
-  + Σ ImportoParziale per le righe con Natura (N1, N2, ...), solo se ImportoParziale > 0
+Formula totale giorno (imponibile NETTO degli annullamenti dello stesso giorno):
+  imponibile_netto = ImportoParziale - TotaleAmmontareAnnulli
+  Σ (imponibile_netto + imposta_netta) per le righe con AliquotaIVA, solo se ImportoParziale > 0
+  + Σ imponibile_netto per le righe con Natura (N1, N2, ...), solo se ImportoParziale > 0
+
+⚠️ <TotaleAmmontareAnnulli> (imponibile degli scontrini annullati lo stesso giorno fiscale, PRIMA
+della chiusura Z) non era letto affatto fino ad agosto 2026: il totale importato era quindi il
+lordo PRIMA degli annullamenti, non il netto stampato come "Totale giorno annullamenti" sullo
+scontrino di chiusura — bug reale (verificato sul file del 14/08/2026, RT1: importava 7.806,18€
+invece di 6.332,68€, esattamente 1.473,50€ in più = imponibile annullato lordizzato). Non è un
+problema di cassa (storni non registrati): il dato è nel file, semplicemente non veniva letto.
+L'imposta non è mai riportata separatamente per l'annullato: va ricalcolata da imponibile_netto
+× aliquota (verificato sui file reali: <Imposta> corrisponde sempre esattamente a
+ImportoParziale × aliquota/100, quindi ricalcolare dal netto dà lo stesso arrotondamento).
 
 ⚠️ <Ammontare> NON è imponibile+imposta come si potrebbe pensare dal nome: verificato sui file
-reali (30/06 e 01/07/2026) che <Ammontare> = <ImportoParziale> + <NonRiscossoServizi> (include
-cioè la tassa di soggiorno "non riscossa", non l'IVA). Va quindi ignorato per il totale fiscale,
-che si ricava da ImportoParziale + Imposta.
+reali che <Ammontare> = ImportoParziale + NonRiscossoServizi + TotaleAmmontareAnnulli (include
+cioè la tassa di soggiorno "non riscossa" e l'annullato, non l'IVA). Va quindi ignorato per il
+totale fiscale, che si ricava da imponibile_netto + imposta_netta.
 
 Codici Natura noti: N1 = tassa di soggiorno (tracciato in esente_n1 e nel campo legacy totale_ts,
 usato nel confronto vs PMS), N2 = penali (tracciato in totale_penali). Solo ImportoParziale per
@@ -109,32 +120,36 @@ def parse_corrisp_xml(xml_content: bytes) -> dict:
 
     for r in riepiloghi:
         importo_parziale = _dec(_child_text(r, 'ImportoParziale'))
+        annulli_testo = _child_text(r, 'TotaleAmmontareAnnulli')
+        annulli = _dec(annulli_testo) if annulli_testo is not None else Decimal('0')
+        imponibile_netto = importo_parziale - annulli
         nrs_testo = _child_text(r, 'NonRiscossoServizi')
         if nrs_testo is not None:
             tassa_soggiorno_nrs += _dec(nrs_testo)
 
-        aliquota, imposta = _iva_info(r)
+        aliquota, _imposta_lorda = _iva_info(r)
         natura = _child_text(r, 'Natura')
 
         if aliquota is not None:
             if importo_parziale > 0:
-                lordo = importo_parziale + imposta
+                imposta_netta = (imponibile_netto * aliquota / Decimal('100')).quantize(Decimal('0.01'))
+                lordo = imponibile_netto + imposta_netta
                 totale_giorno += lordo
                 if aliquota == ALIQUOTA_10:
-                    imponibile_10 += importo_parziale
-                    imposta_10 += imposta
+                    imponibile_10 += imponibile_netto
+                    imposta_10 += imposta_netta
                     lordo_10 += lordo
                 elif aliquota == ALIQUOTA_22:
-                    imponibile_22 += importo_parziale
-                    imposta_22 += imposta
+                    imponibile_22 += imponibile_netto
+                    imposta_22 += imposta_netta
                     lordo_22 += lordo
         elif natura is not None:
             if importo_parziale > 0:
-                totale_giorno += importo_parziale
+                totale_giorno += imponibile_netto
             if natura == 'N1':
-                esente_n1 += importo_parziale
+                esente_n1 += imponibile_netto
             elif natura == 'N2':
-                penali += importo_parziale
+                penali += imponibile_netto
 
     num_documenti = None
     pagato_contanti = Decimal('0')
