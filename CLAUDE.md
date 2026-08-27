@@ -193,7 +193,13 @@ UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % 
 - `kpi_periodo` = KPI solo sulla settimana di riferimento; evidenziata in grafici (ReferenceArea) e tabella.
 - Confronto snapshot precedente (mutuamente esclusivo con anno precedente, offset 364gg ±30gg tolleranza).
 - Revenue giornaliero: senza confronto → BarChart impilato (Camere/F&B/Extra); con confronto → LineChart `revenue_total` corrente vs confronto.
-- Dati giornalieri: collassabili, stato in `localStorage('giornalieri_{hotel_code}')`.
+- Dati giornalieri: collassabili, stato in `localStorage('giornalieri_{hotel_code}')` (default compresso).
+- **Sezione "Dati mensili"** (`SezioneDatiMensili` + helper `aggregaGiorniPerMese` in `DashboardHotel.jsx`,
+  tra "Aggregati settimanali" e "Dati giornalieri"): un blocco collassabile per ogni mese solare della
+  stagione (Mag/Giu/Lug/Ago/Set), ciascuno con tutte le righe giornaliere del mese (stesse colonne di
+  "Dati giornalieri") + riga "TOTALE {mese}" con KPI ricalcolati sui totali del mese (mai media dei
+  giornalieri). Stato apertura solo in-memory (`useState`), tutti i mesi compressi all'apertura pagina.
+  Solo display, nessun endpoint/export dedicato (l'export mensile è `/export/hotel/{code}/mensile`).
 - SettimanaDashboard include: rooms_sold, rooms_available, occupancy, adr, rmc, revpar, trevpar, revenue_*, inc_rooms, inc_fnb, inc_extra.
 
 ## Dashboard Gruppo

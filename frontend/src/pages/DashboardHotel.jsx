@@ -440,6 +440,143 @@ function TabellaAggregatiMensili({ mesi, exportUrl, exportNome }) {
   )
 }
 
+/**
+ * Raggruppa i dati giornalieri per mese solare.
+ * Ogni mese contiene le sue righe giornaliere e una riga totale con i KPI
+ * ricalcolati sui totali del mese (mai media dei KPI giornalieri).
+ */
+function aggregaGiorniPerMese(giorni) {
+  const mesi = {}
+  for (const g of giorni) {
+    if (!g.data) continue
+    const ym = g.data.slice(0, 7)
+    if (!mesi[ym]) mesi[ym] = { ym, giorni: [] }
+    mesi[ym].giorni.push(g)
+  }
+  return Object.values(mesi)
+    .sort((a, b) => a.ym.localeCompare(b.ym))
+    .map(m => {
+      const [year, month] = m.ym.split('-')
+      const t = m.giorni.reduce((acc, g) => {
+        acc.rooms_sold      += g.rooms_sold      || 0
+        acc.rooms_available += g.rooms_available  || 0
+        acc.pax             += g.pax             || 0
+        acc.revenue_rooms   += g.revenue_rooms   || 0
+        acc.revenue_fnb     += g.revenue_fnb     || 0
+        acc.revenue_extra   += g.revenue_extra   || 0
+        acc.revenue_total   += g.revenue_total   || 0
+        return acc
+      }, { rooms_sold: 0, rooms_available: 0, pax: 0, revenue_rooms: 0, revenue_fnb: 0, revenue_extra: 0, revenue_total: 0 })
+      const { rooms_sold: rs, rooms_available: ra, revenue_rooms: rr, revenue_total: rt } = t
+      return {
+        ym: m.ym,
+        label: `${MESI_IT[parseInt(month) - 1]} ${year}`,
+        giorni: m.giorni,
+        totale: {
+          ...t,
+          occupancy: ra > 0 ? (rs / ra * 100) : null,
+          adr:       rs > 0 ? (rr / rs) : null,
+          rmc:       rs > 0 ? (rt / rs) : null,
+          revpar:    ra > 0 ? (rr / ra) : null,
+          trevpar:   ra > 0 ? (rt / ra) : null,
+        },
+      }
+    })
+}
+
+/**
+ * Sezione "Dati mensili": un blocco collassabile per ogni mese della stagione,
+ * ciascuno con tutte le righe giornaliere del mese + riga totale.
+ * All'apertura della pagina tutti i mesi sono compressi.
+ */
+function SezioneDatiMensili({ mesi, refStart, refEnd }) {
+  const [aperti, setAperti] = useState({})
+  if (!mesi || mesi.length === 0) return null
+  const toggle = ym => setAperti(a => ({ ...a, [ym]: !a[ym] }))
+  const tdTot = { background: '#e8edf5', fontWeight: 700 }
+
+  return (
+    <div className="card sezione">
+      <h3 style={{ margin: '0 0 0.75rem' }}>Dati mensili — dettaglio giornaliero per mese</h3>
+      {mesi.map(m => {
+        const aperto = !!aperti[m.ym]
+        const t = m.totale
+        return (
+          <div key={m.ym} style={{ marginBottom: '0.75rem', border: '1px solid #e5e7eb', borderRadius: 6 }}>
+            <div onClick={() => toggle(m.ym)}
+              style={{
+                cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', padding: '0.5rem 0.75rem', background: '#f9fafb',
+              }}>
+              <strong>{m.label}</strong>
+              <span style={{ fontSize: 13, color: '#6b7280' }}>
+                {m.giorni.length} gg &nbsp;·&nbsp; {formatEuro(t.revenue_total)} &nbsp; {aperto ? '▲' : '▼'}
+              </span>
+            </div>
+            {aperto && (
+              <div style={{ overflowX: 'auto', padding: '0.5rem 0.75rem' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left' }}>Giorno</th>
+                      <th>Cam. vend.</th>
+                      <th>PAX</th>
+                      <th>Occup.</th>
+                      <th>ADR</th>
+                      <th>RMC</th>
+                      <th>RevPAR</th>
+                      <th>TRevPAR</th>
+                      <th>Rev. Camere</th>
+                      <th>Rev. F&B</th>
+                      <th>Rev. Extra</th>
+                      <th>Rev. Totale</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {m.giorni.map((g, i) => (
+                      <tr key={i} style={
+                        refStart && g.data >= refStart && g.data <= refEnd
+                          ? { background: '#eff6ff' } : {}
+                      }>
+                        <td>{g.label}</td>
+                        <td>{formatN(g.rooms_sold)}</td>
+                        <td>{formatN(g.pax)}</td>
+                        <td>{g.occupancy != null ? formatPerc(g.occupancy) : '—'}</td>
+                        <td>{g.adr != null ? formatEuro(g.adr) : '—'}</td>
+                        <td>{g.rmc != null ? formatEuro(g.rmc) : '—'}</td>
+                        <td>{g.revpar != null ? formatEuro(g.revpar) : '—'}</td>
+                        <td>{g.trevpar != null ? formatEuro(g.trevpar) : '—'}</td>
+                        <td>{formatEuro(g.revenue_rooms)}</td>
+                        <td>{formatEuro(g.revenue_fnb)}</td>
+                        <td>{formatEuro(g.revenue_extra)}</td>
+                        <td>{formatEuro(g.revenue_total)}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ ...tdTot, textAlign: 'left' }}>TOTALE {m.label}</td>
+                      <td style={tdTot}>{formatN(t.rooms_sold)}</td>
+                      <td style={tdTot}>{formatN(t.pax)}</td>
+                      <td style={tdTot}>{t.occupancy != null ? formatPerc(t.occupancy) : '—'}</td>
+                      <td style={tdTot}>{t.adr != null ? formatEuro(t.adr) : '—'}</td>
+                      <td style={tdTot}>{t.rmc != null ? formatEuro(t.rmc) : '—'}</td>
+                      <td style={tdTot}>{t.revpar != null ? formatEuro(t.revpar) : '—'}</td>
+                      <td style={tdTot}>{t.trevpar != null ? formatEuro(t.trevpar) : '—'}</td>
+                      <td style={tdTot}>{formatEuro(t.revenue_rooms)}</td>
+                      <td style={tdTot}>{formatEuro(t.revenue_fnb)}</td>
+                      <td style={tdTot}>{formatEuro(t.revenue_extra)}</td>
+                      <td style={tdTot}>{formatEuro(t.revenue_total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function ContenutoDashboard({
   dati, datiComp, compLabel, isAnnoPrecedente,
   hotel, currentSnap, giornalieriEspansi, onToggleGiornalieri,
@@ -457,6 +594,7 @@ function ContenutoDashboard({
   )
 
   const mesiAggregati = useMemo(() => aggregaMensile(giorni), [giorni])
+  const mesiGiornalieri = useMemo(() => aggregaGiorniPerMese(giorni), [giorni])
 
   function kpiDelta(key) { return calcolaDelta(kpi[key], kpiComp?.[key]) }
   function kpiCompV(key, fmt) {
@@ -703,6 +841,9 @@ function ContenutoDashboard({
           </div>
         </div>
       )}
+
+      {/* Dati mensili — un blocco collassabile per mese, tra settimanali e giornalieri */}
+      <SezioneDatiMensili mesi={mesiGiornalieri} refStart={refStart} refEnd={refEnd} />
 
       {/* Tabella giornaliera — collassabile */}
       {giorni.length > 0 && (
