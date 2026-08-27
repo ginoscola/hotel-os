@@ -486,11 +486,18 @@ function aggregaGiorniPerMese(giorni) {
  * ciascuno con tutte le righe giornaliere del mese + riga totale.
  * All'apertura della pagina tutti i mesi sono compressi.
  */
-function SezioneDatiMensili({ mesi, refStart, refEnd }) {
+function SezioneDatiMensili({ mesi, refStart, refEnd, hotel, snapParam }) {
   const [aperti, setAperti] = useState({})
   if (!mesi || mesi.length === 0) return null
   const toggle = ym => setAperti(a => ({ ...a, [ym]: !a[ym] }))
   const tdTot = { background: '#e8edf5', fontWeight: 700 }
+
+  const urlExportMese = m => {
+    const da = m.giorni[0].data
+    const a = m.giorni[m.giorni.length - 1].data
+    const params = [snapParam, `da=${da}`, `a=${a}`].filter(Boolean).join('&')
+    return `/export/hotel/${hotel}/giornaliero?${params}`
+  }
 
   return (
     <div className="card sezione">
@@ -503,12 +510,20 @@ function SezioneDatiMensili({ mesi, refStart, refEnd }) {
             <div onClick={() => toggle(m.ym)}
               style={{
                 cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
-                alignItems: 'center', padding: '0.5rem 0.75rem', background: '#f9fafb',
+                alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: '#f9fafb',
               }}>
               <strong>{m.label}</strong>
-              <span style={{ fontSize: 13, color: '#6b7280' }}>
-                {m.giorni.length} gg &nbsp;·&nbsp; {formatEuro(t.revenue_total)} &nbsp; {aperto ? '▲' : '▼'}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: 13, color: '#6b7280' }}>
+                  {m.giorni.length} gg &nbsp;·&nbsp; {formatEuro(t.revenue_total)}
+                </span>
+                <ExportMenu
+                  url={urlExportMese(m)}
+                  nome={`${hotel}_giornaliero_${m.ym}`}
+                  onClick={e => e.stopPropagation()}
+                />
+                <span>{aperto ? '▲' : '▼'}</span>
+              </div>
             </div>
             {aperto && (
               <div style={{ overflowX: 'auto', padding: '0.5rem 0.75rem' }}>
@@ -840,7 +855,8 @@ function ContenutoDashboard({
       )}
 
       {/* Dati mensili — un blocco collassabile per mese, tra settimanali e giornalieri */}
-      <SezioneDatiMensili mesi={mesiGiornalieri} refStart={refStart} refEnd={refEnd} />
+      <SezioneDatiMensili mesi={mesiGiornalieri} refStart={refStart} refEnd={refEnd}
+        hotel={hotel} snapParam={snapParam} />
 
       {/* Tabella giornaliera — collassabile */}
       {giorni.length > 0 && (

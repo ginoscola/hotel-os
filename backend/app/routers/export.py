@@ -273,6 +273,23 @@ _FMT_GIORN = [
 ]
 
 
+def _totale_giorn(righe: List[RigaRevenue]) -> list:
+    """Riga totale per l'export giornaliero — KPI sui totali del periodo (mai medie)."""
+    rs = sum(r.rooms_sold for r in righe)
+    ra = sum(r.rooms_available for r in righe)
+    px = sum(r.pax for r in righe)
+    rr = sum(r.revenue_rooms for r in righe)
+    rf = sum(r.revenue_fnb for r in righe)
+    rx = sum(r.revenue_extra for r in righe)
+    rt = sum(r.revenue_total for r in righe)
+    kpi = calcola_kpi(rs, ra, rr, rf, rx, rt)
+    return [
+        "TOTALE", "", rs, px,
+        kpi.occupancy, kpi.adr, kpi.rmc, kpi.revpar, kpi.trevpar,
+        round(rr, 2), round(rf, 2), round(rx, 2), round(rt, 2),
+    ]
+
+
 def _xlsx_hotel_giorn(hotel_code: str, righe: List[RigaRevenue]) -> io.BytesIO:
     from app.services.kpi_calculator import kpi_da_riga
     wb = openpyxl.Workbook()
@@ -303,6 +320,13 @@ def _xlsx_hotel_giorn(hotel_code: str, righe: List[RigaRevenue]) -> io.BytesIO:
                 cell.number_format = fmt
             if i % 2 == 0:
                 cell.fill = PatternFill("solid", fgColor=_GRIGIO_RIGA)
+
+    riga_tot = len(righe) + 2
+    for j, (val, fmt) in enumerate(zip(_totale_giorn(righe), _FMT_GIORN), start=1):
+        cell = ws.cell(row=riga_tot, column=j, value=val)
+        if fmt and val != "":
+            cell.number_format = fmt
+        cell.font = Font(bold=True)
 
     _auto_width(ws)
     return _to_buf(wb)
@@ -446,6 +470,7 @@ def _csv_hotel_giorn(hotel_code: str, righe: List[RigaRevenue]) -> io.BytesIO:
             round(r.revenue_rooms, 2), round(r.revenue_fnb, 2),
             round(r.revenue_extra, 2), round(r.revenue_total, 2),
         ])
+    w.writerow([_sv(v) for v in _totale_giorn(righe)])
     return io.BytesIO(b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8"))
 
 
@@ -678,7 +703,16 @@ def _pdf_hotel_giorn(hotel_code: str, righe: List[RigaRevenue]) -> io.BytesIO:
             _pv(r.revenue_rooms, 0, "€"), _pv(r.revenue_fnb, 0, "€"),
             _pv(r.revenue_extra, 0, "€"), _pv(r.revenue_total, 0, "€"),
         ])
-    return _costruisci_pdf(titolo, _PDF_INT_GIORN, righe_pdf, _PDF_CW_GIORN)
+    tot = _totale_giorn(righe)
+    righe_pdf.append([
+        "TOTALE", "", str(tot[2]), str(tot[3]),
+        _pv(tot[4], 1, "%"), _pv(tot[5], 2, "€"), _pv(tot[6], 2, "€"),
+        _pv(tot[7], 2, "€"), _pv(tot[8], 2, "€"),
+        _pv(tot[9], 0, "€"), _pv(tot[10], 0, "€"), _pv(tot[11], 0, "€"), _pv(tot[12], 0, "€"),
+    ])
+    n = len(righe_pdf)
+    extra = [("FONTNAME", (0, n), (-1, n), "Helvetica-Bold")]
+    return _costruisci_pdf(titolo, _PDF_INT_GIORN, righe_pdf, _PDF_CW_GIORN, extra_stili=extra)
 
 
 # ---------------------------------------------------------------------------

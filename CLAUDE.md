@@ -200,7 +200,9 @@ UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % 
   stagione (Mag/Giu/Lug/Ago/Set), ciascuno con tutte le righe giornaliere del mese (stesse colonne di
   "Dati giornalieri") + riga "TOTALE {mese}" con KPI ricalcolati sui totali del mese (mai media dei
   giornalieri). Stato apertura solo in-memory (`useState`), tutti i mesi compressi all'apertura pagina.
-  Solo display, nessun endpoint/export dedicato (l'export mensile è `/export/hotel/{code}/mensile`).
+  Ogni blocco mese ha il proprio tasto **Esporta** (xlsx/csv/pdf): riusa `/export/hotel/{code}/giornaliero`
+  con `da`/`a` = prima/ultima data effettiva del mese (`m.giorni[0].data`..`m.giorni.at(-1).data`),
+  filename `{hotel}_giornaliero_{YYYY-MM}`. Nessun endpoint dedicato.
 - SettimanaDashboard include: rooms_sold, rooms_available, occupancy, adr, rmc, revpar, trevpar, revenue_*, inc_rooms, inc_fnb, inc_extra.
 
 ## Dashboard Gruppo
@@ -228,6 +230,8 @@ Tre modalità (toggle, `localStorage('gruppo_modalita')`):
 
 ## Export
 - Hotel: `GET /export/hotel/{code}/settimanale|mensile|giornaliero?snapshot=&da=&a=&formato=xlsx|csv|pdf`
+  (tutti e tre chiudono con una riga "TOTALE" — KPI sui totali del periodo, mai medie — anche il
+  giornaliero, usato sia per la stagione intera sia per il singolo mese via `da`/`a`)
 - Gruppo: `GET /export/gruppo?da=&a=&formato=`
 - `/hotel/{code}/mensile`: aggregati per **mese solare** (non mese contabile Budget), stesse 16 colonne
   del settimanale con prima colonna "Mese", replica di `aggregaMensile()`/`TabellaAggregatiMensili` in
