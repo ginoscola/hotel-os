@@ -220,8 +220,13 @@ Tre modalità (toggle, `localStorage('gruppo_modalita')`):
   mai eseguito finché non è servito da `/forecast/pace-gruppo`).
 
 ## Export
-- Hotel: `GET /export/hotel/{code}/settimanale|giornaliero?snapshot=&da=&a=&formato=xlsx|csv|pdf`
+- Hotel: `GET /export/hotel/{code}/settimanale|mensile|giornaliero?snapshot=&da=&a=&formato=xlsx|csv|pdf`
 - Gruppo: `GET /export/gruppo?da=&a=&formato=`
+- `/hotel/{code}/mensile`: aggregati per **mese solare** (non mese contabile Budget), stesse 16 colonne
+  del settimanale con prima colonna "Mese", replica di `aggregaMensile()`/`TabellaAggregatiMensili` in
+  `DashboardHotel.jsx` (KPI sui totali mensili, `giorni`=giorni con camere vendute, mesi senza vendite
+  esclusi). Helper `_aggrega_mesi`/`_riga_mens`/`_totale_mens`/`_xlsx|_csv|_pdf_hotel_mens` in
+  `export.py`, riusa `_scrivi_riga_sett`. Pulsante Esporta in `TabellaAggregatiMensili` via `SezioneHeader`.
 - Excel: revenue `#,##0.00 "€"`, percentuali `0.0"%"`, interi `#,##0`. Intestazioni bold bianco su blu, righe alternate grigio.
 - PDF: landscape A4, 8pt.
 - Gruppo Excel: 2 fogli (aggregati settimanali + dettaglio hotel).

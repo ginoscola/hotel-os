@@ -30,7 +30,7 @@ from app.services.kpi_calculator import calcola_kpi
 from app.services.weekly_aggregator import AggregatoSettimanale, aggrega_settimane
 from app.services.group_aggregator import aggrega_gruppo_settimanale
 
-from app.utils.locale_it import GIORNI_IT
+from app.utils.locale_it import GIORNI_IT, MESI_IT
 
 router = APIRouter(prefix="/export", tags=["export"], dependencies=[Depends(richiedi_utente_attivo)])
 _BLU_INTESTAZIONE = "1a56db"
@@ -63,6 +63,31 @@ def export_hotel_settimanale(
     settimane = aggrega_settimane(righe)
     nome = f"{hotel_code}_settimanale"
     return _risposta(formato, nome, _xlsx_hotel_sett, _csv_hotel_sett, _pdf_hotel_sett, hotel_code, settimane)
+
+
+# ---------------------------------------------------------------------------
+# Endpoint hotel — mensile (aggregati per mese solare, intera stagione)
+# ---------------------------------------------------------------------------
+
+@router.get("/hotel/{hotel_code}/mensile")
+def export_hotel_mensile(
+    hotel_code: str,
+    da: Optional[date] = Query(None),
+    a: Optional[date] = Query(None),
+    snapshot: Optional[date] = Query(None),
+    formato: str = Query("xlsx", pattern="^(xlsx|csv|pdf)$"),
+    db: Session = Depends(get_db),
+):
+    """Esporta gli aggregati mensili (mese solare) di un hotel in Excel, CSV o PDF."""
+    hotel_code = hotel_code.upper()
+    righe = _carica_righe(db, hotel_code=hotel_code, snapshot_date=snapshot, da=da, a=a)
+    if not righe:
+        raise HTTPException(status_code=404, detail="Nessun dato nel periodo selezionato.")
+    mesi = _aggrega_mesi(righe)
+    if not mesi:
+        raise HTTPException(status_code=404, detail="Nessun dato nel periodo selezionato.")
+    nome = f"{hotel_code}_mensile"
+    return _risposta(formato, nome, _xlsx_hotel_mens, _csv_hotel_mens, _pdf_hotel_mens, hotel_code, mesi)
 
 
 # ---------------------------------------------------------------------------
@@ -502,6 +527,129 @@ def _pdf_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale]) -> i
     n = len(righe_pdf)
     extra = [("FONTNAME", (0, n), (-1, n), "Helvetica-Bold")]
     return _costruisci_pdf(titolo, _PDF_INT_SETT, righe_pdf, _PDF_CW_SETT, extra_stili=extra)
+
+
+# ---------------------------------------------------------------------------
+# Hotel mensile — aggregazione per mese solare + Excel/CSV/PDF
+#
+# Stesse 16 colonne del settimanale (prima colonna "Mese" al posto di
+# "Settimana"): replica esatta di aggregaMensile()/TabellaAggregatiMensili
+# in DashboardHotel.jsx — KPI sui totali mensili (mai medie), 'giorni' =
+# giorni con camere vendute, mesi senza camere vendute esclusi.
+# ---------------------------------------------------------------------------
+
+_INT_MENS     = ["Mese"] + _INT_SETT[1:]
+_PDF_INT_MENS = ["Mese"] + _PDF_INT_SETT[1:]
+_PDF_CW_MENS  = [70, 22, 34, 34, 36, 44, 46, 50, 44, 50, 44, 42, 50, 36, 36, 36]
+
+
+def _aggrega_mesi(righe: List[RigaRevenue]) -> List[dict]:
+    per_mese: Dict[tuple, dict] = {}
+    for r in righe:
+        chiave = (r.data.year, r.data.month)
+        m = per_mese.setdefault(chiave, {
+            "anno": r.data.year, "mese": r.data.month, "giorni": 0,
+            "rooms_sold": 0, "rooms_available": 0,
+            "revenue_rooms": 0.0, "revenue_fnb": 0.0,
+            "revenue_extra": 0.0, "revenue_total": 0.0,
+        })
+        m["rooms_sold"]      += r.rooms_sold
+        m["rooms_available"] += r.rooms_available
+        m["revenue_rooms"]   += r.revenue_rooms
+        m["revenue_fnb"]     += r.revenue_fnb
+        m["revenue_extra"]   += r.revenue_extra
+        m["revenue_total"]   += r.revenue_total
+        if r.rooms_sold > 0:
+            m["giorni"] += 1
+
+    mesi: List[dict] = []
+    for chiave in sorted(per_mese):
+        m = per_mese[chiave]
+        if m["rooms_sold"] <= 0:
+            continue
+        m["kpi"] = calcola_kpi(
+            m["rooms_sold"], m["rooms_available"],
+            m["revenue_rooms"], m["revenue_fnb"], m["revenue_extra"], m["revenue_total"],
+        )
+        m["label"] = f'{MESI_IT[m["mese"] - 1].capitalize()} {m["anno"]}'
+        mesi.append(m)
+    return mesi
+
+
+def _riga_mens(m: dict) -> list:
+    k = m["kpi"]
+    return [
+        m["label"], m["giorni"], m["rooms_sold"], m["rooms_available"],
+        k.occupancy, k.adr, k.revpar, k.trevpar, k.rmc,
+        round(m["revenue_rooms"], 2), round(m["revenue_fnb"], 2),
+        round(m["revenue_extra"], 2), round(m["revenue_total"], 2),
+        k.inc_rooms, k.inc_fnb, k.inc_extra,
+    ]
+
+
+def _totale_mens(mesi: List[dict]) -> list:
+    rs = sum(m["rooms_sold"] for m in mesi)
+    ra = sum(m["rooms_available"] for m in mesi)
+    rr = sum(m["revenue_rooms"] for m in mesi)
+    rf = sum(m["revenue_fnb"] for m in mesi)
+    rx = sum(m["revenue_extra"] for m in mesi)
+    rt = sum(m["revenue_total"] for m in mesi)
+    kpi = calcola_kpi(rs, ra, rr, rf, rx, rt)
+    return [
+        "TOTALE STAGIONE", sum(m["giorni"] for m in mesi), rs, ra,
+        kpi.occupancy, kpi.adr, kpi.revpar, kpi.trevpar, kpi.rmc,
+        round(rr, 2), round(rf, 2), round(rx, 2), round(rt, 2),
+        kpi.inc_rooms, kpi.inc_fnb, kpi.inc_extra,
+    ]
+
+
+def _xlsx_hotel_mens(hotel_code: str, mesi: List[dict]) -> io.BytesIO:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Mensile"
+    _scrivi_intestazione(ws, _INT_MENS)
+    for i, m in enumerate(mesi, start=2):
+        _scrivi_riga_sett(ws, i, _riga_mens(m))
+    _scrivi_riga_sett(ws, len(mesi) + 2, _totale_mens(mesi), bold=True)
+    _auto_width(ws)
+    return _to_buf(wb)
+
+
+def _csv_hotel_mens(hotel_code: str, mesi: List[dict]) -> io.BytesIO:
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(_INT_MENS)
+    for m in mesi:
+        w.writerow([_sv(v) for v in _riga_mens(m)])
+    w.writerow([_sv(v) for v in _totale_mens(mesi)])
+    return io.BytesIO(b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8"))
+
+
+def _pdf_hotel_mens(hotel_code: str, mesi: List[dict]) -> io.BytesIO:
+    titolo = f"{hotel_code} — Aggregati mensili"
+    righe_pdf = []
+    for m in mesi:
+        k = m["kpi"]
+        righe_pdf.append([
+            m["label"], str(m["giorni"]), str(m["rooms_sold"]), str(m["rooms_available"]),
+            _pv(k.occupancy, 1, "%"), _pv(k.adr, 2, "€"),
+            _pv(k.revpar, 2, "€"), _pv(k.trevpar, 2, "€"), _pv(k.rmc, 2, "€"),
+            _pv(m["revenue_rooms"], 0, "€"), _pv(m["revenue_fnb"], 0, "€"),
+            _pv(m["revenue_extra"], 0, "€"), _pv(m["revenue_total"], 0, "€"),
+            _pv(k.inc_rooms, 1, "%"), _pv(k.inc_fnb, 1, "%"), _pv(k.inc_extra, 1, "%"),
+        ])
+    tot = _totale_mens(mesi)
+    righe_pdf.append([
+        "TOTALE", str(tot[1]), str(tot[2]), str(tot[3]),
+        _pv(tot[4], 1, "%"), _pv(tot[5], 2, "€"),
+        _pv(tot[6], 2, "€"), _pv(tot[7], 2, "€"), _pv(tot[8], 2, "€"),
+        _pv(tot[9], 0, "€"), _pv(tot[10], 0, "€"),
+        _pv(tot[11], 0, "€"), _pv(tot[12], 0, "€"),
+        _pv(tot[13], 1, "%"), _pv(tot[14], 1, "%"), _pv(tot[15], 1, "%"),
+    ])
+    n = len(righe_pdf)
+    extra = [("FONTNAME", (0, n), (-1, n), "Helvetica-Bold")]
+    return _costruisci_pdf(titolo, _PDF_INT_MENS, righe_pdf, _PDF_CW_MENS, extra_stili=extra)
 
 
 # ---------------------------------------------------------------------------

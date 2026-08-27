@@ -354,7 +354,7 @@ function CardCorrispettivi({ hotel, data }) {
   )
 }
 
-function TabellaAggregatiMensili({ mesi }) {
+function TabellaAggregatiMensili({ mesi, exportUrl, exportNome }) {
   if (!mesi || mesi.length === 0) return null
 
   const tot = mesi.reduce((acc, m) => {
@@ -382,7 +382,8 @@ function TabellaAggregatiMensili({ mesi }) {
 
   return (
     <div className="card sezione">
-      <h3 style={{ margin: '0 0 0.75rem' }}>Aggregati mensili — intera stagione</h3>
+      <SezioneHeader titolo="Aggregati mensili — intera stagione"
+        exportUrl={exportUrl} exportNome={exportNome} />
       <div style={{ overflowX: 'auto' }}>
         <table>
           <thead>
@@ -465,6 +466,7 @@ function ContenutoDashboard({
   const snapParam = currentSnap ? `snapshot=${currentSnap.snapshot_date}` : ''
   const exportSett = `/export/hotel/${hotel}/settimanale?${snapParam}`
   const exportGiorn = `/export/hotel/${hotel}/giornaliero?${snapParam}`
+  const exportMens = `/export/hotel/${hotel}/mensile?${snapParam}`
 
   // Etichetta intestazione settimana di riferimento
   const refLabel = refStart
@@ -632,7 +634,8 @@ function ContenutoDashboard({
       </div>
 
       {/* Aggregati mensili — intera stagione */}
-      <TabellaAggregatiMensili mesi={mesiAggregati} />
+      <TabellaAggregatiMensili mesi={mesiAggregati}
+        exportUrl={exportMens} exportNome={`${hotel}_mensile`} />
 
       {/* Tabella aggregati settimanali — intera stagione */}
       {settimane.length > 0 && (
