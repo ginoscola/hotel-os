@@ -139,8 +139,7 @@ export default function DashboardHotel() {
     api.get(`/snapshots/${hotel}`)
       .then(({ data }) => setSnapshots(data.snapshots || []))
       .catch(() => setSnapshots([]))
-    const saved = localStorage.getItem(`giornalieri_${hotel}`)
-    setGiornalieriEspansi(saved === 'true')
+    setGiornalieriEspansi(false)   // sempre compresso all'apertura, come i "Dati mensili"
   }, [hotel])
 
   const currentSnap = snapshots[snapIdx] || null
@@ -190,9 +189,7 @@ export default function DashboardHotel() {
   }
 
   function toggleGiornalieri() {
-    const v = !giornalieriEspansi
-    setGiornalieriEspansi(v)
-    localStorage.setItem(`giornalieri_${hotel}`, String(v))
+    setGiornalieriEspansi(v => !v)   // stato solo in-memory, non persistito
   }
 
   const compLabel = confrontaPrevSett

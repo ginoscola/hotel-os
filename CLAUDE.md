@@ -193,7 +193,8 @@ UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % 
 - `kpi_periodo` = KPI solo sulla settimana di riferimento; evidenziata in grafici (ReferenceArea) e tabella.
 - Confronto snapshot precedente (mutuamente esclusivo con anno precedente, offset 364gg ±30gg tolleranza).
 - Revenue giornaliero: senza confronto → BarChart impilato (Camere/F&B/Extra); con confronto → LineChart `revenue_total` corrente vs confronto.
-- Dati giornalieri: collassabili, stato in `localStorage('giornalieri_{hotel_code}')` (default compresso).
+- Dati giornalieri: collassabili, stato solo in-memory (`useState`), **sempre compresso all'apertura
+  della pagina**, come i blocchi "Dati mensili" (non più persistito in localStorage).
 - **Sezione "Dati mensili"** (`SezioneDatiMensili` + helper `aggregaGiorniPerMese` in `DashboardHotel.jsx`,
   tra "Aggregati settimanali" e "Dati giornalieri"): un blocco collassabile per ogni mese solare della
   stagione (Mag/Giu/Lug/Ago/Set), ciascuno con tutte le righe giornaliere del mese (stesse colonne di
