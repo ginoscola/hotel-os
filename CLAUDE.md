@@ -100,7 +100,15 @@ Moduli: `revenue` (/dashboard/gruppo), `produzione` (/statistiche-produzione —
 Tabelle: `modules` (code PK, name, icon, route, ordine, attivo, colore), `module_permissions` (module_code, ruolo, puo_vedere, puo_modificare, puo_importare).
 NavBar L1: tab moduli da `GET /modules/`; L2: sotto-nav del modulo attivo.
 Permessi: al login → `localStorage['moduli_permessi']`; ProtectedRoute verifica `puo_vedere`.
-**Aggiungere modulo**: riga in `modules` → righe `module_permissions` → pagina JSX → `<Route moduleCode="">` in App.jsx. Appare automaticamente in NavBar.
+**Aggiungere modulo**: riga in `modules` → righe `module_permissions` → pagina JSX → `<Route moduleCode="">` in App.jsx. Appare automaticamente in NavBar (tab L1 + link).
+⚠️ **Ma il tab NON risulta evidenziato come attivo se la sua route non è aggiunta anche in
+`rilevaModuloAttivo()`** (`NavBar.jsx`): quella funzione decide quale tab colorare come "attivo"
+con una whitelist manuale di prefissi (`pathname.startsWith('/budget')` ecc.), separata dal routing
+vero e proprio di React Router — non basata su `m.route` dei moduli caricati da `GET /modules/`.
+Bug reale (trovato settembre 2026): mancavano sia `produzione` (`/statistiche-produzione`, aggiunto
+da `prod004_2026` come modulo separato da USALI) sia `forecast` (`/forecast`), quindi su quelle pagine
+restava evidenziato "Statistiche" (default di fallback della funzione). Corretto aggiungendo entrambi
+i prefissi mancanti — ma resta un passo manuale da ricordare a ogni nuovo modulo, non automatico.
 Placeholder: `WorkInProgress.jsx`.
 
 ## Area Admin (`/admin` → AdminUnificato.jsx, sidebar `?s=`)

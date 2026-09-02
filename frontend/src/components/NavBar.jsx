@@ -28,10 +28,12 @@ function getSubnav(modulo, hotels, isAdmin) {
 
 // Mappa route → code modulo
 function rilevaModuloAttivo(pathname) {
+  if (pathname.startsWith('/statistiche-produzione')) return 'produzione'
   if (pathname.startsWith('/budget')) return 'budget'
   if (pathname.startsWith('/usali')) return 'usali'
   if (pathname.startsWith('/dipendenti')) return 'dipendenti'
   if (pathname.startsWith('/corrispettivi')) return 'corrispettivi'
+  if (pathname.startsWith('/forecast')) return 'forecast'
   return 'revenue'  // default: /dashboard/*, /import, /admin
 }
 
