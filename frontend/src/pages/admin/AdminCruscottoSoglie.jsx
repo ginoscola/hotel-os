@@ -4,6 +4,7 @@ import { mostraErrore } from '../../utils/format.js'
 
 const NOME_KPI = {
   occupancy: 'Occupancy',
+  adr: 'ADR (mensile)',
   revenue_stagione_vs_budget: 'Revenue vs budget',
   revpar_vs_budget: 'RevPAR vs budget',
   adr_vs_budget: 'ADR vs budget',
