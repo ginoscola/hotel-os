@@ -11,6 +11,7 @@ from app.routers import lookup as lookup_router
 from app.routers import analisi_ricavi as analisi_ricavi_router
 from app.routers import usali as usali_router
 from app.routers import produzione as produzione_router
+from app.routers import home as home_router
 
 
 def _leggi_cors_origini() -> list:
@@ -69,6 +70,7 @@ app.include_router(lookup_router.router)
 app.include_router(analisi_ricavi_router.router)
 app.include_router(usali_router.router)
 app.include_router(produzione_router.router)
+app.include_router(home_router.router)
 
 
 @app.get("/")

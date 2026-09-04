@@ -32,9 +32,9 @@ export const inpSt = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-export function isAdmin() {
-  try { return JSON.parse(localStorage.getItem('auth_user') || '{}').ruolo === 'admin' } catch { return false }
-}
+// isAdmin vive in utils/auth.js (serve anche fuori da Corrispettivi, es. Home): re-esportata
+// qui per compatibilità con gli import esistenti in questo modulo.
+export { isAdmin } from './auth.js'
 
 export function fmtD(iso) {
   if (!iso) return '—'

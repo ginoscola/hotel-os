@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import AdminUtenti from './AdminUtenti.jsx'
 import AdminCentriDiCosto from './AdminCentriDiCosto.jsx'
 import AdminBackup from './admin/AdminBackup.jsx'
+import AdminCruscottoSoglie from './admin/AdminCruscottoSoglie.jsx'
 import api from '../api/client.js'
 import { mostraErrore } from '../utils/format.js'
 import { APP_VERSION, APP_VERSION_DATE } from '../version.js'
@@ -14,6 +15,12 @@ const SEZIONI = [
       { id: 'utenti',   label: 'Utenti' },
       { id: 'stagioni', label: 'Stagioni operative' },
       { id: 'moduli',   label: 'Gestione moduli' },
+    ],
+  },
+  {
+    gruppo: 'Home / Cruscotto',
+    voci: [
+      { id: 'home-soglie', label: 'Soglie tachimetri' },
     ],
   },
   {
@@ -222,6 +229,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'utenti')        return <AdminUtenti />
   if (sezione === 'stagioni')      return <GestioneStagioni />
   if (sezione === 'moduli')        return <GestioneModuli />
+  if (sezione === 'home-soglie')   return <AdminCruscottoSoglie />
   if (sezione === 'revenue-import') return <RevenueImportMassivo />
   if (sezione === 'revenue-test')  return <RevenueDatiTest />
   if (sezione === 'dip-cc')           return <DipCentriDiCosto />

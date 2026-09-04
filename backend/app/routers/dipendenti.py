@@ -666,6 +666,54 @@ def _trova_struttura(cc: CostCenter, tutti_by_id: dict) -> Optional[CostCenter]:
     return None
 
 
+def _costo_lavoro_per_struttura(import_ids: list[int], db: Session) -> dict[str, dict]:
+    """Costo aziendale totale per struttura sugli import indicati (uno o più mesi).
+
+    Stessa logica di distribuzione proporzionale per CC di report_mensile/annuale-riepilogo
+    (percentuale EmployeeCostCenterMonthly), estratta qui per essere riusata anche dal
+    cruscotto Home (blocco costo del lavoro, solo admin) senza ricostruire l'intero report
+    per-dipendente che non serve in quel contesto — sono solo i totali per struttura.
+    Nessuna assegnazione CC mensile per un dipendente → il suo costo non entra in nessuna
+    struttura (stesso comportamento di 'CC primario' in report_mensile, qui semplificato:
+    i totali per struttura sono un aggregato, non serve un fallback per singolo dipendente).
+    Restituisce {struttura_code: {struttura_name, costo_aziendale, n_dipendenti}}.
+    """
+    if not import_ids:
+        return {}
+
+    monthly_by_key = {
+        (m.employee_id, m.import_id): m
+        for m in db.query(EmployeeMonthly).filter(EmployeeMonthly.import_id.in_(import_ids)).all()
+    }
+    cc_rows = (
+        db.query(EmployeeCostCenterMonthly)
+        .filter(EmployeeCostCenterMonthly.import_id.in_(import_ids))
+        .all()
+    )
+    tutti_cc_by_id = {cc.id: cc for cc in db.query(CostCenter).all()}
+
+    totali: dict[str, dict] = {}
+    for ca in cc_rows:
+        m = monthly_by_key.get((ca.employee_id, ca.import_id))
+        if not m or m.costo_aziendale is None:
+            continue
+        struttura = _trova_struttura(ca.cost_center, tutti_cc_by_id)
+        if not struttura:
+            continue
+        quota = float(m.costo_aziendale) * float(ca.percentuale) / 100
+        s = totali.setdefault(struttura.code, {
+            'struttura_code': struttura.code, 'struttura_name': struttura.name,
+            'costo_aziendale': 0.0, 'dipendenti_set': set(),
+        })
+        s['costo_aziendale'] += quota
+        s['dipendenti_set'].add(ca.employee_id)
+
+    for s in totali.values():
+        s['costo_aziendale'] = round(s['costo_aziendale'], 2)
+        s['n_dipendenti'] = len(s.pop('dipendenti_set'))
+    return totali
+
+
 def _arricchisci_parent_code(righe: list[dict], db: Session) -> list[dict]:
     """Aggiunge parent_code, struttura_code e struttura_name a ogni riga CC."""
     tutti_by_id = {cc.id: cc for cc in db.query(CostCenter).all()}

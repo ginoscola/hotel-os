@@ -13,3 +13,4 @@ from app.models import analisi_ricavi  # noqa: F401
 from app.models import usali  # noqa: F401
 from app.models import produzione  # noqa: F401
 from app.models import shared  # noqa: F401
+from app.models import home  # noqa: F401

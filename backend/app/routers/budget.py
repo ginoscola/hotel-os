@@ -390,13 +390,10 @@ def _settimane_stagione(hotel: Hotel, season_year: int, db: Session) -> list[tup
 # ENDPOINT GRUPPO — deve stare PRIMA di /{hotel_code} per evitare conflitti
 # ---------------------------------------------------------------------------
 
-@router.get("/gruppo/{season_year}/confronto")
-def confronto_gruppo(
-    season_year: int,
-    version: str = Query('v1'),
-    db: Session = Depends(get_db),
-):
-    """Confronto actual vs budget per tutti gli hotel del gruppo."""
+def _confronto_gruppo_dati(season_year: int, version: str, db: Session) -> list[dict]:
+    """Confronto actual vs budget per tutti gli hotel del gruppo — un dict per hotel con
+    almeno una settimana di budget. Estratta da confronto_gruppo() per essere riusata anche
+    dal cruscotto Home (blocco 'vs budget'), stessa logica, nessuna duplicazione."""
     hotels = db.query(Hotel).all()
     risultato = []
     for hotel in hotels:
@@ -441,7 +438,18 @@ def confronto_gruppo(
                 budget_tot['revenue_total'],
             ),
         })
-    return {'season_year': season_year, 'version': version, 'hotel': risultato}
+    return risultato
+
+
+@router.get("/gruppo/{season_year}/confronto")
+def confronto_gruppo(
+    season_year: int,
+    version: str = Query('v1'),
+    db: Session = Depends(get_db),
+):
+    """Confronto actual vs budget per tutti gli hotel del gruppo."""
+    return {'season_year': season_year, 'version': version,
+            'hotel': _confronto_gruppo_dati(season_year, version, db)}
 
 
 @router.get("/gruppo/{season_year}/proiezione")

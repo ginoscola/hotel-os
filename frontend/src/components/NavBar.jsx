@@ -28,6 +28,9 @@ function getSubnav(modulo, hotels, isAdmin) {
 
 // Mappa route → code modulo
 function rilevaModuloAttivo(pathname) {
+  // 'home' non è un code modulo reale (nessuna riga in `modules`): nessun tab si evidenzia,
+  // che è il comportamento voluto per la landing page.
+  if (pathname === '/home' || pathname === '/') return 'home'
   if (pathname.startsWith('/statistiche-produzione')) return 'produzione'
   if (pathname.startsWith('/budget')) return 'budget'
   if (pathname.startsWith('/usali')) return 'usali'
@@ -107,7 +110,7 @@ export default function NavBar() {
       {/* ── Livello 1: moduli ── */}
       <nav className="navbar-l1">
         {/* Brand */}
-        <NavLink to="/dashboard/gruppo" className="navbar-brand">
+        <NavLink to="/home" className="navbar-brand">
           <img src="/hotelos-icon.svg" alt="HotelOS" className="navbar-brand-logo" />
           {appName}
           <span className="navbar-version">v{APP_VERSION}</span>

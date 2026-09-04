@@ -196,6 +196,60 @@ UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % 
 
 ---
 
+## Home / Cruscotto gruppo (settembre 2026)
+Landing page dopo il login (`/` → redirect a `/home`), **non un modulo** registrato in `modules`/
+`module_permissions`: sempre visibile a ogni utente attivo, nessun `moduleCode` sulla `<Route>`,
+nessun tab evidenziato in NavBar (`rilevaModuloAttivo()` la riconosce come caso speciale `'home'`,
+un code che non esiste in `modules`, invece di ricadere sul default `'revenue'`). Aggrega dati già
+esposti dagli altri moduli — non ha tabelle applicative proprie a parte le soglie dei tachimetri.
+
+**Due endpoint separati per fascia di visibilità**, non un solo endpoint con branching sul ruolo —
+un utente `viewer` deve ricevere un 403 pulito sul blocco riservato, non un payload silenziosamente
+più povero:
+- `GET /home/cruscotto` (`richiedi_utente_attivo`) → occupancy/RevPAR/ADR/RevPAR vs budget, pickup
+  7gg, ritmo prenotazioni (mese corrente + confronto anno precedente se disponibile — oggi non lo è,
+  primi dati 2026), mix canali/categorie (Produzione), % contante e tassa di soggiorno incassata
+  (Corrispettivi), commissioni OTA (placeholder, sempre 0 finché Welcome non valorizza la colonna),
+  semaforo per hotel, striscia di freschezza dati.
+- `GET /home/cruscotto/admin` (`richiedi_admin`) → costo del lavoro per struttura, labor cost ratio,
+  margine di contribuzione parziale (ricavi − solo costo lavoro, nessun altro costo operativo), Δ RT
+  vs PMS sull'intera stagione, mix trattamento/tipo ospite, heatmap occupancy per giorno di stagione.
+  Tutto ciò che deriva dal costo del lavoro (Dipendenti/payroll) è qui, mai nell'endpoint pubblico —
+  scelta esplicita dell'utente, non solo un raggruppamento per "quanto è interessante" il dato.
+- `GET|PUT /home/soglie` → cutoff rosso/arancio/verde dei tachimetri, tabella `dashboard_kpi_soglie`
+  (migrazione `home001_2026`, seed con le soglie di default). Ogni riga ha `direzione` (`alto_meglio`
+  / `basso_meglio` / `target` — quest'ultima bidirezionale, per gauge centrati su un target come
+  Δ RT-PMS o vs-budget). `hotel_code` nullable: NULL = default gruppo; il modello supporta override
+  per singolo hotel ma in questa v1 sono seminate solo le righe di default, non ancora esposte
+  nell'admin per-hotel. Admin: `?s=home-soglie` → `AdminCruscottoSoglie.jsx`.
+
+**Non duplica logica**: `routers/home.py` chiama direttamente funzioni già esistenti negli altri
+router — molte sono semplici funzioni Python decorate `@router.get(...)` (il decoratore restituisce
+la funzione invariata), quindi chiamabili come funzioni normali passando `db` esplicito, stesso
+pattern già in uso in `produzione_export.py` (riusa `get_trattamenti()`/`get_reparti()`/`get_gruppo()`).
+Due funzioni sono state estratte per essere riusabili (comportamento invariato per i chiamanti
+originali):
+- `_confronto_gruppo_dati(season_year, version, db)` in `budget.py` (prima logica inline
+  nell'endpoint `confronto_gruppo`)
+- `_costo_lavoro_per_struttura(import_ids, db)` in `dipendenti.py` (stessa distribuzione
+  proporzionale per CC già usata da `report_mensile`/`report_annuale_riepilogo`, qui isolata perché
+  la Home ha bisogno solo dei totali per struttura, non del report per-dipendente completo)
+
+**Tachimetri — SVG custom, non Recharts** (`frontend/src/pages/home/GaugeKpi.jsx`): valutato anche
+`RadialBarChart` di Recharts, scartato perché è pensato per un anello di progresso singolo, non per
+un vero tachimetro (fasce colorate fisse + lancetta) — mancherebbe comunque la lancetta (va disegnata
+a mano sopra) e il caso bidirezionale (Δ RT-PMS, target 0, valori anche negativi) non si adatta al
+modello "riempimento da 0" di RadialBarChart. Componente unico e riusato per ogni gauge della pagina
+(non una configurazione diversa per ognuno): arco fisso disegnato dai cutoff di `dashboard_kpi_soglie`
+(3 fasce per `alto_meglio`/`basso_meglio`, 5 per `target` — rosso-arancio-verde-arancio-rosso attorno
+al target), lancetta ruotata via trigonometria sul valore. Il resto della pagina (ritmo prenotazioni,
+mix ricavi) resta su Recharts come tutto il resto del progetto.
+
+Sotto-pagina "Ricavi camere" di Produzione (`TabRicaviCamere.jsx`) e questo modulo condividono la
+stessa fonte `prod_righe` ma per scopi diversi: non collegati tra loro.
+
+---
+
 ## Dashboard Hotel
 - Snapshot: `GET /snapshots/{hotel_code}` → navigazione con frecce. Settimana di riferimento = settimana Sab–Ven contenente snapshot_date.
 - `kpi_periodo` = KPI solo sulla settimana di riferimento; evidenziata in grafici (ReferenceArea) e tabella.
@@ -615,9 +669,10 @@ Tab attiva: `localStorage('corrispettivi_tab')`.
 `primoGiorno`/`ultimoGiorno`, `giornoSettimana`, `applyToggle`/`fmtToggle` — import da qui, non
 ridefinire), `TabImport.jsx`, `TabDocumenti.jsx` (+ `ModalModifica`, `PerHotelView`, `CameraCell` —
 componenti privati usati solo da scontrini/fatture), `TabGiornalieri.jsx` (+ `DrawerDocumenti`),
-`TabTest.jsx`, `TabFatturati.jsx`, `TabControlloRT.jsx` (+ `FormRT`), `TabPenali.jsx`. `TabAnalisiRicavi.jsx` e
-`TabStampanteRT.jsx` erano già file separati da prima. Prima di aggiungere codice a un tab: verificare
-se l'helper serve anche altrove — se sì va in `corrispettiviHelpers.js`, non duplicato nel file del tab.
+`TabTest.jsx`, `TabFatturati.jsx`, `TabControlloRT.jsx` (+ `FormRT`), `TabPenali.jsx`.
+`TabAnalisiRicavi.jsx` e `TabStampanteRT.jsx` erano già file separati da prima. Prima di aggiungere
+codice a un tab: verificare se l'helper serve anche altrove — se sì va in `corrispettiviHelpers.js`,
+non duplicato nel file del tab.
 
 **Tab "Penali"** (`TabPenali.jsx`, luglio 2026): elenco documenti (scontrini + fatture insieme, con
 colonna Tipo per distinguerli — categoria `penali` esiste su entrambi) filtrato server-side su
@@ -752,8 +807,8 @@ salvataggio di una singola settimana non aveva mai funzionato dal 25/05/2026:
 Modulo separato (non più dentro USALI — spostato su richiesta esplicita dopo la prima versione),
 route `/statistiche-produzione`, code modulo `produzione`, in NavBar tra Statistiche (revenue) e
 Budget. `StatisticheProduzione.jsx` è il tab router (Import, Produzione giornaliera, Analisi canali,
-Analisi trattamenti, Analisi tipo ospite, Report mensile, Dati di test — 7 tab), toggle IVA globale
-`localStorage('produzione_lordo')` su tutte tranne Import/Dati di test. `Usali.jsx` ha 2 tab proprie:
+Analisi trattamenti, Analisi tipo ospite, Report mensile, Ricavi camere, Dati di test — 8 tab), toggle
+IVA globale `localStorage('produzione_lordo')` su tutte tranne Import/Dati di test. `Usali.jsx` ha 2 tab proprie:
 "Conto Economico" (`UsaliContoEconomico.jsx`, invariato) e "Movimenti Attivi" (`UsaliMovimentiAttivi.jsx`,
 vedi sezione dedicata più sotto) — quest'ultima aggiunta dopo la prima separazione dei moduli, legge
 dati aggregati da Produzione/Corrispettivi.
@@ -922,6 +977,32 @@ causa del timeout osservato in campo). Se il backend riceve un timeout dal front
 grande, controllare prima nei log/DB se l'import è comunque andato a buon fine (`GET
 /produzione/import/storico`) prima di far ricaricare il file: il commit lato server può completare
 anche dopo che il browser ha già mostrato l'errore.
+
+### Tab "Ricavi camere" (`produzione/TabRicaviCamere.jsx`, settembre 2026 — nata in Corrispettivi, spostata qui subito perché la fonte è `prod_righe`)
+Ricavi per singola camera in un periodo scelto (default: 01/01–31/12 anno solare corrente), per
+struttura `[DPH][CLB][INT][Gruppo]`. Toggle vista **Per categoria** ↔ **Per trattamento**
+(`localStorage('prod_ricavi_camere_vista')`, hotel in `prod_ricavi_camere_hotel`): stesse righe
+(camere), colonne diverse (categorie di ricavo `prod_categorie` con swatch colore | tipi di
+trattamento BB/HB/FB/AI/Solo Pernottamento/OTA/n·d). Checkbox "Mostra camere a zero" (join con
+anagrafica `rooms`). Camere ordinate per numero crescente (prefisso hotel escluso: `D101`→101;
+`_num_camera()` backend, `numCamera()` frontend — camere senza cifre, es. FUEGO/AIRE, in fondo),
+raggruppate per struttura; click su "TOTALE" nell'header passa all'ordine per ricavo decrescente.
+Casella di ricerca testo (client-side): se combacia con codice/tipo camera filtra le righe, se
+combacia con un'etichetta di colonna filtra le colonne — filtri indipendenti. Riga TOTALE con sfondo
+su ogni `<td>`, ricalcolata sulle righe/colonne visibili. Usa il toggle IVA globale del modulo (prop
+`lordo`).
+Dati a **maturato** (quota spalmata notte per notte su `data_riferimento`), non a fatturato come i
+Corrispettivi (documento emesso alla partenza): sul singolo mese solare divergono per i soggiorni a
+cavallo di fine mese (effetto marcato su CLB/INT, a pacchetto settimanale sab-sab; piccolo su DPH);
+riconciliano sulla stagione. Restano differenze strutturali che non si compensano (tassa di
+soggiorno e penali/fatture eventi solo nei Corrispettivi; voucher pensione scontato solo qui).
+Backend: `produzione_ricavi_camere.py` (sotto-router incluso da `produzione.py`), riusa
+`query_report()` di `produzione_shared` (esclude già `is_riassetto` e categorie `includi_report=false`
+come `escluso_pensione`), `_categorie_attive()` di `produzione_report` e `_risposta()` di
+`produzione_export`. Aggregazione in SQL (GROUP BY camera×categoria e camera×trattamento). Endpoint:
+- `GET /produzione/ricavi-camere?hotel_code=DPH|CLB|INT|GRUPPO&data_da=&data_a=&includi_zero=`
+- `GET /produzione/ricavi-camere/export?...&vista=categoria|trattamento&lordo=&formato=xlsx|csv|pdf`
+  (sotto-path per non collidere con la rotta catch-all `/produzione/export/{dimensione}`).
 
 ## Modulo USALI — Movimenti Attivi
 Seconda tab di `Usali.jsx` (`UsaliMovimentiAttivi.jsx`), accanto a "Conto Economico". Tabella

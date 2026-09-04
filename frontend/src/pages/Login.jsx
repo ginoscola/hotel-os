@@ -16,7 +16,7 @@ export default function Login() {
   // Se già loggato, vai alla dashboard
   useEffect(() => {
     if (localStorage.getItem('auth_token')) {
-      navigate('/dashboard/gruppo', { replace: true })
+      navigate('/home', { replace: true })
     }
   }, [navigate])
 
@@ -53,7 +53,7 @@ export default function Login() {
         localStorage.removeItem('moduli_permessi')
       }
 
-      navigate('/dashboard/gruppo', { replace: true })
+      navigate('/home', { replace: true })
     } catch (err) {
       if (err.response?.status === 401) {
         setErrore('Credenziali errate. Verifica username e password.')

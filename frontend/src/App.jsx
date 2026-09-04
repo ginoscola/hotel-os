@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import NavBar from './components/NavBar.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Login from './pages/Login.jsx'
+import HomeCruscotto from './pages/HomeCruscotto.jsx'
 import Import from './pages/Import.jsx'
 import ImportBulk from './pages/ImportBulk.jsx'
 import DashboardHotel from './pages/DashboardHotel.jsx'
@@ -24,8 +25,11 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
 
-          {/* Redirect root → dashboard gruppo */}
-          <Route path="/" element={<Navigate to="/dashboard/gruppo" replace />} />
+          {/* Home / Cruscotto gruppo — landing page dopo il login */}
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route path="/home" element={
+            <ProtectedRoute><HomeCruscotto /></ProtectedRoute>
+          } />
 
           {/* ── Modulo Revenue ── */}
           <Route path="/dashboard/hotel/:hotelCode" element={

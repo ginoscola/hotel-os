@@ -88,9 +88,9 @@ function PaginaAccesoNegato({ titolo, messaggio }) {
       <div style={{ fontSize: 64, lineHeight: 1 }}>403</div>
       <h2 style={{ margin: 0, color: '#dc2626' }}>{titolo}</h2>
       <p style={{ color: '#6b7280', margin: 0 }}>{messaggio}</p>
-      <a href="/dashboard/gruppo"
+      <a href="/home"
         style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>
-        ← Torna alla dashboard
+        ← Torna alla Home
       </a>
     </div>
   )

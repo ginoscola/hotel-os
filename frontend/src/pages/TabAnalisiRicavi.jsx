@@ -475,10 +475,11 @@ function SubtabImport({ hotels, isAdmin }) {
                       padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#0c4a6e',
                       lineHeight: 1.6 }}>
           <strong>Da dove scaricare i file:</strong><br />
-          Passbi → Analisi Ricavi → Dashboard analisi ricavi<br />
+          Passbi → Dashboard → Ricavi Tipo Trattamento<br />
           • <em>Dettaglio ricavi trattamento</em><br />
           • <em>Dettaglio ricavi per trattamento</em><br />
-          <span style={{ color: '#0369a1' }}>⏱ Da scaricare ogni fine mese per ogni hotel.</span>
+          <span style={{ color: '#0369a1' }}>⏱ Da scaricare ogni fine mese per ogni hotel.</span><br />
+          <span style={{ color: '#0369a1' }}>📄 Formato CSV con separatore <code>;</code></span>
         </div>
 
         {/* Drop zone */}

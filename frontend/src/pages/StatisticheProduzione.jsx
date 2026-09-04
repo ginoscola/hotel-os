@@ -5,6 +5,7 @@ import TabCanali from './produzione/TabCanali'
 import TabTrattamenti from './produzione/TabTrattamenti'
 import TabTipoOspite from './produzione/TabTipoOspite'
 import TabReportMensile from './produzione/TabReportMensile'
+import TabRicaviCamere from './produzione/TabRicaviCamere'
 import TabTest from './produzione/TabTest'
 import { isAdmin, LS_TAB, LS_LORDO } from '../utils/produzioneHelpers'
 
@@ -15,6 +16,7 @@ const TABS_BASE = [
   { id: 'prod-trattamenti', label: 'Analisi trattamenti' },
   { id: 'prod-tipo-ospite', label: 'Analisi tipo ospite' },
   { id: 'prod-mensile', label: 'Report mensile' },
+  { id: 'prod-ricavi-camere', label: 'Ricavi camere' },
 ]
 const TABS_ADMIN = [...TABS_BASE, { id: 'prod-test', label: 'Dati di test' }]
 
@@ -79,6 +81,7 @@ export default function StatisticheProduzione() {
       {tab === 'prod-trattamenti' && <TabTrattamenti lordo={lordo} key={refreshKey} />}
       {tab === 'prod-tipo-ospite' && <TabTipoOspite lordo={lordo} key={refreshKey} />}
       {tab === 'prod-mensile' && <TabReportMensile lordo={lordo} key={refreshKey} />}
+      {tab === 'prod-ricavi-camere' && <TabRicaviCamere lordo={lordo} key={refreshKey} />}
       {tab === 'prod-test' && isAdmin() && <TabTest onPulito={() => setRefreshKey(k => k + 1)} />}
     </div>
   )
