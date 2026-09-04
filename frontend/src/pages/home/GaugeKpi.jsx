@@ -70,8 +70,13 @@ function punto(t, raggio) {
 function arco(t0, t1, raggio) {
   const [x0, y0] = punto(t0, raggio)
   const [x1, y1] = punto(t1, raggio)
-  const largeArc = (t1 - t0) > 0.5 ? 1 : 0
-  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${raggio} ${raggio} 0 ${largeArc} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`
+  // Il gauge è un SEMIcerchio (180°): t∈[0,1] copre al massimo 180° di arco, quindi il tratto
+  // richiesto non è mai quello "lungo" (>180°) del cerchio completo — large-arc-flag è sempre 0.
+  // Bug reale: con `(t1-t0) > 0.5 ? 1 : 0` (soglia corretta solo per un cerchio intero, dove
+  // 0.5 = 180°/360°) qualunque fascia oltre metà della scala veniva disegnata dal lato lungo,
+  // finendo quasi tutta fuori dal viewBox — il frammento superstite appariva come un pezzo
+  // sganciato vicino alla base dell'arco.
+  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${raggio} ${raggio} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`
 }
 
 export default function GaugeKpi({ label, dato, formatValue, sub }) {
@@ -109,7 +114,7 @@ export default function GaugeKpi({ label, dato, formatValue, sub }) {
           )
         })()}
       </svg>
-      <div style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginTop: -14 }}>
+      <div style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginTop: -2 }}>
         {fmt(valore)}
       </div>
       {sub && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{sub}</div>}
