@@ -222,6 +222,22 @@ più povero:
   Δ RT-PMS o vs-budget). `hotel_code` nullable: NULL = default gruppo; il modello supporta override
   per singolo hotel ma in questa v1 sono seminate solo le righe di default, non ancora esposte
   nell'admin per-hotel. Admin: `?s=home-soglie` → `AdminCruscottoSoglie.jsx`.
+- **Occupancy e ADR anche per mese** (`kpi_operativi.occupancy_per_mese`/`adr_per_mese`, blocco
+  pubblico): un tachimetro per ogni mese solare con almeno una camera venduta (mesi senza vendite,
+  tipicamente inizio/fine stagione, esclusi) — `_kpi_per_mese()` in `home.py`, un solo giro sulle
+  righe `daily_revenue` già caricate. **Soglie anche per mese**, non più solo "piatte" per stagione
+  (migrazione `home003_2026`, colonna `dashboard_kpi_soglie.mese`, NULL = piatta/fallback, 1-12 =
+  override per quel mese): maggio e agosto hanno aspettative molto diverse, una soglia unica
+  appiattiva il confronto. `_gauge(kpi_code, valore, soglie, mese=...)` cerca prima
+  `(kpi_code, mese)`, poi ricade su `(kpi_code, NULL)` se quel mese non ha un override — i gauge di
+  stagione (es. "Occupancy stagione") continuano a passare `mese=None`, invariati. Seminate solo
+  maggio-settembre (`SOGLIE_MENSILI` in `home003_2026`, unici mesi realmente operativi — vedi
+  `hotel_seasons`), valori di partenza stimati sui dati reali stagione 2026, da affinare in Admin.
+  ⚠️ **`UNIQUE(kpi_code, hotel_code, mese)` non impedisce righe piatte duplicate**: Postgres tratta
+  ogni NULL come distinto in un vincolo UNIQUE, quindi in teoria più righe con `hotel_code`/`mese`
+  entrambi NULL per lo stesso `kpi_code` passerebbero il vincolo — rischio accettato (stesso limite
+  già presente su `hotel_code` da solo in `home001_2026`), i semi sono scritti a mano nelle
+  migrazioni, non da input utente diretto.
 
 **Non duplica logica**: `routers/home.py` chiama direttamente funzioni già esistenti negli altri
 router — molte sono semplici funzioni Python decorate `@router.get(...)` (il decoratore restituisce

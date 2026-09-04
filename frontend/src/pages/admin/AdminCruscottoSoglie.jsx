@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client.js'
 import { mostraErrore } from '../../utils/format.js'
+import { meseNome } from '../../utils/corrispettiviHelpers.js'
 
 const NOME_KPI = {
   occupancy: 'Occupancy',
@@ -70,7 +71,9 @@ export default function AdminCruscottoSoglie() {
       <p style={{ color: '#6b7280', fontSize: 13, maxWidth: 720 }}>
         Cutoff rosso / arancio / verde di ogni tachimetro della Home. "Rosso" e "arancio" sono i
         valori di passaggio tra una fascia e la successiva — sopra (o sotto, a seconda della
-        direzione) l'arancione la zona è verde.
+        direzione) l'arancione la zona è verde. Occupancy e ADR hanno anche una soglia per
+        singolo mese (righe indentate): un mese senza override usa quella "Tutto l'anno" come
+        fallback.
       </p>
 
       {esito && (
@@ -88,6 +91,7 @@ export default function AdminCruscottoSoglie() {
           <thead>
             <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>
               <th style={{ padding: '6px 8px' }}>KPI</th>
+              <th style={{ padding: '6px 8px' }}>Mese</th>
               <th style={{ padding: '6px 8px' }}>Direzione</th>
               <th style={{ padding: '6px 8px' }}>Target</th>
               <th style={{ padding: '6px 8px' }}>Soglia rossa</th>
@@ -96,12 +100,20 @@ export default function AdminCruscottoSoglie() {
             </tr>
           </thead>
           <tbody>
-            {soglie.map(s => {
+            {soglie.map((s, i) => {
               const mod = modifiche[s.id] || {}
               const sporca = Object.keys(mod).length > 0
+              // Etichetta KPI ripetuta solo sulla prima riga del gruppo (righe già ordinate per
+              // kpi_code dal backend) — le righe mensili restano indentate sotto, senza ripetere.
+              const primoDelGruppo = i === 0 || soglie[i - 1].kpi_code !== s.kpi_code
               return (
-                <tr key={s.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>{NOME_KPI[s.kpi_code] || s.kpi_code}</td>
+                <tr key={s.id} style={{ borderTop: primoDelGruppo ? '2px solid #e2e8f0' : '1px solid #f8fafc' }}>
+                  <td style={{ padding: '6px 8px', fontWeight: primoDelGruppo ? 600 : 400 }}>
+                    {primoDelGruppo ? (NOME_KPI[s.kpi_code] || s.kpi_code) : ''}
+                  </td>
+                  <td style={{ padding: '6px 8px', color: s.mese == null ? '#9ca3af' : '#374151' }}>
+                    {s.mese == null ? 'Tutto l\'anno' : <>↳ {meseNome(s.mese)}</>}
+                  </td>
                   <td style={{ padding: '6px 8px', color: '#6b7280' }}>{NOME_DIREZIONE[s.direzione] || s.direzione}</td>
                   <td style={{ padding: '6px 8px' }}>
                     {s.direzione === 'target' ? (

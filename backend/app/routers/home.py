@@ -97,22 +97,27 @@ def _r(v: Optional[float], d: int = 2) -> Optional[float]:
 
 def _soglie_map(db: Session, hotel_code: Optional[str]) -> dict[str, DashboardKpiSoglia]:
     """kpi_code → soglia applicabile: un override per hotel_code (se esiste) vince sempre
-    sulla soglia di default (hotel_code NULL)."""
+    sulla soglia di default (hotel_code NULL). Chiave (kpi_code, mese): mese NULL = soglia
+    "piatta" di stagione, 1-12 = override per quel mese (es. Occupancy/ADR per mese, dove
+    maggio e agosto hanno aspettative molto diverse — non ha senso un'unica soglia piatta)."""
     rows = db.query(DashboardKpiSoglia).filter(DashboardKpiSoglia.attivo.is_(True)).all()
-    per_kpi: dict[str, DashboardKpiSoglia] = {}
+    per_kpi: dict[tuple, DashboardKpiSoglia] = {}
     for r in rows:
+        chiave = (r.kpi_code, r.mese)
         if r.hotel_code is None:
-            per_kpi.setdefault(r.kpi_code, r)
+            per_kpi.setdefault(chiave, r)
         elif r.hotel_code == hotel_code:
-            per_kpi[r.kpi_code] = r
+            per_kpi[chiave] = r
     return per_kpi
 
 
-def _gauge(kpi_code: str, valore: Optional[float], soglie: dict, **extra) -> dict:
-    """Valuta `valore` contro la soglia di kpi_code e restituisce {valore, zona, soglia, **extra}.
-    zona/soglia None se non c'è una soglia configurata per questo kpi o il valore è indisponibile —
-    il frontend disegna comunque il numero, senza colorare il tachimetro."""
-    row = soglie.get(kpi_code)
+def _gauge(kpi_code: str, valore: Optional[float], soglie: dict, mese: Optional[int] = None, **extra) -> dict:
+    """Valuta `valore` contro la soglia di kpi_code (e, se passato, del mese specifico — con
+    fallback sulla soglia piatta se quel mese non ha un override) e restituisce
+    {valore, zona, soglia, **extra}. zona/soglia None se non c'è nessuna soglia configurata per
+    questo kpi o il valore è indisponibile — il frontend disegna comunque il numero, senza
+    colorare il tachimetro."""
+    row = soglie.get((kpi_code, mese)) or soglie.get((kpi_code, None))
     if row is None or valore is None:
         return {'valore': valore, 'zona': None, 'soglia': None, **extra}
     rossa = float(row.soglia_rossa)
@@ -408,23 +413,22 @@ def cruscotto(
             'occupancy': _gauge('occupancy', kpi.occupancy, soglie),
             'adr': kpi.adr, 'revpar': kpi.revpar, 'trevpar': kpi.trevpar, 'rmc': kpi.rmc,
             'inc_rooms': kpi.inc_rooms, 'inc_fnb': kpi.inc_fnb, 'inc_extra': kpi.inc_extra,
+            # Ogni mese ha la propria soglia (maggio e agosto hanno aspettative diverse — vedi
+            # DashboardKpiSoglia.mese): _gauge cerca prima (kpi_code, quel mese), poi ricade
+            # sulla soglia piatta se il mese non ha un override.
             'occupancy_per_mese': [
                 {
                     'mese': m['mese'], 'mese_label': m['mese_label'],
                     'rooms_sold': m['rooms_sold'], 'rooms_available': m['rooms_available'],
-                    'occupancy': _gauge('occupancy', m['occupancy_valore'], soglie),
+                    'occupancy': _gauge('occupancy', m['occupancy_valore'], soglie, mese=m['mese']),
                 }
                 for m in kpi_per_mese
             ],
-            # Nessuna soglia configurata per 'adr' (a differenza di 'adr_vs_budget'): l'ADR
-            # assoluto non ha un target universale senza un riferimento di budget mensile, che
-            # qui non c'è (il budget è settimanale) — _gauge restituisce zona/soglia None,
-            # il tachimetro resta grigio, mostra solo il numero.
             'adr_per_mese': [
                 {
                     'mese': m['mese'], 'mese_label': m['mese_label'],
                     'rooms_sold': m['rooms_sold'],
-                    'adr': _gauge('adr', m['adr_valore'], soglie),
+                    'adr': _gauge('adr', m['adr_valore'], soglie, mese=m['mese']),
                 }
                 for m in kpi_per_mese
             ],
@@ -565,7 +569,7 @@ class SogliaInput(BaseModel):
 
 def _soglia_out(row: DashboardKpiSoglia) -> dict:
     return {
-        'id': row.id, 'kpi_code': row.kpi_code, 'hotel_code': row.hotel_code,
+        'id': row.id, 'kpi_code': row.kpi_code, 'hotel_code': row.hotel_code, 'mese': row.mese,
         'direzione': row.direzione, 'unita': row.unita,
         'target': float(row.target) if row.target is not None else None,
         'soglia_rossa': float(row.soglia_rossa), 'soglia_arancione': float(row.soglia_arancione),
@@ -575,10 +579,13 @@ def _soglia_out(row: DashboardKpiSoglia) -> dict:
 
 @router.get("/soglie", dependencies=[Depends(richiedi_utente_attivo)])
 def lista_soglie(db: Session = Depends(get_db)):
+    # Raggruppa per kpi_code (piatta/mese NULL prima, poi 1-12 in ordine): con le righe mensili
+    # aggiunte, l'`ordine` originale (pensato per una lista piatta di kpi diversi) mescolerebbe
+    # le righe mensili di un kpi con quelle di altri kpi — qui è più leggibile in tabella.
     righe = (
         db.query(DashboardKpiSoglia)
         .filter(DashboardKpiSoglia.attivo.is_(True))
-        .order_by(DashboardKpiSoglia.ordine)
+        .order_by(DashboardKpiSoglia.kpi_code, DashboardKpiSoglia.mese.nulls_first())
         .all()
     )
     return [_soglia_out(r) for r in righe]
