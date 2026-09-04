@@ -41,6 +41,7 @@ from app.routers.dipendenti import _costo_lavoro_per_struttura
 from app.routers.forecast import _pace_punti
 from app.routers.produzione_report import _categorie_attive, _per_categoria, report_canali, report_tipo_ospite, report_trattamenti
 from app.routers.produzione_shared import query_report
+from app.utils.locale_it import MESI_IT
 
 router = APIRouter(prefix="/home", tags=["home"])
 
@@ -240,6 +241,28 @@ def _aggrega_vs_budget(confronto_sel: list[dict]) -> Optional[dict]:
     }
 
 
+def _occupancy_per_mese(righe: list) -> list[dict]:
+    """Occupancy per mese solare, solo i mesi con almeno una camera venduta ('in cui c'è
+    stata gente') — un mese aperto ma senza vendite (es. inizio/fine stagione) non compare."""
+    per_mese: dict[int, dict] = {}
+    for r in righe:
+        acc = per_mese.setdefault(r.data.month, {'rooms_sold': 0, 'rooms_available': 0})
+        acc['rooms_sold'] += r.rooms_sold
+        acc['rooms_available'] += r.rooms_available
+    out = []
+    for m in sorted(per_mese):
+        acc = per_mese[m]
+        if not acc['rooms_sold']:
+            continue
+        occ = round(acc['rooms_sold'] / acc['rooms_available'] * 100, 1) if acc['rooms_available'] else None
+        out.append({
+            'mese': m, 'mese_label': MESI_IT[m - 1],
+            'rooms_sold': acc['rooms_sold'], 'rooms_available': acc['rooms_available'],
+            'occupancy_valore': occ,
+        })
+    return out
+
+
 def _semaforo_hotel(per_hotel_righe: dict, confronto: list[dict], db: Session) -> list[dict]:
     confronto_by_hc = {c['hotel_code']: c for c in confronto}
     out = []
@@ -382,6 +405,14 @@ def cruscotto(
             'occupancy': _gauge('occupancy', kpi.occupancy, soglie),
             'adr': kpi.adr, 'revpar': kpi.revpar, 'trevpar': kpi.trevpar, 'rmc': kpi.rmc,
             'inc_rooms': kpi.inc_rooms, 'inc_fnb': kpi.inc_fnb, 'inc_extra': kpi.inc_extra,
+            'occupancy_per_mese': [
+                {
+                    'mese': m['mese'], 'mese_label': m['mese_label'],
+                    'rooms_sold': m['rooms_sold'], 'rooms_available': m['rooms_available'],
+                    'occupancy': _gauge('occupancy', m['occupancy_valore'], soglie),
+                }
+                for m in _occupancy_per_mese(righe_sel)
+            ],
         },
         'pickup_7gg': _gauge('pickup_7gg', pickup_7gg, soglie),
         'vs_budget': None if vs_budget is None else {

@@ -107,6 +107,23 @@ export default function HomeCruscotto() {
         <GaugeKpi label="Pickup 7 giorni" dato={dati.pickup_7gg} formatValue={v => v == null ? '—' : formatEuroK(v)} />
         <GaugeKpi label="Contante su incassato" dato={dati.pagamenti?.perc_contante ?? { valore: null, soglia: null }} />
       </div>
+
+      {kpi?.occupancy_per_mese?.length > 0 && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{ marginTop: 0 }}>Occupancy per mese</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
+            {kpi.occupancy_per_mese.map(m => (
+              <GaugeKpi
+                key={m.mese}
+                label={m.mese_label}
+                dato={m.occupancy}
+                sub={`${formatN(m.rooms_sold)} / ${formatN(m.rooms_available)} camere`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {!vsBudget && (
         <p style={{ fontSize: 12, color: '#9ca3af', marginTop: -8, marginBottom: '1rem' }}>
           Nessun budget caricato per {dati.anno}: i tachimetri "vs budget" restano vuoti finché non viene inserito.
