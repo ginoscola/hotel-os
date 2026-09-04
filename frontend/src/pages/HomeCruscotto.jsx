@@ -124,6 +124,23 @@ export default function HomeCruscotto() {
         </div>
       )}
 
+      {kpi?.adr_per_mese?.length > 0 && (
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{ marginTop: 0 }}>ADR per mese</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
+            {kpi.adr_per_mese.map(m => (
+              <GaugeKpi
+                key={m.mese}
+                label={m.mese_label}
+                dato={m.adr}
+                formatValue={v => v == null ? '—' : formatEuro(v)}
+                sub={`${formatN(m.rooms_sold)} camere vendute`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {!vsBudget && (
         <p style={{ fontSize: 12, color: '#9ca3af', marginTop: -8, marginBottom: '1rem' }}>
           Nessun budget caricato per {dati.anno}: i tachimetri "vs budget" restano vuoti finché non viene inserito.

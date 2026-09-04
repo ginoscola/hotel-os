@@ -241,24 +241,26 @@ def _aggrega_vs_budget(confronto_sel: list[dict]) -> Optional[dict]:
     }
 
 
-def _occupancy_per_mese(righe: list) -> list[dict]:
-    """Occupancy per mese solare, solo i mesi con almeno una camera venduta ('in cui c'è
-    stata gente') — un mese aperto ma senza vendite (es. inizio/fine stagione) non compare."""
+def _kpi_per_mese(righe: list) -> list[dict]:
+    """Occupancy e ADR per mese solare, solo i mesi con almeno una camera venduta ('in cui
+    c'è stata gente') — un mese aperto ma senza vendite (es. inizio/fine stagione) non compare."""
     per_mese: dict[int, dict] = {}
     for r in righe:
-        acc = per_mese.setdefault(r.data.month, {'rooms_sold': 0, 'rooms_available': 0})
+        acc = per_mese.setdefault(r.data.month, {'rooms_sold': 0, 'rooms_available': 0, 'revenue_rooms': 0.0})
         acc['rooms_sold'] += r.rooms_sold
         acc['rooms_available'] += r.rooms_available
+        acc['revenue_rooms'] += r.revenue_rooms
     out = []
     for m in sorted(per_mese):
         acc = per_mese[m]
         if not acc['rooms_sold']:
             continue
         occ = round(acc['rooms_sold'] / acc['rooms_available'] * 100, 1) if acc['rooms_available'] else None
+        adr = round(acc['revenue_rooms'] / acc['rooms_sold'], 2)
         out.append({
             'mese': m, 'mese_label': MESI_IT[m - 1],
             'rooms_sold': acc['rooms_sold'], 'rooms_available': acc['rooms_available'],
-            'occupancy_valore': occ,
+            'occupancy_valore': occ, 'adr_valore': adr,
         })
     return out
 
@@ -363,6 +365,7 @@ def cruscotto(
         per_hotel_righe = _raggruppa_per_hotel(_carica_righe(db, snapshot_date=snap))
         righe_sel = [r for hc in hotel_codes for r in per_hotel_righe.get(hc, [])]
     kpi = _kpi_schema(righe_sel) if righe_sel else None
+    kpi_per_mese = _kpi_per_mese(righe_sel)
 
     otb_serie = _otb_stagione_per_snapshot(hotel_codes, db)
     pickup_7gg = _pickup(otb_serie, giorni=7)
@@ -411,7 +414,19 @@ def cruscotto(
                     'rooms_sold': m['rooms_sold'], 'rooms_available': m['rooms_available'],
                     'occupancy': _gauge('occupancy', m['occupancy_valore'], soglie),
                 }
-                for m in _occupancy_per_mese(righe_sel)
+                for m in kpi_per_mese
+            ],
+            # Nessuna soglia configurata per 'adr' (a differenza di 'adr_vs_budget'): l'ADR
+            # assoluto non ha un target universale senza un riferimento di budget mensile, che
+            # qui non c'è (il budget è settimanale) — _gauge restituisce zona/soglia None,
+            # il tachimetro resta grigio, mostra solo il numero.
+            'adr_per_mese': [
+                {
+                    'mese': m['mese'], 'mese_label': m['mese_label'],
+                    'rooms_sold': m['rooms_sold'],
+                    'adr': _gauge('adr', m['adr_valore'], soglie),
+                }
+                for m in kpi_per_mese
             ],
         },
         'pickup_7gg': _gauge('pickup_7gg', pickup_7gg, soglie),
