@@ -4,11 +4,16 @@ import api from '../api/client.js'
 /**
  * Pulsante di export con selezione formato (xlsx/csv/pdf).
  * Gestisce download blob e mostra eventuali errori inline.
+ * `snapshot` (ISO YYYY-MM-DD, opzionale): se valorizzato viene appeso al nome
+ * del file come `_YYYYMMDD` — così il download riporta a quale snapshot si
+ * riferiscono i dati esportati.
  */
-export function ExportMenu({ url, nome, onClick }) {
+export function ExportMenu({ url, nome, onClick, snapshot }) {
   const [formato, setFormato] = useState('xlsx')
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState(null)
+
+  const nomeFile = snapshot ? `${nome}_${snapshot.replaceAll('-', '')}` : nome
 
   async function handleExport(e) {
     e.stopPropagation()
@@ -20,7 +25,7 @@ export function ExportMenu({ url, nome, onClick }) {
       const href = URL.createObjectURL(resp.data)
       const a = document.createElement('a')
       a.href = href
-      a.download = `${nome}.${formato}`
+      a.download = `${nomeFile}.${formato}`
       a.click()
       URL.revokeObjectURL(href)
     } catch {
@@ -52,11 +57,11 @@ export function ExportMenu({ url, nome, onClick }) {
   )
 }
 
-export function SezioneHeader({ titolo, exportUrl, exportNome }) {
+export function SezioneHeader({ titolo, exportUrl, exportNome, exportSnapshot }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
       <h3 style={{ margin: 0 }}>{titolo}</h3>
-      <ExportMenu url={exportUrl} nome={exportNome} />
+      <ExportMenu url={exportUrl} nome={exportNome} snapshot={exportSnapshot} />
     </div>
   )
 }

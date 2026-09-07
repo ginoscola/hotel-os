@@ -351,7 +351,7 @@ function CardCorrispettivi({ hotel, data }) {
   )
 }
 
-function TabellaAggregatiMensili({ mesi, exportUrl, exportNome }) {
+function TabellaAggregatiMensili({ mesi, exportUrl, exportNome, exportSnapshot }) {
   if (!mesi || mesi.length === 0) return null
 
   const tot = mesi.reduce((acc, m) => {
@@ -380,7 +380,7 @@ function TabellaAggregatiMensili({ mesi, exportUrl, exportNome }) {
   return (
     <div className="card sezione">
       <SezioneHeader titolo="Aggregati mensili — intera stagione"
-        exportUrl={exportUrl} exportNome={exportNome} />
+        exportUrl={exportUrl} exportNome={exportNome} exportSnapshot={exportSnapshot} />
       <div style={{ overflowX: 'auto' }}>
         <table>
           <thead>
@@ -486,7 +486,7 @@ function aggregaGiorniPerMese(giorni) {
  * ciascuno con tutte le righe giornaliere del mese + riga totale.
  * All'apertura della pagina tutti i mesi sono compressi.
  */
-function SezioneDatiMensili({ mesi, refStart, refEnd, hotel, snapParam }) {
+function SezioneDatiMensili({ mesi, refStart, refEnd, hotel, snapParam, snapDate }) {
   const [aperti, setAperti] = useState({})
   if (!mesi || mesi.length === 0) return null
   const toggle = ym => setAperti(a => ({ ...a, [ym]: !a[ym] }))
@@ -520,6 +520,7 @@ function SezioneDatiMensili({ mesi, refStart, refEnd, hotel, snapParam }) {
                 <ExportMenu
                   url={urlExportMese(m)}
                   nome={`${hotel}_giornaliero_${m.ym}`}
+                  snapshot={snapDate}
                   onClick={e => e.stopPropagation()}
                 />
                 <span>{aperto ? '▲' : '▼'}</span>
@@ -614,6 +615,7 @@ function ContenutoDashboard({
   }
 
   const snapParam = currentSnap ? `snapshot=${currentSnap.snapshot_date}` : ''
+  const snapDate = currentSnap?.snapshot_date || null
   const exportSett = `/export/hotel/${hotel}/settimanale?${snapParam}`
   const exportGiorn = `/export/hotel/${hotel}/giornaliero?${snapParam}`
   const exportMens = `/export/hotel/${hotel}/mensile?${snapParam}`
@@ -690,7 +692,7 @@ function ContenutoDashboard({
       {/* Grafico occupazione giornaliera — intera stagione */}
       <div className="card sezione">
         <SezioneHeader titolo="Occupazione giornaliera — intera stagione"
-          exportUrl={exportGiorn} exportNome={`${hotel}_giornaliero`} />
+          exportUrl={exportGiorn} exportNome={`${hotel}_giornaliero`} exportSnapshot={snapDate} />
         <ResponsiveContainer width="100%" height={240}>
           <LineChart data={giorniMerged} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -728,7 +730,7 @@ function ContenutoDashboard({
           titolo={datiComp
             ? 'Revenue totale giornaliero — confronto'
             : 'Revenue giornaliero per tipologia — intera stagione'}
-          exportUrl={exportGiorn} exportNome={`${hotel}_giornaliero`} />
+          exportUrl={exportGiorn} exportNome={`${hotel}_giornaliero`} exportSnapshot={snapDate} />
         <ResponsiveContainer width="100%" height={260}>
           {datiComp ? (
             <LineChart data={giorniMerged} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
@@ -785,13 +787,13 @@ function ContenutoDashboard({
 
       {/* Aggregati mensili — intera stagione */}
       <TabellaAggregatiMensili mesi={mesiAggregati}
-        exportUrl={exportMens} exportNome={`${hotel}_mensile`} />
+        exportUrl={exportMens} exportNome={`${hotel}_mensile`} exportSnapshot={snapDate} />
 
       {/* Tabella aggregati settimanali — intera stagione */}
       {settimane.length > 0 && (
         <div className="card sezione">
           <SezioneHeader titolo="Aggregati settimanali — intera stagione"
-            exportUrl={exportSett} exportNome={`${hotel}_settimanale`} />
+            exportUrl={exportSett} exportNome={`${hotel}_settimanale`} exportSnapshot={snapDate} />
           <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>
@@ -856,7 +858,7 @@ function ContenutoDashboard({
 
       {/* Dati mensili — un blocco collassabile per mese, tra settimanali e giornalieri */}
       <SezioneDatiMensili mesi={mesiGiornalieri} refStart={refStart} refEnd={refEnd}
-        hotel={hotel} snapParam={snapParam} />
+        hotel={hotel} snapParam={snapParam} snapDate={snapDate} />
 
       {/* Tabella giornaliera — collassabile */}
       {giorni.length > 0 && (
@@ -871,6 +873,7 @@ function ContenutoDashboard({
             <ExportMenu
               url={exportGiorn}
               nome={`${hotel}_giornaliero`}
+              snapshot={snapDate}
               onClick={e => e.stopPropagation()}
             />
           </div>

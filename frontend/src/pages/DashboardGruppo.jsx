@@ -528,7 +528,8 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
       {contributi.length > 0 && (
         <div className="card sezione">
           <SezioneHeader titolo="Contributo revenue per hotel"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale" />
+            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
+            exportSnapshot={snapshotDate} />
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={datiContributoBar} layout="vertical" margin={{ left: 30, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -549,7 +550,8 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
       {contributi.length > 0 && (
         <div className="card sezione">
           <SezioneHeader titolo="Dettaglio per hotel"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale" />
+            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
+            exportSnapshot={snapshotDate} />
           <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>
@@ -623,7 +625,8 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
       {modalita === 'stagione' && settimane.length > 0 && (
         <div className="card sezione">
           <SezioneHeader titolo="Trend settimanale gruppo RevPAR / TRevPAR"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale" />
+            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
+            exportSnapshot={snapshotDate} />
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -647,7 +650,8 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
       {modalita === 'stagione' && settimane.length > 0 && (
         <div className="card sezione">
           <SezioneHeader titolo="Trend settimanale Revenue"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale" />
+            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
+            exportSnapshot={snapshotDate} />
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -669,7 +673,8 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
       {modalita === 'stagione' && settimane.length > 0 && (
         <div className="card sezione">
           <SezioneHeader titolo="Trend settimanale Occupazione"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale" />
+            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
+            exportSnapshot={snapshotDate} />
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -691,7 +696,8 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
       {modalita === 'stagione' && settimane.length > 0 && (
         <div className="card sezione">
           <SezioneHeader titolo="Aggregati settimanali gruppo"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale" />
+            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
+            exportSnapshot={snapshotDate} />
           <div style={{ overflowX: 'auto' }}>
             <table>
               <thead>
