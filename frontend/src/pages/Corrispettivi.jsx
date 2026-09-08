@@ -8,6 +8,7 @@ import TabPenali from './TabPenali'
 import TabGiornalieri from './TabGiornalieri'
 import TabTest from './TabTest'
 import TabFatturati from './TabFatturati'
+import TabCassa from './TabCassa'
 import api from '../api/client'
 import { isAdmin } from '../utils/corrispettiviHelpers'
 
@@ -23,6 +24,7 @@ const TABS_BASE = [
   { id: 'fatture', label: 'Fatture' },
   { id: 'penali', label: 'Penali' },
   { id: 'fatturati', label: 'Riepilogo Fatturati' },
+  { id: 'cassa', label: 'Cassa' },
   { id: 'rt', label: 'Controllo RT' },
   { id: 'rt-stampante', label: 'Stampante RT' },
   { id: 'analisi', label: 'Analisi Ricavi' },
@@ -34,7 +36,10 @@ const TABS_ADMIN = [
 
 export default function Corrispettivi() {
   const tabsDisponibili = isAdmin() ? TABS_ADMIN : TABS_BASE
-  const [tab, setTab] = useState(() => localStorage.getItem(LS_TAB) || 'giornalieri')
+  const [tab, setTab] = useState(() => {
+    const salvato = localStorage.getItem(LS_TAB)
+    return TABS_ADMIN.some(t => t.id === salvato) ? salvato : 'giornalieri'
+  })
   const [hotels, setHotels] = useState([])
   const [lordo, setLordo] = useState(() => {
     const v = localStorage.getItem(LS_LORDO)
@@ -118,6 +123,9 @@ export default function Corrispettivi() {
       )}
       {tab === 'fatturati' && (
         <TabFatturati lordo={lordo} />
+      )}
+      {tab === 'cassa' && (
+        <TabCassa />
       )}
       {tab === 'rt' && (
         <TabControlloRT />

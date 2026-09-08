@@ -128,6 +128,14 @@ class CorrispettiviManuale(Base):
     data_giorno = Column(Date, nullable=False)
     struttura_code = Column(String(20), nullable=False)    # 'MMS' o 'BON'
     arrangiamenti_lordo = Column(Numeric(12, 2), nullable=False, default=0)
+    # Ripartizione per tipo di incasso (opzionale, migrazione corrfix003_2026): NULL su
+    # tutte e 4 = nessuna ripartizione inserita (comportamento storico, arrangiamenti_lordo
+    # resta un unico totale). Quando presente, arrangiamenti_lordo è ricalcolato come somma
+    # dei 4 dal backend — mai il contrario, per non disallinearli.
+    incasso_contante = Column(Numeric(12, 2), nullable=True)
+    incasso_bonifico = Column(Numeric(12, 2), nullable=True)
+    incasso_assegno = Column(Numeric(12, 2), nullable=True)
+    incasso_elettronico = Column(Numeric(12, 2), nullable=True)
     note = Column(Text, nullable=True)
     is_test = Column(Boolean, nullable=False, default=False)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -138,6 +146,59 @@ class CorrispettiviManuale(Base):
     __table_args__ = (
         UniqueConstraint('data_giorno', 'struttura_code', name='uq_manuale_giorno_struttura'),
     )
+
+
+class CorrispettiviIncassoStorico(Base):
+    """Ripartizione una-tantum del pregresso MMS/BON per tipo di incasso (corrfix004_2026).
+
+    Una riga per (struttura_code, anno, is_test): copre i giorni MMS/BON già inseriti come
+    totale unico senza ripartizione, fino a `data_a` ('ad oggi'). Da `data_a` in poi la
+    ripartizione va inserita giorno per giorno su CorrispettiviManuale.incasso_*.
+    Consumata solo da `_calcola_pagamenti` (tab 'Tipo Incasso' + 'Forme di pagamento'):
+    NON è una fonte di ricavo per report/giornaliero, report/fatturati o USALI, che
+    continuano a leggere CorrispettiviManuale.arrangiamenti_lordo.
+    """
+    __tablename__ = "corrispettivi_incasso_storico"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    struttura_code = Column(String(20), nullable=False)    # 'MMS' o 'BON'
+    anno = Column(Integer, nullable=False)
+    data_a = Column(Date, nullable=False)                  # taglio "ad oggi"
+    incasso_contante = Column(Numeric(12, 2), nullable=False, default=0)
+    incasso_bonifico = Column(Numeric(12, 2), nullable=False, default=0)
+    incasso_assegno = Column(Numeric(12, 2), nullable=False, default=0)
+    incasso_elettronico = Column(Numeric(12, 2), nullable=False, default=0)
+    note = Column(Text, nullable=True)
+    is_test = Column(Boolean, nullable=False, default=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('struttura_code', 'anno', 'is_test', name='uq_incasso_storico_struttura_anno'),
+    )
+
+
+class CassaMovimento(Base):
+    """Movimenti della cassa contante di gruppo (corrfix005_2026).
+
+    Cassa reale = saldo_iniziale + Σ contante incassato (riga 'Contante' di
+    `_calcola_pagamenti`) − Σ versamenti + Σ rettifiche (con segno).
+    - tipo='saldo_iniziale': contante al 1° del mese di `data` (baseline, positiva)
+    - tipo='versamento': importo versato in banca (positivo, sottratto)
+    - tipo='rettifica': aggiustamento con segno (spese/prelievi/ammanchi/resti)
+    """
+    __tablename__ = "cassa_movimenti"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tipo = Column(String(20), nullable=False)
+    data = Column(Date, nullable=False, index=True)
+    importo = Column(Numeric(12, 2), nullable=False)
+    note = Column(Text, nullable=True)
+    is_test = Column(Boolean, nullable=False, default=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class RtChiusura(Base):

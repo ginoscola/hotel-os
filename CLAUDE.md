@@ -443,6 +443,7 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
 - `POST /import?is_test=&on_conflict=salta|aggiorna`
 - `GET|PUT /documenti/{id}`, `GET /scontrini`, `GET /fatture` (alias)
 - `POST|PUT|GET /manuali`
+- `PUT /incasso-storico` (upsert, admin), `DELETE /incasso-storico/{id}` → pregresso MMS/BON ripartito una-tantum (vedi sezione dedicata)
 - `GET /report/giornaliero?data_da=&data_a=&struttura_code=&tipo=` → valori lordi; toggle IVA client-side
 - `GET /export/giornaliero?anno=&mese=&tipo=&lordo=` → export Excel della tabella mensile di
   "Corrispettivi giornalieri" (`TabGiornalieri.jsx`), riusando `report_giornaliero()` invece di
@@ -496,6 +497,125 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   multi-file).
   ⚠️ Nel file XML reale `<Imposta>` è annidato dentro `<IVA>` insieme a `<AliquotaIVA>` (non fratello
   diretto di `<IVA>` sotto `<Riepilogo>` come nell'esempio iniziale): il parser gestisce entrambe le forme.
+
+**"Forme di pagamento" (raggruppate)** — tabella in "Riepilogo Fatturati" (`TabFatturati.jsx`),
+settembre 2026: 4 macro-categorie (Contante/Bonifico/Assegno/Pagamento elettronico — quest'ultima
+raccoglie tutte le carte/app: Carta Credito, Bancomat, XPAY-Nexi, Satispay) per mese, stesso anno,
+con export `GET /corrispettivi/export/tipo-incasso?anno=&formato=`. **C'era un tab dedicato "Tipo
+Incasso"** con la stessa tabella: rimosso a fine settembre 2026 perché duplicava questa (`TabTipoIncasso.jsx`
+eliminato, tab tolto da `Corrispettivi.jsx`). L'endpoint `report_tipo_incasso` e `export_tipo_incasso`
+restano (consumati ora da `TabFatturati.jsx` al posto di `report_pagamenti`). `report_pagamenti`
+(metodi grezzi Welcome, non raggruppati) resta ma è usato **solo da `home.py`** (`_perc_contante`).
+Non duplica il parsing di `tipo_pagamento`: `_calcola_pagamenti(db, anno, is_test, key_fn,
+ordine_primario)` in `corrispettivi_report.py` è condivisa — `report_pagamenti` la chiama con
+`key_fn=identità`, `report_tipo_incasso` con `key_fn` che rimappa i 9 metodi noti alle 4 categorie
+via `METODO_A_CATEGORIA_INCASSO` (dizionario fisso, non da Admin). Le righe Non specificato/Caparra/
+Sospeso/MMS-BON restano informative fuori dalle 4 categorie. I totali dei due report coincidono
+esattamente (la rimappatura raggruppa, non altera, il denaro).
+⚠️ **Bug scoperto progettando questa tab, corretto nello stesso refactor**: un documento con un
+solo metodo citato a importo `0,00 €` nel testo (es. `"Contante 0,00 € /"`, tipico quando `pagato`
+deriva solo da un aggiustamento caparra/sospeso) produceva comunque una lista non vuota da
+`_estrai_importi_per_metodo` — `if importi:` da solo bastava per entrare nel ramo "distribuisci per
+metodo", che poi scartava silenziosamente l'intero `pagato` del documento (`_acc` ignora i valori a
+0). Impatto: 40 documenti, 1.237,00€ persi sul 2026 in ENTRAMBI i report (bug preesistente in
+`report_pagamenti`, non introdotto da "Tipo Incasso"). Fix: si entra nel ramo "per metodo" solo se
+la somma degli importi estratti è ≠ 0; altrimenti si ricade sul fallback `_normalizza(raw)` che
+attribuisce comunque il `pagato` reale al metodo citato nel testo.
+
+⚠️ **Bug ben più grande, stessa scoperta (231.198,14€ sul 2026)**: anche quando il testo riporta
+importi > 0, la loro somma non sempre coincide con `pagato`, sempre per difetto, pur con
+`Deposito`/`Sospeso` entrambi a zero sul documento — 722 documenti su 4.282 nel 2026, 207 dei quali
+con un gap multiplo esatto di 100€. Esempio reale: scontrino I-SC 852, Totale 2.014€, testo
+"Bancomat 1.514,00 € /" → mancano 500€ non spiegati da nessuna colonna. **Confermato dall'utente**
+(proprietario, conosce Welcome): quando il testo dichiara meno del dovuto, il residuo è quasi
+certamente una caparra incassata in precedenza e applicata a saldo — stessa semantica della riga
+'Caparra', solo non riflessa in `Deposito` per questi documenti specifici (causa non nota, probabile
+limite dell'export Welcome). Fix: il residuo (`pagato - somma_importi`) confluisce nella riga
+'Caparra' invece di sparire, in ENTRAMBI i report (`_calcola_pagamenti`) — il totale generale ora
+coincide sempre esattamente con SUM(totale_lordo) reale (verificato: 1.806.417,66€ su entrambi,
+= documenti DPH/CLB/INT + manuali MMS/BON 2026), invariante che prima valeva solo quando il testo
+copriva per caso l'intero pagato.
+
+**Ripartizione manuale MMS/BON per tipo di incasso** (`corrfix003_2026`, 4 colonne nullable
+`incasso_contante/bonifico/assegno/elettronico` su `corrispettivi_manuali`, NULL su tutte e 4 =
+nessuna ripartizione inserita, comportamento storico invariato): a differenza di DPH/CLB/INT
+(sempre estratti da `corrispettivi_documenti`, mai inseriti a mano), MMS e BON non hanno dati
+Welcome. Il modale `ModaleIncassoManuale` in `TabGiornalieri.jsx` (sostituisce il vecchio input+Salva
+singolo): **MMS e BON incassano solo in contante e pagamento elettronico** (confermato dall'utente —
+`bonifico`/`assegno` restano nello schema ma sono sempre azzerati per queste due strutture). Si parte
+dal **totale lordo del giorno**, si inserisce la **quota elettronica**, il **contante è la differenza**
+(campo calcolato, sola lettura). `arrangiamenti_lordo` resta il campo autoritativo per gli altri
+consumatori (`report_giornaliero`, `report_fatturati`, USALI `_ricavi_ristorante`/
+`_somma_maremosso_esterni`) — **ricalcolato dal backend come somma dei 4** quando la ripartizione è
+presente (= contante + elettronico, mai il contrario, `POST/PUT /corrispettivi/manuali`; il body
+manda anche `arrangiamenti_lordo` esplicito ma il backend lo ignora e usa la somma). `_calcola_pagamenti` disaggrega sempre (nessun parametro, comportamento unico): le righe con
+ripartizione confluiscono nelle 4 categorie vere in ENTRAMBI i report — anche in
+`report_pagamenti` (vocabolario di metodi grezzi Welcome), perché 'Contante'/'Bonifico'/'Assegno'
+coincidono già con nomi di metodi grezzi noti (`TIPI_PAGAMENTO_NOTI`) e si sommano semplicemente
+alle righe esistenti; solo 'Pagamento elettronico' compare come riga propria (nessuna granularità
+per-carta disponibile per un incasso inserito a mano). I giorni MMS/BON storici senza ripartizione
+restano nella riga unica informativa 'MMS / BON (manuale)' in entrambi i report.
+⚠️ **Incidente sfiorato nello stesso lavoro**: `UNIQUE(data_giorno, struttura_code)` su
+`corrispettivi_manuali` **non include `is_test`** — una chiamata `POST /manuali` con `is_test=true`
+su un giorno che ha già un record reale lo trova come "esistente" (la query di lookup non filtra su
+is_test) e lo sovrascrive silenziosamente. Successo quasi per un pelo testando manualmente questo
+stesso endpoint: dati reali del 15/07/2026 (MMS, 792,50€) sovrascritti con valori di test, recuperati
+nella stessa sessione perché lo scostamento del totale era stato notato subito. Fix: `crea_manuale`
+ora rifiuta con 409 se il record esistente ha un `is_test` diverso da quello della richiesta,
+invece di sovrascriverlo — un record reale e uno di test per lo stesso giorno/struttura non possono
+comunque coesistere nello schema attuale (il vincolo UNIQUE non li distingue), ma almeno non si
+sostituiscono più a vicenda senza errore. Da tenere a mente testando questo endpoint in futuro: usare
+sempre una data fuori stagione (es. gennaio) per i test, mai una data con dati reali già presenti.
+
+**Pregresso MMS/BON ripartito una-tantum** (`corrfix004_2026`, tabella `corrispettivi_incasso_storico`
+— una riga per `(struttura_code, anno, is_test)`: `data_a` "ad oggi" + `incasso_contante/bonifico/
+assegno/elettronico`): rifare giorno per giorno la ripartizione dei ~100 giorni MMS/BON già inseriti
+come totale unico è impraticabile. Qui si inserisce **una volta** la ripartizione complessiva fino a
+`data_a`; da lì in poi si usa il modale giornaliero (`corrispettivi_manuali.incasso_*`). Consumata
+**solo** da `_calcola_pagamenti` (tab "Tipo Incasso" + "Forme di pagamento"): `report_giornaliero`,
+`report_fatturati` e USALI continuano a leggere `arrangiamenti_lordo` invariato. Comportamento in
+`_calcola_pagamenti` quando la riga esiste per una struttura: i giorni MMS/BON senza ripartizione
+propria e con `data_giorno <= data_a` non alimentano più la riga mensile `'MMS / BON (manuale)'` ma
+vengono sommati in `atteso` (+ `base_mese`, stessa somma spezzata per mese); i 4 importi `incasso_*`
+confluiscono **direttamente nelle 4 righe categoria** (via `key_fn`, come già la ripartizione
+giornaliera — l'utente vuole il vero totale per metodo, non righe separate), **distribuiti sui mesi in
+proporzione** a `base_mese` (`_distribuisci()`, ultimo mese assorbe l'arrotondamento): non esiste un
+dettaglio giornaliero della ripartizione, si usa il ritmo reale degli incassi MMS/BON come proxy —
+così la riga TOTALE in fondo resta coerente (Σ mesi = Σ categorie = TOTALE generale). Il residuo
+`atteso - somma4` (0 con dati corretti) va a `'MMS / BON (manuale)'` con lo stesso criterio, così il
+TOTALE resta = `SUM(totale_lordo)` reale (verificato: 1.806.417,66€ prima e dopo). Endpoint
+`PUT /corrispettivi/incasso-storico` (upsert, admin) e `DELETE /corrispettivi/incasso-storico/{id}`;
+la risposta di `/report/tipo-incasso` espone comunque `pregresso_mmsbon`
+(`{MMS,BON} → atteso/data_a/salvato/incasso_*/residuo/id`). **Nessun pannello UI**: l'inserimento è
+una-tantum, fatto una volta a settembre 2026 (dati salvati e verificati) — c'era un pannello in
+`TabTipoIncasso.jsx`, rimosso su richiesta dell'utente subito dopo l'inserimento. Correzioni future:
+via `PUT/DELETE /corrispettivi/incasso-storico` diretto (o riesumare il pannello dallo storico git,
+commit di questo lavoro). `home.py::_perc_contante` legge `totale_anno['Contante']`, che già include
+il pregresso confluito.
+
+### Tab "Cassa" — cassa contante reale di gruppo (`TabCassa.jsx`, settembre 2026)
+Il **vero scopo** per cui è nata la tab Tipo Incasso: sapere quanto contante fisico ha in mano il
+gruppo. **Cassa reale = saldo iniziale + Σ contante incassato − Σ versamenti in banca + Σ rettifiche**
+(con segno), come saldo progressivo per mese. Gestione **a livello di gruppo** (un unico saldo,
+nessuno scorporo per struttura — scelta esplicita dell'utente).
+- Tabella `cassa_movimenti` (`corrfix005_2026`): `tipo` ∈ {`saldo_iniziale` (contante al 1° del mese
+  di `data` — l'endpoint forza `day=1`; baseline positiva), `versamento` (importo versato in banca,
+  positivo, **sottratto**), `rettifica` (± con segno: spese/prelievi/ammanchi in contanti = negativo,
+  contante immesso = positivo)} + `data`, `importo`, `note`, `is_test`, audit. Nessun vincolo UNIQUE:
+  il `saldo_iniziale` usato è **il più recente con `data.year <= anno`** (agisce da punto di re-basing).
+- **Sotto-router `corrispettivi_cassa.py`** (incluso da `corrispettivi.py`): `GET|POST /cassa/movimenti`,
+  `PUT|DELETE /cassa/movimenti/{id}` (scrittura admin), `GET /cassa/riepilogo?anno=` →
+  `{saldo_iniziale, mesi:[{mese, contante_incassato, versamenti, rettifiche, saldo_fine_mese}],
+  totali, saldo_corrente}`.
+- **`contante_incassato` per mese NON è riaggregato**: `riepilogo_cassa()` chiama `report_tipo_incasso()`
+  e legge `per_tipo['Contante']` — resta identico alla riga Contante della tab Tipo Incasso (DPH/CLB/INT
+  + MMS/BON + pregresso una-tantum distribuito). Se cambia la logica del contante lì, la cassa segue
+  senza modifiche.
+- ⚠️ Il contante include la **tassa di soggiorno pagata in contanti** (denaro fisicamente in cassa ma
+  da girare al Comune) — coerente con `_calcola_pagamenti` che non la sottrae. La tab lo dichiara in
+  nota; un'eventuale riga "di cui tassa soggiorno" è un affinamento futuro, non fatto in v1.
+- Frontend: card grande "Cassa contante disponibile" (`saldo_corrente`) + tabella mensile + (solo
+  admin) form aggiungi/modifica movimento con elenco. Tab `id='cassa'`, dopo "Tipo Incasso".
   ⚠️ **`<TotaleAmmontareAnnulli>` non veniva letto affatto fino ad agosto 2026**: bug reale (trovato
   14/08/2026, RT1) — il campo, presente in ogni `<Riepilogo>` (aliquota IVA o Natura), è l'imponibile
   degli scontrini annullati lo stesso giorno fiscale prima della chiusura Z (lo stesso importo
@@ -674,8 +794,8 @@ Endpoint (prefix `/analisi-ricavi`):
 Frontend `TabAnalisiRicavi.jsx`: bottoni hotel [DPH][CLB][INT][Gruppo]; frecce ◀▶ mese/anno; toggle Range (mese_fine); toggle dettaglio/macrocategorie; toggle Δ Revenue (solo hotel singolo). Default: mese precedente a quello corrente. Colori: priorità DB → `CATEGORIA_COLORI` → palette.
 Admin `corr-classificazione`: `CorrClassificazioneTrattamenti` con colonna Colore (swatch + hex).
 
-### Frontend Corrispettivi.jsx (10 tab)
-Import | Corrispettivi giornalieri (drawer cella→documenti) | Scontrini | Fatture | Penali | Riepilogo Fatturati | Controllo RT | Stampante RT | Analisi Ricavi | Dati di test.
+### Frontend Corrispettivi.jsx (11 tab)
+Import | Corrispettivi giornalieri (drawer cella→documenti) | Scontrini | Fatture | Penali | Riepilogo Fatturati | Cassa | Controllo RT | Stampante RT | Analisi Ricavi | Dati di test.
 `PerHotelView`: generico per scontrini/fatture, `localStorage('scontrini_vista'|'fatture_vista')`.
 Tab attiva: `localStorage('corrispettivi_tab')`.
 

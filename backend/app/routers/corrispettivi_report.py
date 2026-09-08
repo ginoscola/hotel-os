@@ -5,11 +5,13 @@ Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
   GET    /report/mensile        → aggregato per mese e struttura
   GET    /check                 → totali per struttura
   GET    /report/fatturati      → riepilogo fatturati per mese/struttura
-  GET    /report/pagamenti      → riepilogo per tipo di pagamento
+  GET    /report/pagamenti      → riepilogo per tipo di pagamento grezzo (metodo Welcome)
+  GET    /report/tipo-incasso   → riepilogo per macro-categoria (Contante/Bonifico/Assegno/Elettronico)
   GET    /admin/test-stats      → conteggio record is_test
   DELETE /admin/test-data       → cancella tutti i record is_test
   GET    /export/fatturati      → export Excel riepilogo fatturati
   GET    /export/giornaliero    → export Excel tabella mensile Corrispettivi giornalieri
+  GET    /export/tipo-incasso   → export xlsx/csv/pdf riepilogo Tipo Incasso
 """
 from datetime import date
 from typing import List, Optional, Set
@@ -20,7 +22,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth import richiedi_admin, richiedi_utente_attivo
-from app.models.corrispettivi import CorrispettiviDocumento, CorrispettiviImport, CorrispettiviManuale
+from app.models.corrispettivi import (
+    CorrispettiviDocumento, CorrispettiviImport, CorrispettiviManuale, CorrispettiviIncassoStorico,
+)
 from app.routers.corrispettivi_shared import (
     STRUTTURE_HOTEL, STRUTTURE_MANUALI, STRUTTURE_ORDINE, NOME_STRUTTURA, CATEGORIE, _to_float,
 )
@@ -532,16 +536,75 @@ def report_fatturati(
     }
 
 
-@router.get("/report/pagamenti")
-def report_pagamenti(
-    anno: int = Query(..., ge=2020, le=2030),
-    is_test: bool = Query(False),
-    db: Session = Depends(get_db),
-    _=Depends(richiedi_utente_attivo),
-):
-    """Riepilogo fatturati per tipo di pagamento e mese nell'anno.
+TIPI_PAGAMENTO_NOTI = [
+    'Bonifico/Vaglia', 'XPAY-Nexi', 'Carta Credito',
+    'Bancomat', 'Bonifico', 'Contante', 'Satispay', 'Assegno', 'xpay',
+]
 
-    Ogni documento fiscale (scontrino/fattura — solo questi, non 'escluso') si divide in:
+# Le 4 macro-categorie di "Tipo Incasso" (settembre 2026): Pagamento elettronico raccoglie
+# tutte le forme carta/app viste finora nei dati Welcome. Un metodo grezzo non presente qui
+# (nuovo tipo mai visto) resta visibile come riga propria in `report_tipo_incasso` invece di
+# sparire silenziosamente in una categoria sbagliata — vedi `_calcola_pagamenti(key_fn=...)`.
+CATEGORIE_INCASSO = ['Contante', 'Bonifico', 'Assegno', 'Pagamento elettronico']
+METODO_A_CATEGORIA_INCASSO = {
+    'Contante': 'Contante',
+    'Bonifico': 'Bonifico',
+    'Bonifico/Vaglia': 'Bonifico',
+    'Assegno': 'Assegno',
+    'Carta Credito': 'Pagamento elettronico',
+    'Bancomat': 'Pagamento elettronico',
+    'XPAY-Nexi': 'Pagamento elettronico',
+    'Satispay': 'Pagamento elettronico',
+    'xpay': 'Pagamento elettronico',
+}
+
+
+def _distribuisci(importo: float, pesi: dict, tot_pesi: float) -> dict:
+    """Ripartisce `importo` sui mesi in proporzione a `pesi` ({mese: peso}); la somma delle
+    quote è esatta (l'ultimo mese assorbe l'arrotondamento). Vuoto se non distribuibile."""
+    if not importo or tot_pesi <= 0 or not pesi:
+        return {}
+    mesi = sorted(pesi)
+    out, acc = {}, 0.0
+    for i, m in enumerate(mesi):
+        if i == len(mesi) - 1:
+            out[m] = round(importo - acc, 2)
+        else:
+            q = round(importo * pesi[m] / tot_pesi, 2)
+            out[m] = q
+            acc = round(acc + q, 2)
+    return out
+
+
+def _calcola_pagamenti(db: Session, anno: int, is_test: bool, key_fn, ordine_primario: List[str]) -> dict:
+    """Aggrega i documenti fiscali (scontrino/fattura, non annullati) per mese e metodo di
+    pagamento, più i corrispettivi manuali MMS/BON. Condivisa da `report_pagamenti` (un tipo
+    = un metodo grezzo Welcome, `key_fn` identità) e `report_tipo_incasso` (un tipo = una
+    delle 4 macro-categorie, `key_fn` rimappa via `METODO_A_CATEGORIA_INCASSO`) — stessa
+    estrazione testo, stessa formula `pagato`, stesse righe speciali, un solo posto da
+    correggere se emerge un altro bug del parsing.
+
+    Le righe MMS/BON con ripartizione manuale per tipo di incasso già inserita (settembre
+    2026, vedi `corrispettivi_manuali.incasso_*`) confluiscono nelle 4 categorie vere in
+    ENTRAMBI i report: 'Contante'/'Bonifico'/'Assegno' coincidono già con metodi grezzi noti
+    (`TIPI_PAGAMENTO_NOTI`) quindi si sommano alle righe esistenti anche in `report_pagamenti`;
+    'Pagamento elettronico' compare come riga propria (nessuna granularità carta disponibile
+    per un incasso inserito a mano). I giorni MMS/BON senza ripartizione restano nella riga
+    unica informativa 'MMS / BON (manuale)'.
+
+    Pregresso MMS/BON ripartito una-tantum (`corrispettivi_incasso_storico`, corrfix004_2026):
+    se esiste una riga per (struttura, anno, is_test), i giorni MMS/BON senza ripartizione
+    propria e con `data_giorno <= data_a` non alimentano più 'MMS / BON (manuale)' ma vengono
+    sommati in `atteso`; i 4 importi `incasso_*` confluiscono DIRETTAMENTE nelle 4 righe
+    categoria (via `key_fn`) — così ogni TOTALE è il vero totale di quel metodo (documenti
+    DPH/CLB/INT + MMS/BON) — distribuiti sui mesi in proporzione al ritmo reale degli incassi
+    MMS/BON (`base_mese`), non esistendo un dettaglio giornaliero della ripartizione. Il
+    residuo `atteso - somma4` (0 con dati corretti) va a 'MMS / BON (manuale)' con lo stesso
+    criterio, così il TOTALE generale resta = SUM(totale_lordo) reale e la riga TOTALE in
+    fondo resta coerente. La risposta include `pregresso_mmsbon` ({MMS, BON} →
+    atteso/data_a/salvato/incasso_*/residuo/id) per il pannello di inserimento.
+
+    Ogni documento si divide in:
       pagato  = totale_lordo + deposito - sospeso
       caparra = deposito
       sospeso = sospeso
@@ -558,8 +621,6 @@ def report_pagamenti(
     Il campo `incassato` di Welcome NON è un'alternativa affidabile: risultava a 0 su 1.681
     documenti su 3.254 (51,6%) del 2026 pur totalmente pagati (es. scontrino da 4.890€
     "Contante" con incassato=0) — non riflette "è stato pagato" in questo dataset.
-    Formula verificata sui dati reali: 0 scarti su tutti i 3.254 documenti 2026 confrontando
-    `pagato` con la somma degli importi espliciti nel testo Pagamenti (vedi sotto).
 
     ⚠️ Un documento può elencare più metodi di pagamento nel testo grezzo della colonna
     Pagamenti (es. 'Contante 8,00 € / Bancomat 300,00 € /'): la vecchia normalizzazione
@@ -569,21 +630,40 @@ def report_pagamenti(
     veniva contato per intero (945€, dopo il bug del deposito) come Contante. Fix: quando il
     testo riporta importi per metodo, si distribuisce `pagato` tra i metodi effettivamente
     citati (`_estrai_importi_per_metodo`), non tutto al primo.
+
+    ⚠️ **Bug 2**: un metodo citato con importo `0,00 €` (es. "Contante 0,00 € /", tipicamente
+    quando `pagato` deriva solo da un aggiustamento caparra/sospeso e non dal testo) produce
+    comunque una lista non vuota — `if importi:` da solo entrava in quel ramo e perdeva
+    silenziosamente l'intero `pagato` del documento (`_acc` scarta i valori a 0, quindi
+    accumulava zero e basta). Trovato progettando "Tipo Incasso" (settembre 2026): 40
+    documenti, 1.237,00 € persi sul 2026. Fix: si passa al ramo "importi per metodo" solo se
+    la somma estratta è realmente informativa (≠ 0); altrimenti si ricade sul fallback
+    `_normalizza(raw)` che attribuisce comunque il `pagato` reale al metodo citato nel testo.
+
+    ⚠️ **Bug 3 (il più grande)**: su 722 documenti 2026 la somma degli importi estratti dal
+    testo NON coincide con `pagato`, sempre per difetto (mai un metodo "in più" — 231.198,14 €
+    complessivi su DPH/CLB/INT, verificato confrontando col vero SUM(totale_lordo) progettando
+    "Tipo Incasso"), pur con `Deposito`/`Sospeso` entrambi a zero su quei documenti. Esempio
+    reale: scontrino I-SC 852, Totale 2.014 €, testo "Bancomat 1.514,00 € /" → mancano 500 €.
+    207 casi su 722 sono multipli esatti di 100 €. Confermato dall'utente (proprietario, che
+    conosce il funzionamento di Welcome): quando il totale dichiarato nel testo è inferiore al
+    dovuto, il residuo è quasi certamente una caparra incassata in precedenza e applicata a
+    saldo — la stessa semantica della riga 'Caparra' già esistente, solo non riflessa nella
+    colonna `Deposito` per questi documenti specifici (causa non nota, probabilmente un limite
+    dell'export Welcome). Fix: il residuo (`pagato - somma_importi`, di qualunque segno) confluisce
+    nella riga 'Caparra' invece di sparire — così il totale del report torna a coincidere
+    esattamente con SUM(totale_lordo) reale, invariante che prima valeva solo "per fortuna"
+    quando il testo copriva l'intero pagato.
     """
     import re as _re
     from decimal import Decimal
     from app.utils.locale_it import MESI_IT
 
-    TIPI_NOTI = [
-        'Bonifico/Vaglia', 'XPAY-Nexi', 'Carta Credito',
-        'Bancomat', 'Bonifico', 'Contante', 'Satispay', 'Assegno', 'xpay',
-    ]
-
     def _normalizza(raw: str) -> str:
         if not raw or not raw.strip():
             return 'Non specificato'
         raw_l = raw.strip().lower()
-        for tipo in TIPI_NOTI:
+        for tipo in TIPI_PAGAMENTO_NOTI:
             if raw_l.startswith(tipo.lower()):
                 return tipo
         return raw.strip()
@@ -594,7 +674,7 @@ def report_pagamenti(
         """Da 'Contante 8,00 € / Bancomat 300,00 € /' estrae [('Contante', 8.00), ('Bancomat', 300.00)].
         Lista vuota se il testo non riporta importi per metodo (caso a singolo metodo)."""
         trovati = []
-        for tipo in TIPI_NOTI:
+        for tipo in TIPI_PAGAMENTO_NOTI:
             for m in _re.finditer(_re.escape(tipo) + _PATTERN_IMPORTO, raw, _re.IGNORECASE):
                 val = float(Decimal(m.group(1).replace('.', '').replace(',', '.')))
                 trovati.append((tipo, val))
@@ -617,21 +697,43 @@ def report_pagamenti(
         .all()
     )
 
-    # Aggiungi i corrispettivi manuali MMS/BON per mese
-    mese_man_col = func.extract('month', CorrispettiviManuale.data_giorno).label('mese')
+    # Corrispettivi manuali MMS/BON a livello di singola riga (non aggregati per mese come
+    # prima): serve per poter disaggregare, mese per mese, le righe che hanno già una
+    # ripartizione per tipo di incasso inserita (vedi sotto) da quelle che non ce l'hanno.
     righe_man = (
-        db.query(mese_man_col, func.sum(CorrispettiviManuale.arrangiamenti_lordo).label('totale'))
+        db.query(
+            func.extract('month', CorrispettiviManuale.data_giorno).label('mese'),
+            CorrispettiviManuale.data_giorno,
+            CorrispettiviManuale.struttura_code,
+            CorrispettiviManuale.arrangiamenti_lordo,
+            CorrispettiviManuale.incasso_contante,
+            CorrispettiviManuale.incasso_bonifico,
+            CorrispettiviManuale.incasso_assegno,
+            CorrispettiviManuale.incasso_elettronico,
+        )
         .filter(
             func.extract('year', CorrispettiviManuale.data_giorno) == anno,
             CorrispettiviManuale.is_test == is_test,
         )
-        .group_by(mese_man_col)
         .all()
     )
 
+    # Pregresso MMS/BON ripartito una-tantum (corrfix004_2026): 0-2 righe (MMS, BON).
+    # Se presente per una struttura, i suoi giorni MMS/BON senza ripartizione propria e
+    # con data_giorno <= data_a NON alimentano la riga mensile 'MMS / BON (manuale)' ma
+    # vengono sommati nel totale `atteso` e sostituiti dalle righe `Pregresso MMS/BON — …`.
+    storico_by_str = {
+        s.struttura_code: s
+        for s in db.query(CorrispettiviIncassoStorico)
+        .filter(CorrispettiviIncassoStorico.anno == anno,
+                CorrispettiviIncassoStorico.is_test == is_test)
+        .all()
+    }
+    oggi = date.today()
+
     if not righe and not righe_man:
         return {'anno': anno, 'mesi': [], 'tipi': [], 'per_tipo': {},
-                'totale_mese': {}, 'totale_anno': {}}
+                'totale_mese': {}, 'totale_anno': {}, 'pregresso_mmsbon': {}}
 
     per_tipo: dict = {}
     mesi_set: set = set()
@@ -654,36 +756,121 @@ def report_pagamenti(
         pagato = totale + deposito - sospeso
 
         importi = _estrai_importi_per_metodo(raw)
-        if importi:
+        somma_importi = round(sum(val for _, val in importi), 2)
+        residuo_non_tracciato = 0.0
+        if importi and somma_importi != 0:
             for tipo, val in importi:
-                _acc(tipo, m, round(val, 2))
+                _acc(key_fn(tipo), m, round(val, 2))
+            # Bug 3 sopra: quanto dichiarato nel testo può essere inferiore a `pagato` senza
+            # che Deposito/Sospeso lo spieghino — il residuo va comunque a Caparra sotto.
+            residuo_non_tracciato = round(pagato - somma_importi, 2)
         elif pagato != 0:
-            _acc(_normalizza(raw), m, round(pagato, 2))
+            _acc(key_fn(_normalizza(raw)), m, round(pagato, 2))
 
-        # Riga 'Caparra' = -deposito (positivo, essendo deposito quasi sempre <= 0): mostra
-        # quanto di questo mese è coperto da caparre già incassate prima, come importo
-        # leggibile. Col segno invertito la somma pagato+Caparra+Sospeso ricostruisce
-        # esattamente totale_lordo (pagato = totale_lordo + deposito - sospeso già lo
-        # sottrae una volta; sommarlo di nuovo con lo stesso segno lo conterebbe due volte).
-        _acc('Caparra', m, round(-deposito, 2))
+        # Riga 'Caparra' = -deposito (positivo, essendo deposito quasi sempre <= 0), più
+        # l'eventuale residuo non tracciato sopra: mostra quanto di questo mese è coperto da
+        # caparre già incassate prima, come importo leggibile. Col segno invertito la somma
+        # pagato+Caparra+Sospeso ricostruisce esattamente totale_lordo (pagato = totale_lordo
+        # + deposito - sospeso già lo sottrae una volta; sommarlo di nuovo con lo stesso segno
+        # lo conterebbe due volte).
+        _acc('Caparra', m, round(-deposito + residuo_non_tracciato, 2))
         _acc('Sospeso', m, round(sospeso, 2))
+
+    # `atteso` = pregresso MMS/BON per struttura = somma dei totali giornalieri SENZA
+    # ripartizione propria fino al taglio 'data_a' (della riga storico se esiste, altrimenti
+    # oggi). Serve al pannello di inserimento per la riconciliazione col residuo; quando la
+    # riga storico esiste, questi giorni non emettono la riga mensile 'MMS / BON (manuale)'.
+    # `base_mese` = stesso importo suddiviso per mese: pesi per distribuire il pregresso
+    # ripartito sulle colonne mensili (non c'è un dettaglio giornaliero della ripartizione,
+    # si usa il ritmo reale degli incassi MMS/BON come proxy).
+    atteso_map: dict = {}
+    base_mese: dict = {}
 
     for r in righe_man:
         m = int(r.mese)
         mesi_set.add(m)
-        _acc('MMS / BON (manuale)', m, round(float(r.totale or 0), 2))
+        ha_ripartizione = any(
+            v is not None for v in
+            (r.incasso_contante, r.incasso_bonifico, r.incasso_assegno, r.incasso_elettronico)
+        )
+        if ha_ripartizione:
+            # Le stesse 4 etichette esistono già in entrambi i report (per report_pagamenti,
+            # 'Contante'/'Bonifico'/'Assegno' coincidono con metodi grezzi noti — vedi
+            # TIPI_PAGAMENTO_NOTI — quindi confluiscono nelle righe già esistenti; 'Pagamento
+            # elettronico' compare come riga propria accanto a Bancomat/Carta Credito/ecc.,
+            # essendo l'unica granularità disponibile per un incasso inserito a mano).
+            _acc(key_fn('Contante'), m, round(float(r.incasso_contante or 0), 2))
+            _acc(key_fn('Bonifico'), m, round(float(r.incasso_bonifico or 0), 2))
+            _acc(key_fn('Assegno'), m, round(float(r.incasso_assegno or 0), 2))
+            _acc(key_fn('Pagamento elettronico'), m, round(float(r.incasso_elettronico or 0), 2))
+        else:
+            sc = r.struttura_code
+            lordo_r = round(float(r.arrangiamenti_lordo or 0), 2)
+            st = storico_by_str.get(sc)
+            entro_taglio = r.data_giorno <= (st.data_a if st else oggi)
+            if entro_taglio:
+                atteso_map[sc] = round(atteso_map.get(sc, 0.0) + lordo_r, 2)
+                base_mese.setdefault(sc, {})
+                base_mese[sc][m] = round(base_mese[sc].get(m, 0.0) + lordo_r, 2)
+            if not (st is not None and entro_taglio):
+                # Nessun pregresso ripartito per questa struttura, oppure giorno oltre il
+                # taglio: resta nella riga informativa mensile come prima.
+                _acc('MMS / BON (manuale)', m, lordo_r)
+
+    # Pregresso MMS/BON ripartito: i 4 importi confluiscono DIRETTAMENTE nelle 4 righe
+    # categoria (via key_fn), distribuiti sui mesi in proporzione al ritmo reale degli
+    # incassi MMS/BON (`base_mese`) — così ogni colonna TOTALE è il vero totale di quel
+    # metodo (documenti DPH/CLB/INT + MMS/BON) e la riga TOTALE in fondo resta coerente.
+    # Il residuo (atteso - somma dei 4, = 0 con dati corretti) va a 'MMS / BON (manuale)'
+    # con lo stesso criterio, così il TOTALE generale resta = SUM(totale_lordo).
+    pregresso_mmsbon: dict = {}
+    for sc in ('MMS', 'BON'):
+        st = storico_by_str.get(sc)
+        atteso = round(atteso_map.get(sc, 0.0), 2)
+        if st is None:
+            pregresso_mmsbon[sc] = {
+                'id': None, 'salvato': False, 'data_a': oggi.isoformat(), 'atteso': atteso,
+                'incasso_contante': 0.0, 'incasso_bonifico': 0.0,
+                'incasso_assegno': 0.0, 'incasso_elettronico': 0.0, 'residuo': 0.0, 'note': None,
+            }
+            continue
+        c = round(float(st.incasso_contante or 0), 2)
+        b = round(float(st.incasso_bonifico or 0), 2)
+        a_ = round(float(st.incasso_assegno or 0), 2)
+        e = round(float(st.incasso_elettronico or 0), 2)
+        residuo = round(atteso - (c + b + a_ + e), 2)
+        pesi = base_mese.get(sc, {})
+        tot_pesi = round(sum(pesi.values()), 2)
+        for cat, val, dest in (
+            ('Contante', c, key_fn('Contante')),
+            ('Bonifico', b, key_fn('Bonifico')),
+            ('Assegno', a_, key_fn('Assegno')),
+            ('Pagamento elettronico', e, key_fn('Pagamento elettronico')),
+            ('__residuo__', residuo, 'MMS / BON (manuale)'),
+        ):
+            if val == 0:
+                continue
+            quote = _distribuisci(val, pesi, tot_pesi) or {st.data_a.month: val}
+            for mm, q in quote.items():
+                mesi_set.add(mm)
+                _acc(dest, mm, q)
+        pregresso_mmsbon[sc] = {
+            'id': st.id, 'salvato': True, 'data_a': st.data_a.isoformat(), 'atteso': atteso,
+            'incasso_contante': c, 'incasso_bonifico': b, 'incasso_assegno': a_,
+            'incasso_elettronico': e, 'residuo': residuo, 'note': st.note,
+        }
 
     mesi_ordinati = sorted(mesi_set)
 
-    # Ordine: tipi noti → altri → Non specificato → MMS/BON → Caparra → Sospeso in fondo
+    # Ordine: tipi primari (noti/categorie) → altri → Non specificato → MMS/BON → Caparra → Sospeso
     SPECIALI = ('Non specificato', 'MMS / BON (manuale)', 'Caparra', 'Sospeso')
-    tipi_noti_presenti = [t for t in TIPI_NOTI if t in per_tipo]
-    tipi_altri = sorted(t for t in per_tipo if t not in TIPI_NOTI and t not in SPECIALI)
+    tipi_primari_presenti = [t for t in ordine_primario if t in per_tipo]
+    tipi_altri = sorted(t for t in per_tipo if t not in ordine_primario and t not in SPECIALI)
     tipi_ns    = ['Non specificato']    if 'Non specificato'    in per_tipo else []
     tipi_man   = ['MMS / BON (manuale)'] if 'MMS / BON (manuale)' in per_tipo else []
     tipi_cap   = ['Caparra']            if 'Caparra'            in per_tipo else []
     tipi_sosp  = ['Sospeso']            if 'Sospeso'            in per_tipo else []
-    tipi_ordinati = tipi_noti_presenti + tipi_altri + tipi_ns + tipi_man + tipi_cap + tipi_sosp
+    tipi_ordinati = tipi_primari_presenti + tipi_altri + tipi_ns + tipi_man + tipi_cap + tipi_sosp
 
     totale_mese = {
         m: round(sum(per_tipo[t].get(m, 0.0) for t in tipi_ordinati), 2)
@@ -701,7 +888,66 @@ def report_pagamenti(
         },
         'totale_mese': {str(m): totale_mese[m] for m in mesi_ordinati},
         'totale_anno': totale_anno,
+        'pregresso_mmsbon': pregresso_mmsbon,
     }
+
+
+@router.get("/report/pagamenti")
+def report_pagamenti(
+    anno: int = Query(..., ge=2020, le=2030),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """Riepilogo fatturati per tipo di pagamento grezzo (metodo Welcome) e mese nell'anno.
+    Vedi `_calcola_pagamenti` per la formula `pagato` e la gestione dei metodi multipli."""
+    return _calcola_pagamenti(db, anno, is_test, key_fn=lambda t: t, ordine_primario=TIPI_PAGAMENTO_NOTI)
+
+
+@router.get("/report/tipo-incasso")
+def report_tipo_incasso(
+    anno: int = Query(..., ge=2020, le=2030),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """Riepilogo per macro-categoria di incasso (Contante/Bonifico/Assegno/Pagamento
+    elettronico) e mese — tabella "Forme di pagamento" in Riepilogo Fatturati (versione
+    raggruppata, l'unica esposta in UI; il vecchio tab 'Tipo Incasso' è stato rimosso a
+    settembre 2026 perché duplicava questa tabella). Stessa aggregazione di `report_pagamenti`
+    (metodi grezzi Welcome), rimappata alle 4 categorie via `METODO_A_CATEGORIA_INCASSO`
+    ('Pagamento elettronico' = Carta Credito + Bancomat + XPAY-Nexi + Satispay). Le righe Non specificato/
+    Caparra/Sospeso/MMS-BON (per i giorni non ancora ripartiti manualmente) restano
+    informative fuori dalle 4 categorie: non è noto (o non esiste) un metodo di pagamento
+    reale a cui attribuirle — ma il TOTALE del report (somma di tutte le righe, incluse
+    queste) coincide sempre esattamente con i corrispettivi reali (DPH/CLB/INT da
+    `corrispettivi_documenti` + MMS/BON da `corrispettivi_manuali`), vedi `_calcola_pagamenti`."""
+    key_fn = lambda t: METODO_A_CATEGORIA_INCASSO.get(t, t)
+    return _calcola_pagamenti(db, anno, is_test, key_fn=key_fn, ordine_primario=CATEGORIE_INCASSO)
+
+
+@router.get("/export/tipo-incasso")
+def export_tipo_incasso(
+    anno: int = Query(..., ge=2020, le=2030),
+    formato: str = Query('xlsx', pattern="^(xlsx|csv|pdf)$"),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """Export della tabella 'Tipo Incasso' (stessa aggregazione di `report_tipo_incasso`)."""
+    from app.routers.corrispettivi_documenti import _risposta_tabella
+
+    dati = report_tipo_incasso(anno=anno, is_test=is_test, db=db, _=None)
+    intestazioni = ['Categoria'] + [m['nome_mese'] for m in dati['mesi']] + ['Totale']
+    righe = [
+        [t] + [dati['per_tipo'][t].get(str(m['mese']), 0.0) for m in dati['mesi']] + [dati['totale_anno'].get(t, 0.0)]
+        for t in dati['tipi']
+    ]
+    righe.append(
+        ['TOTALE'] + [dati['totale_mese'].get(str(m['mese']), 0.0) for m in dati['mesi']]
+        + [round(sum(dati['totale_anno'].values()), 2)]
+    )
+    return _risposta_tabella(formato, f'corrispettivi_tipo_incasso_{anno}', f'Tipo Incasso {anno}', intestazioni, righe)
 
 
 @router.get("/admin/test-stats")

@@ -85,6 +85,103 @@ function DrawerDocumenti({ info, onClose }) {
   )
 }
 
+// ── Modale incasso manuale MMS/BON ────────────────────────────────────────────
+// MMS (Maremosso) e BON (Buona Onda) incassano solo in due forme: contante e pagamento
+// elettronico. Si parte dal totale lordo del giorno, si inserisce la quota elettronica,
+// il contante è la differenza (calcolato). Salva su corrispettivi_manuali con la
+// ripartizione (incasso_contante/incasso_elettronico; bonifico/assegno azzerati) —
+// arrangiamenti_lordo resta il totale.
+
+function ModaleIncassoManuale({ info, onClose, onSalvato }) {
+  const [totale, setTotale] = useState(info.row?.arrangiamenti_lordo ?? '')
+  const [elettronico, setElettronico] = useState(info.row?.incasso_elettronico ?? '')
+  const [saving, setSaving] = useState(false)
+  const [errore, setErrore] = useState(null)
+
+  const tot = parseFloat(totale) || 0
+  const elett = parseFloat(elettronico) || 0
+  const contante = Math.round((tot - elett) * 100) / 100
+  const elettEccessivo = elett > tot + 0.001
+
+  const salva = async () => {
+    if (elettEccessivo) { setErrore('Il pagamento elettronico non può superare il totale.'); return }
+    setSaving(true)
+    setErrore(null)
+    try {
+      await api.post('/corrispettivi/manuali', {
+        data_giorno: info.data,
+        struttura_code: info.struttura_code,
+        arrangiamenti_lordo: tot,
+        incasso_contante: contante,
+        incasso_elettronico: elett,
+        incasso_bonifico: 0,
+        incasso_assegno: 0,
+      })
+      onSalvato()
+      onClose()
+    } catch (e) {
+      setErrore(mostraErrore(e, 'Errore salvataggio'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.4)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#fff', borderRadius: 12, padding: '1.5rem', width: 320,
+        boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+      }}>
+        <h3 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: '#1e293b' }}>
+          {NOMI[info.struttura_code]} — {fmtD(info.data)}
+        </h3>
+        <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: '#64748b' }}>
+          Incasso del giorno (lordo, IVA 10% inclusa)
+        </p>
+
+        <label style={{ display: 'block', marginBottom: '0.6rem' }}>
+          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Totale incasso</span>
+          <input type="number" step="0.01" min="0" value={totale} placeholder="0.00"
+            onChange={e => setTotale(e.target.value)}
+            style={{ ...inpSt, width: '100%', boxSizing: 'border-box', textAlign: 'right', fontWeight: 700 }} />
+        </label>
+
+        <div style={{ borderTop: '1px solid #e2e8f0', margin: '0.5rem 0 0.75rem' }} />
+
+        <label style={{ display: 'block', marginBottom: '0.6rem' }}>
+          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Pagamento elettronico</span>
+          <input type="number" step="0.01" min="0" value={elettronico} placeholder="0.00"
+            onChange={e => setElettronico(e.target.value)}
+            style={{ ...inpSt, width: '100%', boxSizing: 'border-box', textAlign: 'right' }} />
+        </label>
+
+        <label style={{ display: 'block', marginBottom: '0.4rem' }}>
+          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Contante (calcolato)</span>
+          <input type="text" readOnly value={formatEuro(contante)}
+            style={{
+              ...inpSt, width: '100%', boxSizing: 'border-box', textAlign: 'right',
+              background: '#f1f5f9', color: elettEccessivo ? '#ef4444' : '#1e293b',
+            }} />
+        </label>
+
+        {errore && <p style={{ color: '#ef4444', fontSize: '0.78rem', marginTop: '0.5rem' }}>{errore}</p>}
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+            Annulla
+          </button>
+          <button onClick={salva} disabled={saving || elettEccessivo}
+            style={{ ...inpSt, cursor: 'pointer', background: '#1e3a5f', color: '#fff', border: 'none' }}>
+            {saving ? 'Salvataggio…' : 'Salva'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Tab Corrispettivi giornalieri ─────────────────────────────────────────────
 
 export default function TabGiornalieri({ lordo }) {
@@ -95,11 +192,10 @@ export default function TabGiornalieri({ lordo }) {
   const [datiGG, setDatiGG] = useState([])
   const [manuali, setManuali] = useState({})     // key: "YYYY-MM-DD_MMS/BON" → lordo
   const [manualiDB, setManualiDB] = useState([]) // array dal DB
-  const [manualiEdit, setManualiEdit] = useState({}) // edit in corso
-  const [saving, setSaving] = useState({})
   const [check, setCheck] = useState(null)
   const [loading, setLoading] = useState(false)
   const [drawer, setDrawer] = useState(null)  // { data, struttura_code, tipo, categoria }
+  const [modaleIncasso, setModaleIncasso] = useState(null)  // { data, struttura_code, row }
 
   const da = primoGiorno(anno, mese)
   const a = ultimoGiorno(anno, mese)
@@ -187,24 +283,6 @@ export default function TabGiornalieri({ lordo }) {
     })
   })
   giorni.forEach(data => { totMeseGlobale += byData[data]?.totale_giorno || 0 })
-
-  // Salva manuale
-  const salvaManuale = async (data, sc) => {
-    const key = `${data}_${sc}`
-    const val = parseFloat(manualiEdit[key] ?? manuali[key] ?? 0)
-    setSaving(s => ({ ...s, [key]: true }))
-    try {
-      await api.post('/corrispettivi/manuali', {
-        data_giorno: data, struttura_code: sc, arrangiamenti_lordo: val,
-      })
-      carica()
-    } catch (e) {
-      alert(mostraErrore(e, 'Errore salvataggio'))
-    } finally {
-      setSaving(s => ({ ...s, [key]: false }))
-      setManualiEdit(e => { const n = { ...e }; delete n[key]; return n })
-    }
-  }
 
   const navMese = (delta) => {
     let m = mese + delta
@@ -444,7 +522,8 @@ export default function TabGiornalieri({ lordo }) {
             Inserimento manuale — Maremosso (MMS) e Buona Onda (BON)
           </h3>
           <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 0.75rem' }}>
-            Inserire il totale lordo (IVA 10% inclusa). Il sistema calcola automaticamente imponibile e IVA.
+            Inserire il totale lordo del giorno (IVA 10% inclusa) e la quota di pagamento
+            elettronico. Il contante è calcolato come differenza; imponibile e IVA sono automatici.
           </p>
 
           <p style={{ fontSize: '0.78rem', color: giorniCompletati === giorni.length ? '#22c55e' : '#64748b', margin: '0 0 0.75rem' }}>
@@ -455,48 +534,38 @@ export default function TabGiornalieri({ lordo }) {
           <table style={{ borderCollapse: 'collapse', fontSize: '0.82rem' }}>
             <thead>
               <tr style={{ background: '#f1f5f9' }}>
-                {['Data', 'MMS lordo (€)', '', 'BON lordo (€)', ''].map((h, i) => (
+                {['Data', 'MMS', '', 'BON', ''].map((h, i) => (
                   <th key={i} style={{ ...thSt, textAlign: i === 0 ? 'left' : 'right', padding: '6px 10px', color: '#475569' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {giorni.map((data) => {
-                const keyMMS = `${data}_MMS`
-                const keyBON = `${data}_BON`
-                const valMMS = manualiEdit[keyMMS] ?? manuali[keyMMS] ?? ''
-                const valBON = manualiEdit[keyBON] ?? manuali[keyBON] ?? ''
-                const salvMMS = !!manuali[keyMMS]
-                const salvBON = !!manuali[keyBON]
-                const inpMMS = { ...inpSt, width: 90, textAlign: 'right', border: `2px solid ${salvMMS ? '#16a34a' : '#f59e0b'}` }
-                const inpBON = { ...inpSt, width: 90, textAlign: 'right', border: `2px solid ${salvBON ? '#16a34a' : '#f59e0b'}` }
+                const rowMMS = manualiDB.find(m => m.data_giorno === data && m.struttura_code === 'MMS')
+                const rowBON = manualiDB.find(m => m.data_giorno === data && m.struttura_code === 'BON')
+                const totMMS = manuali[`${data}_MMS`] || 0
+                const totBON = manuali[`${data}_BON`] || 0
                 return (
                   <tr key={data}>
                     <td style={{ ...tdSt, textAlign: 'left' }}>
                       {fmtD(data)} {giornoSettimana(data)}
                     </td>
-                    <td style={tdSt}>
-                      <input type="number" step="0.01" min="0" value={valMMS}
-                        placeholder="0.00"
-                        onChange={e => setManualiEdit(v => ({ ...v, [keyMMS]: e.target.value }))}
-                        style={inpMMS} />
+                    <td style={{ ...tdSt, color: totMMS ? '#1e293b' : '#94a3b8', fontWeight: totMMS ? 600 : 400 }}>
+                      {totMMS ? formatEuro(totMMS) : '—'}
                     </td>
                     <td style={tdSt}>
-                      <button onClick={() => salvaManuale(data, 'MMS')} disabled={saving[keyMMS]}
-                        style={{ ...inpSt, cursor: 'pointer', background: '#1e3a5f', color: '#fff', border: 'none', fontSize: '0.78rem', padding: '4px 10px' }}>
-                        {saving[keyMMS] ? '…' : 'Salva'}
+                      <button onClick={() => setModaleIncasso({ data, struttura_code: 'MMS', row: rowMMS })}
+                        style={{ ...inpSt, cursor: 'pointer', background: rowMMS ? '#16a34a' : '#f59e0b', color: '#fff', border: 'none', fontSize: '0.78rem', padding: '4px 10px' }}>
+                        {rowMMS ? 'Modifica' : 'Inserisci'}
                       </button>
                     </td>
-                    <td style={tdSt}>
-                      <input type="number" step="0.01" min="0" value={valBON}
-                        placeholder="0.00"
-                        onChange={e => setManualiEdit(v => ({ ...v, [keyBON]: e.target.value }))}
-                        style={inpBON} />
+                    <td style={{ ...tdSt, color: totBON ? '#1e293b' : '#94a3b8', fontWeight: totBON ? 600 : 400 }}>
+                      {totBON ? formatEuro(totBON) : '—'}
                     </td>
                     <td style={tdSt}>
-                      <button onClick={() => salvaManuale(data, 'BON')} disabled={saving[keyBON]}
-                        style={{ ...inpSt, cursor: 'pointer', background: '#1e3a5f', color: '#fff', border: 'none', fontSize: '0.78rem', padding: '4px 10px' }}>
-                        {saving[keyBON] ? '…' : 'Salva'}
+                      <button onClick={() => setModaleIncasso({ data, struttura_code: 'BON', row: rowBON })}
+                        style={{ ...inpSt, cursor: 'pointer', background: rowBON ? '#16a34a' : '#f59e0b', color: '#fff', border: 'none', fontSize: '0.78rem', padding: '4px 10px' }}>
+                        {rowBON ? 'Modifica' : 'Inserisci'}
                       </button>
                     </td>
                   </tr>
@@ -505,6 +574,10 @@ export default function TabGiornalieri({ lordo }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {modaleIncasso && (
+        <ModaleIncassoManuale info={modaleIncasso} onClose={() => setModaleIncasso(null)} onSalvato={carica} />
       )}
 
       {/* Sezione CHECK */}

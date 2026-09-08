@@ -7,6 +7,7 @@ prefix /corrispettivi (nessun cambio per il resto dell'app, main.py invariato):
   corrispettivi_documenti.py  → CRUD documenti (scontrini/fatture) e manuali (MMS/BON)
   corrispettivi_report.py     → report giornaliero/mensile/fatturati/pagamenti, check, export
   corrispettivi_rt.py         → Controllo RT (chiusure registratore telematico)
+  corrispettivi_cassa.py      → Cassa contante reale (saldo iniziale, versamenti, rettifiche)
 
 Endpoint:
   POST   /corrispettivi/import                → upload file Excel (on_conflict: salta|aggiorna)
@@ -30,8 +31,16 @@ Endpoint:
   GET    /corrispettivi/report/mensile        → aggregato per mese e struttura
   GET    /corrispettivi/check                 → totali per struttura
   GET    /corrispettivi/report/fatturati      → riepilogo fatturati per mese/struttura
-  GET    /corrispettivi/report/pagamenti      → riepilogo per tipo di pagamento
+  GET    /corrispettivi/report/pagamenti      → riepilogo per metodo grezzo Welcome (solo Home)
+  GET    /corrispettivi/report/tipo-incasso   → riepilogo raggruppato 4 forme (Riepilogo Fatturati)
+  GET    /corrispettivi/export/tipo-incasso   → export xlsx/csv/pdf forme di pagamento
   GET    /corrispettivi/export/fatturati      → export Excel riepilogo fatturati
+
+  GET    /corrispettivi/cassa/movimenti       → elenco movimenti cassa contante
+  POST   /corrispettivi/cassa/movimenti       → crea movimento (admin)
+  PUT    /corrispettivi/cassa/movimenti/{id}  → modifica movimento (admin)
+  DELETE /corrispettivi/cassa/movimenti/{id}  → elimina movimento (admin)
+  GET    /corrispettivi/cassa/riepilogo       → saldo progressivo cassa per mese
 
   GET    /corrispettivi/admin/test-stats      → conteggio record is_test
   DELETE /corrispettivi/admin/test-data       → cancella tutti i record is_test
@@ -46,6 +55,7 @@ Endpoint:
 from fastapi import APIRouter
 
 from app.routers import (
+    corrispettivi_cassa,
     corrispettivi_documenti,
     corrispettivi_import,
     corrispettivi_report,
@@ -58,3 +68,4 @@ router.include_router(corrispettivi_import.router)
 router.include_router(corrispettivi_documenti.router)
 router.include_router(corrispettivi_report.router)
 router.include_router(corrispettivi_rt.router)
+router.include_router(corrispettivi_cassa.router)

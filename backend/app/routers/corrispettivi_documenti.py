@@ -12,6 +12,8 @@ Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
   POST   /manuali               → inserimento MMS/BON
   PUT    /manuali/{id}          → modifica MMS/BON
   GET    /manuali               → lista con filtri
+  PUT    /incasso-storico       → upsert ripartizione una-tantum pregresso MMS/BON
+  DELETE /incasso-storico/{id}  → annulla la ripartizione una-tantum
 
   GET    /export/penali         → export tabella Penali (xlsx/csv/pdf)
 """
@@ -34,7 +36,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth import richiedi_admin, richiedi_utente_attivo
-from app.models.corrispettivi import CorrispettiviDocumento, CorrispettiviManuale
+from app.models.corrispettivi import (
+    CorrispettiviDocumento, CorrispettiviManuale, CorrispettiviIncassoStorico,
+)
 from app.services.corrispettivi_excel_parser import _determina_categoria
 from app.routers.corrispettivi_shared import NOME_STRUTTURA, STRUTTURE_MANUALI, _to_float, _d
 
@@ -142,6 +146,9 @@ def _fmt_documento(d: CorrispettiviDocumento) -> dict:
     }
 
 
+CAMPI_INCASSO_MANUALE = ('incasso_contante', 'incasso_bonifico', 'incasso_assegno', 'incasso_elettronico')
+
+
 def _fmt_manuale(m: CorrispettiviManuale) -> dict:
     lordo = _to_float(m.arrangiamenti_lordo)
     imponibile = round(lordo / 1.10, 2)
@@ -154,6 +161,11 @@ def _fmt_manuale(m: CorrispettiviManuale) -> dict:
         'arrangiamenti_lordo': lordo,
         'arrangiamenti_imponibile': imponibile,
         'arrangiamenti_iva': iva,
+        'incasso_contante': _to_float(m.incasso_contante) if m.incasso_contante is not None else None,
+        'incasso_bonifico': _to_float(m.incasso_bonifico) if m.incasso_bonifico is not None else None,
+        'incasso_assegno': _to_float(m.incasso_assegno) if m.incasso_assegno is not None else None,
+        'incasso_elettronico': _to_float(m.incasso_elettronico) if m.incasso_elettronico is not None else None,
+        'ha_ripartizione': any(getattr(m, c) is not None for c in CAMPI_INCASSO_MANUALE),
         'note': m.note,
         'is_test': m.is_test,
         'updated_at': m.updated_at.isoformat() if m.updated_at else None,
@@ -370,6 +382,11 @@ def crea_manuale(
     """
     Inserisce o aggiorna un corrispettivo manuale per MMS o BON.
     Body: {data_giorno, struttura_code, arrangiamenti_lordo, note?, is_test?}
+    Oppure, per la ripartizione per tipo di incasso (tab 'Tipo Incasso'):
+    Body: {data_giorno, struttura_code, incasso_contante, incasso_bonifico,
+           incasso_assegno, incasso_elettronico, note?, is_test?}
+    Se è presente almeno uno dei 4 campi incasso_*, arrangiamenti_lordo viene
+    ricalcolato come somma dei 4 (mai il contrario) e la ripartizione viene salvata.
     """
     struttura = str(body.get('struttura_code', '')).upper()
     if struttura not in STRUTTURE_MANUALI:
@@ -384,16 +401,40 @@ def crea_manuale(
     except ValueError:
         raise HTTPException(status_code=400, detail="data_giorno non valida (formato YYYY-MM-DD)")
 
-    lordo = float(body.get('arrangiamenti_lordo', 0))
     is_test = bool(body.get('is_test', False))
+    ha_ripartizione = any(body.get(c) is not None for c in CAMPI_INCASSO_MANUALE)
+    if ha_ripartizione:
+        valori_incasso = {c: float(body.get(c) or 0) for c in CAMPI_INCASSO_MANUALE}
+        lordo = round(sum(valori_incasso.values()), 2)
+    else:
+        lordo = float(body.get('arrangiamenti_lordo', 0))
 
     esistente = db.query(CorrispettiviManuale).filter(
         CorrispettiviManuale.data_giorno == data_g,
         CorrispettiviManuale.struttura_code == struttura,
     ).first()
 
+    # UNIQUE(data_giorno, struttura_code) non include is_test: un record reale e uno di test
+    # per lo stesso giorno/struttura non possono coesistere nello schema attuale. Senza questo
+    # controllo, una chiamata con is_test=true su un giorno che ha già un record reale (o
+    # viceversa) lo sovrascriverebbe silenziosamente — incidente reale evitato per un pelo
+    # testando manualmente questo stesso endpoint (settembre 2026).
+    if esistente and esistente.is_test != is_test:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Esiste già un record {'di test' if esistente.is_test else 'reale'} per "
+                f"{struttura} il {data_g.isoformat()}: non è possibile sovrascriverlo con un "
+                f"record {'di test' if is_test else 'reale'} (stesso giorno+struttura). "
+                "Cancellarlo prima se l'operazione è intenzionale."
+            ),
+        )
+
     if esistente:
         esistente.arrangiamenti_lordo = _d(lordo)
+        if ha_ripartizione:
+            for c in CAMPI_INCASSO_MANUALE:
+                setattr(esistente, c, _d(valori_incasso[c]))
         esistente.note = body.get('note', esistente.note)
         esistente.updated_by = utente.id
         m = esistente
@@ -402,6 +443,7 @@ def crea_manuale(
             data_giorno=data_g,
             struttura_code=struttura,
             arrangiamenti_lordo=_d(lordo),
+            **({c: _d(valori_incasso[c]) for c in CAMPI_INCASSO_MANUALE} if ha_ripartizione else {}),
             note=body.get('note'),
             is_test=is_test,
             created_by=utente.id,
@@ -424,7 +466,12 @@ def modifica_manuale(
     if not m:
         raise HTTPException(status_code=404, detail="Record non trovato")
 
-    if 'arrangiamenti_lordo' in body:
+    if any(c in body for c in CAMPI_INCASSO_MANUALE):
+        for c in CAMPI_INCASSO_MANUALE:
+            if c in body:
+                setattr(m, c, _d(float(body[c] or 0)))
+        m.arrangiamenti_lordo = _d(round(sum(float(getattr(m, c) or 0) for c in CAMPI_INCASSO_MANUALE), 2))
+    elif 'arrangiamenti_lordo' in body:
         m.arrangiamenti_lordo = _d(body['arrangiamenti_lordo'])
     if 'note' in body:
         m.note = body['note']
@@ -452,6 +499,89 @@ def lista_manuali(
         q = q.filter(CorrispettiviManuale.struttura_code == struttura_code.upper())
     manuali = q.order_by(CorrispettiviManuale.data_giorno.desc()).all()
     return [_fmt_manuale(m) for m in manuali]
+
+
+# ── Pregresso MMS/BON per tipo di incasso (ripartizione una-tantum) ──────────
+# Vedi migrazione corrfix004_2026. La LETTURA dei valori correnti passa dal report
+# `/report/tipo-incasso` (campo `pregresso_mmsbon`), non da un GET dedicato. Il pannello
+# di inserimento è stato rimosso (inserimento fatto una volta a settembre 2026): qui
+# restano solo scrittura (upsert) e cancellazione, riservate ad admin, per correzioni.
+
+def _fmt_incasso_storico(s: CorrispettiviIncassoStorico) -> dict:
+    return {
+        'id': s.id,
+        'struttura_code': s.struttura_code,
+        'anno': s.anno,
+        'data_a': s.data_a.isoformat(),
+        'incasso_contante': _to_float(s.incasso_contante),
+        'incasso_bonifico': _to_float(s.incasso_bonifico),
+        'incasso_assegno': _to_float(s.incasso_assegno),
+        'incasso_elettronico': _to_float(s.incasso_elettronico),
+        'totale': round(sum(_to_float(getattr(s, c)) for c in CAMPI_INCASSO_MANUALE), 2),
+        'note': s.note,
+        'is_test': s.is_test,
+    }
+
+
+@router.put("/incasso-storico")
+def upsert_incasso_storico(
+    body: dict,
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    """Inserisce/aggiorna la ripartizione una-tantum del pregresso MMS/BON per tipo di
+    incasso. Body: {struttura_code, anno, data_a, incasso_contante, incasso_bonifico,
+    incasso_assegno, incasso_elettronico, note?, is_test?}. Upsert su (struttura, anno, is_test)."""
+    struttura = str(body.get('struttura_code', '')).upper()
+    if struttura not in STRUTTURE_MANUALI:
+        raise HTTPException(status_code=400,
+                            detail=f"struttura_code deve essere uno di: {STRUTTURE_MANUALI}")
+    try:
+        anno = int(body.get('anno'))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="anno obbligatorio")
+    try:
+        data_a = date.fromisoformat(str(body.get('data_a')))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="data_a non valida (formato YYYY-MM-DD)")
+
+    is_test = bool(body.get('is_test', False))
+    valori = {c: _d(float(body.get(c) or 0)) for c in CAMPI_INCASSO_MANUALE}
+
+    s = db.query(CorrispettiviIncassoStorico).filter(
+        CorrispettiviIncassoStorico.struttura_code == struttura,
+        CorrispettiviIncassoStorico.anno == anno,
+        CorrispettiviIncassoStorico.is_test == is_test,
+    ).first()
+    if s:
+        s.data_a = data_a
+        for c in CAMPI_INCASSO_MANUALE:
+            setattr(s, c, valori[c])
+        s.note = body.get('note', s.note)
+        s.updated_by = utente.id
+    else:
+        s = CorrispettiviIncassoStorico(
+            struttura_code=struttura, anno=anno, data_a=data_a, note=body.get('note'),
+            is_test=is_test, created_by=utente.id, updated_by=utente.id, **valori,
+        )
+        db.add(s)
+    db.commit()
+    return _fmt_incasso_storico(s)
+
+
+@router.delete("/incasso-storico/{storico_id}")
+def elimina_incasso_storico(
+    storico_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_admin),
+):
+    s = db.query(CorrispettiviIncassoStorico).filter(
+        CorrispettiviIncassoStorico.id == storico_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Record non trovato")
+    db.delete(s)
+    db.commit()
+    return {'ok': True}
 
 
 # ── Export tabellare generico (xlsx/csv/pdf) — usato da /export/penali ────────

@@ -295,6 +295,8 @@ def _perc_contante(pagamenti: dict) -> Optional[float]:
     esclusi = {'Caparra', 'Sospeso', 'MMS / BON (manuale)'}
     totale_anno = pagamenti.get('totale_anno') or {}
     totale = sum(v for k, v in totale_anno.items() if k not in esclusi)
+    # 'Contante' include già il pregresso MMS/BON ripartito (corrfix004_2026: confluisce
+    # direttamente nella riga categoria, non in una riga separata).
     contante = totale_anno.get('Contante', 0.0)
     return round(contante / totale * 100, 1) if totale else None
 

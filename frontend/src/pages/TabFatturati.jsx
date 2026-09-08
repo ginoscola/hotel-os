@@ -4,8 +4,11 @@ import {
   Legend, ResponsiveContainer, Cell,
 } from 'recharts'
 import api from '../api/client'
+import { ExportMenu } from '../components/ExportMenu'
 import { formatEuro, mostraErrore } from '../utils/format'
 import { STRUTTURE_HOTEL, STRUTTURE_MANUALI, NOMI, NOME_CAT, thSt, tdSt, inpSt } from '../utils/corrispettiviHelpers'
+
+const CATEGORIE_INCASSO = ['Contante', 'Bonifico', 'Assegno', 'Pagamento elettronico']
 
 const COLORI_STRUTTURA = {
   DPH: '#1e3a5f', CLB: '#0ea5e9', INT: '#6366f1',
@@ -40,7 +43,7 @@ export default function TabFatturati({ lordo }) {
     try {
       const [r1, r2] = await Promise.all([
         api.get('/corrispettivi/report/fatturati', { params: { anno, lordo } }),
-        api.get('/corrispettivi/report/pagamenti', { params: { anno } }),
+        api.get('/corrispettivi/report/tipo-incasso', { params: { anno } }),
       ])
       setDati(r1.data)
       setDatiPag(r2.data)
@@ -422,17 +425,20 @@ export default function TabFatturati({ lordo }) {
             </>
           )}
 
-          {/* ── Tabella tipi di pagamento ──────────────────────────────────── */}
+          {/* ── Forme di pagamento (raggruppate: Contante / Bonifico / Assegno / Elettronico) ── */}
           {datiPag && datiPag.tipi?.length > 0 && (
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1.25rem', marginBottom: '1.5rem' }}>
-              <h3 style={{ margin: '0 0 1rem', fontSize: '0.95rem', color: '#1e293b', fontWeight: 700 }}>
-                Forme di pagamento {anno}
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b', fontWeight: 700 }}>
+                  Forme di pagamento {anno}
+                </h3>
+                <ExportMenu url={`/corrispettivi/export/tipo-incasso?anno=${anno}`} nome={`corrispettivi_forme_pagamento_${anno}`} />
+              </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ minWidth: 500 }}>
                   <thead>
                     <tr>
-                      <th style={{ ...thSt, textAlign: 'left', minWidth: 140 }}>Tipo pagamento</th>
+                      <th style={{ ...thSt, textAlign: 'left', minWidth: 140 }}>Forma di pagamento</th>
                       {datiPag.mesi.map(m => (
                         <th key={m.mese} style={{ ...thSt }}>{m.nome_mese.slice(0, 3)}</th>
                       ))}
@@ -441,7 +447,7 @@ export default function TabFatturati({ lordo }) {
                   </thead>
                   <tbody>
                     {datiPag.tipi.map((tipo, idx) => {
-                      const isSpeciale = tipo === 'Caparra' || tipo === 'Sospeso' || tipo === 'MMS / BON (manuale)'
+                      const isSpeciale = !CATEGORIE_INCASSO.includes(tipo)
                       const bgBase = idx % 2 === 0 ? '#fff' : '#f8fafc'
                       const borderTop = isSpeciale ? '1px solid #e2e8f0' : undefined
                       return (
@@ -475,6 +481,12 @@ export default function TabFatturati({ lordo }) {
                   </tbody>
                 </table>
               </div>
+              <p style={{ marginTop: '1rem', fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                «Pagamento elettronico» raggruppa carte e app (Carta Credito, Bancomat, XPAY-Nexi,
+                Satispay). I totali includono gli incassi MMS e BON. Le righe in corsivo
+                (Non specificato, Caparra, Sospeso, MMS/BON manuale) sono informative e non
+                rientrano nelle 4 forme di pagamento.
+              </p>
             </div>
           )}
 
