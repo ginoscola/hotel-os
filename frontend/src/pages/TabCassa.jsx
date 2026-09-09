@@ -47,6 +47,10 @@ export default function TabCassa() {
 
   const salva = async () => {
     if (!form.importo && form.importo !== 0) { setErrore('Inserire un importo'); return }
+    if (form.tipo !== 'rettifica' && (parseFloat(form.importo) || 0) < 0) {
+      setErrore(`L'importo di un ${tipoLabel(form.tipo).toLowerCase()} non può essere negativo (usa "Rettifica" per un'uscita di contante).`)
+      return
+    }
     setSaving(true)
     setErrore(null)
     try {
@@ -190,7 +194,15 @@ export default function TabCassa() {
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <label style={{ fontSize: '0.75rem', color: '#64748b' }}>
                   <div style={{ marginBottom: 3 }}>Tipo</div>
-                  <select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))} style={{ ...inpSt, padding: '6px 8px' }}>
+                  <select value={form.tipo} onChange={e => setForm(f => {
+                    // Solo la rettifica accetta il segno: passando a versamento/saldo iniziale
+                    // normalizzo un eventuale importo negativo rimasto da una bozza di rettifica.
+                    const tipo = e.target.value
+                    const importo = tipo !== 'rettifica' && f.importo
+                      ? String(Math.abs(parseFloat(f.importo) || 0))
+                      : f.importo
+                    return { ...f, tipo, importo }
+                  })} style={{ ...inpSt, padding: '6px 8px' }}>
                     {TIPI.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </label>
@@ -199,8 +211,9 @@ export default function TabCassa() {
                   <input type="date" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} style={{ ...inpSt, padding: '6px 8px' }} />
                 </label>
                 <label style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                  <div style={{ marginBottom: 3 }}>Importo {form.tipo === 'rettifica' && '(± con segno)'}</div>
-                  <input type="number" step="0.01" value={form.importo} placeholder="0.00"
+                  <div style={{ marginBottom: 3 }}>Importo {form.tipo === 'rettifica' ? '(± con segno)' : '(solo positivo)'}</div>
+                  <input type="number" step="0.01" min={form.tipo === 'rettifica' ? undefined : '0'}
+                    value={form.importo} placeholder="0.00"
                     onChange={e => setForm(f => ({ ...f, importo: e.target.value }))}
                     style={{ ...inpSt, padding: '6px 8px', width: 120, textAlign: 'right' }} />
                 </label>

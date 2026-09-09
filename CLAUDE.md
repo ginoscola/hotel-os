@@ -616,6 +616,13 @@ nessuno scorporo per struttura — scelta esplicita dell'utente).
   nota; un'eventuale riga "di cui tassa soggiorno" è un affinamento futuro, non fatto in v1.
 - Frontend: card grande "Cassa contante disponibile" (`saldo_corrente`) + tabella mensile + (solo
   admin) form aggiungi/modifica movimento con elenco. Tab `id='cassa'`, dopo "Tipo Incasso".
+  ⚠️ Solo `rettifica` accetta importo con segno; `versamento`/`saldo_iniziale` negativi → 400
+  (`_parse_body()`). Un'uscita di contante (es. pagamento fornitore dalla cassa) è una **rettifica
+  negativa**, non un versamento (il versamento è il contante portato fisicamente in banca). Il form
+  (`TabCassa.jsx`) normalizza con `Math.abs()` l'importo rimasto in campo quando si cambia Tipo da
+  `rettifica` a un tipo che non ammette il segno, e blocca il salvataggio lato client con messaggio
+  esplicito — bug UX reale (settembre 2026: `-73,20` digitato come bozza di rettifica, poi Tipo
+  cambiato in "Versamento in banca" senza che il segno sparisse → 400 dal backend).
   ⚠️ **`<TotaleAmmontareAnnulli>` non veniva letto affatto fino ad agosto 2026**: bug reale (trovato
   14/08/2026, RT1) — il campo, presente in ogni `<Riepilogo>` (aliquota IVA o Natura), è l'imponibile
   degli scontrini annullati lo stesso giorno fiscale prima della chiusura Z (lo stesso importo
