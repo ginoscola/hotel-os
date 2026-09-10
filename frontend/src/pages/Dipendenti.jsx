@@ -1649,7 +1649,7 @@ function AnalisiCC() {
                   const totPrec = centriPrecVis.find(c => c.code === code)?.totale ?? null
                   return (
                     <tr key={code} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                      <td style={{ ...tdStyle, position: 'sticky', left: 0, zIndex: 1, background: '#f1f5f9', borderRight: '2px solid #cbd5e1' }}>
+                      <td style={{ ...tdStyle, position: 'sticky', left: 0, zIndex: 1, background: idx % 2 === 0 ? '#fff' : '#edf1f7', borderRight: '2px solid #cbd5e1' }}>
                         {(cc.struttura_code || cc.parent_name) && (
                           <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
                             {cc.struttura_code && (
