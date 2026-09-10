@@ -1603,7 +1603,7 @@ function AnalisiCC() {
                 {/* Riga anno se confronta attivo */}
                 {confronta && (
                   <tr>
-                    <th style={{ ...thStyle, background: '#1e293b' }}></th>
+                    <th style={{ ...thStyle, background: '#1e293b', position: 'sticky', left: 0, zIndex: 3 }}></th>
                     {mesiUnione.map(m => (
                       <th key={m} colSpan={2} style={{ ...thStyle, background: '#1e293b', textAlign: 'center', borderLeft: '1px solid #334155' }}>
                         {MESI_BREVI[m]}
@@ -1613,7 +1613,7 @@ function AnalisiCC() {
                   </tr>
                 )}
                 <tr style={{ background: '#2d6a9f' }}>
-                  <th style={{ ...thStyle, minWidth: 160 }}>Centro di costo</th>
+                  <th style={{ ...thStyle, minWidth: 160, background: '#2d6a9f', position: 'sticky', left: 0, zIndex: 3 }}>Centro di costo</th>
                   {mesiUnione.map(m => (
                     confronta ? (
                       <>
@@ -1647,7 +1647,7 @@ function AnalisiCC() {
                   const totPrec = centriPrecVis.find(c => c.code === code)?.totale ?? null
                   return (
                     <tr key={code} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                      <td style={{ ...tdStyle }}>
+                      <td style={{ ...tdStyle, position: 'sticky', left: 0, zIndex: 1, background: '#f1f5f9', borderRight: '2px solid #cbd5e1' }}>
                         {(cc.struttura_code || cc.parent_name) && (
                           <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
                             {cc.struttura_code && (
@@ -1708,7 +1708,7 @@ function AnalisiCC() {
 
                 {/* Riga totali */}
                 <tr>
-                  <td style={{ ...tdStyle, background: '#0f172a', color: '#fff', fontWeight: 700 }}>TOTALE</td>
+                  <td style={{ ...tdStyle, background: '#0f172a', color: '#fff', fontWeight: 700, position: 'sticky', left: 0, zIndex: 2, borderRight: '2px solid #334155' }}>TOTALE</td>
                   {mesiUnione.map(m => {
                     const curr = totaliMeseVis[String(m)] ?? null
                     const prec = totaliMesePrecVis[String(m)] ?? null
