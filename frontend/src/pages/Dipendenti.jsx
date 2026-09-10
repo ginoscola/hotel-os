@@ -1598,7 +1598,9 @@ function AnalisiCC() {
           <div style={{ display: 'flex', gap: 28, alignItems: 'stretch' }}>
           {/* ── Tabella ── */}
           <div style={{ overflowX: 'auto', flex: 1, minWidth: 0 }}>
-            <table style={{ ...tableStyle, fontSize: 12 }}>
+            {/* overflow:visible obbligatorio: l'overflow:hidden di tableStyle (per il borderRadius)
+                rompe position:sticky delle celle, che si ancorerebbero alla tabella anziché al div che scrolla */}
+            <table style={{ ...tableStyle, fontSize: 12, overflow: 'visible', borderRadius: 0 }}>
               <thead>
                 {/* Riga anno se confronta attivo */}
                 {confronta && (
