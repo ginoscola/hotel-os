@@ -1780,15 +1780,15 @@ function AnalisiCC() {
               }))
               .filter(d => d.value > 0)
 
-            // Vista per struttura: raggruppa per struttura_code e somma
+            // Vista per struttura: totale REALE per hotel (tutti i reparti/categorie), indipendente
+            // dai filtri della tabella sopra (vista struttura, granularita, checkbox categorie) —
+            // sempre dal dato grezzo del periodo selezionato, non da centriVis filtrato.
             const perStruttura = {}
-            allCCCodes.forEach(code => {
-              const cc = ccByCode[code]
-              const sc = cc?.struttura_code
+            ;(dati?.centri || []).forEach(cc => {
+              const sc = cc.struttura_code
               if (!sc) return
-              const v = totaleCCAnno(code)
               if (!perStruttura[sc]) perStruttura[sc] = { name: cc.struttura_name ?? sc, struttura_code: sc, value: 0 }
-              perStruttura[sc].value += v
+              perStruttura[sc].value += cc.totale
             })
             const dataTortaStruttura = Object.values(perStruttura)
               .filter(d => d.value > 0)
@@ -1806,10 +1806,16 @@ function AnalisiCC() {
               color: attivo ? '#fff' : '#64748b',
             })
 
+            const labelPeriodo = periodoTipo === 'anno'
+              ? `${anno}`
+              : periodoTipo === 'mese'
+                ? `${MESI_BREVI[periodoMeseDa]} ${anno}`
+                : `${MESI_BREVI[periodoMeseDa]}-${MESI_BREVI[periodoMeseA]} ${anno}`
+
             return (
               <div style={{ flexShrink: 0, width: 320, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginBottom: 6, textAlign: 'center' }}>
-                  Ripartizione {anno}
+                  Ripartizione {labelPeriodo}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 4, marginBottom: 6 }}>
                   <button style={btnToggle(tortaVista === 'reparto')} onClick={() => setTortaVista('reparto')}>Per reparto</button>
