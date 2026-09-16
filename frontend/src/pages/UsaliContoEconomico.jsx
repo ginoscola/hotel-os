@@ -9,7 +9,6 @@ const MESI = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
 // accorpato in DPH (vedi riga "Ricavi ristorante e bar — clienti esterni" e nota in pagina).
 // Resta invece distinto in Dipendenti → Analisi CC e in Movimenti Attivi, non toccati da questo.
 const STRUTTURE_HOTEL = ['DPH', 'CLB', 'INT']
-const STRUTTURE_RISTR = ['BON']
 const COL_ORDER = ['DPH', 'CLB', 'INT', 'HOTEL', 'BON', 'GRUPPO']
 
 const COL_LABEL = {
@@ -215,7 +214,6 @@ export default function UsaliContoEconomico() {
   if (dati) {
     for (const s of dati.strutture) mappa[s.struttura_code] = s
     mappa['HOTEL'] = dati.tot_hotel
-    mappa['RISTR'] = dati.tot_ristoranti
     mappa['GRUPPO'] = dati.tot_gruppo
   }
 
@@ -248,7 +246,6 @@ export default function UsaliContoEconomico() {
     if (!s) return <td key={col} style={{ textAlign: 'right', padding: '4px 8px', color: '#94a3b8' }}>—</td>
 
     const isHotel = STRUTTURE_HOTEL.includes(col)
-    const isRistr = STRUTTURE_RISTR.includes(col)
     // Voce non applicabile
     if (voce.soloHotel && !isHotel && !isTot) {
       return <td key={col} style={{ textAlign: 'right', padding: '4px 8px', color: '#e2e8f0' }}>n/a</td>
@@ -390,17 +387,6 @@ export default function UsaliContoEconomico() {
         </span>
       </div>
 
-      <p style={{ color: '#64748b', fontSize: '0.8rem', marginTop: 0, marginBottom: 16, maxWidth: 900 }}>
-        Maremosso è il ristorante di Du Parc (stessa azienda e partita IVA, licenza e registratore
-        fiscale propri): qui è accorpato su Du Parc, senza colonna propria. "Ricavi ristorante e bar"
-        resta il dato di pacchetto mezza/pensione completa (CSV Revenue, colazione + pranzo/cena),
-        e il costo del lavoro di Cucina/Sala/Bar è sommato a quello di Du Parc. Gli incassi di chi
-        paga direttamente al ristorante (non ospiti in pacchetto, dalla stampante fiscale di
-        Maremosso) restano invece visibili a sé sulla riga "clienti esterni" sotto. Il dettaglio per
-        struttura di Maremosso resta comunque disponibile in Dipendenti → Analisi CC e in Movimenti
-        Attivi (tab "Ristorante Mare Mosso"), invariati.
-      </p>
-
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Caricamento…</div>
       ) : (
@@ -420,7 +406,7 @@ export default function UsaliContoEconomico() {
                       padding: '8px 8px', textAlign: 'right', fontWeight: 600,
                       fontSize: IS_TOTALE[col] ? 12 : 13,
                       background: IS_TOTALE[col] ? '#334155' : '#1e293b',
-                      borderLeft: IS_TOTALE[col] ? '2px solid #475569' : col === 'MMS' ? '2px solid #475569' : 'none',
+                      borderLeft: IS_TOTALE[col] ? '2px solid #475569' : 'none',
                     }}>
                       {COL_LABEL[col]}
                     </th>

@@ -42,8 +42,7 @@ STRUTTURE_RISTORANTI = ['BON']
 TUTTE_STRUTTURE = STRUTTURE_HOTEL + STRUTTURE_RISTORANTI
 
 NOME_STRUTTURA = {
-    'DPH': 'Du Parc', 'CLB': 'Club Hotel', 'INT': 'International',
-    'MMS': 'Maremosso', 'BON': 'Buona Onda',
+    'DPH': 'Du Parc', 'CLB': 'Club Hotel', 'INT': 'International', 'BON': 'Buona Onda',
 }
 
 # ── Voci manuali per struttura ─────────────────────────────────────────────────
@@ -585,10 +584,8 @@ def get_report(
         strutture_result.append(_calcola_struttura(codice, anno, mese, auto, manuali_delta, manuali_cum))
 
     hotel_list = [s for s in strutture_result if s['struttura_code'] in STRUTTURE_HOTEL]
-    ristr_list = [s for s in strutture_result if s['struttura_code'] in STRUTTURE_RISTORANTI]
 
     tot_hotel = _somma_strutture(hotel_list, 'Totale Hotel', 'HOTEL')
-    tot_ristr = _somma_strutture(ristr_list, 'Totale Ristoranti', 'RISTR')
     tot_gruppo = _somma_strutture(strutture_result, 'Totale Gruppo', 'GRUPPO')
 
     kpi_config = _leggi_kpi_config(db)
@@ -603,7 +600,6 @@ def get_report(
         'ytd': ytd,
         'strutture': strutture_result,
         'tot_hotel': tot_hotel,
-        'tot_ristoranti': tot_ristr,
         'tot_gruppo': tot_gruppo,
         'kpi_config': kpi_config,
     }
