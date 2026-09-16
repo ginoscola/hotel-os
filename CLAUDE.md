@@ -1149,58 +1149,58 @@ come `escluso_pensione`), `_categorie_attive()` di `produzione_report` e `_rispo
 
 ## Modulo USALI — Conto Economico
 
-**Maremosso (MMS) ha un nodo struttura proprio nell'albero centri di costo** (`usali005_2026`,
-settembre 2026): prima esisteva solo per i ricavi (`auto_maremosso` in Movimenti Attivi/Conto
-Economico attribuiva già pranzo/cena a MMS), ma nell'albero CC non c'era alcun nodo `MMS` — Cucina/
-Sala/Bar restavano figli di `DPH_FNB`, quindi `_lavoro_da_dipendenti()` (risale la gerarchia fino al
-primo nodo `tipo='struttura'`) attribuiva **tutto** il costo del personale F&B a Du Parc, mentre parte
-del ricavo corrispondente era già su Maremosso — EBITDAR distorto su entrambe le strutture (DPH
-depresso, MMS gonfiato). Confermato dall'utente: Cucina/Sala/Bar lavorano esclusivamente per pranzo/
-cena al Maremosso (nessuna quota colazione), quindi spostamento pieno dei 3 reparti, non uno split %.
-Fix: nuovo `MMS` (struttura) → `MMS_FNB` (categoria, mirror di `BON_FNB`) → `MMS_CUCINA`/`MMS_SALA`/
-`MMS_BAR` (stessi `id` di `DPH_CUCINA`/`DPH_SALA`/`DPH_BAR`, solo `code`/`name`/`parent_id` cambiati —
-zero impatto sui collegamenti dipendenti già esistenti in `employee_cc_default`/
-`EmployeeCostCenterMonthly`). Colazioni e Pasticceria restano su DPH (colazione servita in hotel).
+**Maremosso (MMS) è accorpato su Du Parc, nessuna colonna propria** (settembre 2026, assetto
+finale dopo due iterazioni — vedi sotto). Confermato dall'utente: stessa azienda e partita IVA di
+Du Parc, licenza e registratore fiscale propri ma nessun obbligo di separazione contabile —
+tenerlo distinto era una scelta di reporting gestionale, non un requisito. `STRUTTURE_RISTORANTI`
+in `usali.py` = `['BON']` (MMS rimosso); `TUTTE_STRUTTURE` non lo itera più come riga a sé.
+- **Ricavi**: `ricavi_fnb` di DPH torna a essere il dato di pacchetto grezzo da `daily_revenue`
+  (comprensivo di colazione E pranzo/cena consumati al Maremosso, invariato rispetto a
+  Dashboard/Budget/Revenue). Nuova riga **"Ricavi ristorante e bar — clienti esterni"**
+  (`ricavi_fnb_esterni`, sezione A, entra nel totale ricavi) = `_ricavi_ristorante(db, 'MMS', ...)`
+  — chi paga direttamente al ristorante Maremosso (stampante fiscale propria, corrispettivi), mai
+  negli ospiti Du Parc in pacchetto: nessuna sovrapposizione. Visibile solo su DPH (`soloStruttura:
+  'DPH'` lato frontend), "n/a" altrove.
+- **Costo del lavoro**: `_lavoro_fnb_dph_con_maremosso()` somma il `lavoro_fnb` di DPH (Colazioni +
+  Pasticceria) e quello di MMS (Cucina/Sala/Bar, via `_lavoro_da_dipendenti(db, 'MMS', ...)`) in
+  un'unica cifra su DPH — nessuna riga "clienti esterni" lato costo, non esiste un costo del lavoro
+  da isolare come per i ricavi.
+- **Il nodo CC `MMS` → `MMS_FNB` → `MMS_CUCINA`/`MMS_SALA`/`MMS_BAR` (`usali005_2026`) resta
+  intatto in anagrafica**, solo per poter tornare indietro senza perdere dati: alimenta ancora la
+  somma sopra, e **Dipendenti → Analisi CC e Movimenti Attivi (tab "Ristorante Mare Mosso")
+  continuano a mostrare Maremosso distinto, invariati** — solo il Conto Economico lo accorpa.
+- Frontend `UsaliContoEconomico.jsx`: `KPI_BLOCCHI` non ha più il blocco "KPI Ristoranti" (con solo
+  Buona Onda rimasto sarebbe ridondante con la sua colonna nella tabella principale) — resta "KPI
+  Hotel" e "KPI Gruppo". `COL_ORDER` non ha più `MMS`/`RISTR` (il totale ristoranti con un solo
+  membro duplicherebbe la colonna BON).
+
+⚠️ **Prima iterazione (scartata): ripartizione proporzionale invece di accorpamento.** Prima di
+sapere che Maremosso è la stessa partita IVA di Du Parc, si era tentato di dargli una colonna
+propria nel Conto Economico, usando `usali005_2026` (sotto) per il costo del lavoro e una funzione
+(`_ripartisci_ricavi_fnb_dph_mms`, poi rimossa) che spaccava proporzionalmente il ricavo di
+pacchetto DPH tra DPH e MMS in base al mix Produzione (Colazione+Bar+Pasticceria vs Ristorante
+Maremosso) — perché nessun dato sorgente spezza il pacchetto mezza/pensione per pasto (verificato:
+Colazione+Ristorante Maremosso da Produzione coprivano solo ~80-85% del pacchetto mensile DPH).
+Scartata perché, saputo che è la stessa azienda, non c'era motivo di accettare una stima quando un
+accorpamento è preciso al centesimo — tenuta a mente questa storia perché se in futuro si volesse
+di nuovo una colonna Maremosso a sé, la strada della ripartizione proporzionale è già stata
+esplorata e la funzione (rimossa) è recuperabile dalla history git.
+
+**Il nodo CC `MMS` nell'albero centri di costo** (`usali005_2026`, settembre 2026): prima non
+esisteva alcun nodo struttura `MMS` — Cucina/Sala/Bar erano figli di `DPH_FNB`, quindi
+`_lavoro_da_dipendenti()` (risale la gerarchia fino al primo nodo `tipo='struttura'`) attribuiva
+tutto il costo del personale F&B a Du Parc. Confermato dall'utente: Cucina/Sala/Bar lavorano
+esclusivamente per pranzo/cena al Maremosso (nessuna quota colazione), quindi spostamento pieno dei
+3 reparti, non uno split %. Migrazione: nuovo `MMS` (struttura) → `MMS_FNB` (categoria, mirror di
+`BON_FNB`) → `MMS_CUCINA`/`MMS_SALA`/`MMS_BAR` (stessi `id` di `DPH_CUCINA`/`DPH_SALA`/`DPH_BAR`,
+solo `code`/`name`/`parent_id` cambiati — zero impatto sui collegamenti dipendenti già esistenti in
+`employee_cc_default`/`EmployeeCostCenterMonthly`). Colazioni e Pasticceria restano su DPH.
 Aggiornata anche `usali_cc_voce_mapping` in `app_config` (chiavi per `code`: le 3 chiavi `DPH_*`
-rinominate sarebbero altrimenti cadute sul fallback `'altri'`). Nessuna modifica a `usali.py` o al
-frontend: `MMS` era già in `STRUTTURE_RISTORANTI`/`NOME_STRUTTURA`, e sia il Conto Economico sia
-Dipendenti → Analisi CC risalgono l'albero CC a ogni query (nessuno snapshot mensile) — la nuova
-struttura compare da sola ovunque i dati sono raggruppati per struttura.
-⚠️ **Effetto retroattivo, voluto**: essendo tutto calcolato live, lo spostamento riclassifica anche i
-mesi già chiusi (EBITDAR storico DPH/MMS e report Dipendenti per-struttura cambiano rispetto a P&L
-già esportati in passato con la vecchia ripartizione) — coerente con l'obiettivo, ma da tenere a
-mente se si confrontano export mensili fatti prima di questa migrazione.
-
-**Maremosso è la stessa azienda di Du Parc (stessa partita IVA, licenza e registratore fiscale
-propri)**: confermato dall'utente — niente obbligo fiscale a tenerlo separato in Conto Economico,
-è una scelta di reporting gestionale. Valutata e scartata l'alternativa "accorpare tutto sotto
-DPH" (più semplice, zero stime) a favore di tenerlo come struttura propria: dà una vera fotografia
-di quanto rende/costa gestire il ristorante come unità a sé, utile per decisioni future (tenerlo
-aperto, cambiare formula, ecc.) — accettando che il lato ricavi richieda una stima (sotto).
-
-**Ricavi F&B di DPH ripartiti tra DPH e MMS** (stessa migrazione concettuale del costo lavoro,
-ma senza migrazione DB — solo `usali.py`, `_ripartisci_ricavi_fnb_dph_mms()`): `ricavi_fnb` di DPH
-viene da `daily_revenue` (CSV Revenue, prezzo di pacchetto mezza/pensione completa) — un unico
-numero che non distingue colazione da pranzo/cena consumato al Maremosso, a differenza del costo
-del lavoro che si poteva risolvere con un puro spostamento di centro di costo. **Non esiste un dato
-sorgente che spezzi il pacchetto per pasto** (verificato: Colazione+Ristorante Maremosso da
-Produzione coprono solo ~80-85% del pacchetto mensile DPH, il resto — probabilmente il valore della
-colazione inclusa nella tariffa, mai prezzata a sé in Welcome quando è "inclusa" — non è tracciato
-da nessuna parte). Fix: il pacchetto viene **ripartito proporzionalmente** tra DPH (Colazione + Bar
-+ Pasticceria) e MMS (Ristorante Mare Mosso: Alimenti via redirect Produzione + Bevande manuali),
-usando come chiave di riparto le stesse voci già calcolate per Movimenti Attivi (`_somma_produzione_
-categoria`, `_somma_maremosso`, voci manuali `mov_pasticceria`/`mov_maremosso_*`) — il **totale**
-pacchetto resta invariato (nessun ricavo perso o inventato rispetto a Dashboard/Budget/Revenue, che
-continuano a leggere `daily_revenue` senza modifiche), cambia solo l'allocazione tra le due
-strutture. Se un mese non ha dati Produzione importati (o non c'è ricavo di pacchetto), fallback:
-tutto resta su DPH, 0 su MMS, come prima di questo fix — non si inventa un riparto senza base dati.
-⚠️ **È una stima gestionale, non un dato di cassa esatto**: il mix Colazione/Bar/Pasticceria vs
-Ristorante Maremosso da Produzione è un proxy per l'allocazione, non il valore assoluto — normale
-in qualunque reporting per reparto quando il prezzo è a pacchetto (stessa logica, concettualmente,
-di come revenue_rooms/revenue_fnb sono già una convenzione di allocazione sul CSV Revenue, non
-fatture pasto-per-pasto). Il ricavo "clienti esterni" di MMS (da corrispettivi, `_ricavi_ristorante`)
-resta invariato e si somma a questa quota — nessuna sovrapposizione, sono canali diversi (ospiti
-Du Parc in pacchetto vs clienti che pagano direttamente al ristorante).
+rinominate sarebbero altrimenti cadute sul fallback `'altri'`).
+⚠️ **Effetto retroattivo**: essendo tutto calcolato live (nessuno snapshot mensile), lo spostamento
+riclassifica anche i mesi già chiusi in Dipendenti → Analisi CC (Cucina/Sala/Bar risultano sotto
+"Maremosso" invece che "Hotel Du Parc" anche per i mesi passati) — coerente con l'obiettivo, da
+tenere a mente confrontando report per-struttura esportati prima di questa migrazione.
 
 ## Modulo USALI — Movimenti Attivi
 Seconda tab di `Usali.jsx` (`UsaliMovimentiAttivi.jsx`), accanto a "Conto Economico". Tabella

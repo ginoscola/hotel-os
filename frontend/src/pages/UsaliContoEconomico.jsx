@@ -5,17 +5,19 @@ import { formatEuro, formatPerc, mostraErrore } from '../utils/format.js'
 const MESI = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
   'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
 
+// Maremosso (MMS) non ha una colonna propria qui: stessa azienda/partita IVA di Du Parc,
+// accorpato in DPH (vedi riga "Ricavi ristorante e bar — clienti esterni" e nota in pagina).
+// Resta invece distinto in Dipendenti → Analisi CC e in Movimenti Attivi, non toccati da questo.
 const STRUTTURE_HOTEL = ['DPH', 'CLB', 'INT']
-const STRUTTURE_RISTR = ['MMS', 'BON']
-const COL_ORDER = ['DPH', 'CLB', 'INT', 'HOTEL', 'MMS', 'BON', 'RISTR', 'GRUPPO']
+const STRUTTURE_RISTR = ['BON']
+const COL_ORDER = ['DPH', 'CLB', 'INT', 'HOTEL', 'BON', 'GRUPPO']
 
 const COL_LABEL = {
   DPH: 'Du Parc', CLB: 'Club Hotel', INT: 'International',
-  HOTEL: 'TOT. HOTEL', MMS: 'Maremosso', BON: 'Buona Onda',
-  RISTR: 'TOT. RISTR.', GRUPPO: 'GRUPPO',
+  HOTEL: 'TOT. HOTEL', BON: 'Buona Onda', GRUPPO: 'GRUPPO',
 }
 
-const IS_TOTALE = { HOTEL: true, RISTR: true, GRUPPO: true }
+const IS_TOTALE = { HOTEL: true, GRUPPO: true }
 
 // Struttura P&L
 const SEZIONI = [
@@ -24,6 +26,7 @@ const SEZIONI = [
     voci: [
       { key: 'ricavi_camere', label: 'Ricavi camere', auto: true, soloHotel: true },
       { key: 'ricavi_fnb', label: 'Ricavi ristorante e bar', auto: true },
+      { key: 'ricavi_fnb_esterni', label: 'Ricavi ristorante e bar — clienti esterni', auto: true, soloStruttura: 'DPH' },
       { key: 'ricavi_altri_operativi', label: 'Ricavi altri reparti operativi' },
       { key: 'ricavi_vari_operativi', label: 'Ricavi vari operativi' },
     ],
@@ -70,11 +73,11 @@ const SEZIONI = [
 
 const KPI_CODES = ['ebitdar_pct', 'fnb_cost_pct', 'lavoro_pct', 'utenze_pct']
 
-// Blocchi KPI separati per tipo di struttura
+// Blocchi KPI separati per tipo di struttura. Nessun blocco "Ristoranti": con Maremosso
+// accorpato in DPH resterebbe solo Buona Onda, ridondante con la sua colonna nella tabella sopra.
 const KPI_BLOCCHI = [
-  { id: 'hotel',      label: 'KPI Hotel',       cols: ['DPH', 'CLB', 'INT', 'HOTEL'],  tipoConfig: 'hotel' },
-  { id: 'ristoranti', label: 'KPI Ristoranti',  cols: ['MMS', 'BON', 'RISTR'],          tipoConfig: 'ristoranti' },
-  { id: 'gruppo',     label: 'KPI Gruppo',      cols: ['GRUPPO'],                        tipoConfig: null },
+  { id: 'hotel',  label: 'KPI Hotel',  cols: ['DPH', 'CLB', 'INT', 'HOTEL'], tipoConfig: 'hotel' },
+  { id: 'gruppo', label: 'KPI Gruppo', cols: ['GRUPPO'],                      tipoConfig: null },
 ]
 
 // ── Componente cella editabile ──────────────────────────────────────────────
@@ -227,8 +230,9 @@ export default function UsaliContoEconomico() {
     if (!s) return false
     // Ricavi auto (da daily_revenue / corrispettivi)
     if (voce.auto) {
-      if (voce.key === 'ricavi_camere') return s.ricavi_camere_auto
-      if (voce.key === 'ricavi_fnb')    return s.ricavi_fnb_auto
+      if (voce.key === 'ricavi_camere')       return s.ricavi_camere_auto
+      if (voce.key === 'ricavi_fnb')          return s.ricavi_fnb_auto
+      if (voce.key === 'ricavi_fnb_esterni')  return s.ricavi_fnb_esterni_auto
     }
     // Lavoro auto (da dipendenti)
     if (voce.key === 'lavoro_camere')       return s.lavoro_camere_auto
@@ -247,6 +251,9 @@ export default function UsaliContoEconomico() {
     const isRistr = STRUTTURE_RISTR.includes(col)
     // Voce non applicabile
     if (voce.soloHotel && !isHotel && !isTot) {
+      return <td key={col} style={{ textAlign: 'right', padding: '4px 8px', color: '#e2e8f0' }}>n/a</td>
+    }
+    if (voce.soloStruttura && col !== voce.soloStruttura && !isTot) {
       return <td key={col} style={{ textAlign: 'right', padding: '4px 8px', color: '#e2e8f0' }}>n/a</td>
     }
 
@@ -384,16 +391,14 @@ export default function UsaliContoEconomico() {
       </div>
 
       <p style={{ color: '#64748b', fontSize: '0.8rem', marginTop: 0, marginBottom: 16, maxWidth: 900 }}>
-        Maremosso è il ristorante di Du Parc (stessa azienda, licenza e registratore fiscale propri):
-        in questo Conto Economico ha una colonna a sé per vedere quanto rende/costa come unità a sé,
-        non per obbligo fiscale. "Ricavi ristorante e bar" di Du Parc arriva dal pacchetto mezza/
-        pensione completa (CSV Revenue), che non distingue colazione da pranzo/cena consumato al
-        Maremosso — quel totale viene quindi <b>ripartito proporzionalmente</b> tra Du Parc (colazione,
-        bar, pasticceria) e Maremosso (ristorante, bevande) in base al mix reale da Produzione: è una
-        stima gestionale d'allocazione, non un dato di cassa esatto, ma il totale combinato resta
-        invariato rispetto a Dashboard/Budget. Il costo del lavoro di Cucina/Sala/Bar segue la stessa
-        logica: attribuito interamente a Maremosso, dato che quel personale lavora lì per pranzo e
-        cena (Colazioni/Pasticceria restano su Du Parc).
+        Maremosso è il ristorante di Du Parc (stessa azienda e partita IVA, licenza e registratore
+        fiscale propri): qui è accorpato su Du Parc, senza colonna propria. "Ricavi ristorante e bar"
+        resta il dato di pacchetto mezza/pensione completa (CSV Revenue, colazione + pranzo/cena),
+        e il costo del lavoro di Cucina/Sala/Bar è sommato a quello di Du Parc. Gli incassi di chi
+        paga direttamente al ristorante (non ospiti in pacchetto, dalla stampante fiscale di
+        Maremosso) restano invece visibili a sé sulla riga "clienti esterni" sotto. Il dettaglio per
+        struttura di Maremosso resta comunque disponibile in Dipendenti → Analisi CC e in Movimenti
+        Attivi (tab "Ristorante Mare Mosso"), invariati.
       </p>
 
       {loading ? (
