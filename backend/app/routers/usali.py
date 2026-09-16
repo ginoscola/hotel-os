@@ -293,6 +293,56 @@ def _ricavi_ristorante(db: Session, struttura_code: str, da: date, a: date) -> O
     return totale if totale > 0 else None
 
 
+def _somma_manuale_movimenti(
+    db: Session, struttura_code: str, voce_code: str, anno: int, mese_ini: int, mese_fine: int
+) -> float:
+    """Somma una voce manuale di Movimenti Attivi (usali_voci_manuali, valore per-mese, NON
+    cumulativo da gennaio come le voci del Conto Economico — vedi _voci_manuali) su mese_ini..mese_fine."""
+    tot = db.query(func.sum(UsaliVoceManuali.valore)).filter(
+        UsaliVoceManuali.struttura_code == struttura_code,
+        UsaliVoceManuali.anno == anno,
+        UsaliVoceManuali.mese.between(mese_ini, mese_fine),
+        UsaliVoceManuali.voce_code == voce_code,
+    ).scalar()
+    return _fl(tot)
+
+
+def _ripartisci_ricavi_fnb_dph_mms(
+    db: Session, anno: int, mese_ini: int, mese_fine: int, da: date, a: date,
+    ricavi_fnb_pacchetto: Optional[float],
+) -> tuple[Optional[float], float]:
+    """Spacca il ricavo F&B di pacchetto di Du Parc (da daily_revenue — comprensivo di colazione
+    E pranzo/cena consumati al Maremosso, un unico numero non spezzato per pasto) tra DPH
+    (Colazione + Bar + Pasticceria) e MMS (Ristorante Mare Mosso: Alimenti via redirect Produzione
+    + Bevande manuali), in proporzione al peso di ciascuna quota sui dati Produzione/Movimenti
+    Attivi (stesse voci già visibili nella tab Movimenti Attivi di Du Parc).
+    Il totale di pacchetto resta invariato (nessun ricavo perso o inventato rispetto a
+    Dashboard/Budget, che continuano a leggere daily_revenue) — solo l'allocazione tra le due
+    strutture cambia, usando Produzione come chiave di riparto e non come valore assoluto (i due
+    sistemi non coincidono esattamente, vedi Tab "Ricavi camere").
+    Ritorna (ricavi_fnb_dph, ricavi_fnb_mms_da_sommare_ai_clienti_esterni_di_MMS).
+    Nessun dato Produzione o nessun ricavo di pacchetto → fallback: tutto resta su DPH (0 su MMS),
+    come oggi, finché non c'è una base per ripartire.
+    """
+    quota_dph = 0.0
+    for categoria in ('colazione', 'bar_alcolici', 'bar_analcolici', 'bar_caffetteria'):
+        quota_dph += _somma_produzione_categoria(db, categoria, 'DPH', da, a)['imponibile']
+    quota_dph += _somma_manuale_movimenti(db, 'DPH', 'mov_pasticceria', anno, mese_ini, mese_fine)
+
+    quota_mms = _somma_maremosso(db, da, a)['imponibile']
+    for voce in ('mov_maremosso_vino', 'mov_maremosso_alcolici', 'mov_maremosso_analcolici'):
+        quota_mms += _somma_manuale_movimenti(db, 'DPH', voce, anno, mese_ini, mese_fine)
+
+    pacchetto = _fl(ricavi_fnb_pacchetto)
+    totale_quote = quota_dph + quota_mms
+    if pacchetto <= 0 or totale_quote <= 0:
+        return ricavi_fnb_pacchetto, 0.0
+
+    ricavi_dph = round(pacchetto * quota_dph / totale_quote, 2)
+    ricavi_mms = round(pacchetto * quota_mms / totale_quote, 2)
+    return (ricavi_dph or None), ricavi_mms
+
+
 def _voci_manuali(
     db: Session, struttura_code: str, anno: int, mese_fine: int, mese_ini: int = 1
 ) -> tuple[dict, dict]:
@@ -534,14 +584,24 @@ def get_report(
     cc_mapping = _leggi_cc_mapping(db)
     strutture_result = []
 
+    dph_auto = _revenue_mensile_hotel(db, 'DPH', da, a)
+    ricavi_fnb_dph, ricavi_fnb_mms_extra = _ripartisci_ricavi_fnb_dph_mms(
+        db, anno, mese_ini, mese, da, a, dph_auto.get('ricavi_fnb')
+    )
+    dph_auto['ricavi_fnb'] = ricavi_fnb_dph
+
     for codice in TUTTE_STRUTTURE:
         manuali_delta, manuali_cum = _voci_manuali(db, codice, anno, mese, mese_ini)
 
-        if codice in STRUTTURE_HOTEL:
+        if codice == 'DPH':
+            auto = dph_auto
+        elif codice in STRUTTURE_HOTEL:
             auto = _revenue_mensile_hotel(db, codice, da, a)
         else:
             ricavi_ristr = _ricavi_ristorante(db, codice, da, a)
             auto = {'ricavi_camere': None, 'ricavi_fnb': ricavi_ristr}
+            if codice == 'MMS' and ricavi_fnb_mms_extra:
+                auto['ricavi_fnb'] = round((auto['ricavi_fnb'] or 0.0) + ricavi_fnb_mms_extra, 2) or None
 
         lavoro = _lavoro_da_dipendenti(db, codice, anno, mese_ini, mese, cc_mapping)
         if lavoro:

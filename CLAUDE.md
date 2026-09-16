@@ -1171,6 +1171,37 @@ mesi già chiusi (EBITDAR storico DPH/MMS e report Dipendenti per-struttura camb
 già esportati in passato con la vecchia ripartizione) — coerente con l'obiettivo, ma da tenere a
 mente se si confrontano export mensili fatti prima di questa migrazione.
 
+**Maremosso è la stessa azienda di Du Parc (stessa partita IVA, licenza e registratore fiscale
+propri)**: confermato dall'utente — niente obbligo fiscale a tenerlo separato in Conto Economico,
+è una scelta di reporting gestionale. Valutata e scartata l'alternativa "accorpare tutto sotto
+DPH" (più semplice, zero stime) a favore di tenerlo come struttura propria: dà una vera fotografia
+di quanto rende/costa gestire il ristorante come unità a sé, utile per decisioni future (tenerlo
+aperto, cambiare formula, ecc.) — accettando che il lato ricavi richieda una stima (sotto).
+
+**Ricavi F&B di DPH ripartiti tra DPH e MMS** (stessa migrazione concettuale del costo lavoro,
+ma senza migrazione DB — solo `usali.py`, `_ripartisci_ricavi_fnb_dph_mms()`): `ricavi_fnb` di DPH
+viene da `daily_revenue` (CSV Revenue, prezzo di pacchetto mezza/pensione completa) — un unico
+numero che non distingue colazione da pranzo/cena consumato al Maremosso, a differenza del costo
+del lavoro che si poteva risolvere con un puro spostamento di centro di costo. **Non esiste un dato
+sorgente che spezzi il pacchetto per pasto** (verificato: Colazione+Ristorante Maremosso da
+Produzione coprono solo ~80-85% del pacchetto mensile DPH, il resto — probabilmente il valore della
+colazione inclusa nella tariffa, mai prezzata a sé in Welcome quando è "inclusa" — non è tracciato
+da nessuna parte). Fix: il pacchetto viene **ripartito proporzionalmente** tra DPH (Colazione + Bar
++ Pasticceria) e MMS (Ristorante Mare Mosso: Alimenti via redirect Produzione + Bevande manuali),
+usando come chiave di riparto le stesse voci già calcolate per Movimenti Attivi (`_somma_produzione_
+categoria`, `_somma_maremosso`, voci manuali `mov_pasticceria`/`mov_maremosso_*`) — il **totale**
+pacchetto resta invariato (nessun ricavo perso o inventato rispetto a Dashboard/Budget/Revenue, che
+continuano a leggere `daily_revenue` senza modifiche), cambia solo l'allocazione tra le due
+strutture. Se un mese non ha dati Produzione importati (o non c'è ricavo di pacchetto), fallback:
+tutto resta su DPH, 0 su MMS, come prima di questo fix — non si inventa un riparto senza base dati.
+⚠️ **È una stima gestionale, non un dato di cassa esatto**: il mix Colazione/Bar/Pasticceria vs
+Ristorante Maremosso da Produzione è un proxy per l'allocazione, non il valore assoluto — normale
+in qualunque reporting per reparto quando il prezzo è a pacchetto (stessa logica, concettualmente,
+di come revenue_rooms/revenue_fnb sono già una convenzione di allocazione sul CSV Revenue, non
+fatture pasto-per-pasto). Il ricavo "clienti esterni" di MMS (da corrispettivi, `_ricavi_ristorante`)
+resta invariato e si somma a questa quota — nessuna sovrapposizione, sono canali diversi (ospiti
+Du Parc in pacchetto vs clienti che pagano direttamente al ristorante).
+
 ## Modulo USALI — Movimenti Attivi
 Seconda tab di `Usali.jsx` (`UsaliMovimentiAttivi.jsx`), accanto a "Conto Economico". Tabella
 Reparto/Conto/Imponibile mensile (formato di un foglio di inserimento esterno preesistente),
