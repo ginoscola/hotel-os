@@ -1147,6 +1147,30 @@ come `escluso_pensione`), `_categorie_attive()` di `produzione_report` e `_rispo
 - `GET /produzione/ricavi-camere/export?...&vista=categoria|trattamento&lordo=&formato=xlsx|csv|pdf`
   (sotto-path per non collidere con la rotta catch-all `/produzione/export/{dimensione}`).
 
+## Modulo USALI — Conto Economico
+
+**Maremosso (MMS) ha un nodo struttura proprio nell'albero centri di costo** (`usali005_2026`,
+settembre 2026): prima esisteva solo per i ricavi (`auto_maremosso` in Movimenti Attivi/Conto
+Economico attribuiva già pranzo/cena a MMS), ma nell'albero CC non c'era alcun nodo `MMS` — Cucina/
+Sala/Bar restavano figli di `DPH_FNB`, quindi `_lavoro_da_dipendenti()` (risale la gerarchia fino al
+primo nodo `tipo='struttura'`) attribuiva **tutto** il costo del personale F&B a Du Parc, mentre parte
+del ricavo corrispondente era già su Maremosso — EBITDAR distorto su entrambe le strutture (DPH
+depresso, MMS gonfiato). Confermato dall'utente: Cucina/Sala/Bar lavorano esclusivamente per pranzo/
+cena al Maremosso (nessuna quota colazione), quindi spostamento pieno dei 3 reparti, non uno split %.
+Fix: nuovo `MMS` (struttura) → `MMS_FNB` (categoria, mirror di `BON_FNB`) → `MMS_CUCINA`/`MMS_SALA`/
+`MMS_BAR` (stessi `id` di `DPH_CUCINA`/`DPH_SALA`/`DPH_BAR`, solo `code`/`name`/`parent_id` cambiati —
+zero impatto sui collegamenti dipendenti già esistenti in `employee_cc_default`/
+`EmployeeCostCenterMonthly`). Colazioni e Pasticceria restano su DPH (colazione servita in hotel).
+Aggiornata anche `usali_cc_voce_mapping` in `app_config` (chiavi per `code`: le 3 chiavi `DPH_*`
+rinominate sarebbero altrimenti cadute sul fallback `'altri'`). Nessuna modifica a `usali.py` o al
+frontend: `MMS` era già in `STRUTTURE_RISTORANTI`/`NOME_STRUTTURA`, e sia il Conto Economico sia
+Dipendenti → Analisi CC risalgono l'albero CC a ogni query (nessuno snapshot mensile) — la nuova
+struttura compare da sola ovunque i dati sono raggruppati per struttura.
+⚠️ **Effetto retroattivo, voluto**: essendo tutto calcolato live, lo spostamento riclassifica anche i
+mesi già chiusi (EBITDAR storico DPH/MMS e report Dipendenti per-struttura cambiano rispetto a P&L
+già esportati in passato con la vecchia ripartizione) — coerente con l'obiettivo, ma da tenere a
+mente se si confrontano export mensili fatti prima di questa migrazione.
+
 ## Modulo USALI — Movimenti Attivi
 Seconda tab di `Usali.jsx` (`UsaliMovimentiAttivi.jsx`), accanto a "Conto Economico". Tabella
 Reparto/Conto/Imponibile mensile (formato di un foglio di inserimento esterno preesistente),
