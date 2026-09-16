@@ -47,7 +47,7 @@ NOME_STRUTTURA = {
 # Hotel: tutte le voci; Ristoranti: solo voci F&B e costi indiretti
 VOCI_HOTEL = [
     'ricavi_altri_operativi', 'ricavi_vari_operativi',
-    'lavoro_camere', 'appalto_camere', 'lavanderia', 'altri_costi_camere',
+    'lavoro_camere', 'appalto_camere', 'lavanderia', 'consulenze_camere', 'altri_costi_camere',
     'lavoro_fnb', 'fdv_fnb', 'attrezzature_fnb', 'consulenze_fnb',
     'lavoro_altri_reparti', 'fdv_altri_reparti',
     'lavoro_non_suddiviso', 'altri_costi_admin', 'consulenze',
@@ -350,6 +350,7 @@ def _calcola_struttura(struttura_code: str, anno: int, mese: int,
     lavoro_camere = (_fl(_lav_cam_a) if _lav_cam_a is not None else manuali.get('lavoro_camere', 0.0)) if is_hotel else 0.0
     appalto_camere = manuali.get('appalto_camere', 0.0) if is_hotel else 0.0
     lavanderia = manuali.get('lavanderia', 0.0) if is_hotel else 0.0
+    consulenze_camere = manuali.get('consulenze_camere', 0.0) if is_hotel else 0.0
     altri_costi_camere = manuali.get('altri_costi_camere', 0.0) if is_hotel else 0.0
     lavoro_fnb = _fl(_lav_fnb_a) if _lav_fnb_a is not None else manuali.get('lavoro_fnb', 0.0)
     fdv_fnb = manuali.get('fdv_fnb', 0.0)
@@ -357,7 +358,7 @@ def _calcola_struttura(struttura_code: str, anno: int, mese: int,
     consulenze_fnb = manuali.get('consulenze_fnb', 0.0)
     lavoro_altri = (_fl(_lav_alt_a) if _lav_alt_a is not None else manuali.get('lavoro_altri_reparti', 0.0)) if is_hotel else 0.0
     fdv_altri = manuali.get('fdv_altri_reparti', 0.0) if is_hotel else 0.0
-    tot_costi_diretti = (lavoro_camere + appalto_camere + lavanderia +
+    tot_costi_diretti = (lavoro_camere + appalto_camere + lavanderia + consulenze_camere +
                          altri_costi_camere + lavoro_fnb +
                          fdv_fnb + attrezzature_fnb + consulenze_fnb + lavoro_altri + fdv_altri)  # B
 
@@ -406,9 +407,11 @@ def _calcola_struttura(struttura_code: str, anno: int, mese: int,
         'appalto_camere_cum': _c.get('appalto_camere'),
         'lavanderia': lavanderia,
         'lavanderia_cum': _c.get('lavanderia'),
+        'consulenze_camere': consulenze_camere,
+        'consulenze_camere_cum': _c.get('consulenze_camere'),
         'altri_costi_camere': altri_costi_camere,
         'altri_costi_camere_cum': _c.get('altri_costi_camere'),
-        'tot_costi_camere': round(lavoro_camere + appalto_camere + lavanderia + altri_costi_camere, 2),
+        'tot_costi_camere': round(lavoro_camere + appalto_camere + lavanderia + consulenze_camere + altri_costi_camere, 2),
         'lavoro_fnb': lavoro_fnb,
         'lavoro_fnb_auto': _lav_fnb_a is not None,
         'fdv_fnb': fdv_fnb,
@@ -478,8 +481,9 @@ def _somma_strutture(strutture: list, nome: str, struttura_code: str) -> dict:
         'lavoro_camere': s('lavoro_camere'),
         'appalto_camere': s('appalto_camere'),
         'lavanderia': s('lavanderia'),
+        'consulenze_camere': s('consulenze_camere'),
         'altri_costi_camere': s('altri_costi_camere'),
-        'tot_costi_camere': round(s('lavoro_camere') + s('appalto_camere') + s('lavanderia') + s('altri_costi_camere'), 2),
+        'tot_costi_camere': round(s('lavoro_camere') + s('appalto_camere') + s('lavanderia') + s('consulenze_camere') + s('altri_costi_camere'), 2),
         'lavoro_fnb': s('lavoro_fnb'),
         'fdv_fnb': s('fdv_fnb'),
         'attrezzature_fnb': s('attrezzature_fnb'),

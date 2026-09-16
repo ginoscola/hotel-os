@@ -34,6 +34,7 @@ const SEZIONI = [
       { key: 'lavoro_camere', label: 'Costo del lavoro — Camere', soloHotel: true, gruppo: 'camere' },
       { key: 'appalto_camere', label: 'Costo del lavoro in appalto — Camere', soloHotel: true, gruppo: 'camere' },
       { key: 'lavanderia', label: 'Costo lavanderia', soloHotel: true, gruppo: 'camere' },
+      { key: 'consulenze_camere', label: 'Consulenze camere', soloHotel: true, gruppo: 'camere' },
       { key: 'altri_costi_camere', label: 'Altri costi camere', soloHotel: true, gruppo: 'camere' },
       { key: 'tot_costi_camere', label: 'Totale costi Camere', subtotale: true, soloHotel: true, gruppo: 'camere' },
       { key: 'lavoro_fnb', label: 'Costo del lavoro — F&B', gruppo: 'fnb' },
