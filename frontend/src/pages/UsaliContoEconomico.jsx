@@ -383,6 +383,19 @@ export default function UsaliContoEconomico() {
         </span>
       </div>
 
+      <p style={{ color: '#64748b', fontSize: '0.8rem', marginTop: 0, marginBottom: 16, maxWidth: 900 }}>
+        Maremosso è il ristorante di Du Parc (stessa azienda, licenza e registratore fiscale propri):
+        in questo Conto Economico ha una colonna a sé per vedere quanto rende/costa come unità a sé,
+        non per obbligo fiscale. "Ricavi ristorante e bar" di Du Parc arriva dal pacchetto mezza/
+        pensione completa (CSV Revenue), che non distingue colazione da pranzo/cena consumato al
+        Maremosso — quel totale viene quindi <b>ripartito proporzionalmente</b> tra Du Parc (colazione,
+        bar, pasticceria) e Maremosso (ristorante, bevande) in base al mix reale da Produzione: è una
+        stima gestionale d'allocazione, non un dato di cassa esatto, ma il totale combinato resta
+        invariato rispetto a Dashboard/Budget. Il costo del lavoro di Cucina/Sala/Bar segue la stessa
+        logica: attribuito interamente a Maremosso, dato che quel personale lavora lì per pranzo e
+        cena (Colazioni/Pasticceria restano su Du Parc).
+      </p>
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Caricamento…</div>
       ) : (
