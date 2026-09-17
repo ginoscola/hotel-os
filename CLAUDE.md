@@ -498,6 +498,20 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   ⚠️ Nel file XML reale `<Imposta>` è annidato dentro `<IVA>` insieme a `<AliquotaIVA>` (non fratello
   diretto di `<IVA>` sotto `<Riepilogo>` come nell'esempio iniziale): il parser gestisce entrambe le forme.
 
+**Grafico "Fatturato mensile" — 3 viste** (`TabFatturati.jsx`, settembre 2026): "Per attività" (le
+5 strutture/casse fiscali DPH/CLB/INT/MMS/BON separate, come da sempre — rinominata da "Per
+struttura", che generava confusione con la nuova vista sotto), "Per struttura" (nuova: raggruppa
+per struttura **fisica**, cioè dove le attività operano davvero — `GRUPPI_FISICI`: Du Parc =
+DPH+MMS, Club Hotel = CLB, International = INT+BON, stessa logica già adottata per Maremosso nel
+Conto Economico USALI — vedi sezione Usali), "Hotel vs Ristoranti" (invariata, 2 macro-gruppi da
+`totale_hotel`/`totale_ristoranti` calcolati lato backend). La vista "Per struttura" è puro calcolo
+client-side (somma `per_struttura[attività].totale` già presente nella risposta di
+`GET /report/fatturati`, nessuna modifica al backend) — verificato che la somma dei 3 gruppi fisici
+coincide esattamente, mese per mese, con `totale_hotel + totale_ristoranti` già calcolati dal
+backend (nessun ricavo perso o duplicato). Buona Onda (BON) raggruppata sotto International non è
+un'invenzione: confermato dall'utente che opera fisicamente lì, stesso rapporto di Maremosso con
+Du Parc.
+
 **"Forme di pagamento" (raggruppate)** — tabella in "Riepilogo Fatturati" (`TabFatturati.jsx`),
 settembre 2026: 4 macro-categorie (Contante/Bonifico/Assegno/Pagamento elettronico — quest'ultima
 raccoglie tutte le carte/app: Carta Credito, Bancomat, XPAY-Nexi, Satispay) per mese, stesso anno,

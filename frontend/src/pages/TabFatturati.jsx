@@ -18,6 +18,15 @@ const COL_HOTEL_TOT  = '#94a3b8'
 const COL_RIST_TOT   = '#fbbf24'
 const COL_GEN_TOT    = '#334155'
 
+// Raggruppamento per struttura FISICA (dove operano le attività, non le singole partite/casse):
+// Maremosso opera fisicamente per Du Parc, Buona Onda per International — vedi anche il
+// trattamento di Maremosso nel Conto Economico USALI (accorpato su Du Parc, stessa logica).
+const GRUPPI_FISICI = [
+  { id: 'DUPARC', label: 'Du Parc', attivita: ['DPH', 'MMS'], colore: COLORI_STRUTTURA.DPH },
+  { id: 'CLUB', label: 'Club Hotel', attivita: ['CLB'], colore: COLORI_STRUTTURA.CLB },
+  { id: 'INTERNATIONAL', label: 'International', attivita: ['INT', 'BON'], colore: COLORI_STRUTTURA.INT },
+]
+
 const annoCorrente = new Date().getFullYear()
 const meseCorrente = new Date().getMonth() + 1
 
@@ -99,8 +108,19 @@ export default function TabFatturati({ lordo }) {
     strutture.forEach(s => { entry[s] = m.per_struttura?.[s]?.totale || 0 })
     return entry
   })
+  // Vista "per struttura fisica": un punto per mese, una Bar per gruppo (Du Parc/Club/International),
+  // somma delle attività che vi operano fisicamente (es. Maremosso dentro Du Parc)
+  const datiGraficoFisico = mesi.map(m => {
+    const entry = { nome: m.nome_mese.slice(0, 3) }
+    GRUPPI_FISICI.forEach(g => {
+      entry[g.id] = g.attivita.reduce((acc, a) => acc + (m.per_struttura?.[a]?.totale || 0), 0)
+    })
+    return entry
+  })
   const datiGrafico = vistaGrafico === 'struttura'
     ? (raggruppaPer === 'struttura' ? datiGraficoPers : datiGraficoMese)
+    : vistaGrafico === 'fisica'
+    ? datiGraficoFisico
     : mesi.map(m => ({ nome: m.nome_mese.slice(0, 3), Hotel: m.totale_hotel || 0, Ristoranti: m.totale_ristoranti || 0 }))
 
   const stileColonnaTot = {
@@ -502,12 +522,13 @@ export default function TabFatturati({ lordo }) {
                     <input type="checkbox" checked={raggruppaPer === 'struttura'}
                       onChange={e => setRaggruppaPer(e.target.checked ? 'struttura' : 'mese')}
                       style={{ cursor: 'pointer' }} />
-                    Raggruppa per struttura
+                    Raggruppa per attività
                   </label>
                 )}
                 <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 7, padding: '3px 4px', gap: 2 }}>
                   {[
-                    { id: 'struttura', label: 'Per struttura' },
+                    { id: 'struttura', label: 'Per attività' },
+                    { id: 'fisica', label: 'Per struttura' },
                     { id: 'gruppo', label: 'Hotel vs Ristoranti' },
                   ].map(v => (
                     <button key={v.id} onClick={() => setVistaGrafico(v.id)}
@@ -560,6 +581,13 @@ export default function TabFatturati({ lordo }) {
                     {strutture.map(s => (
                       <Bar key={s} dataKey={s} name={NOMI[s] || s}
                         fill={COLORI_STRUTTURA[s] || '#94a3b8'} radius={[3, 3, 0, 0]} />
+                    ))}
+                  </>
+                ) : vistaGrafico === 'fisica' ? (
+                  <>
+                    <Legend wrapperStyle={{ fontSize: '0.78rem' }} />
+                    {GRUPPI_FISICI.map(g => (
+                      <Bar key={g.id} dataKey={g.id} name={g.label} fill={g.colore} radius={[3, 3, 0, 0]} />
                     ))}
                   </>
                 ) : (
