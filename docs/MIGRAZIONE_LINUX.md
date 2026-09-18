@@ -146,6 +146,37 @@ margine libero nel VG, non serviva ripartizionare il disco fisico.
   smontare), per questo la dimensione iniziale (60GB) è stata scelta con margine piuttosto che
   risicata.
 
+## Miniprogetti spostati su /srv/progetti (fatto, 18 settembre 2026)
+I due miniprogetti già in produzione sul server (pagina di benvenuto, dashboard di stato) vivevano
+fuori da `/srv/progetti` (rispettivamente `/var/www/html` e `/opt/hotelos-status`) — spostati per
+coerenza col resto, appena creata la LV dedicata.
+- **Pagina di benvenuto**: `/var/www/html/index.html` → `/srv/progetti/pagina-benvenuto/index.html`,
+  `root` di nginx (`/etc/nginx/sites-available/default`) aggiornato di conseguenza. `/var/www/html`
+  svuotata (non cancellata, resta la cartella vuota del pacchetto Debian).
+- **hotelos-status**: intera cartella `/opt/hotelos-status` (incluso `venv`) → `/srv/progetti/hotelos-status`
+  via `rsync -a` (preserva owner `statusapp:statusapp`/`root`), poi aggiornati `WorkingDirectory`/
+  `ExecStart` nelle 3 unit systemd (`hotelos-status.service`, `hotelos-status-alert.service`,
+  `hotelos-status-smart.service`). `/var/lib/hotelos-status` (stato: smart.json, alert_state.json) e
+  `/etc/hotelos-status/alert-email.env` (credenziali) **non spostati**: sono runtime/segreti, non
+  file di progetto.
+  ⚠️ **Spostare una venv rompe gli script con shebang assoluto**: `venv/bin/uvicorn` ha
+  `#!/opt/hotelos-status/venv/bin/python3` in testa — spostando la cartella quel path non esiste
+  più. Fix: `ExecStart` non invoca più `venv/bin/uvicorn` direttamente ma
+  `venv/bin/python3 -m uvicorn main:app ...` — `venv/bin/python3` è un semplice symlink a
+  `/usr/bin/python3` (indipendente dal percorso), quindi funziona da qualunque posizione si sposti
+  la venv in futuro. Nessun problema analogo per `alert_check.py` (gira su `/usr/bin/python3`
+  diretto, solo stdlib, mai dipeso dalla venv) né per `main.py` (usa `Path(__file__).parent` per
+  trovare `static/index.html`, si adatta da solo alla nuova posizione).
+- **Apache**: non era in uso (`apache2.service` risultava `failed` — conflitto di porta 80 con
+  nginx, `Address already in use`, non collegato allo spostamento) ma installato per un possibile
+  uso futuro (PHP/MySQL). `DocumentRoot` aggiornato comunque, in una cartella **separata** da quella
+  di nginx (`/srv/progetti/apache-www`, non condivisa con `pagina-benvenuto`): se in futuro Apache
+  ospiterà un progetto reale, resta isolato dalla pagina di benvenuto invece di dipenderne. Aggiunto
+  anche il blocco `<Directory /srv/progetti/apache-www/>` in `apache2.conf` (l'unico già presente
+  concedeva accesso solo su `/var/www/`, non su `/srv/`) — verificato solo con `apache2ctl
+  configtest` (sintassi), il servizio resta `failed` finché non si risolve il conflitto di porta con
+  nginx, fuori dallo scope di questo spostamento.
+
 ## Obiettivo
 Sostituire il Mac Mini attuale con una macchina Linux come **unica** macchina dev+produzione
 (non una macchina aggiuntiva in parallelo). Stack completo: nginx + systemd + certbot (non solo
