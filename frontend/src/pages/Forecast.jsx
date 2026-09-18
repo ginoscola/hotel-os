@@ -6,6 +6,7 @@ import {
   ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
+import { isAdmin } from '../utils/auth.js'
 
 // ---------------------------------------------------------------------------
 // Costanti
@@ -87,6 +88,7 @@ export default function Forecast() {
         <button style={stileTab('pace')} onClick={() => setTabAttiva('pace')}>Pace Chart</button>
         <button style={stileTab('maturato')} onClick={() => setTabAttiva('maturato')}>Maturato</button>
         <button style={stileTab('cancellazioni')} onClick={() => setTabAttiva('cancellazioni')}>Cancellazioni</button>
+        <button style={stileTab('cancellazioni-reali')} onClick={() => setTabAttiva('cancellazioni-reali')}>Cancellazioni reali</button>
       </div>
 
       {tabAttiva === 'riepilogo' && (
@@ -117,6 +119,9 @@ export default function Forecast() {
       )}
       {tabAttiva === 'cancellazioni' && (
         <TabCancellazioni anno={anno} hotelCode={hotelSelezionato} />
+      )}
+      {tabAttiva === 'cancellazioni-reali' && (
+        <TabCancellazioniReali anno={anno} hotelCode={hotelSelezionato} />
       )}
     </div>
   )
@@ -836,6 +841,254 @@ function TabCancellazioni({ anno, hotelCode }) {
           : 'Perdita allocata in proporzione a quando è stata osservata la prenotazione (stima approssimata, non un dato certo).'}
         {' '}Dato aggregato per giorno, non per singola prenotazione: un giorno con cancellazioni e nuove prenotazioni contemporanee mostra solo il saldo netto.
       </p>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Tab 5 — Cancellazioni reali (import Welcome)
+// ---------------------------------------------------------------------------
+
+function TabCancellazioniReali({ anno, hotelCode }) {
+  const [meseUpload, setMeseUpload] = useState(new Date().getMonth() + 1)
+  const [annoUpload, setAnnoUpload] = useState(anno)
+  const [caricando, setCaricando] = useState(false)
+  const [esitoImport, setEsitoImport] = useState(null)
+  const inputRef = useRef(null)
+
+  const [canale, setCanale] = useState('')
+  const [arrivoDa, setArrivoDa] = useState('')
+  const [arrivoA, setArrivoA] = useState('')
+  const [prenotazioneDa, setPrenotazioneDa] = useState('')
+  const [prenotazioneA, setPrenotazioneA] = useState('')
+
+  const [dati, setDati] = useState(null)
+  const [righe, setRighe] = useState(null)
+  const [pagina, setPagina] = useState(1)
+  const [errore, setErrore] = useState(null)
+  const [caricandoDati, setCaricandoDati] = useState(false)
+
+  const paramsFiltri = {
+    anno,
+    hotel_code: hotelCode,
+    canale: canale || undefined,
+    arrivo_da: arrivoDa || undefined,
+    arrivo_a: arrivoA || undefined,
+  }
+
+  const caricaReport = useCallback(async () => {
+    setCaricandoDati(true)
+    setErrore(null)
+    try {
+      const r = await api.get('/prenotazioni-cancellate/report', { params: paramsFiltri })
+      setDati(r.data)
+    } catch (e) {
+      setErrore(mostraErrore(e, 'Errore nel caricamento'))
+      setDati(null)
+    } finally {
+      setCaricandoDati(false)
+    }
+  }, [anno, hotelCode, canale, arrivoDa, arrivoA])
+
+  const caricaRighe = useCallback(async () => {
+    try {
+      const r = await api.get('/prenotazioni-cancellate/', {
+        params: { ...paramsFiltri, prenotazione_da: prenotazioneDa || undefined, prenotazione_a: prenotazioneA || undefined, pagina, per_pagina: 20 },
+      })
+      setRighe(r.data)
+    } catch {}
+  }, [anno, hotelCode, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, pagina])
+
+  useEffect(() => { caricaReport() }, [caricaReport])
+  useEffect(() => { caricaRighe() }, [caricaRighe])
+  useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelCode])
+
+  async function handleUpload(file) {
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setEsitoImport({ ok: false, msg: 'Seleziona un file CSV' })
+      return
+    }
+    setCaricando(true)
+    setEsitoImport(null)
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const { data } = await api.post(
+        `/prenotazioni-cancellate/import?mese=${meseUpload}&anno=${annoUpload}`,
+        form, { headers: { 'Content-Type': 'multipart/form-data' } }
+      )
+      setEsitoImport({
+        ok: true,
+        msg: `Importate ${data.n_inserite} righe (${data.n_saltate} già presenti).`
+          + (data.warning.length ? ' ' + data.warning.join(' ') : ''),
+      })
+      caricaReport()
+      caricaRighe()
+    } catch (err) {
+      setEsitoImport({ ok: false, msg: mostraErrore(err) })
+    } finally {
+      setCaricando(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  const datiGrafico = dati ? dati.per_mese.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
+
+  return (
+    <div>
+      <p style={{ margin: '0 0 1.2rem', fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
+        Dato reale (una riga = una camera cancellata), da import manuale dell'export Welcome
+        "PrenotazioniWeb" filtrato per mese di prenotazione — complementare alla stima nella tab
+        "Cancellazioni". Limite noto: l'export non riporta la data di cancellazione, solo quella
+        di prenotazione originale.
+      </p>
+
+      {isAdmin() && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: '1rem', marginBottom: '1.5rem' }}>
+          <h3 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', color: '#9a3412' }}>Importa export Welcome</h3>
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={stileLabel}>Mese prenotazione</label>
+            <select value={meseUpload} onChange={e => setMeseUpload(Number(e.target.value))} style={stileSelect}>
+              {MESI_LABEL.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
+            </select>
+            <label style={stileLabel}>Anno</label>
+            <select value={annoUpload} onChange={e => setAnnoUpload(Number(e.target.value))} style={stileSelect}>
+              {[2024, 2025, 2026, 2027].map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <input ref={inputRef} type="file" accept=".csv" onChange={e => handleUpload(e.target.files[0])} disabled={caricando} />
+            {caricando && <span style={{ color: '#9a3412', fontSize: '0.85rem' }}>Caricamento…</span>}
+          </div>
+          {esitoImport && (
+            <div style={{
+              marginTop: '0.7rem', padding: '0.6rem 0.9rem', borderRadius: 8, fontSize: '0.85rem',
+              background: esitoImport.ok ? '#dcfce7' : '#fee2e2', color: esitoImport.ok ? '#166534' : '#991b1b',
+            }}>
+              {esitoImport.ok ? '✓ ' : '✗ '}{esitoImport.msg}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.2rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <label style={stileLabel}>Canale</label>
+          <select value={canale} onChange={e => setCanale(e.target.value)} style={stileSelect}>
+            <option value="">Tutti</option>
+            {(dati?.per_canale || []).map(c => <option key={c.canale} value={c.canale}>{c.canale}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={stileLabel}>Arrivo da</label>
+          <input type="date" value={arrivoDa} onChange={e => setArrivoDa(e.target.value)} style={stileSelect} />
+        </div>
+        <div>
+          <label style={stileLabel}>Arrivo a</label>
+          <input type="date" value={arrivoA} onChange={e => setArrivoA(e.target.value)} style={stileSelect} />
+        </div>
+        <div>
+          <label style={stileLabel}>Prenotazione da</label>
+          <input type="date" value={prenotazioneDa} onChange={e => setPrenotazioneDa(e.target.value)} style={stileSelect} />
+        </div>
+        <div>
+          <label style={stileLabel}>Prenotazione a</label>
+          <input type="date" value={prenotazioneA} onChange={e => setPrenotazioneA(e.target.value)} style={stileSelect} />
+        </div>
+      </div>
+
+      {caricandoDati && <Caricamento />}
+      {errore && <Errore msg={errore} />}
+
+      {dati && !caricandoDati && (
+        <>
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+            <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#dc2626" />
+            <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#dc2626" />
+          </div>
+
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem', marginBottom: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#374151' }}>
+              Per mese di prenotazione — {anno} · {dati.hotel_code}
+            </h3>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={datiGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
+                <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                <Legend />
+                <Bar dataKey="n" name="Camere cancellate" fill="#dc2626" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+            <div>
+              <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9rem', color: '#374151' }}>Per struttura</h4>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead><tr style={{ background: '#f3f4f6' }}><Th>Hotel</Th><Th align="right">N.</Th><Th align="right">Importo</Th></tr></thead>
+                <tbody>
+                  {dati.per_hotel.map(h => (
+                    <tr key={h.hotel_code} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={stCella}>{h.hotel_code}</td>
+                      <td style={{ ...stCella, textAlign: 'right' }}>{h.n}</td>
+                      <td style={{ ...stCella, textAlign: 'right' }}>{formatEuro(h.importo)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9rem', color: '#374151' }}>Per canale</h4>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead><tr style={{ background: '#f3f4f6' }}><Th>Canale</Th><Th align="right">N.</Th><Th align="right">Importo</Th></tr></thead>
+                <tbody>
+                  {dati.per_canale.map(c => (
+                    <tr key={c.canale} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={stCella}>{c.canale}</td>
+                      <td style={{ ...stCella, textAlign: 'right' }}>{c.n}</td>
+                      <td style={{ ...stCella, textAlign: 'right' }}>{formatEuro(c.importo)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9rem', color: '#374151' }}>Dettaglio prenotazioni cancellate</h4>
+          {righe && (
+            <>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ background: '#1e3a5f', color: '#fff' }}>
+                    <Th>Hotel</Th><Th>Canale</Th><Th align="center">Prenotato</Th><Th align="center">Arrivo</Th>
+                    <Th align="center">Partenza</Th><Th>Cliente</Th><Th>Camera</Th><Th align="right">Importo</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {righe.righe.map(r => (
+                    <tr key={r.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={stCella}>{r.hotel_code}</td>
+                      <td style={stCella}>{r.canale}</td>
+                      <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.data_prenotazione)}</td>
+                      <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.arrivo)}</td>
+                      <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.partenza)}</td>
+                      <td style={stCella}>{r.cliente}</td>
+                      <td style={stCella}>{r.tipo_camera}</td>
+                      <td style={{ ...stCella, textAlign: 'right', color: '#dc2626', fontWeight: 600 }}>{formatEuro(r.importo)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginTop: '0.8rem', fontSize: '0.85rem' }}>
+                <button disabled={pagina <= 1} onClick={() => setPagina(p => p - 1)} style={{ cursor: pagina <= 1 ? 'default' : 'pointer' }}>◀</button>
+                <span>Pagina {righe.pagina} — {righe.totale} risultati</span>
+                <button disabled={pagina * righe.per_pagina >= righe.totale} onClick={() => setPagina(p => p + 1)} style={{ cursor: 'pointer' }}>▶</button>
+              </div>
+            </>
+          )}
+        </>
+      )}
     </div>
   )
 }

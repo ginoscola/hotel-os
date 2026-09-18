@@ -947,6 +947,46 @@ calcolate nello stesso giro sui dati:
   (stesso stile IVA inclusa/esclusa del resto dell'app) tra le due dimensioni,
   `localStorage('forecast_cancellazioni_vista')`.
 
+**Tab "Cancellazioni reali"** (5° tab, settembre 2026): complementare alla stima sopra — dato reale
+da import manuale dell'export Welcome "PrenotazioniWeb" (una riga = una camera cancellata), non
+derivato per confronto di snapshot. Nasce da un'indagine reale su un report di analisi cancellazioni
+(generato da un'altra sessione Claude su richiesta dell'utente) che dichiarava un 27,9% di
+cancellato/gruppo: risultato falso, causato dall'aver scambiato la colonna "7gg" (flusso settimanale
+di nuove prenotazioni acquisite, volatile per natura) con lo stock di fatturato corrente per quella
+settimana di arrivo — un normale calo di ritmo di vendita settimanale non è una cancellazione. Il
+tasso vero, verificato su questi dati reali, è ~10% sull'intera stagione 2026 (coerente sia con la
+stima picco-vs-attuale sopra sia con la colonna PROG del foglio Excel del gestionale, che non mostra
+mai un calo). Vedi anche limite del calcolo picco-vs-attuale: sottostima le cancellazioni avvenute
+prima del primo snapshot Revenue disponibile (16/03/2026) — nessun dato in `daily_revenue` copre
+prima di quella data.
+- **Modello**: `PrenotazioneCancellataImport`/`PrenotazioneCancellata` in `models/prenotazioni.py`
+  (migrazione `prenot001_2026`). Una riga = una camera (una prenotazione multi-camera genera più
+  righe con lo stesso `codice_ota`). ⚠️ **Nessun ID prenotazione univoco nell'export**: l'interfaccia
+  Welcome mostra un "Codice Prenotazione" interno (es. 6097) e persino una colonna "Data
+  cancellazione" a schermo, ma il pulsante "Esporta" di quella vista **non le include** — verificato
+  chiedendo esplicitamente all'utente di provare (nessuna opzione per personalizzare le colonne
+  esportate). La dedup usa quindi una chiave composita (`is_test`, hotel, codice_ota, data
+  prenotazione, arrivo, partenza, tipo camera, importo, cliente) — `codice_ota` è `''` (non `NULL`)
+  per le prenotazioni dirette/manuali, stesso accorgimento anti-`NULL<>NULL` già usato in
+  `prod_righe`. **Nessuna data di cancellazione disponibile**: si sa solo che una prenotazione fatta
+  in un dato mese è stata *poi* cancellata, non quando — quindi non è possibile costruire un
+  incrocio mese-prenotazione × mese-cancellazione, solo il totale cancellato per mese di
+  prenotazione (i file storici gen-lug+set 2026 usati per validare questo modulo erano filtrati per
+  mese di prenotazione lato Welcome, non per mese di cancellazione — un primo tentativo di file
+  "agosto" era invece filtrato per data di cancellazione, causando conteggi doppi con marzo-luglio
+  finché non è stato rigenerato con lo stesso filtro degli altri mesi).
+- Endpoint (prefix `/prenotazioni-cancellate`): `POST /import?mese=&anno=&is_test=` (admin,
+  multipart CSV — avvisa, non scarta, se `dataPren` di alcune righe cade fuori dal mese/anno
+  dichiarati), `GET /import/storico`, `DELETE /import/{id}?conferma=true`, `GET /report?anno=&
+  hotel_code=&canale=&arrivo_da=&arrivo_a=` (aggregati per mese prenotazione/hotel/canale),
+  `GET /?...&pagina=&per_pagina=` (righe grezze paginate), `GET|DELETE /admin/test-stats|test-data`.
+  Parser: `services/prenotazioni_parser.py` (CSV, scarta la riga iniziale `sep=,` che Excel
+  antepone, date ISO con eventuali secondi frazionari, importi già in formato punto-decimale —
+  a differenza dei fogli del modulo Revenue non serve conversione virgola→punto).
+- Frontend: pannello import solo admin (`isAdmin()`), filtri (struttura ereditata dall'header, canale,
+  periodo prenotazione, periodo arrivo), grafico a barre per mese di prenotazione, tabelle per
+  struttura/canale, tabella dettaglio paginata.
+
 ---
 
 ## Modulo Budget
