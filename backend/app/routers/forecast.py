@@ -11,8 +11,9 @@ Tabelle gestite:
 """
 
 from calendar import monthrange
+from collections import defaultdict
 from datetime import date
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -100,6 +101,27 @@ class PaceGruppoResponse(BaseModel):
     mese: int
     mese_label: str
     strutture: List[PaceStruttura]
+
+
+class CancellazioniMeseRow(BaseModel):
+    mese: int
+    mese_label: str
+    # Perdita attribuita al mese della data di SOGGIORNO cancellata
+    camere_perse_soggiorno: int
+    revenue_perso_soggiorno: float
+    n_date_con_perdita: int
+    # Stessa perdita, ma allocata proporzionalmente al mese in cui è stata OSSERVATA
+    # la prenotazione (stima, non un dato esatto — vedi docstring di _cancellazioni_hotel)
+    camere_perse_prenotazione: float
+    revenue_perso_prenotazione: float
+
+
+class CancellazioniResponse(BaseModel):
+    anno: int
+    hotel_code: str
+    mesi: List[CancellazioniMeseRow]
+    totale_camere_perse: int
+    totale_revenue_perso: float
 
 
 class MaturatInput(BaseModel):
@@ -518,6 +540,141 @@ def get_pace_gruppo(
         mese=mese,
         mese_label=MESI_IT[mese - 1],
         strutture=strutture,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Endpoint: analisi cancellazioni
+# ---------------------------------------------------------------------------
+
+def _cancellazioni_hotel(db: Session, hotel_code: str, anno: int) -> Dict[str, Dict[int, dict]]:
+    """
+    Stima le camere perse per cancellazione confrontando rooms_sold tra TUTTI gli
+    snapshot disponibili in daily_revenue (non solo l'ultimo) — a differenza dei
+    documenti fiscali di Corrispettivi, che tracciano solo le cancellazioni con
+    penale addebitata, questa è l'unica fonte per le cancellazioni gratuite (entro
+    i termini di policy), che non generano mai un documento.
+
+    Per ogni data di soggiorno, il picco massimo di rooms_sold mai osservato tra gli
+    snapshot meno il valore nell'ultimo snapshot disponibile è una stima delle camere
+    perse nette (cancellazioni − eventuali nuove prenotazioni nello stesso periodo,
+    non distinguibili con dati aggregati per giorno).
+
+    Stima anche il mese di "prenotazione": ogni incremento positivo di rooms_sold tra
+    due snapshot consecutivi per la stessa data è attribuito al mese dello snapshot in
+    cui è stato osservato; la perdita finale di quella data viene poi allocata in
+    proporzione a questi incrementi. È un'approssimazione dichiarata (non un conteggio
+    esatto di prenotazioni), utile per il trend ma non per un numero esatto — la prima
+    osservazione disponibile di una data include anche prenotazioni fatte prima del
+    primo snapshot mai caricato (baseline sconosciuta, attribuita al mese di quel primo
+    snapshot).
+    """
+    righe = (
+        db.query(DailyRevenue)
+        .filter(
+            DailyRevenue.hotel_code == hotel_code,
+            DailyRevenue.data >= date(anno, 1, 1),
+            DailyRevenue.data <= date(anno, 12, 31),
+            DailyRevenue.is_test == False,
+            DailyRevenue.snapshot_date.isnot(None),
+        )
+        .order_by(DailyRevenue.data, DailyRevenue.snapshot_date)
+        .all()
+    )
+
+    per_data: Dict[date, List[DailyRevenue]] = defaultdict(list)
+    for r in righe:
+        per_data[r.data].append(r)
+
+    per_mese_sogg = {m: {"camere": 0, "revenue": 0.0, "n_date": 0} for m in range(1, 13)}
+    per_mese_pren = {m: {"camere": 0.0, "revenue": 0.0} for m in range(1, 13)}
+
+    for data_soggiorno, snaps in per_data.items():
+        picco = 0
+        adr_al_picco = 0.0
+        cohort: List[Tuple[int, int]] = []   # (mese_snapshot, incremento_rooms_sold)
+        prev_sold = 0
+
+        for s in snaps:
+            delta = s.rooms_sold - prev_sold
+            if delta > 0:
+                cohort.append((s.snapshot_date.month, delta))
+            if s.rooms_sold > picco:
+                picco = s.rooms_sold
+                adr_al_picco = (s.revenue_rooms / s.rooms_sold) if s.rooms_sold else 0.0
+            prev_sold = s.rooms_sold
+
+        attuale = snaps[-1].rooms_sold
+        perso = picco - attuale
+        if perso <= 0:
+            continue
+
+        mese_sogg = data_soggiorno.month
+        revenue_perso = round(perso * adr_al_picco, 2)
+        per_mese_sogg[mese_sogg]["camere"] += perso
+        per_mese_sogg[mese_sogg]["revenue"] += revenue_perso
+        per_mese_sogg[mese_sogg]["n_date"] += 1
+
+        tot_cohort = sum(d for _, d in cohort)
+        if tot_cohort > 0:
+            for mese_pren, delta in cohort:
+                quota = delta / tot_cohort
+                per_mese_pren[mese_pren]["camere"] += perso * quota
+                per_mese_pren[mese_pren]["revenue"] += revenue_perso * quota
+
+    return {"soggiorno": per_mese_sogg, "prenotazione": per_mese_pren}
+
+
+@router.get(
+    "/cancellazioni",
+    response_model=CancellazioniResponse,
+    dependencies=[Depends(richiedi_utente_attivo)],
+)
+def get_cancellazioni(
+    anno: int = Query(...),
+    hotel_code: str = Query(default="all"),
+    db: Session = Depends(get_db),
+):
+    """
+    Andamento mensile delle camere perse per cancellazione (stima, vedi
+    `_cancellazioni_hotel`) — con o senza penale, a differenza dell'analisi
+    equivalente possibile su Corrispettivi (solo documenti annullati/penali).
+    """
+    hotels = _hotels_per_codice(hotel_code, db)
+    if not hotels:
+        raise HTTPException(status_code=404, detail="Nessun hotel trovato")
+
+    tot_sogg = {m: {"camere": 0, "revenue": 0.0, "n_date": 0} for m in range(1, 13)}
+    tot_pren = {m: {"camere": 0.0, "revenue": 0.0} for m in range(1, 13)}
+
+    for hotel in hotels:
+        ris = _cancellazioni_hotel(db, hotel.code, anno)
+        for m in range(1, 13):
+            tot_sogg[m]["camere"] += ris["soggiorno"][m]["camere"]
+            tot_sogg[m]["revenue"] += ris["soggiorno"][m]["revenue"]
+            tot_sogg[m]["n_date"] += ris["soggiorno"][m]["n_date"]
+            tot_pren[m]["camere"] += ris["prenotazione"][m]["camere"]
+            tot_pren[m]["revenue"] += ris["prenotazione"][m]["revenue"]
+
+    mesi = [
+        CancellazioniMeseRow(
+            mese=m,
+            mese_label=MESI_IT[m - 1],
+            camere_perse_soggiorno=tot_sogg[m]["camere"],
+            revenue_perso_soggiorno=_arrotonda(tot_sogg[m]["revenue"]),
+            n_date_con_perdita=tot_sogg[m]["n_date"],
+            camere_perse_prenotazione=_arrotonda(tot_pren[m]["camere"], 1),
+            revenue_perso_prenotazione=_arrotonda(tot_pren[m]["revenue"]),
+        )
+        for m in range(1, 13)
+    ]
+
+    return CancellazioniResponse(
+        anno=anno,
+        hotel_code=hotels[0].code if len(hotels) == 1 else "all",
+        mesi=mesi,
+        totale_camere_perse=sum(tot_sogg[m]["camere"] for m in range(1, 13)),
+        totale_revenue_perso=_arrotonda(sum(tot_sogg[m]["revenue"] for m in range(1, 13))),
     )
 
 

@@ -925,6 +925,28 @@ browser → stampante** (nessun proxy backend: si è verificato empiricamente ch
 Tabelle (`forecast_maturato`, `forecast_budget`, `forecast_pickup_config`): UNIQUE per (hotel_id, anno, mese).
 Endpoint: `GET /forecast/summary?anno=&hotel_code=` (hotel_code=all → aggregato), `GET /forecast/pace`, `PUT /forecast/maturato|budget|pickup-config`, `DELETE /forecast/maturato/{id}`.
 
+**Tab "Cancellazioni"** (settembre 2026): stima le camere perse per cancellazione confrontando
+`rooms_sold` tra **tutti** gli snapshot di `daily_revenue` di una stagione, non solo l'ultimo —
+unica fonte per le cancellazioni **senza penale** (entro i termini di policy, non generano mai un
+documento fiscale): Corrispettivi (`annullato`/`categoria='penali'`) intercetta solo quelle *con*
+penale addebitata, quindi non basta da solo. Per ogni data di soggiorno: `perso = picco_storico_rooms_sold − rooms_sold_ultimo_snapshot`
+(`_cancellazioni_hotel()` in `routers/forecast.py`) — un delta positivo è una stima di camere
+perse nette, non un conteggio esatto (dato aggregato per giorno, non per singola prenotazione: un
+giorno con cancellazioni e nuove prenotazioni contemporanee mostra solo il saldo netto).
+Endpoint `GET /forecast/cancellazioni?anno=&hotel_code=`, aggrega per mese in due dimensioni,
+calcolate nello stesso giro sui dati:
+- **Per mese di soggiorno**: perdita attribuita al mese della data cancellata (dato più solido).
+- **Per mese di prenotazione** (stima, dichiarata approssimata in UI): ogni incremento positivo di
+  `rooms_sold` tra due snapshot consecutivi è un "incremento cohort" attribuito al mese dello
+  snapshot in cui è osservato; la perdita finale di una data è allocata proporzionalmente tra questi
+  incrementi. ⚠️ La primissima osservazione disponibile di una data include anche prenotazioni fatte
+  prima del primo snapshot mai caricato (baseline sconosciuta) — genera un picco nel mese del primo
+  snapshot stagionale che non riflette prenotazioni reali fatte in quel mese, visibile sui dati 2026
+  come concentrazione anomala a marzo (primi snapshot della stagione). Frontend: 4° tab in
+  `Forecast.jsx` (`TabCancellazioni`), grafico a barre mensile + tabella, toggle pillola arancione
+  (stesso stile IVA inclusa/esclusa del resto dell'app) tra le due dimensioni,
+  `localStorage('forecast_cancellazioni_vista')`.
+
 ---
 
 ## Modulo Budget
