@@ -214,12 +214,12 @@ def elimina_import(import_id: int, conferma: bool = Query(False), db: Session = 
 # Report
 # ---------------------------------------------------------------------------
 
-def _applica_filtri(query, hotel_code, canale, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test):
+def _applica_filtri(query, hotel_code, canali, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test):
     query = query.filter(PrenotazioneCancellata.is_test == is_test)
     if hotel_code and hotel_code.lower() != "all":
         query = query.filter(PrenotazioneCancellata.hotel_code == hotel_code.upper())
-    if canale:
-        query = query.filter(PrenotazioneCancellata.canale == canale)
+    if canali:
+        query = query.filter(PrenotazioneCancellata.canale.in_(canali))
     if prenotazione_da:
         query = query.filter(PrenotazioneCancellata.data_prenotazione >= prenotazione_da)
     if prenotazione_a:
@@ -229,6 +229,15 @@ def _applica_filtri(query, hotel_code, canale, prenotazione_da, prenotazione_a, 
     if arrivo_a:
         query = query.filter(PrenotazioneCancellata.arrivo <= arrivo_a)
     return query
+
+
+def _parse_canali(canali: Optional[str]) -> Optional[list]:
+    """'Booking.com,Sito Diretto' -> ['Booking.com', 'Sito Diretto'] — stringa comma-separated
+    invece di un query param ripetuto, per non dipendere da come axios serializza gli array."""
+    if not canali:
+        return None
+    valori = [c.strip() for c in canali.split(",") if c.strip()]
+    return valori or None
 
 
 def _applica_ricerca(query, q: Optional[str]):
@@ -302,7 +311,7 @@ def _fmt_riga(r: PrenotazioneCancellata) -> dict:
 def report(
     anno: int = Query(...),
     hotel_code: str = Query(default="all"),
-    canale: Optional[str] = Query(default=None),
+    canali: Optional[str] = Query(default=None, description="Canali separati da virgola"),
     arrivo_da: Optional[date] = Query(default=None),
     arrivo_a: Optional[date] = Query(default=None),
     prenotazione_da: Optional[date] = Query(default=None),
@@ -314,7 +323,7 @@ def report(
     base = db.query(PrenotazioneCancellata).filter(
         func.extract("year", PrenotazioneCancellata.arrivo) == anno
     )
-    base = _applica_filtri(base, hotel_code, canale, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
+    base = _applica_filtri(base, hotel_code, _parse_canali(canali), prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
     righe = base.all()
 
     per_mese = {m: {"n": 0, "importo": 0.0} for m in range(1, 13)}
@@ -363,11 +372,32 @@ def report(
     }
 
 
+@router.get("/canali", dependencies=[Depends(richiedi_utente_attivo)])
+def lista_canali(
+    anno: int = Query(...),
+    hotel_code: str = Query(default="all"),
+    arrivo_da: Optional[date] = Query(default=None),
+    arrivo_a: Optional[date] = Query(default=None),
+    prenotazione_da: Optional[date] = Query(default=None),
+    prenotazione_a: Optional[date] = Query(default=None),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """Elenco canali distinti per popolare le checkbox di filtro — NON filtrato per canale
+    (altrimenti la lista si restringerebbe da sola man mano che se ne selezionano)."""
+    query = db.query(PrenotazioneCancellata.canale).filter(
+        func.extract("year", PrenotazioneCancellata.arrivo) == anno
+    )
+    query = _applica_filtri(query, hotel_code, None, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
+    canali = sorted({c for (c,) in query.distinct().all()})
+    return {"canali": canali}
+
+
 @router.get("/", dependencies=[Depends(richiedi_utente_attivo)])
 def lista_righe(
     anno: int = Query(...),
     hotel_code: str = Query(default="all"),
-    canale: Optional[str] = Query(default=None),
+    canali: Optional[str] = Query(default=None, description="Canali separati da virgola"),
     arrivo_da: Optional[date] = Query(default=None),
     arrivo_a: Optional[date] = Query(default=None),
     prenotazione_da: Optional[date] = Query(default=None),
@@ -383,7 +413,7 @@ def lista_righe(
     query = db.query(PrenotazioneCancellata).filter(
         func.extract("year", PrenotazioneCancellata.arrivo) == anno
     )
-    query = _applica_filtri(query, hotel_code, canale, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
+    query = _applica_filtri(query, hotel_code, _parse_canali(canali), prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
     query = _applica_ricerca(query, q)
     totale = query.count()
     colonna = _COLONNE_ORDINABILI.get(ordina_per, PrenotazioneCancellata.data_prenotazione)

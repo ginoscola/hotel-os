@@ -726,7 +726,8 @@ function TabMaturato({ anno, hotels, hotelSelezionato, onAggiornato }) {
 
 function TabCancellazioni({ anno, hotelCode, hotels }) {
   const [hotelFiltro, setHotelFiltro] = useState(hotelCode || 'all')
-  const [canale, setCanale] = useState('')
+  const [canaliDisponibili, setCanaliDisponibili] = useState([])
+  const [canaliSelezionati, setCanaliSelezionati] = useState([])
   const [arrivoDa, setArrivoDa] = useState('')
   const [arrivoA, setArrivoA] = useState('')
   const [prenotazioneDa, setPrenotazioneDa] = useState('')
@@ -753,16 +754,28 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
     }
   }
 
+  function toggleCanale(c) {
+    setCanaliSelezionati(sel => sel.includes(c) ? sel.filter(x => x !== c) : [...sel, c])
+  }
+
   // Debounce della ricerca libera: evita una richiesta per ogni carattere digitato.
   useEffect(() => {
     const t = setTimeout(() => setRicerca(ricercaInput), 400)
     return () => clearTimeout(t)
   }, [ricercaInput])
 
+  // Elenco canali disponibili — NON dipende dai canali selezionati, altrimenti la lista di
+  // checkbox si restringerebbe da sola man mano che se ne selezionano.
+  useEffect(() => {
+    api.get('/prenotazioni-cancellate/canali', {
+      params: { anno, hotel_code: hotelFiltro, arrivo_da: arrivoDa || undefined, arrivo_a: arrivoA || undefined, prenotazione_da: prenotazioneDa || undefined, prenotazione_a: prenotazioneA || undefined },
+    }).then(r => setCanaliDisponibili(r.data.canali)).catch(() => {})
+  }, [anno, hotelFiltro, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
+
   const paramsFiltri = {
     anno,
     hotel_code: hotelFiltro,
-    canale: canale || undefined,
+    canali: canaliSelezionati.length ? canaliSelezionati.join(',') : undefined,
     arrivo_da: arrivoDa || undefined,
     arrivo_a: arrivoA || undefined,
     prenotazione_da: prenotazioneDa || undefined,
@@ -781,7 +794,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
     } finally {
       setCaricandoDati(false)
     }
-  }, [anno, hotelFiltro, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
+  }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
 
   const caricaRighe = useCallback(async () => {
     try {
@@ -790,11 +803,11 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
       })
       setRighe(r.data)
     } catch {}
-  }, [anno, hotelFiltro, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, ricerca, ordinaPer, direzione, pagina])
+  }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, ricerca, ordinaPer, direzione, pagina])
 
   useEffect(() => { caricaReport() }, [caricaReport])
   useEffect(() => { caricaRighe() }, [caricaRighe])
-  useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelFiltro, ricerca, ordinaPer, direzione])
+  useEffect(() => { setPagina(1) }, [canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelFiltro, ricerca, ordinaPer, direzione])
 
   async function handleElimina(riga) {
     if (!window.confirm(`Eliminare definitivamente la prenotazione ${riga.numero_prenotazione || riga.id} (${riga.cliente || 'senza nome'}, ${riga.hotel_code})?`)) return
@@ -831,13 +844,6 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
           </select>
         </div>
         <div>
-          <label style={stileLabel}>Canale</label>
-          <select value={canale} onChange={e => setCanale(e.target.value)} style={stileSelect}>
-            <option value="">Tutti</option>
-            {(dati?.per_canale || []).map(c => <option key={c.canale} value={c.canale}>{c.canale}</option>)}
-          </select>
-        </div>
-        <div>
           <label style={stileLabel}>Arrivo da</label>
           <input type="date" value={arrivoDa} onChange={e => setArrivoDa(e.target.value)} style={stileSelect} />
         </div>
@@ -852,6 +858,18 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
         <div>
           <label style={stileLabel}>Prenotazione a</label>
           <input type="date" value={prenotazioneA} onChange={e => setPrenotazioneA(e.target.value)} style={stileSelect} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.2rem', overflowX: 'auto', paddingBottom: 4 }}>
+        <span style={{ ...stileLabel, marginBottom: 0, whiteSpace: 'nowrap' }}>Canali:</span>
+        <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'nowrap' }}>
+          {canaliDisponibili.map(c => (
+            <label key={c} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.85rem', color: '#374151', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+              <input type="checkbox" checked={canaliSelezionati.includes(c)} onChange={() => toggleCanale(c)} />
+              {c}
+            </label>
+          ))}
         </div>
       </div>
 
