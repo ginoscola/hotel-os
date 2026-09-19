@@ -1010,10 +1010,17 @@ prima di quella data.
   Parser: `services/prenotazioni_parser.py` (CSV, scarta la riga iniziale `sep=,` che Excel
   antepone, date ISO con eventuali secondi frazionari, importi già in formato punto-decimale —
   a differenza dei fogli del modulo Revenue non serve conversione virgola→punto).
-- Frontend: pannello import solo admin (`isAdmin()`), filtri (struttura ereditata dall'header, canale,
-  periodo prenotazione, periodo arrivo), grafico a barre per mese di prenotazione, tabelle per
-  struttura/canale, tabella dettaglio paginata con colonne "Codice Prenotazione"/"Data
-  cancellazione" (quest'ultima mostra `~data_rilevata` in grigio se il valore certo manca).
+- Frontend: **6° tab separato "Importa Cancellazioni Welcome"** (solo admin — non un pannello fisso
+  in cima alla tab di consultazione come nella primissima versione, spostato su richiesta esplicita
+  per non sporcare la pagina quando si va solo a guardare i dati): pannello upload + storico import
+  con eliminazione. La tab "Cancellazioni reali" resta solo consultazione (filtri, grafico, tabelle),
+  colonne dettaglio "Codice Prenotazione"/"Data cancellazione" (quest'ultima mostra `~data_rilevata`
+  in grigio se il valore certo manca).
+  ⚠️ Il backend serializza `created_at` degli import con `.isoformat()` completo (con ora e fuso);
+  `formatDataIt()` del frontend si aspetta invece una data pura `YYYY-MM-DD` e fallisce silenziosamente
+  su un datetime completo (`NaN` al posto del giorno) — bug reale trovato nella tabella storico import,
+  corretto troncando a `.date().isoformat()` lato backend. Attenzione a questo stesso pattern se si
+  espone `created_at`/altri `DateTime` in un nuovo endpoint pensato per `formatDataIt()`.
 
 ---
 

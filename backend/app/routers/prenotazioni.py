@@ -34,7 +34,7 @@ def _fmt_import(imp: PrenotazioneCancellataImport) -> dict:
         "n_righe_valide": imp.n_righe_valide,
         "n_righe_fuori_mese": imp.n_righe_fuori_mese,
         "is_test": imp.is_test,
-        "created_at": imp.created_at.isoformat() if imp.created_at else None,
+        "created_at": imp.created_at.date().isoformat() if imp.created_at else None,
     }
 
 

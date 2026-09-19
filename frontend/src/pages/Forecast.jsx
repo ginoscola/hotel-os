@@ -89,6 +89,7 @@ export default function Forecast() {
         <button style={stileTab('maturato')} onClick={() => setTabAttiva('maturato')}>Maturato</button>
         <button style={stileTab('cancellazioni')} onClick={() => setTabAttiva('cancellazioni')}>Cancellazioni</button>
         <button style={stileTab('cancellazioni-reali')} onClick={() => setTabAttiva('cancellazioni-reali')}>Cancellazioni reali</button>
+        <button style={stileTab('importa-cancellazioni')} onClick={() => setTabAttiva('importa-cancellazioni')}>Importa Cancellazioni Welcome</button>
       </div>
 
       {tabAttiva === 'riepilogo' && (
@@ -123,6 +124,7 @@ export default function Forecast() {
       {tabAttiva === 'cancellazioni-reali' && (
         <TabCancellazioniReali anno={anno} hotelCode={hotelSelezionato} />
       )}
+      {tabAttiva === 'importa-cancellazioni' && <TabImportaCancellazioni />}
     </div>
   )
 }
@@ -850,12 +852,6 @@ function TabCancellazioni({ anno, hotelCode }) {
 // ---------------------------------------------------------------------------
 
 function TabCancellazioniReali({ anno, hotelCode }) {
-  const [meseUpload, setMeseUpload] = useState(new Date().getMonth() + 1)
-  const [annoUpload, setAnnoUpload] = useState(anno)
-  const [caricando, setCaricando] = useState(false)
-  const [esitoImport, setEsitoImport] = useState(null)
-  const inputRef = useRef(null)
-
   const [canale, setCanale] = useState('')
   const [arrivoDa, setArrivoDa] = useState('')
   const [arrivoA, setArrivoA] = useState('')
@@ -903,36 +899,6 @@ function TabCancellazioniReali({ anno, hotelCode }) {
   useEffect(() => { caricaRighe() }, [caricaRighe])
   useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelCode])
 
-  async function handleUpload(file) {
-    if (!file) return
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      setEsitoImport({ ok: false, msg: 'Seleziona un file CSV' })
-      return
-    }
-    setCaricando(true)
-    setEsitoImport(null)
-    const form = new FormData()
-    form.append('file', file)
-    try {
-      const { data } = await api.post(
-        `/prenotazioni-cancellate/import?mese=${meseUpload}&anno=${annoUpload}`,
-        form, { headers: { 'Content-Type': 'multipart/form-data' } }
-      )
-      setEsitoImport({
-        ok: true,
-        msg: `Importate ${data.n_inserite} righe (${data.n_saltate} già presenti).`
-          + (data.warning.length ? ' ' + data.warning.join(' ') : ''),
-      })
-      caricaReport()
-      caricaRighe()
-    } catch (err) {
-      setEsitoImport({ ok: false, msg: mostraErrore(err) })
-    } finally {
-      setCaricando(false)
-      if (inputRef.current) inputRef.current.value = ''
-    }
-  }
-
   const datiGrafico = dati ? dati.per_mese.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
 
   return (
@@ -941,34 +907,9 @@ function TabCancellazioniReali({ anno, hotelCode }) {
         Dato reale (una riga = una camera cancellata), da import manuale dell'export Welcome
         "PrenotazioniWeb" filtrato per mese di prenotazione — complementare alla stima nella tab
         "Cancellazioni". Limite noto: l'export non riporta la data di cancellazione, solo quella
-        di prenotazione originale.
+        di prenotazione originale (a meno di non averla aggiunta a mano, vedi tab "Importa
+        Cancellazioni Welcome").
       </p>
-
-      {isAdmin() && (
-        <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: '1rem', marginBottom: '1.5rem' }}>
-          <h3 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', color: '#9a3412' }}>Importa export Welcome</h3>
-          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={stileLabel}>Mese prenotazione</label>
-            <select value={meseUpload} onChange={e => setMeseUpload(Number(e.target.value))} style={stileSelect}>
-              {MESI_LABEL.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
-            </select>
-            <label style={stileLabel}>Anno</label>
-            <select value={annoUpload} onChange={e => setAnnoUpload(Number(e.target.value))} style={stileSelect}>
-              {[2024, 2025, 2026, 2027].map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-            <input ref={inputRef} type="file" accept=".csv" onChange={e => handleUpload(e.target.files[0])} disabled={caricando} />
-            {caricando && <span style={{ color: '#9a3412', fontSize: '0.85rem' }}>Caricamento…</span>}
-          </div>
-          {esitoImport && (
-            <div style={{
-              marginTop: '0.7rem', padding: '0.6rem 0.9rem', borderRadius: 8, fontSize: '0.85rem',
-              background: esitoImport.ok ? '#dcfce7' : '#fee2e2', color: esitoImport.ok ? '#166534' : '#991b1b',
-            }}>
-              {esitoImport.ok ? '✓ ' : '✗ '}{esitoImport.msg}
-            </div>
-          )}
-        </div>
-      )}
 
       <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.2rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div>
@@ -1098,6 +1039,151 @@ function TabCancellazioniReali({ anno, hotelCode }) {
             </>
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Tab 6 — Importa Cancellazioni Welcome
+// ---------------------------------------------------------------------------
+
+function TabImportaCancellazioni() {
+  const [meseUpload, setMeseUpload] = useState(new Date().getMonth() + 1)
+  const [annoUpload, setAnnoUpload] = useState(new Date().getFullYear())
+  const [caricando, setCaricando] = useState(false)
+  const [esitoImport, setEsitoImport] = useState(null)
+  const inputRef = useRef(null)
+
+  const [storico, setStorico] = useState(null)
+  const [eliminando, setEliminando] = useState(null)
+
+  const caricaStorico = useCallback(async () => {
+    try {
+      const r = await api.get('/prenotazioni-cancellate/import/storico')
+      setStorico(r.data)
+    } catch {}
+  }, [])
+
+  useEffect(() => { caricaStorico() }, [caricaStorico])
+
+  async function handleUpload(file) {
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setEsitoImport({ ok: false, msg: 'Seleziona un file CSV' })
+      return
+    }
+    setCaricando(true)
+    setEsitoImport(null)
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const { data } = await api.post(
+        `/prenotazioni-cancellate/import?mese=${meseUpload}&anno=${annoUpload}`,
+        form, { headers: { 'Content-Type': 'multipart/form-data' } }
+      )
+      setEsitoImport({
+        ok: true,
+        msg: `Importate ${data.n_inserite} righe (${data.n_saltate} già presenti).`
+          + (data.warning.length ? ' ' + data.warning.join(' ') : ''),
+      })
+      caricaStorico()
+    } catch (err) {
+      setEsitoImport({ ok: false, msg: mostraErrore(err) })
+    } finally {
+      setCaricando(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  async function handleElimina(id) {
+    if (!window.confirm('Eliminare questo import e tutte le righe collegate?')) return
+    setEliminando(id)
+    try {
+      await api.delete(`/prenotazioni-cancellate/import/${id}?conferma=true`)
+      caricaStorico()
+    } catch (err) {
+      alert(mostraErrore(err))
+    } finally {
+      setEliminando(null)
+    }
+  }
+
+  if (!isAdmin()) {
+    return (
+      <div style={{ textAlign: 'center', color: '#6b7280', padding: '3rem' }}>
+        Sezione riservata agli amministratori.
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <p style={{ margin: '0 0 1.2rem', fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
+        Carica qui l'export Welcome "PrenotazioniWeb" (foglio DISDETTE), filtrato lato Welcome per
+        mese di prenotazione. Il dato importato compare nella tab "Cancellazioni reali".
+      </p>
+
+      <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: '1rem', marginBottom: '2rem' }}>
+        <h3 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', color: '#9a3412' }}>Importa export Welcome</h3>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={stileLabel}>Mese prenotazione</label>
+          <select value={meseUpload} onChange={e => setMeseUpload(Number(e.target.value))} style={stileSelect}>
+            {MESI_LABEL.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
+          </select>
+          <label style={stileLabel}>Anno</label>
+          <select value={annoUpload} onChange={e => setAnnoUpload(Number(e.target.value))} style={stileSelect}>
+            {[2024, 2025, 2026, 2027].map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <input ref={inputRef} type="file" accept=".csv" onChange={e => handleUpload(e.target.files[0])} disabled={caricando} />
+          {caricando && <span style={{ color: '#9a3412', fontSize: '0.85rem' }}>Caricamento…</span>}
+        </div>
+        {esitoImport && (
+          <div style={{
+            marginTop: '0.7rem', padding: '0.6rem 0.9rem', borderRadius: 8, fontSize: '0.85rem',
+            background: esitoImport.ok ? '#dcfce7' : '#fee2e2', color: esitoImport.ok ? '#166534' : '#991b1b',
+          }}>
+            {esitoImport.ok ? '✓ ' : '✗ '}{esitoImport.msg}
+          </div>
+        )}
+      </div>
+
+      <h3 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', color: '#374151' }}>Import effettuati</h3>
+      {storico && (
+        storico.length === 0 ? (
+          <p style={{ color: '#9ca3af', fontSize: '0.88rem' }}>Nessun import ancora effettuato.</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.87rem' }}>
+            <thead>
+              <tr style={{ background: '#f3f4f6' }}>
+                <Th>File</Th><Th>Mese prenotazione</Th><Th align="right">Righe valide</Th>
+                <Th align="right">Fuori mese</Th><Th align="center">Caricato il</Th><Th align="center">Azioni</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {storico.map(imp => (
+                <tr key={imp.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  <td style={stCella}>{imp.nome_file}</td>
+                  <td style={stCella}>{imp.mese_label} {imp.anno}</td>
+                  <td style={{ ...stCella, textAlign: 'right' }}>{imp.n_righe_valide}</td>
+                  <td style={{ ...stCella, textAlign: 'right', color: imp.n_righe_fuori_mese ? '#d97706' : '#d1d5db' }}>
+                    {imp.n_righe_fuori_mese || '—'}
+                  </td>
+                  <td style={{ ...stCella, textAlign: 'center', color: '#6b7280' }}>{formatDataIt(imp.created_at)}</td>
+                  <td style={{ ...stCella, textAlign: 'center' }}>
+                    <button
+                      onClick={() => handleElimina(imp.id)}
+                      disabled={eliminando === imp.id}
+                      style={{ border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: '0.8rem' }}
+                    >
+                      {eliminando === imp.id ? '…' : '🗑'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
       )}
     </div>
   )
