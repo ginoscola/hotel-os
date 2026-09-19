@@ -7,7 +7,7 @@ Per "PrenotazioniWeb" limitato a quanto l'export espone (nessun ID prenotazione 
 univoco, nessuna data di cancellazione — vedi models/prenotazioni.py).
 """
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
@@ -331,6 +331,25 @@ def report(
     per_hotel: dict = {}
     per_canale: dict = {}
 
+    # Range giornaliero costruito sull'effettivo minimo/massimo tra le righe filtrate (non su
+    # tutto l'anno solare): così restringere i filtri data (arrivo/prenotazione) restringe da sé
+    # anche la vista "Giornaliero", coerente con l'idea di poter analizzare periodi più brevi
+    # senza dover introdurre un filtro separato solo per il grafico.
+    per_giorno = {}
+    if righe:
+        date_pren = [r.data_prenotazione for r in righe]
+        d, fine = min(date_pren), max(date_pren)
+        while d <= fine:
+            per_giorno[d] = {"n": 0, "importo": 0.0}
+            d += timedelta(days=1)
+    per_giorno_arrivo = {}
+    if righe:
+        date_arr = [r.arrivo for r in righe]
+        d, fine = min(date_arr), max(date_arr)
+        while d <= fine:
+            per_giorno_arrivo[d] = {"n": 0, "importo": 0.0}
+            d += timedelta(days=1)
+
     for r in righe:
         m = r.data_prenotazione.month
         per_mese[m]["n"] += 1
@@ -339,6 +358,12 @@ def report(
         ma = r.arrivo.month
         per_mese_arrivo[ma]["n"] += 1
         per_mese_arrivo[ma]["importo"] += r.importo
+
+        per_giorno[r.data_prenotazione]["n"] += 1
+        per_giorno[r.data_prenotazione]["importo"] += r.importo
+
+        per_giorno_arrivo[r.arrivo]["n"] += 1
+        per_giorno_arrivo[r.arrivo]["importo"] += r.importo
 
         per_hotel.setdefault(r.hotel_code, {"n": 0, "importo": 0.0})
         per_hotel[r.hotel_code]["n"] += 1
@@ -360,6 +385,14 @@ def report(
         "per_mese_arrivo": [
             {"mese": m, "mese_label": MESI_IT[m - 1], "n": d["n"], "importo": round(d["importo"], 2)}
             for m, d in per_mese_arrivo.items()
+        ],
+        "per_giorno": [
+            {"data": d.isoformat(), "n": v["n"], "importo": round(v["importo"], 2)}
+            for d, v in sorted(per_giorno.items())
+        ],
+        "per_giorno_arrivo": [
+            {"data": d.isoformat(), "n": v["n"], "importo": round(v["importo"], 2)}
+            for d, v in sorted(per_giorno_arrivo.items())
         ],
         "per_hotel": [
             {"hotel_code": h, "n": d["n"], "importo": round(d["importo"], 2)}

@@ -744,6 +744,11 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const [eliminandoId, setEliminandoId] = useState(null)
   const [ordinaPer, setOrdinaPer] = useState('data_prenotazione')
   const [direzione, setDirezione] = useState('desc')
+  const [vistaPeriodo, setVistaPeriodo] = useState(() => localStorage.getItem('cancellazioni_vista_periodo') || 'mensile')
+
+  useEffect(() => {
+    localStorage.setItem('cancellazioni_vista_periodo', vistaPeriodo)
+  }, [vistaPeriodo])
 
   function ordinaColonna(campo) {
     if (ordinaPer === campo) {
@@ -820,6 +825,9 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
 
   const datiGrafico = dati ? dati.per_mese.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
   const datiGraficoArrivo = dati ? dati.per_mese_arrivo.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
+  const datiGraficoGiorno = dati ? dati.per_giorno.map(g => ({ giorno: g.data.slice(5), n: g.n, importo: g.importo })) : []
+  const datiGraficoGiornoArrivo = dati ? dati.per_giorno_arrivo.map(g => ({ giorno: g.data.slice(5), n: g.n, importo: g.importo })) : []
+  const giornaliero = vistaPeriodo === 'giornaliero'
 
   return (
     <div>
@@ -873,40 +881,66 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
 
       {dati && !caricandoDati && (
         <>
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#dc2626" />
             <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#dc2626" />
+            <div style={{ display: 'inline-flex', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: 3, marginLeft: 'auto' }}>
+              <button onClick={() => setVistaPeriodo('mensile')} style={stileToggleBtn(vistaPeriodo === 'mensile')}>Mensile</button>
+              <button onClick={() => setVistaPeriodo('giornaliero')} style={stileToggleBtn(vistaPeriodo === 'giornaliero')}>Giornaliero</button>
+            </div>
           </div>
 
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem', marginBottom: '1.5rem' }}>
             <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#374151' }}>
-              Per mese di prenotazione — {anno} · {dati.hotel_code}
+              Per {giornaliero ? 'giorno' : 'mese'} di prenotazione — {anno} · {dati.hotel_code}
             </h3>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={datiGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
-                <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
-                <Legend />
-                <Bar dataKey="n" name="Camere cancellate" fill="#dc2626" radius={[4, 4, 0, 0]} />
-              </BarChart>
+              {giornaliero ? (
+                <LineChart data={datiGraficoGiorno} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis dataKey="giorno" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
+                  <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
+                  <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                  <Legend />
+                  <Line type="monotone" dataKey="n" name="Camere cancellate" stroke="#dc2626" strokeWidth={2} dot={false} />
+                </LineChart>
+              ) : (
+                <BarChart data={datiGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
+                  <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                  <Legend />
+                  <Bar dataKey="n" name="Camere cancellate" fill="#dc2626" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              )}
             </ResponsiveContainer>
           </div>
 
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem', marginBottom: '1.5rem' }}>
             <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#374151' }}>
-              Per mese di arrivo — {anno} · {dati.hotel_code}
+              Per {giornaliero ? 'giorno' : 'mese'} di arrivo — {anno} · {dati.hotel_code}
             </h3>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={datiGraficoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
-                <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
-                <Legend />
-                <Bar dataKey="n" name="Camere cancellate" fill="#b91c1c" radius={[4, 4, 0, 0]} />
-              </BarChart>
+              {giornaliero ? (
+                <LineChart data={datiGraficoGiornoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis dataKey="giorno" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
+                  <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
+                  <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                  <Legend />
+                  <Line type="monotone" dataKey="n" name="Camere cancellate" stroke="#b91c1c" strokeWidth={2} dot={false} />
+                </LineChart>
+              ) : (
+                <BarChart data={datiGraficoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
+                  <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                  <Legend />
+                  <Bar dataKey="n" name="Camere cancellate" fill="#b91c1c" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              )}
             </ResponsiveContainer>
           </div>
 

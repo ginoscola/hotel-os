@@ -1091,6 +1091,19 @@ reimport li sovrascrivesse silenziosamente.
   in `order_by()`. Frontend: componente `ThOrd` (intestazione cliccabile, freccia ▲/▼ sulla colonna
   attiva, secondo click sulla stessa colonna inverte la direzione), stato `ordinaPer`/`direzione` in
   `TabCancellazioni`, reset pagina a 1 al cambio come per gli altri filtri.
+- **Toggle Mensile/Giornaliero sui due grafici** (pillola arancione, stesso stile IVA
+  inclusa/esclusa del resto dell'app, `localStorage('cancellazioni_vista_periodo')`): a mensile
+  restano i `BarChart` di sempre; a giornaliero diventano `LineChart` (barre illeggibili su fino a
+  365 punti, una linea rende sia i picchi isolati sia i periodi piatti). `GET /report` calcola
+  `per_giorno`/`per_giorno_arrivo` nello stesso giro sui dati già usato per `per_mese`/
+  `per_mese_arrivo` (nessuna query aggiuntiva). ⚠️ **Il range giornaliero è il min/max effettivo
+  tra le righe filtrate, non l'anno solare intero**: restringere i filtri data esistenti
+  (`arrivo_da/a`, `prenotazione_da/a`) restringe automaticamente anche la vista Giornaliero, senza
+  bisogno di un filtro dedicato al grafico — utile per analizzare periodi più brevi (es. un singolo
+  mese) restando sugli stessi controlli già in pagina. Verificato: filtrando `arrivo_da/a` su 15
+  giorni di agosto, `per_giorno_arrivo` si riduce esattamente a 15 punti mentre `per_giorno`
+  (prenotazione) resta ampio (le prenotazioni per quel periodo di arrivo sono fatte su mesi diversi)
+  — i due assi si restringono indipendentemente, coerente con cosa filtra ciascuno.
 - **Filtro canale — select singola** (`canale`/`Tutti`, invariata nell'aspetto): provata una
   variante a checkbox multi-selezione (una per canale, su una riga sotto i filtri data) per
   poter filtrare su più canali insieme — **scartata subito dopo, giudicata dall'utente troppo
