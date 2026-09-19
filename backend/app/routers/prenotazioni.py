@@ -65,7 +65,7 @@ def importa_csv(
 
     raw = file.file.read()
     try:
-        risultato = parse_csv(raw, mese_atteso=mese, anno_atteso=anno)
+        risultato = parse_csv(raw, mese_atteso=mese, anno_atteso=anno, data_rilevata=date.today())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -242,6 +242,9 @@ def lista_righe(
                 "canale": r.canale,
                 "canale_vendita": r.canale_vendita,
                 "codice_ota": r.codice_ota,
+                "numero_prenotazione": r.numero_prenotazione,
+                "data_cancellazione": r.data_cancellazione.isoformat() if r.data_cancellazione else None,
+                "data_rilevata": r.data_rilevata.isoformat(),
                 "data_prenotazione": r.data_prenotazione.isoformat(),
                 "arrivo": r.arrivo.isoformat(),
                 "partenza": r.partenza.isoformat(),

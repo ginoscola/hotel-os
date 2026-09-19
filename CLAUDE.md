@@ -975,6 +975,22 @@ prima di quella data.
   mese di prenotazione lato Welcome, non per mese di cancellazione — un primo tentativo di file
   "agosto" era invece filtrato per data di cancellazione, causando conteggi doppi con marzo-luglio
   finché non è stato rigenerato con lo stesso filtro degli altri mesi).
+- **Due colonne opzionali per compilazione manuale** (`numero_prenotazione`, `data_cancellazione`
+  sul modello — migrazione `prenot002_2026`), pensate per quando l'utente ha tempo di aprire la
+  scheda prenotazione su Welcome e copiare a mano "Codice Prenotazione" e "Data cancellazione"
+  (visibili solo a schermo, non nell'export) prima di caricare il CSV: il parser le legge se
+  presenti nell'intestazione **con lo stesso nome usato a schermo in Welcome** ("Codice
+  Prenotazione", "Data cancellazione" — scelta deliberata per non costringere l'utente a imparare
+  un nome colonna diverso), accetta la data in formato ISO o italiano (`gg/mm/aaaa`), e non richiede
+  nulla se le colonne mancano del tutto (comportamento identico a prima, verificato). Non fanno
+  parte della chiave di dedup (restano popolate solo sulla prima riga inserita, non sovrascritte
+  dai re-import successivi).
+- **`data_rilevata`** (obbligatoria, = data dell'import): fallback pratico quando manca
+  `data_cancellazione` — con import ripetuti nel tempo dello stesso mese di prenotazione, una riga
+  mai vista prima negli import precedenti (quindi non scartata dalla dedup) prende come
+  `data_rilevata` la data dell'import corrente, dando una finestra indicativa sul periodo di
+  cancellazione invece di nessuna informazione temporale. Mostrata in tabella con un trattino "~" a
+  distinguerla da una data cancellazione certa.
 - Endpoint (prefix `/prenotazioni-cancellate`): `POST /import?mese=&anno=&is_test=` (admin,
   multipart CSV — avvisa, non scarta, se `dataPren` di alcune righe cade fuori dal mese/anno
   dichiarati), `GET /import/storico`, `DELETE /import/{id}?conferma=true`, `GET /report?anno=&
@@ -985,7 +1001,8 @@ prima di quella data.
   a differenza dei fogli del modulo Revenue non serve conversione virgola→punto).
 - Frontend: pannello import solo admin (`isAdmin()`), filtri (struttura ereditata dall'header, canale,
   periodo prenotazione, periodo arrivo), grafico a barre per mese di prenotazione, tabelle per
-  struttura/canale, tabella dettaglio paginata.
+  struttura/canale, tabella dettaglio paginata con colonne "Codice Prenotazione"/"Data
+  cancellazione" (quest'ultima mostra `~data_rilevata` in grigio se il valore certo manca).
 
 ---
 

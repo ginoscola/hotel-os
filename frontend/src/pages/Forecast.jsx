@@ -1061,8 +1061,10 @@ function TabCancellazioniReali({ anno, hotelCode }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                 <thead>
                   <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                    <Th>Hotel</Th><Th>Canale</Th><Th align="center">Prenotato</Th><Th align="center">Arrivo</Th>
-                    <Th align="center">Partenza</Th><Th>Cliente</Th><Th>Camera</Th><Th align="right">Importo</Th>
+                    <Th>Hotel</Th><Th>Canale</Th><Th>Codice Prenotazione</Th>
+                    <Th align="center">Data prenotazione</Th><Th align="center">Data cancellazione</Th>
+                    <Th align="center">Arrivo</Th><Th align="center">Partenza</Th>
+                    <Th>Cliente</Th><Th>Camera</Th><Th align="right">Importo</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1070,7 +1072,15 @@ function TabCancellazioniReali({ anno, hotelCode }) {
                     <tr key={r.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                       <td style={stCella}>{r.hotel_code}</td>
                       <td style={stCella}>{r.canale}</td>
+                      <td style={stCella}>{r.numero_prenotazione || <span style={{ color: '#d1d5db' }}>—</span>}</td>
                       <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.data_prenotazione)}</td>
+                      <td style={{ ...stCella, textAlign: 'center' }}>
+                        {r.data_cancellazione
+                          ? formatDataIt(r.data_cancellazione)
+                          : <span style={{ color: '#9ca3af' }} title="Data cancellazione non disponibile — mostrata la data in cui questa riga è stata rilevata per la prima volta da un import">
+                              ~{formatDataIt(r.data_rilevata)}
+                            </span>}
+                      </td>
                       <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.arrivo)}</td>
                       <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.partenza)}</td>
                       <td style={stCella}>{r.cliente}</td>

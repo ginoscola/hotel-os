@@ -57,6 +57,19 @@ class PrenotazioneCancellata(Base):
         Integer, ForeignKey("prenotazioni_cancellate_imports.id", ondelete="CASCADE"), nullable=False
     )
     hotel_code = Column(String(20), nullable=False, index=True)
+    # Codice Prenotazione interno di Welcome (es. "6097") — non esposto dall'export CSV attuale
+    # (verificato: il pulsante "Esporta" non include questa colonna né "Data cancellazione", pur
+    # mostrandole a schermo). Compilato solo se l'utente lo aggiunge a mano al CSV prima di
+    # caricarlo, o se un futuro export lo includerà.
+    numero_prenotazione = Column(String(50), nullable=True)
+    # Vera data di cancellazione — stesso discorso: non nell'export attuale, disponibile solo se
+    # inserita a mano nel CSV o esposta in futuro da Welcome.
+    data_cancellazione = Column(Date, nullable=True)
+    # Data dell'import in cui questa riga è stata vista per la prima volta (fallback pratico
+    # quando data_cancellazione manca): con import settimanali dello stesso mese di prenotazione,
+    # una riga nuova rispetto alla settimana precedente dà una finestra indicativa di ~7 giorni
+    # per la cancellazione, invece di nessuna informazione temporale.
+    data_rilevata = Column(Date, nullable=False)
     canale = Column(String(50), nullable=False)          # Booking.com / Mr Preno / Sito Diretto / Italcamel / altro
     canale_vendita = Column(String(100), nullable=False, default="")  # parametroCanaleVendita.descrizione
     # '' invece di NULL — nelle prenotazioni dirette/manuali non c'è un codice OTA, e NULL
