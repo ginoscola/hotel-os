@@ -1013,9 +1013,12 @@ prima di quella data.
 - Frontend: **6° tab separato "Importa Cancellazioni Welcome"** (solo admin — non un pannello fisso
   in cima alla tab di consultazione come nella primissima versione, spostato su richiesta esplicita
   per non sporcare la pagina quando si va solo a guardare i dati): pannello upload + storico import
-  con eliminazione. La tab "Cancellazioni reali" resta solo consultazione (filtri, grafico, tabelle),
-  colonne dettaglio "Codice Prenotazione"/"Data cancellazione" (quest'ultima mostra `~data_rilevata`
-  in grigio se il valore certo manca).
+  con eliminazione. La tab "Cancellazioni reali" resta solo consultazione (filtri, **due grafici a
+  barre mensili** — per mese di prenotazione e, subito sotto, per mese di **arrivo** [`per_mese_arrivo`
+  nella response di `/report`, stesso calcolo ma su `r.arrivo.month`] — utile perché le due viste
+  raccontano cose diverse: la prima quando è stata *fatta* la prenotazione poi cancellata, la seconda
+  per quale periodo di *soggiorno*, tabelle), colonne dettaglio "Codice Prenotazione"/"Data
+  cancellazione" (quest'ultima mostra `~data_rilevata` in grigio se il valore certo manca).
   ⚠️ Il backend serializza `created_at` degli import con `.isoformat()` completo (con ora e fuso);
   `formatDataIt()` del frontend si aspetta invece una data pura `YYYY-MM-DD` e fallisce silenziosamente
   su un datetime completo (`NaN` al posto del giorno) — bug reale trovato nella tabella storico import,

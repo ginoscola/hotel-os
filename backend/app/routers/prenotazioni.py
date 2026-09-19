@@ -170,6 +170,7 @@ def report(
     righe = base.all()
 
     per_mese = {m: {"n": 0, "importo": 0.0} for m in range(1, 13)}
+    per_mese_arrivo = {m: {"n": 0, "importo": 0.0} for m in range(1, 13)}
     per_hotel: dict = {}
     per_canale: dict = {}
 
@@ -177,6 +178,10 @@ def report(
         m = r.data_prenotazione.month
         per_mese[m]["n"] += 1
         per_mese[m]["importo"] += r.importo
+
+        ma = r.arrivo.month
+        per_mese_arrivo[ma]["n"] += 1
+        per_mese_arrivo[ma]["importo"] += r.importo
 
         per_hotel.setdefault(r.hotel_code, {"n": 0, "importo": 0.0})
         per_hotel[r.hotel_code]["n"] += 1
@@ -194,6 +199,10 @@ def report(
         "per_mese": [
             {"mese": m, "mese_label": MESI_IT[m - 1], "n": d["n"], "importo": round(d["importo"], 2)}
             for m, d in per_mese.items()
+        ],
+        "per_mese_arrivo": [
+            {"mese": m, "mese_label": MESI_IT[m - 1], "n": d["n"], "importo": round(d["importo"], 2)}
+            for m, d in per_mese_arrivo.items()
         ],
         "per_hotel": [
             {"hotel_code": h, "n": d["n"], "importo": round(d["importo"], 2)}

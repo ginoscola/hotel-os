@@ -900,6 +900,7 @@ function TabCancellazioniReali({ anno, hotelCode }) {
   useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelCode])
 
   const datiGrafico = dati ? dati.per_mese.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
+  const datiGraficoArrivo = dati ? dati.per_mese_arrivo.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
 
   return (
     <div>
@@ -959,6 +960,22 @@ function TabCancellazioniReali({ anno, hotelCode }) {
                 <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
                 <Legend />
                 <Bar dataKey="n" name="Camere cancellate" fill="#dc2626" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem', marginBottom: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#374151' }}>
+              Per mese di arrivo — {anno} · {dati.hotel_code}
+            </h3>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={datiGraficoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
+                <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                <Legend />
+                <Bar dataKey="n" name="Camere cancellate" fill="#b91c1c" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
