@@ -1085,6 +1085,12 @@ reimport li sovrascrivesse silenziosamente.
   mercato) + campi numerici/data castati a testo (`cast(col, String)`) così anche un importo
   ("540") o una data ("2026-07") sono cercabili. Stessi filtri di struttura/canale/periodo della
   tabella, non un filtro separato.
+- **Ordinamento cliccabile** (`ordina_per`/`direzione=asc|desc` su `GET /prenotazioni-cancellate/`,
+  settembre 2026): whitelist `_COLONNE_ORDINABILI` in `prenotazioni.py` (hotel, canale, codice
+  prenotazione, date, cliente, camera, importo) — mai una colonna arbitraria da query string diretta
+  in `order_by()`. Frontend: componente `ThOrd` (intestazione cliccabile, freccia ▲/▼ sulla colonna
+  attiva, secondo click sulla stessa colonna inverte la direzione), stato `ordinaPer`/`direzione` in
+  `TabCancellazioni`, reset pagina a 1 al cambio come per gli altri filtri.
 - ⚠️ **Reimport: l'identità di una prenotazione non può più essere la UNIQUE di dedup esistente**
   (`uq_prenotazione_cancellata_dedup`, che include `importo` fra le colonne) — se Welcome ricalcola
   l'importo su una modifica reale, la vecchia chiave non troverebbe più la riga come "già presente"

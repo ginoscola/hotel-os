@@ -259,6 +259,20 @@ def _applica_ricerca(query, q: Optional[str]):
     return query.filter(or_(*(c.ilike(pattern) for c in campi)))
 
 
+_COLONNE_ORDINABILI = {
+    "hotel_code": PrenotazioneCancellata.hotel_code,
+    "canale": PrenotazioneCancellata.canale,
+    "numero_prenotazione": PrenotazioneCancellata.numero_prenotazione,
+    "data_prenotazione": PrenotazioneCancellata.data_prenotazione,
+    "data_cancellazione": PrenotazioneCancellata.data_cancellazione,
+    "arrivo": PrenotazioneCancellata.arrivo,
+    "partenza": PrenotazioneCancellata.partenza,
+    "cliente": PrenotazioneCancellata.cliente,
+    "tipo_camera": PrenotazioneCancellata.tipo_camera,
+    "importo": PrenotazioneCancellata.importo,
+}
+
+
 def _fmt_riga(r: PrenotazioneCancellata) -> dict:
     return {
         "id": r.id,
@@ -359,6 +373,8 @@ def lista_righe(
     prenotazione_da: Optional[date] = Query(default=None),
     prenotazione_a: Optional[date] = Query(default=None),
     q: Optional[str] = Query(default=None, description="Ricerca libera su tutti i campi della tabella"),
+    ordina_per: str = Query(default="data_prenotazione", description="Colonna di ordinamento (click intestazione)"),
+    direzione: str = Query(default="desc", pattern="^(asc|desc)$"),
     is_test: bool = Query(False),
     pagina: int = Query(1, ge=1),
     per_pagina: int = Query(50, ge=1, le=500),
@@ -370,8 +386,10 @@ def lista_righe(
     query = _applica_filtri(query, hotel_code, canale, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
     query = _applica_ricerca(query, q)
     totale = query.count()
+    colonna = _COLONNE_ORDINABILI.get(ordina_per, PrenotazioneCancellata.data_prenotazione)
+    ordinamento = colonna.asc() if direzione == "asc" else colonna.desc()
     righe = (
-        query.order_by(PrenotazioneCancellata.data_prenotazione.desc())
+        query.order_by(ordinamento)
         .offset((pagina - 1) * per_pagina)
         .limit(per_pagina)
         .all()

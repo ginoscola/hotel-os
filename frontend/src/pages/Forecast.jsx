@@ -741,6 +741,17 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const [caricandoDati, setCaricandoDati] = useState(false)
   const [rigaInModifica, setRigaInModifica] = useState(null)
   const [eliminandoId, setEliminandoId] = useState(null)
+  const [ordinaPer, setOrdinaPer] = useState('data_prenotazione')
+  const [direzione, setDirezione] = useState('desc')
+
+  function ordinaColonna(campo) {
+    if (ordinaPer === campo) {
+      setDirezione(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setOrdinaPer(campo)
+      setDirezione('asc')
+    }
+  }
 
   // Debounce della ricerca libera: evita una richiesta per ogni carattere digitato.
   useEffect(() => {
@@ -775,15 +786,15 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const caricaRighe = useCallback(async () => {
     try {
       const r = await api.get('/prenotazioni-cancellate/', {
-        params: { ...paramsFiltri, q: ricerca || undefined, pagina, per_pagina: 20 },
+        params: { ...paramsFiltri, q: ricerca || undefined, ordina_per: ordinaPer, direzione, pagina, per_pagina: 20 },
       })
       setRighe(r.data)
     } catch {}
-  }, [anno, hotelFiltro, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, ricerca, pagina])
+  }, [anno, hotelFiltro, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, ricerca, ordinaPer, direzione, pagina])
 
   useEffect(() => { caricaReport() }, [caricaReport])
   useEffect(() => { caricaRighe() }, [caricaRighe])
-  useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelFiltro, ricerca])
+  useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelFiltro, ricerca, ordinaPer, direzione])
 
   async function handleElimina(riga) {
     if (!window.confirm(`Eliminare definitivamente la prenotazione ${riga.numero_prenotazione || riga.id} (${riga.cliente || 'senza nome'}, ${riga.hotel_code})?`)) return
@@ -934,10 +945,16 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                 <thead>
                   <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                    <Th>Hotel</Th><Th>Canale</Th><Th>Codice Prenotazione</Th>
-                    <Th align="center">Data prenotazione</Th><Th align="center">Data cancellazione</Th>
-                    <Th align="center">Arrivo</Th><Th align="center">Partenza</Th>
-                    <Th>Cliente</Th><Th>Camera</Th><Th align="right">Importo</Th>
+                    <ThOrd campo="hotel_code" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Hotel</ThOrd>
+                    <ThOrd campo="canale" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Canale</ThOrd>
+                    <ThOrd campo="numero_prenotazione" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Codice Prenotazione</ThOrd>
+                    <ThOrd campo="data_prenotazione" align="center" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Data prenotazione</ThOrd>
+                    <ThOrd campo="data_cancellazione" align="center" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Data cancellazione</ThOrd>
+                    <ThOrd campo="arrivo" align="center" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Arrivo</ThOrd>
+                    <ThOrd campo="partenza" align="center" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Partenza</ThOrd>
+                    <ThOrd campo="cliente" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Cliente</ThOrd>
+                    <ThOrd campo="tipo_camera" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Camera</ThOrd>
+                    <ThOrd campo="importo" align="right" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Importo</ThOrd>
                     <Th align="center">Azioni</Th>
                   </tr>
                 </thead>
@@ -1300,6 +1317,23 @@ function Th({ children, align = 'left', title }) {
   return (
     <th title={title} style={{ padding: '0.6rem 0.75rem', textAlign: align, fontSize: '0.8rem', fontWeight: 700 }}>
       {children}
+    </th>
+  )
+}
+
+// Intestazione cliccabile per ordinare una tabella lato server (vedi TabCancellazioni).
+function ThOrd({ children, campo, ordinaPer, direzione, onClick, align = 'left' }) {
+  const attiva = ordinaPer === campo
+  return (
+    <th
+      onClick={() => onClick(campo)}
+      title="Clicca per ordinare"
+      style={{
+        padding: '0.6rem 0.75rem', textAlign: align, fontSize: '0.8rem', fontWeight: 700,
+        cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
+      }}
+    >
+      {children}{attiva && (direzione === 'asc' ? ' ▲' : ' ▼')}
     </th>
   )
 }
