@@ -1138,6 +1138,16 @@ reimport li sovrascrivesse silenziosamente.
   e quello in basso restano allineati ai bordi superiore/inferiore delle card — messo inizialmente
   come due righe separate ("accanto" poi "sotto" il primo toggle), corretto su richiesta esplicita
   perché spezzava il layout.
+- **Colore card KPI/grafici allineato al resto di `Forecast.jsx`**: la tab nasceva con un rosso
+  (`#dc2626`/`#b91c1c`) usato solo qui, mentre il resto della pagina (tab bar attiva, pulsanti,
+  card KPI e linea OTB in "Pace Chart") usa sempre il viola `#8B5CF6` — stonava, segnalato
+  dall'utente. Uniformato: card KPI e serie dei due grafici ora in viola (`#8B5CF6` per il grafico
+  "per mese/giorno di prenotazione", `#7c3aed` — già in uso altrove in questo stesso file, es.
+  `ReferenceLine` di Maturato — per quello "di arrivo", per mantenere le due serie visivamente
+  distinguibili). Le pillole arancioni dei toggle restano invariate: quelle sono la convenzione
+  condivisa tra moduli (vedi sezione "Uniformità grafica tra pagine"), non lo stile specifico di
+  questa pagina. Nessun file di costanti colore condiviso esiste nel progetto — le uniche
+  convenzioni cross-pagina sono documentate qui in CLAUDE.md, non centralizzate in codice.
 - **Filtro canale — select singola** (`canale`/`Tutti`, invariata nell'aspetto): provata una
   variante a checkbox multi-selezione (una per canale, su una riga sotto i filtri data) per
   poter filtrare su più canali insieme — **scartata subito dopo, giudicata dall'utente troppo

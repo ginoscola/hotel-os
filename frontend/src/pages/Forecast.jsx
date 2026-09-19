@@ -840,13 +840,6 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
 
   return (
     <div>
-      <p style={{ margin: '0 0 1.2rem', fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
-        Dato reale (una riga = una camera cancellata), da import manuale dell'export Welcome
-        "PrenotazioniWeb" filtrato per mese di prenotazione — complementare alla stima nella tab
-        "Cancellazioni". Limite noto: l'export non riporta la data di cancellazione, solo quella
-        di prenotazione originale (a meno di non averla aggiunta a mano, vedi tab "Importa
-        Cancellazioni Welcome").
-      </p>
 
       <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.2rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <div>
@@ -891,8 +884,8 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
       {dati && !caricandoDati && (
         <>
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-            <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#dc2626" />
-            <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#dc2626" />
+            <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#8B5CF6" />
+            <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#8B5CF6" />
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginLeft: 'auto' }}>
               <div style={{ display: 'inline-flex', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: 3 }}>
                 <button onClick={() => setVistaPeriodo('mensile')} style={stileToggleBtn(vistaPeriodo === 'mensile')}>Mensile</button>
@@ -917,7 +910,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                   <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
                   <Tooltip formatter={metricaFormatter} />
                   <Legend />
-                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#dc2626" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#8B5CF6" strokeWidth={2} dot={false} />
                 </LineChart>
               ) : (
                 <BarChart data={datiGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
@@ -926,7 +919,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                   <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
                   <Tooltip formatter={metricaFormatter} />
                   <Legend />
-                  <Bar dataKey={metricaKey} name={metricaNome} fill="#dc2626" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={metricaKey} name={metricaNome} fill="#8B5CF6" radius={[4, 4, 0, 0]} />
                 </BarChart>
               )}
             </ResponsiveContainer>
@@ -944,7 +937,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                   <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
                   <Tooltip formatter={metricaFormatter} />
                   <Legend />
-                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#b91c1c" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#7c3aed" strokeWidth={2} dot={false} />
                 </LineChart>
               ) : (
                 <BarChart data={datiGraficoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
@@ -953,7 +946,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                   <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
                   <Tooltip formatter={metricaFormatter} />
                   <Legend />
-                  <Bar dataKey={metricaKey} name={metricaNome} fill="#b91c1c" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={metricaKey} name={metricaNome} fill="#7c3aed" radius={[4, 4, 0, 0]} />
                 </BarChart>
               )}
             </ResponsiveContainer>
@@ -1043,7 +1036,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                       <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.partenza)}</td>
                       <td style={stCella}>{r.cliente}</td>
                       <td style={stCella}>{r.tipo_camera}</td>
-                      <td style={{ ...stCella, textAlign: 'right', color: '#dc2626', fontWeight: 600 }}>{formatEuro(r.importo)}</td>
+                      <td style={{ ...stCella, textAlign: 'right', color: '#8B5CF6', fontWeight: 600 }}>{formatEuro(r.importo)}</td>
                       <td style={{ ...stCella, textAlign: 'center', whiteSpace: 'nowrap' }}>
                         {isAdmin() && (
                           <>
