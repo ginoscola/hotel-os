@@ -1019,6 +1019,17 @@ prima di quella data.
   raccontano cose diverse: la prima quando è stata *fatta* la prenotazione poi cancellata, la seconda
   per quale periodo di *soggiorno*, tabelle), colonne dettaglio "Codice Prenotazione"/"Data
   cancellazione" (quest'ultima mostra `~data_rilevata` in grigio se il valore certo manca).
+  ⚠️ **`prenotazione_da`/`prenotazione_a` esistevano in UI ma non arrivavano a `/report`** (bug reale,
+  corretto lo stesso giorno): la funzione `_applica_filtri()` li supportava già, ma l'endpoint
+  `report()` non li dichiarava tra i query param e passava `None, None` al loro posto — quindi i due
+  grafici, i KPI e le tabelle per struttura/canale ignoravano il filtro periodo di prenotazione
+  (applicato solo alla tabella dettaglio). Utile per capire, es., "delle prenotazioni fatte a
+  febbraio, per che mese di arrivo erano" — che è esattamente il pattern osservato sui dati reali:
+  quasi tutte le cancellazioni prenotate fino ad aprile sono per soggiorni di agosto.
+- **Filtro "Struttura" indipendente dal selettore hotel in cima alla pagina** (stesso pattern già
+  usato in `TabPace`): stato locale `hotelFiltro` inizializzato dall'header ma poi controllato solo
+  dalla propria select nella riga filtri — l'utente può guardare "Riepilogo Stagione" per un hotel e
+  "Cancellazioni reali" per tutti (o un altro) senza che cambino insieme.
   ⚠️ Il backend serializza `created_at` degli import con `.isoformat()` completo (con ora e fuso);
   `formatDataIt()` del frontend si aspetta invece una data pura `YYYY-MM-DD` e fallisce silenziosamente
   su un datetime completo (`NaN` al posto del giorno) — bug reale trovato nella tabella storico import,

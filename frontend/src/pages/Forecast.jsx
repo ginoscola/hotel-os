@@ -122,7 +122,7 @@ export default function Forecast() {
         <TabCancellazioni anno={anno} hotelCode={hotelSelezionato} />
       )}
       {tabAttiva === 'cancellazioni-reali' && (
-        <TabCancellazioniReali anno={anno} hotelCode={hotelSelezionato} />
+        <TabCancellazioniReali anno={anno} hotelCode={hotelSelezionato} hotels={hotels} />
       )}
       {tabAttiva === 'importa-cancellazioni' && <TabImportaCancellazioni />}
     </div>
@@ -851,7 +851,8 @@ function TabCancellazioni({ anno, hotelCode }) {
 // Tab 5 — Cancellazioni reali (import Welcome)
 // ---------------------------------------------------------------------------
 
-function TabCancellazioniReali({ anno, hotelCode }) {
+function TabCancellazioniReali({ anno, hotelCode, hotels }) {
+  const [hotelFiltro, setHotelFiltro] = useState(hotelCode || 'all')
   const [canale, setCanale] = useState('')
   const [arrivoDa, setArrivoDa] = useState('')
   const [arrivoA, setArrivoA] = useState('')
@@ -866,10 +867,12 @@ function TabCancellazioniReali({ anno, hotelCode }) {
 
   const paramsFiltri = {
     anno,
-    hotel_code: hotelCode,
+    hotel_code: hotelFiltro,
     canale: canale || undefined,
     arrivo_da: arrivoDa || undefined,
     arrivo_a: arrivoA || undefined,
+    prenotazione_da: prenotazioneDa || undefined,
+    prenotazione_a: prenotazioneA || undefined,
   }
 
   const caricaReport = useCallback(async () => {
@@ -884,20 +887,20 @@ function TabCancellazioniReali({ anno, hotelCode }) {
     } finally {
       setCaricandoDati(false)
     }
-  }, [anno, hotelCode, canale, arrivoDa, arrivoA])
+  }, [anno, hotelFiltro, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
 
   const caricaRighe = useCallback(async () => {
     try {
       const r = await api.get('/prenotazioni-cancellate/', {
-        params: { ...paramsFiltri, prenotazione_da: prenotazioneDa || undefined, prenotazione_a: prenotazioneA || undefined, pagina, per_pagina: 20 },
+        params: { ...paramsFiltri, pagina, per_pagina: 20 },
       })
       setRighe(r.data)
     } catch {}
-  }, [anno, hotelCode, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, pagina])
+  }, [anno, hotelFiltro, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, pagina])
 
   useEffect(() => { caricaReport() }, [caricaReport])
   useEffect(() => { caricaRighe() }, [caricaRighe])
-  useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelCode])
+  useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelFiltro])
 
   const datiGrafico = dati ? dati.per_mese.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
   const datiGraficoArrivo = dati ? dati.per_mese_arrivo.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
@@ -913,6 +916,13 @@ function TabCancellazioniReali({ anno, hotelCode }) {
       </p>
 
       <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.2rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <label style={stileLabel}>Struttura</label>
+          <select value={hotelFiltro} onChange={e => setHotelFiltro(e.target.value)} style={stileSelect}>
+            <option value="all">Tutti gli hotel</option>
+            {hotels.map(h => <option key={h.code} value={h.code}>{h.name}</option>)}
+          </select>
+        </div>
         <div>
           <label style={stileLabel}>Canale</label>
           <select value={canale} onChange={e => setCanale(e.target.value)} style={stileSelect}>

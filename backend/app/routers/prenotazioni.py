@@ -159,6 +159,8 @@ def report(
     canale: Optional[str] = Query(default=None),
     arrivo_da: Optional[date] = Query(default=None),
     arrivo_a: Optional[date] = Query(default=None),
+    prenotazione_da: Optional[date] = Query(default=None),
+    prenotazione_a: Optional[date] = Query(default=None),
     is_test: bool = Query(False),
     db: Session = Depends(get_db),
 ):
@@ -166,7 +168,7 @@ def report(
     base = db.query(PrenotazioneCancellata).filter(
         func.extract("year", PrenotazioneCancellata.data_prenotazione) == anno
     )
-    base = _applica_filtri(base, hotel_code, canale, None, None, arrivo_da, arrivo_a, is_test)
+    base = _applica_filtri(base, hotel_code, canale, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
     righe = base.all()
 
     per_mese = {m: {"n": 0, "importo": 0.0} for m in range(1, 13)}
