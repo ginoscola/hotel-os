@@ -754,10 +754,6 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
     }
   }
 
-  function toggleCanale(c) {
-    setCanaliSelezionati(sel => sel.includes(c) ? sel.filter(x => x !== c) : [...sel, c])
-  }
-
   // Debounce della ricerca libera: evita una richiesta per ogni carattere digitato.
   useEffect(() => {
     const t = setTimeout(() => setRicerca(ricercaInput), 400)
@@ -844,6 +840,17 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
           </select>
         </div>
         <div>
+          <label style={stileLabel}>Canale</label>
+          <select
+            value={canaliSelezionati[0] || ''}
+            onChange={e => setCanaliSelezionati(e.target.value ? [e.target.value] : [])}
+            style={stileSelect}
+          >
+            <option value="">Tutti</option>
+            {canaliDisponibili.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
           <label style={stileLabel}>Arrivo da</label>
           <input type="date" value={arrivoDa} onChange={e => setArrivoDa(e.target.value)} style={stileSelect} />
         </div>
@@ -858,18 +865,6 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
         <div>
           <label style={stileLabel}>Prenotazione a</label>
           <input type="date" value={prenotazioneA} onChange={e => setPrenotazioneA(e.target.value)} style={stileSelect} />
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.2rem', overflowX: 'auto', paddingBottom: 4 }}>
-        <span style={{ ...stileLabel, marginBottom: 0, whiteSpace: 'nowrap' }}>Canali:</span>
-        <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'nowrap' }}>
-          {canaliDisponibili.map(c => (
-            <label key={c} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.85rem', color: '#374151', whiteSpace: 'nowrap', cursor: 'pointer' }}>
-              <input type="checkbox" checked={canaliSelezionati.includes(c)} onChange={() => toggleCanale(c)} />
-              {c}
-            </label>
-          ))}
         </div>
       </div>
 

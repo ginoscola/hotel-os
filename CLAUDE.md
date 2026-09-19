@@ -1091,18 +1091,20 @@ reimport li sovrascrivesse silenziosamente.
   in `order_by()`. Frontend: componente `ThOrd` (intestazione cliccabile, freccia ▲/▼ sulla colonna
   attiva, secondo click sulla stessa colonna inverte la direzione), stato `ordinaPer`/`direzione` in
   `TabCancellazioni`, reset pagina a 1 al cambio come per gli altri filtri.
-- **Filtro canali multi-selezione** (checkbox, settembre 2026, sostituisce la vecchia select
-  singola): `canali` su `GET /report`/`GET /` è una stringa comma-separated (`_parse_canali()`),
-  non un query param ripetuto — scelta deliberata per non dipendere da come axios serializza un
-  array (nessun `paramsSerializer` custom in `api/client.js`). `GET /prenotazioni-cancellate/canali`
-  (nuovo, whitelist implicita via `_applica_filtri(..., canali=None, ...)`) restituisce l'elenco
-  canali distinti **senza applicare il filtro canali stesso** — se lo applicasse, la lista di
-  checkbox si restringerebbe da sola man mano che l'utente ne seleziona uno, rendendo impossibile
-  aggiungerne altri. Rispetta comunque hotel/periodo. Frontend: riga di checkbox sotto i filtri
-  data (`canaliDisponibili` da `/canali`, ricaricato su cambio hotel/periodo ma non su cambio
-  selezione canali stessa; `canaliSelezionati` array, nessuna selezione = nessun filtro = tutti i
-  canali, come il comportamento storico della select "Tutti"), su una riga sola con `overflowX:
-  auto` come fallback se non ci stanno tutti.
+- **Filtro canale — select singola** (`canale`/`Tutti`, invariata nell'aspetto): provata una
+  variante a checkbox multi-selezione (una per canale, su una riga sotto i filtri data) per
+  poter filtrare su più canali insieme — **scartata subito dopo, giudicata dall'utente troppo
+  confusionaria**: per questo filtro l'utente preferisce la scelta singola "uno o tutti" alla
+  possibilità di combinarne più di uno. Tenuto però il miglioramento di backend portato da quel
+  tentativo: `GET /prenotazioni-cancellate/canali` (nuovo, whitelist implicita via
+  `_applica_filtri(..., canali=None, ...)`) restituisce l'elenco canali distinti rispettando
+  hotel/periodo ma **senza applicare il filtro canale stesso**, quindi non si restringe da solo
+  quando lo si usa per popolare le opzioni della select — a differenza della vecchia fonte
+  (`dati.per_canale`, già ristretta dal filtro corrente). `canali` su `GET /report`/`GET /` resta
+  una stringa comma-separated lato backend (`_parse_canali()`, accetta anche un solo valore) —
+  scelta deliberata per non dipendere da come axios serializza un array (nessun
+  `paramsSerializer` custom in `api/client.js`); il frontend la usa oggi con un solo elemento
+  (`canaliSelezionati` resta un array internamente, ma la UI ne mostra sempre al più uno).
 - ⚠️ **Reimport: l'identità di una prenotazione non può più essere la UNIQUE di dedup esistente**
   (`uq_prenotazione_cancellata_dedup`, che include `importo` fra le colonne) — se Welcome ricalcola
   l'importo su una modifica reale, la vecchia chiave non troverebbe più la riga come "già presente"
