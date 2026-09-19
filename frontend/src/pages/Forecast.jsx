@@ -745,10 +745,15 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const [ordinaPer, setOrdinaPer] = useState('data_prenotazione')
   const [direzione, setDirezione] = useState('desc')
   const [vistaPeriodo, setVistaPeriodo] = useState(() => localStorage.getItem('cancellazioni_vista_periodo') || 'mensile')
+  const [vistaMetrica, setVistaMetrica] = useState(() => localStorage.getItem('cancellazioni_vista_metrica') || 'prenotazioni')
 
   useEffect(() => {
     localStorage.setItem('cancellazioni_vista_periodo', vistaPeriodo)
   }, [vistaPeriodo])
+
+  useEffect(() => {
+    localStorage.setItem('cancellazioni_vista_metrica', vistaMetrica)
+  }, [vistaMetrica])
 
   function ordinaColonna(campo) {
     if (ordinaPer === campo) {
@@ -828,6 +833,10 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const datiGraficoGiorno = dati ? dati.per_giorno.map(g => ({ giorno: g.data.slice(5), n: g.n, importo: g.importo })) : []
   const datiGraficoGiornoArrivo = dati ? dati.per_giorno_arrivo.map(g => ({ giorno: g.data.slice(5), n: g.n, importo: g.importo })) : []
   const giornaliero = vistaPeriodo === 'giornaliero'
+  const fatturato = vistaMetrica === 'fatturato'
+  const metricaKey = fatturato ? 'importo' : 'n'
+  const metricaNome = fatturato ? 'Importo cancellato' : 'Camere cancellate'
+  const metricaFormatter = v => fatturato ? formatEuro(v) : v
 
   return (
     <div>
@@ -881,12 +890,18 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
 
       {dati && !caricandoDati && (
         <>
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
             <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#dc2626" />
             <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#dc2626" />
-            <div style={{ display: 'inline-flex', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: 3, marginLeft: 'auto' }}>
-              <button onClick={() => setVistaPeriodo('mensile')} style={stileToggleBtn(vistaPeriodo === 'mensile')}>Mensile</button>
-              <button onClick={() => setVistaPeriodo('giornaliero')} style={stileToggleBtn(vistaPeriodo === 'giornaliero')}>Giornaliero</button>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginLeft: 'auto' }}>
+              <div style={{ display: 'inline-flex', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: 3 }}>
+                <button onClick={() => setVistaPeriodo('mensile')} style={stileToggleBtn(vistaPeriodo === 'mensile')}>Mensile</button>
+                <button onClick={() => setVistaPeriodo('giornaliero')} style={stileToggleBtn(vistaPeriodo === 'giornaliero')}>Giornaliero</button>
+              </div>
+              <div style={{ display: 'inline-flex', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: 3 }}>
+                <button onClick={() => setVistaMetrica('prenotazioni')} style={stileToggleBtn(vistaMetrica === 'prenotazioni')}>Prenotazioni</button>
+                <button onClick={() => setVistaMetrica('fatturato')} style={stileToggleBtn(vistaMetrica === 'fatturato')}>Fatturato</button>
+              </div>
             </div>
           </div>
 
@@ -899,19 +914,19 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                 <LineChart data={datiGraficoGiorno} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="giorno" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
-                  <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
-                  <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                  <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
+                  <Tooltip formatter={metricaFormatter} />
                   <Legend />
-                  <Line type="monotone" dataKey="n" name="Camere cancellate" stroke="#dc2626" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#dc2626" strokeWidth={2} dot={false} />
                 </LineChart>
               ) : (
                 <BarChart data={datiGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
-                  <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                  <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
+                  <Tooltip formatter={metricaFormatter} />
                   <Legend />
-                  <Bar dataKey="n" name="Camere cancellate" fill="#dc2626" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={metricaKey} name={metricaNome} fill="#dc2626" radius={[4, 4, 0, 0]} />
                 </BarChart>
               )}
             </ResponsiveContainer>
@@ -926,19 +941,19 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                 <LineChart data={datiGraficoGiornoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="giorno" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
-                  <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
-                  <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                  <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
+                  <Tooltip formatter={metricaFormatter} />
                   <Legend />
-                  <Line type="monotone" dataKey="n" name="Camere cancellate" stroke="#b91c1c" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#b91c1c" strokeWidth={2} dot={false} />
                 </LineChart>
               ) : (
                 <BarChart data={datiGraficoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                   <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
-                  <Tooltip formatter={(v, name) => name === 'Importo' ? formatEuro(v) : v} />
+                  <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
+                  <Tooltip formatter={metricaFormatter} />
                   <Legend />
-                  <Bar dataKey="n" name="Camere cancellate" fill="#b91c1c" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey={metricaKey} name={metricaNome} fill="#b91c1c" radius={[4, 4, 0, 0]} />
                 </BarChart>
               )}
             </ResponsiveContainer>

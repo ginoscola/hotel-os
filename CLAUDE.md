@@ -1128,6 +1128,16 @@ reimport li sovrascrivesse silenziosamente.
   giorni di agosto, `per_giorno_arrivo` si riduce esattamente a 15 punti mentre `per_giorno`
   (prenotazione) resta ampio (le prenotazioni per quel periodo di arrivo sono fatte su mesi diversi)
   — i due assi si restringono indipendentemente, coerente con cosa filtra ciascuno.
+- **Secondo toggle Prenotazioni/Fatturato**, stesso stile pillola, sotto quello Mensile/Giornaliero
+  (`localStorage('cancellazioni_vista_metrica')`): sceglie se i due grafici mostrano `n` (camere
+  cancellate) o `importo` — dato già presente in ogni punto di `per_mese`/`per_giorno` e affini,
+  quindi puro cambio di `dataKey`/formatter lato frontend, nessuna modifica al backend. I due gruppi
+  di pulsanti stanno in una colonna (`flexDirection:'column', justifyContent:'space-between'`)
+  affiancata alle due `CardKpi`, non sotto di esse: l'`alignItems:'stretch'` di default del
+  container flex padre allunga la colonna alla stessa altezza delle card, così il pulsante in alto
+  e quello in basso restano allineati ai bordi superiore/inferiore delle card — messo inizialmente
+  come due righe separate ("accanto" poi "sotto" il primo toggle), corretto su richiesta esplicita
+  perché spezzava il layout.
 - **Filtro canale — select singola** (`canale`/`Tutti`, invariata nell'aspetto): provata una
   variante a checkbox multi-selezione (una per canale, su una riga sotto i filtri data) per
   poter filtrare su più canali insieme — **scartata subito dopo, giudicata dall'utente troppo
