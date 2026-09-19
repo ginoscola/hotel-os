@@ -24,6 +24,12 @@ from app.utils.locale_it import MESI_IT
 
 router = APIRouter(prefix="/prenotazioni-cancellate", tags=["prenotazioni-cancellate"])
 
+# La stagione operativa va maggio-settembre (vedi hotel_seasons): le prenotazioni fatte a
+# ottobre/novembre/dicembre sono quasi sempre per la stagione SUCCESSIVA (chi prenota con largo
+# anticipo), non un residuo della stagione appena finita. I grafici "per mese di prenotazione"
+# vanno quindi letti come anno commerciale ott→set, non come anno solare gen→dic.
+_MESI_ORDINE_COMMERCIALE = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
 
 def _fmt_import(imp: PrenotazioneCancellataImport) -> dict:
     return {
@@ -379,12 +385,12 @@ def report(
         "totale_n": len(righe),
         "totale_importo": round(sum(r.importo for r in righe), 2),
         "per_mese": [
-            {"mese": m, "mese_label": MESI_IT[m - 1], "n": d["n"], "importo": round(d["importo"], 2)}
-            for m, d in per_mese.items()
+            {"mese": m, "mese_label": MESI_IT[m - 1], "n": per_mese[m]["n"], "importo": round(per_mese[m]["importo"], 2)}
+            for m in _MESI_ORDINE_COMMERCIALE
         ],
         "per_mese_arrivo": [
-            {"mese": m, "mese_label": MESI_IT[m - 1], "n": d["n"], "importo": round(d["importo"], 2)}
-            for m, d in per_mese_arrivo.items()
+            {"mese": m, "mese_label": MESI_IT[m - 1], "n": per_mese_arrivo[m]["n"], "importo": round(per_mese_arrivo[m]["importo"], 2)}
+            for m in _MESI_ORDINE_COMMERCIALE
         ],
         "per_giorno": [
             {"data": d.isoformat(), "n": v["n"], "importo": round(v["importo"], 2)}

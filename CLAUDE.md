@@ -1091,6 +1091,13 @@ reimport li sovrascrivesse silenziosamente.
   in `order_by()`. Frontend: componente `ThOrd` (intestazione cliccabile, freccia ▲/▼ sulla colonna
   attiva, secondo click sulla stessa colonna inverte la direzione), stato `ordinaPer`/`direzione` in
   `TabCancellazioni`, reset pagina a 1 al cambio come per gli altri filtri.
+- **Vista mensile in ordine di anno commerciale (ott→set), non anno solare (gen→dic)**:
+  `_MESI_ORDINE_COMMERCIALE = [10,11,12,1,...,9]` in `prenotazioni.py` — la stagione operativa è
+  maggio-settembre (`hotel_seasons`), quindi le prenotazioni fatte a ottobre/novembre/dicembre sono
+  quasi sempre per la stagione SUCCESSIVA (chi prenota con largo anticipo), non un residuo di quella
+  appena chiusa. `per_mese`/`per_mese_arrivo` in `GET /report` restano dict chiave=mese-numero
+  (1-12, invariato per l'accumulo), solo l'ORDINE della lista in output cambia — il frontend non ha
+  bisogno di modifiche, mappa l'array così com'è sull'asse X del grafico.
 - **Toggle Mensile/Giornaliero sui due grafici** (pillola arancione, stesso stile IVA
   inclusa/esclusa del resto dell'app, `localStorage('cancellazioni_vista_periodo')`): a mensile
   restano i `BarChart` di sempre; a giornaliero diventano `LineChart` (barre illeggibili su fino a
