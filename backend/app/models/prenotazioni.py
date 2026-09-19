@@ -25,10 +25,12 @@ class PrenotazioneCancellataImport(Base):
 
     id = Column(Integer, primary_key=True)
     nome_file = Column(String(255), nullable=False)
-    # Mese/anno di prenotazione dichiarati in fase di upload (usati solo per il controllo
-    # di coerenza sulle righe — vedi services/prenotazioni_parser.py — non per il filtro
-    # dei report, che usano sempre data_prenotazione reale della riga).
-    mese = Column(Integer, nullable=False)
+    # Mese/anno dichiarati in fase di upload — per il formato "PrenotazioniWeb" validano le righe
+    # (vedi services/prenotazioni_parser.py); per "Elenco Prenotazioni" sono solo un'etichetta
+    # (mese nullable: NULL = import di più mesi/intera stagione in un colpo solo, es. il "mega
+    # import" di fine stagione — non usato per filtrare i report, che leggono sempre le date reali
+    # riga per riga).
+    mese = Column(Integer, nullable=True)
     anno = Column(Integer, nullable=False)
     n_righe_totali = Column(Integer, nullable=False, default=0)
     n_righe_valide = Column(Integer, nullable=False, default=0)
@@ -84,7 +86,7 @@ class PrenotazioneCancellata(Base):
     cliente = Column(String(255), nullable=False, default="")
     email = Column(String(255), nullable=True)
     tipo_camera = Column(String(100), nullable=False, default="")
-    trattamento = Column(String(20), nullable=True)
+    trattamento = Column(String(100), nullable=True)
     mercato = Column(String(50), nullable=True)
     importo = Column(Float, nullable=False, default=0.0)
     is_test = Column(Boolean, nullable=False, default=False)

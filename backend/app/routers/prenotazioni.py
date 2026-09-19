@@ -29,7 +29,7 @@ def _fmt_import(imp: PrenotazioneCancellataImport) -> dict:
         "nome_file": imp.nome_file,
         "mese": imp.mese,
         "anno": imp.anno,
-        "mese_label": MESI_IT[imp.mese - 1],
+        "mese_label": MESI_IT[imp.mese - 1] if imp.mese else "Intera stagione",
         "n_righe_totali": imp.n_righe_totali,
         "n_righe_valide": imp.n_righe_valide,
         "n_righe_fuori_mese": imp.n_righe_fuori_mese,
@@ -44,28 +44,36 @@ def _fmt_import(imp: PrenotazioneCancellataImport) -> dict:
 
 @router.post("/import")
 def importa_csv(
-    mese: int = Query(..., ge=1, le=12, description="Mese di prenotazione dichiarato per questo file"),
+    mese: Optional[int] = Query(
+        default=None, ge=1, le=12,
+        description="Mese di prenotazione dichiarato per questo file — solo etichetta per 'Elenco "
+        "Prenotazioni' (le date reali sono lette riga per riga); omesso = import di più mesi/intera "
+        "stagione in un colpo solo",
+    ),
     anno: int = Query(...),
     is_test: bool = Query(False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     utente=Depends(richiedi_admin),
 ):
-    if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=422, detail="Il file deve essere un CSV")
+    if not file.filename.lower().endswith((".csv", ".xlsx")):
+        raise HTTPException(status_code=422, detail="Il file deve essere un CSV o un XLSX")
 
     esistente = db.query(PrenotazioneCancellataImport).filter_by(
         mese=mese, anno=anno, nome_file=file.filename,
     ).first()
     if esistente:
+        label = f"mese {mese:02d}/{anno}" if mese else f"intera stagione {anno}"
         raise HTTPException(
             status_code=409,
-            detail=f"Import già presente per {file.filename} (mese {mese:02d}/{anno})",
+            detail=f"Import già presente per {file.filename} ({label})",
         )
 
     raw = file.file.read()
     try:
-        risultato = parse_csv(raw, mese_atteso=mese, anno_atteso=anno, data_rilevata=date.today())
+        risultato = parse_csv(
+            raw, mese_atteso=mese or 0, anno_atteso=anno, data_rilevata=date.today(),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -166,7 +174,7 @@ def report(
 ):
     """Aggregati per mese di prenotazione, per hotel e per canale."""
     base = db.query(PrenotazioneCancellata).filter(
-        func.extract("year", PrenotazioneCancellata.data_prenotazione) == anno
+        func.extract("year", PrenotazioneCancellata.arrivo) == anno
     )
     base = _applica_filtri(base, hotel_code, canale, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
     righe = base.all()
@@ -232,7 +240,7 @@ def lista_righe(
     db: Session = Depends(get_db),
 ):
     query = db.query(PrenotazioneCancellata).filter(
-        func.extract("year", PrenotazioneCancellata.data_prenotazione) == anno
+        func.extract("year", PrenotazioneCancellata.arrivo) == anno
     )
     query = _applica_filtri(query, hotel_code, canale, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
     totale = query.count()

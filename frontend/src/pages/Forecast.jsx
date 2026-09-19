@@ -1076,7 +1076,7 @@ function TabCancellazioniReali({ anno, hotelCode, hotels }) {
 // ---------------------------------------------------------------------------
 
 function TabImportaCancellazioni() {
-  const [meseUpload, setMeseUpload] = useState(new Date().getMonth() + 1)
+  const [meseUpload, setMeseUpload] = useState('') // '' = intera stagione (nessun filtro/etichetta di mese)
   const [annoUpload, setAnnoUpload] = useState(new Date().getFullYear())
   const [caricando, setCaricando] = useState(false)
   const [esitoImport, setEsitoImport] = useState(null)
@@ -1096,8 +1096,8 @@ function TabImportaCancellazioni() {
 
   async function handleUpload(file) {
     if (!file) return
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      setEsitoImport({ ok: false, msg: 'Seleziona un file CSV' })
+    if (!file.name.toLowerCase().match(/\.(csv|xlsx)$/)) {
+      setEsitoImport({ ok: false, msg: 'Seleziona un file CSV o XLSX' })
       return
     }
     setCaricando(true)
@@ -1105,8 +1105,9 @@ function TabImportaCancellazioni() {
     const form = new FormData()
     form.append('file', file)
     try {
+      const qsMese = meseUpload ? `&mese=${meseUpload}` : ''
       const { data } = await api.post(
-        `/prenotazioni-cancellate/import?mese=${meseUpload}&anno=${annoUpload}`,
+        `/prenotazioni-cancellate/import?anno=${annoUpload}${qsMese}`,
         form, { headers: { 'Content-Type': 'multipart/form-data' } }
       )
       setEsitoImport({
@@ -1147,22 +1148,25 @@ function TabImportaCancellazioni() {
   return (
     <div>
       <p style={{ margin: '0 0 1.2rem', fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
-        Carica qui l'export Welcome "PrenotazioniWeb" (foglio DISDETTE), filtrato lato Welcome per
-        mese di prenotazione. Il dato importato compare nella tab "Cancellazioni reali".
+        Carica qui l'export Welcome "Elenco Prenotazioni" (o, in formato legacy, "PrenotazioniWeb"
+        foglio DISDETTE). Ogni riga porta già le proprie date reali: "Mese" qui sotto è solo
+        un'etichetta per lo storico import, lascialo su "Intera stagione" per un file che copre
+        più mesi o tutti gli hotel insieme. Il dato importato compare nella tab "Cancellazioni reali".
       </p>
 
       <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: '1rem', marginBottom: '2rem' }}>
         <h3 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', color: '#9a3412' }}>Importa export Welcome</h3>
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={stileLabel}>Mese prenotazione</label>
-          <select value={meseUpload} onChange={e => setMeseUpload(Number(e.target.value))} style={stileSelect}>
+          <label style={stileLabel}>Mese (etichetta, opzionale)</label>
+          <select value={meseUpload} onChange={e => setMeseUpload(e.target.value ? Number(e.target.value) : '')} style={stileSelect}>
+            <option value="">Intera stagione</option>
             {MESI_LABEL.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
           </select>
           <label style={stileLabel}>Anno</label>
           <select value={annoUpload} onChange={e => setAnnoUpload(Number(e.target.value))} style={stileSelect}>
             {[2024, 2025, 2026, 2027].map(a => <option key={a} value={a}>{a}</option>)}
           </select>
-          <input ref={inputRef} type="file" accept=".csv" onChange={e => handleUpload(e.target.files[0])} disabled={caricando} />
+          <input ref={inputRef} type="file" accept=".csv,.xlsx" onChange={e => handleUpload(e.target.files[0])} disabled={caricando} />
           {caricando && <span style={{ color: '#9a3412', fontSize: '0.85rem' }}>Caricamento…</span>}
         </div>
         {esitoImport && (

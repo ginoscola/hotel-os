@@ -991,11 +991,12 @@ prima di quella data.
   e la seconda veniva scartata come falso duplicato — stesso tipo di problema già visto in
   `prod_righe` con ospite vuoto. Verificare sempre `n_inserite` vs righe attese nel CSV dopo un
   import con più camere per prenotazione.
-  ⚠️ **`GET /report` e `GET /` filtrano per anno di `data_prenotazione`**, non per il mese/anno
-  dichiarato in fase di import: le righe "fuori mese" (dataPren a cavallo di fine anno, es.
-  prenotazioni di fine dicembre incluse nell'export di gennaio) restano nell'anno solare corretto
-  della loro data reale, non in quello dichiarato — visibili solo filtrando quell'anno specifico,
-  non nell'anno della stagione. Impatto oggi minimo (2 righe isolate su tutto il 2026), non risolto.
+  ⚠️ **`GET /report` e `GET /` filtrano per anno di `arrivo`, non di `data_prenotazione`** (bug
+  reale, corretto): filtrare sull'anno della prenotazione escludeva le righe prenotate con largo
+  anticipo nell'anno precedente (es. prenotato il 27/11/2025 per un soggiorno di luglio 2026) — con
+  il formato "Elenco Prenotazioni" (vedi sotto) capita spesso, non un'eccezione isolata come nel
+  formato precedente: su un file di test, 5 righe su 10 sparivano filtrando anno=2026. L'anno deve
+  riferirsi alla stagione (= anno di arrivo), coerente con `hotel_seasons` e col resto dell'app.
 - **`data_rilevata`** (obbligatoria, = data dell'import): fallback pratico quando manca
   `data_cancellazione` — con import ripetuti nel tempo dello stesso mese di prenotazione, una riga
   mai vista prima negli import precedenti (quindi non scartata dalla dedup) prende come
@@ -1003,13 +1004,55 @@ prima di quella data.
   cancellazione invece di nessuna informazione temporale. Mostrata in tabella con un trattino "~" a
   distinguerla da una data cancellazione certa.
 - Endpoint (prefix `/prenotazioni-cancellate`): `POST /import?mese=&anno=&is_test=` (admin,
-  multipart CSV — avvisa, non scarta, se `dataPren` di alcune righe cade fuori dal mese/anno
+  multipart CSV o XLSX — avvisa, non scarta, se `dataPren` di alcune righe cade fuori dal mese/anno
   dichiarati), `GET /import/storico`, `DELETE /import/{id}?conferma=true`, `GET /report?anno=&
   hotel_code=&canale=&arrivo_da=&arrivo_a=` (aggregati per mese prenotazione/hotel/canale),
   `GET /?...&pagina=&per_pagina=` (righe grezze paginate), `GET|DELETE /admin/test-stats|test-data`.
-  Parser: `services/prenotazioni_parser.py` (CSV, scarta la riga iniziale `sep=,` che Excel
-  antepone, date ISO con eventuali secondi frazionari, importi già in formato punto-decimale —
-  a differenza dei fogli del modulo Revenue non serve conversione virgola→punto).
+  ⚠️ **`mese` è opzionale** (`prenot004_2026`, colonna nullable): pensato per "PrenotazioniWeb"
+  (dove valida `data_prenotazione` riga per riga — vedi sopra), ma non ha senso per un mega import
+  "Elenco Prenotazioni" di tutta la stagione in un colpo solo, dove serviva solo come etichetta
+  inerte (il parser di quel formato non lo usa mai per validare). Omesso → `mese=NULL`,
+  `mese_label="Intera stagione"` in `_fmt_import()`; passato comunque a `parse_csv()` come `0`
+  (mai un mese reale, innocuo perché "Elenco Prenotazioni" lo ignora e "PrenotazioniWeb" lo userebbe
+  solo per il warning "fuori mese", mai per rifiutare righe).
+
+**Secondo formato supportato: "Elenco Prenotazioni"** (settembre 2026, sostituisce "PrenotazioniWeb"
+come fonte principale — molto più semplice e veloce da esportare per l'utente): CSV **punto e
+virgola** (non virgola) rilevato dall'intestazione "Codice prenotazione", oppure **XLSX** diretto
+(rilevato dai byte iniziali `PK`, firma zip) — stesso schema, stesse colonne. Date italiane
+`gg/mm/aaaa`, importi con virgola decimale. A differenza di "PrenotazioniWeb": ha un **ID
+prenotazione nativo** (`Codice prenotazione`, va in `numero_prenotazione`) e una **vera data di
+cancellazione nativa** (`Data cancellazione`) — le due colonne opzionali sopra non servono più per
+questo formato. Filtrato lato Welcome per mese/periodo di **arrivo** (anche l'intera stagione in
+un colpo solo, tutti gli hotel insieme — `Ubicazione` distingue la struttura riga per riga): per
+questo formato `mese`/`anno` in fase di upload sono solo un'etichetta per l'import, **nessun
+controllo di coerenza sulle date** (un "mega import" di più mesi non deve generare falsi avvisi
+"fuori mese" — a differenza di "PrenotazioniWeb", dove mese/anno validano `data_prenotazione`).
+⚠️ **Contiene versioni storiche della stessa prenotazione**: una modifica (importo cambiato,
+conferma, ecc.) genera una nuova riga con lo stesso `Codice prenotazione` — se cambia anche la
+camera (`Risorsa`) sono camere realmente distinte della stessa prenotazione multi-camera (tenute
+entrambe), se la camera è la stessa sono versioni nel tempo della stessa riga (`parse_elenco_prenotazioni`
+raggruppa per (codice, camera) e tiene solo quella con `Data cancellazione` più recente). Caso reale
+verificato: codice 905, 3 righe, stessa camera I426, importi/stato diversi (1739€ Prenotata→1764€
+Prenotata→1759€ Confermata) — tenuta solo l'ultima. ⚠️ Questa deduplica funziona solo **dentro lo
+stesso file caricato in una volta**: se in futuro (stagione 2027) si passa a import settimanali
+invece che un mega import unico a fine stagione, una prenotazione modificata tra un import e il
+successivo genererebbe righe separate nel database (la dedup a livello DB usa la chiave composita
+di `PrenotazioneCancellata`, che include `importo` — versioni con importo diverso non collidono) —
+da risolvere prima di adottare import ricorrenti, non ancora fatto.
+⚠️ **`trattamento` era `varchar(20)`, troppo corto per un valore reale del file** (bug reale,
+settembre 2026): a differenza di "PrenotazioniWeb" (dove `trattamento.nome` è tipicamente un codice
+breve, BB/HB/FB), "Elenco Prenotazioni" riporta la descrizione estesa del trattamento così com'è in
+Welcome (es. "Pensione Completa con bevande incluse...") — un mega import reale falliva con
+`StringDataRightTruncation` sulla prima riga con un trattamento lungo, l'intero import annullato
+(nessuna riga inserita). Fix (`prenot005_2026`): colonna allargata a `varchar(100)` (stessa misura
+di `canale_vendita`/`tipo_camera`, altri campi testo libero dello stesso file).
+Parser: `services/prenotazioni_parser.py` — `parse_csv()` è il dispatcher che rileva il formato e
+smista a `_parse_csv_prenotazioniweb()` o `parse_elenco_prenotazioni()`; quest'ultimo prende le
+righe già lette (da CSV con `csv.DictReader(delimiter=";")` o da XLSX con `openpyxl`, entrambe
+convertite nello stesso formato dict-per-riga prima di entrare nella logica comune). `_num_it()`/
+`_parse_data_it()` gestiscono sia stringhe (CSV) sia tipi nativi Excel (float/datetime già tipizzati
+in celle xlsx formattate) — verificato con entrambi i casi reali.
 - Frontend: **6° tab separato "Importa Cancellazioni Welcome"** (solo admin — non un pannello fisso
   in cima alla tab di consultazione come nella primissima versione, spostato su richiesta esplicita
   per non sporcare la pagina quando si va solo a guardare i dati): pannello upload + storico import
