@@ -925,40 +925,30 @@ browser → stampante** (nessun proxy backend: si è verificato empiricamente ch
 Tabelle (`forecast_maturato`, `forecast_budget`, `forecast_pickup_config`): UNIQUE per (hotel_id, anno, mese).
 Endpoint: `GET /forecast/summary?anno=&hotel_code=` (hotel_code=all → aggregato), `GET /forecast/pace`, `PUT /forecast/maturato|budget|pickup-config`, `DELETE /forecast/maturato/{id}`.
 
-**Tab "Cancellazioni"** (settembre 2026): stima le camere perse per cancellazione confrontando
-`rooms_sold` tra **tutti** gli snapshot di `daily_revenue` di una stagione, non solo l'ultimo —
-unica fonte per le cancellazioni **senza penale** (entro i termini di policy, non generano mai un
-documento fiscale): Corrispettivi (`annullato`/`categoria='penali'`) intercetta solo quelle *con*
-penale addebitata, quindi non basta da solo. Per ogni data di soggiorno: `perso = picco_storico_rooms_sold − rooms_sold_ultimo_snapshot`
-(`_cancellazioni_hotel()` in `routers/forecast.py`) — un delta positivo è una stima di camere
-perse nette, non un conteggio esatto (dato aggregato per giorno, non per singola prenotazione: un
-giorno con cancellazioni e nuove prenotazioni contemporanee mostra solo il saldo netto).
-Endpoint `GET /forecast/cancellazioni?anno=&hotel_code=`, aggrega per mese in due dimensioni,
-calcolate nello stesso giro sui dati:
-- **Per mese di soggiorno**: perdita attribuita al mese della data cancellata (dato più solido).
-- **Per mese di prenotazione** (stima, dichiarata approssimata in UI): ogni incremento positivo di
-  `rooms_sold` tra due snapshot consecutivi è un "incremento cohort" attribuito al mese dello
-  snapshot in cui è osservato; la perdita finale di una data è allocata proporzionalmente tra questi
-  incrementi. ⚠️ La primissima osservazione disponibile di una data include anche prenotazioni fatte
-  prima del primo snapshot mai caricato (baseline sconosciuta) — genera un picco nel mese del primo
-  snapshot stagionale che non riflette prenotazioni reali fatte in quel mese, visibile sui dati 2026
-  come concentrazione anomala a marzo (primi snapshot della stagione). Frontend: 4° tab in
-  `Forecast.jsx` (`TabCancellazioni`), grafico a barre mensile + tabella, toggle pillola arancione
-  (stesso stile IVA inclusa/esclusa del resto dell'app) tra le due dimensioni,
-  `localStorage('forecast_cancellazioni_vista')`.
+⚠️ **Tab "Cancellazioni" (stima picco-vs-attuale) rimossa** (settembre 2026): esisteva una prima
+versione che stimava le camere perse confrontando `rooms_sold` tra tutti gli snapshot di
+`daily_revenue` (`_cancellazioni_hotel()`/`GET /forecast/cancellazioni`, oggi cancellati). Rimossa
+dopo aver messo a confronto i due numeri sulla stagione 2026: la stima dava 446 camere/36.349€
+persi, il dato reale da import Welcome (vedi sotto) 1.029 camere/671.467€ — gap enorme e non un
+semplice rumore. Causa identificata: la stima è un **saldo netto per data** (picco storico meno
+ultimo snapshot), quindi una camera cancellata e poi rivenduta prima dello snapshot successivo non
+genera alcuna perdita netta, pur essendo una cancellazione reale — con vendite che continuano tutta
+la stagione questo da solo spiega gran parte del gap sulle camere; il gap sul revenue (18x, molto
+più ampio di quello sulle camere, 2,3x) suggerisce inoltre che le prenotazioni cancellate realmente
+includano soggiorni/importi più alti (es. gruppi multi-camera) che il modello netto-per-notte non
+cattura proporzionalmente. Limite aggiuntivo, già noto, della stima: nessuna visibilità prima del
+primo snapshot Revenue (16/03/2026). Codice recuperabile dalla history git se in futuro servisse un
+fallback per periodi non coperti da import reali (oggi non è il caso: si punta al mega import
+dell'intera stagione — vedi sotto).
 
-**Tab "Cancellazioni reali"** (5° tab, settembre 2026): complementare alla stima sopra — dato reale
-da import manuale dell'export Welcome "PrenotazioniWeb" (una riga = una camera cancellata), non
+**Tab "Cancellazioni"** (4° tab, settembre 2026, rinominata da "Cancellazioni reali" dopo la
+rimozione della stima sopra — nessuna ambiguità restante col nome breve): dato reale
+da import manuale dell'export Welcome (una riga = una camera cancellata), non
 derivato per confronto di snapshot. Nasce da un'indagine reale su un report di analisi cancellazioni
 (generato da un'altra sessione Claude su richiesta dell'utente) che dichiarava un 27,9% di
 cancellato/gruppo: risultato falso, causato dall'aver scambiato la colonna "7gg" (flusso settimanale
 di nuove prenotazioni acquisite, volatile per natura) con lo stock di fatturato corrente per quella
-settimana di arrivo — un normale calo di ritmo di vendita settimanale non è una cancellazione. Il
-tasso vero, verificato su questi dati reali, è ~10% sull'intera stagione 2026 (coerente sia con la
-stima picco-vs-attuale sopra sia con la colonna PROG del foglio Excel del gestionale, che non mostra
-mai un calo). Vedi anche limite del calcolo picco-vs-attuale: sottostima le cancellazioni avvenute
-prima del primo snapshot Revenue disponibile (16/03/2026) — nessun dato in `daily_revenue` copre
-prima di quella data.
+settimana di arrivo — un normale calo di ritmo di vendita settimanale non è una cancellazione.
 - **Modello**: `PrenotazioneCancellataImport`/`PrenotazioneCancellata` in `models/prenotazioni.py`
   (migrazione `prenot001_2026`). Una riga = una camera (una prenotazione multi-camera genera più
   righe con lo stesso `codice_ota`). ⚠️ **Nessun ID prenotazione univoco nell'export**: l'interfaccia
@@ -1053,10 +1043,10 @@ righe già lette (da CSV con `csv.DictReader(delimiter=";")` o da XLSX con `open
 convertite nello stesso formato dict-per-riga prima di entrare nella logica comune). `_num_it()`/
 `_parse_data_it()` gestiscono sia stringhe (CSV) sia tipi nativi Excel (float/datetime già tipizzati
 in celle xlsx formattate) — verificato con entrambi i casi reali.
-- Frontend: **6° tab separato "Importa Cancellazioni Welcome"** (solo admin — non un pannello fisso
+- Frontend: **5° tab separato "Importa Cancellazioni Welcome"** (solo admin — non un pannello fisso
   in cima alla tab di consultazione come nella primissima versione, spostato su richiesta esplicita
   per non sporcare la pagina quando si va solo a guardare i dati): pannello upload + storico import
-  con eliminazione. La tab "Cancellazioni reali" resta solo consultazione (filtri, **due grafici a
+  con eliminazione. La tab "Cancellazioni" resta solo consultazione (filtri, **due grafici a
   barre mensili** — per mese di prenotazione e, subito sotto, per mese di **arrivo** [`per_mese_arrivo`
   nella response di `/report`, stesso calcolo ma su `r.arrivo.month`] — utile perché le due viste
   raccontano cose diverse: la prima quando è stata *fatta* la prenotazione poi cancellata, la seconda
@@ -1072,7 +1062,7 @@ in celle xlsx formattate) — verificato con entrambi i casi reali.
 - **Filtro "Struttura" indipendente dal selettore hotel in cima alla pagina** (stesso pattern già
   usato in `TabPace`): stato locale `hotelFiltro` inizializzato dall'header ma poi controllato solo
   dalla propria select nella riga filtri — l'utente può guardare "Riepilogo Stagione" per un hotel e
-  "Cancellazioni reali" per tutti (o un altro) senza che cambino insieme.
+  "Cancellazioni" per tutti (o un altro) senza che cambino insieme.
   ⚠️ Il backend serializza `created_at` degli import con `.isoformat()` completo (con ora e fuso);
   `formatDataIt()` del frontend si aspetta invece una data pura `YYYY-MM-DD` e fallisce silenziosamente
   su un datetime completo (`NaN` al posto del giorno) — bug reale trovato nella tabella storico import,

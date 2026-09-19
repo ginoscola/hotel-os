@@ -1,12 +1,16 @@
-"""Cancellazioni reali — import riga-per-riga da export Welcome PMS ("PrenotazioniWeb"),
-filtrato lato Welcome per mese di prenotazione + stato eliminata/cancellata.
+"""Cancellazioni — import riga-per-riga da export Welcome PMS ("Elenco Prenotazioni" o,
+in formato legacy, "PrenotazioniWeb").
 
-Fonte alternativa/complementare alla stima "picco vs attuale" di Forecast (vedi
-routers/forecast.py, _cancellazioni_hotel): qui il dato è reale (una riga = una camera
-cancellata), non derivato per confronto di snapshot. Limite noto: l'export Welcome non
-espone né un ID prenotazione interno univoco né la data di cancellazione — solo la data
-di prenotazione originale — quindi non è possibile costruire un incrocio mese
-prenotazione × mese cancellazione, solo il totale cancellato per mese di prenotazione.
+Dato reale (una riga = una camera cancellata), non derivato per confronto di snapshot —
+sostituisce la stima "picco vs attuale" che esisteva in Forecast (`_cancellazioni_hotel`,
+rimossa dopo il confronto: il dato reale mostrava un numero di camere/revenue perso molto
+più alto, perché la stima nettava le cancellazioni contro le nuove prenotazioni sulla
+stessa data — vedi CLAUDE.md, sezione Forecast). Limite noto del formato "PrenotazioniWeb":
+l'export Welcome non espone né un ID prenotazione interno univoco né la data di
+cancellazione — solo la data di prenotazione originale — quindi non è possibile costruire
+un incrocio mese prenotazione × mese cancellazione, solo il totale cancellato per mese di
+prenotazione. Il formato "Elenco Prenotazioni" non ha questo limite (ID e data
+cancellazione nativi).
 """
 
 from sqlalchemy import (

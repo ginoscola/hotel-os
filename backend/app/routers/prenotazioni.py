@@ -1,9 +1,10 @@
-"""Cancellazioni reali — import da export Welcome "PrenotazioniWeb".
+"""Cancellazioni — import da export Welcome ("Elenco Prenotazioni" o, in formato legacy,
+"PrenotazioniWeb").
 
-Complementare alla stima di /forecast/cancellazioni (picco vs attuale sugli snapshot
-Revenue): qui il dato è reale, una riga = una camera cancellata, ma limitato a quanto
-l'export espone (nessun ID prenotazione interno univoco, nessuna data di cancellazione —
-vedi models/prenotazioni.py).
+Dato reale, una riga = una camera cancellata (a differenza di una stima derivata dagli
+snapshot Revenue, rimossa dopo il confronto con questo dato reale — vedi CLAUDE.md).
+Per "PrenotazioniWeb" limitato a quanto l'export espone (nessun ID prenotazione interno
+univoco, nessuna data di cancellazione — vedi models/prenotazioni.py).
 """
 
 from datetime import date

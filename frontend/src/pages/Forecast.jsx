@@ -88,7 +88,6 @@ export default function Forecast() {
         <button style={stileTab('pace')} onClick={() => setTabAttiva('pace')}>Pace Chart</button>
         <button style={stileTab('maturato')} onClick={() => setTabAttiva('maturato')}>Maturato</button>
         <button style={stileTab('cancellazioni')} onClick={() => setTabAttiva('cancellazioni')}>Cancellazioni</button>
-        <button style={stileTab('cancellazioni-reali')} onClick={() => setTabAttiva('cancellazioni-reali')}>Cancellazioni reali</button>
         <button style={stileTab('importa-cancellazioni')} onClick={() => setTabAttiva('importa-cancellazioni')}>Importa Cancellazioni Welcome</button>
       </div>
 
@@ -119,10 +118,7 @@ export default function Forecast() {
         />
       )}
       {tabAttiva === 'cancellazioni' && (
-        <TabCancellazioni anno={anno} hotelCode={hotelSelezionato} />
-      )}
-      {tabAttiva === 'cancellazioni-reali' && (
-        <TabCancellazioniReali anno={anno} hotelCode={hotelSelezionato} hotels={hotels} />
+        <TabCancellazioni anno={anno} hotelCode={hotelSelezionato} hotels={hotels} />
       )}
       {tabAttiva === 'importa-cancellazioni' && <TabImportaCancellazioni />}
     </div>
@@ -725,133 +721,10 @@ function TabMaturato({ anno, hotels, hotelSelezionato, onAggiornato }) {
 }
 
 // ---------------------------------------------------------------------------
-// Tab 4 — Cancellazioni
+// Tab 4 — Cancellazioni (import Welcome)
 // ---------------------------------------------------------------------------
 
-function TabCancellazioni({ anno, hotelCode }) {
-  const [vista, setVista] = useState(() => localStorage.getItem('forecast_cancellazioni_vista') || 'soggiorno')
-  const [dati, setDati] = useState(null)
-  const [caricando, setCaricando] = useState(false)
-  const [errore, setErrore] = useState(null)
-
-  useEffect(() => {
-    localStorage.setItem('forecast_cancellazioni_vista', vista)
-  }, [vista])
-
-  useEffect(() => {
-    caricaDati()
-  }, [anno, hotelCode])
-
-  async function caricaDati() {
-    setCaricando(true)
-    setErrore(null)
-    try {
-      const r = await api.get('/forecast/cancellazioni', { params: { anno, hotel_code: hotelCode } })
-      setDati(r.data)
-    } catch (e) {
-      setErrore(mostraErrore(e, 'Errore nel caricamento'))
-      setDati(null)
-    } finally {
-      setCaricando(false)
-    }
-  }
-
-  if (caricando) return <Caricamento />
-  if (errore) return <Errore msg={errore} />
-  if (!dati) return null
-
-  const perSoggiorno = vista === 'soggiorno'
-  const datiGrafico = dati.mesi.map(m => ({
-    mese: MESI_LABEL[m.mese - 1].slice(0, 3),
-    camere: perSoggiorno ? m.camere_perse_soggiorno : Math.round(m.camere_perse_prenotazione * 10) / 10,
-    revenue: perSoggiorno ? m.revenue_perso_soggiorno : m.revenue_perso_prenotazione,
-  }))
-
-  return (
-    <div>
-      <p style={{ margin: '0 0 1.2rem', fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
-        Stima delle camere perse per cancellazione confrontando gli snapshot del modulo Revenue nel
-        tempo — a differenza dei documenti fiscali di Corrispettivi (che tracciano solo le
-        cancellazioni con penale), questa include anche quelle senza penale, che non generano mai un
-        documento. È una stima per i trend, non un conteggio esatto di prenotazioni.
-      </p>
-
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <CardKpi titolo="Camere perse — stagione" valore={dati.totale_camere_perse} colore="#dc2626" />
-        <CardKpi titolo="Revenue perso — stagione" valore={formatEuro(dati.totale_revenue_perso)} colore="#dc2626" />
-      </div>
-
-      <div style={{ display: 'inline-flex', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: 3, marginBottom: '1.2rem' }}>
-        <button
-          onClick={() => setVista('soggiorno')}
-          style={stileToggleBtn(vista === 'soggiorno')}
-        >
-          Per mese di soggiorno
-        </button>
-        <button
-          onClick={() => setVista('prenotazione')}
-          style={stileToggleBtn(vista === 'prenotazione')}
-        >
-          Per mese di prenotazione (stima)
-        </button>
-      </div>
-
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem', marginBottom: '1.5rem' }}>
-        <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#374151' }}>
-          Camere perse per mese — {anno} · {dati.hotel_code}
-        </h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={datiGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-            <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
-            <Tooltip formatter={(v, name) => name === 'Revenue perso' ? formatEuro(v) : v} />
-            <Legend />
-            <Bar dataKey="camere" name="Camere perse" fill="#dc2626" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.87rem' }}>
-        <thead>
-          <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-            <Th>Mese</Th>
-            <Th align="right">Camere perse</Th>
-            <Th align="right">Revenue perso</Th>
-            {perSoggiorno && <Th align="center">N. date con perdita</Th>}
-          </tr>
-        </thead>
-        <tbody>
-          {dati.mesi.map(m => (
-            <tr key={m.mese} style={{ borderBottom: '1px solid #e5e7eb' }}>
-              <td style={{ ...stCella, fontWeight: 600 }}>{m.mese_label}</td>
-              <td style={{ ...stCella, textAlign: 'right', color: '#dc2626', fontWeight: 600 }}>
-                {perSoggiorno ? m.camere_perse_soggiorno : m.camere_perse_prenotazione.toFixed(1)}
-              </td>
-              <td style={{ ...stCella, textAlign: 'right' }}>
-                {formatEuro(perSoggiorno ? m.revenue_perso_soggiorno : m.revenue_perso_prenotazione)}
-              </td>
-              {perSoggiorno && <td style={{ ...stCella, textAlign: 'center', color: '#9ca3af' }}>{m.n_date_con_perdita}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <p style={{ marginTop: '1rem', fontSize: '0.78rem', color: '#9ca3af', lineHeight: 1.5 }}>
-        {perSoggiorno
-          ? 'Perdita attribuita al mese della data di soggiorno cancellata.'
-          : 'Perdita allocata in proporzione a quando è stata osservata la prenotazione (stima approssimata, non un dato certo).'}
-        {' '}Dato aggregato per giorno, non per singola prenotazione: un giorno con cancellazioni e nuove prenotazioni contemporanee mostra solo il saldo netto.
-      </p>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Tab 5 — Cancellazioni reali (import Welcome)
-// ---------------------------------------------------------------------------
-
-function TabCancellazioniReali({ anno, hotelCode, hotels }) {
+function TabCancellazioni({ anno, hotelCode, hotels }) {
   const [hotelFiltro, setHotelFiltro] = useState(hotelCode || 'all')
   const [canale, setCanale] = useState('')
   const [arrivoDa, setArrivoDa] = useState('')
@@ -1072,7 +945,7 @@ function TabCancellazioniReali({ anno, hotelCode, hotels }) {
 }
 
 // ---------------------------------------------------------------------------
-// Tab 6 — Importa Cancellazioni Welcome
+// Tab 5 — Importa Cancellazioni Welcome
 // ---------------------------------------------------------------------------
 
 function TabImportaCancellazioni() {
@@ -1151,7 +1024,7 @@ function TabImportaCancellazioni() {
         Carica qui l'export Welcome "Elenco Prenotazioni" (o, in formato legacy, "PrenotazioniWeb"
         foglio DISDETTE). Ogni riga porta già le proprie date reali: "Mese" qui sotto è solo
         un'etichetta per lo storico import, lascialo su "Intera stagione" per un file che copre
-        più mesi o tutti gli hotel insieme. Il dato importato compare nella tab "Cancellazioni reali".
+        più mesi o tutti gli hotel insieme. Il dato importato compare nella tab "Cancellazioni".
       </p>
 
       <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: '1rem', marginBottom: '2rem' }}>
