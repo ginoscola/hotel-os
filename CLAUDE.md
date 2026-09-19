@@ -1069,6 +1069,48 @@ in celle xlsx formattate) — verificato con entrambi i casi reali.
   corretto troncando a `.date().isoformat()` lato backend. Attenzione a questo stesso pattern se si
   espone `created_at`/altri `DateTime` in un nuovo endpoint pensato per `formatDataIt()`.
 
+**Modifica/cancellazione riga + reimport intelligente** (settembre 2026): nato da un problema reale
+— l'utente aveva visto prenotazioni cancellate manualmente e poi reinserite a mano su Welcome,
+creando dati fuorvianti che andavano corretti o eliminati direttamente in HotelOS, senza che un
+reimport li sovrascrivesse silenziosamente.
+- **`modificato_manualmente`** (`prenot006_2026`, Boolean default false) su `PrenotazioneCancellata`
+  — stesso pattern di `corrispettivi_documenti.modificato_manualmente`. Impostato a `true` solo da
+  `PUT /prenotazioni-cancellate/{id}` (admin, `ModaleModificaCancellazione` in `Forecast.jsx`):
+  form con tutti i campi principali, `notti` sempre ricalcolato server-side da arrivo/partenza (mai
+  inviato dal client). `DELETE /prenotazioni-cancellate/{id}?conferma=true` (admin) rimuove la riga
+  — stesso pattern `?conferma=true` già in uso per l'eliminazione import, con `window.confirm()`
+  lato frontend prima della chiamata.
+- **Ricerca libera** (`q` su `GET /prenotazioni-cancellate/`, debounce 400ms lato frontend): ILIKE
+  su tutti i campi testuali (hotel, canale, codice prenotazione, cliente, camera, trattamento,
+  mercato) + campi numerici/data castati a testo (`cast(col, String)`) così anche un importo
+  ("540") o una data ("2026-07") sono cercabili. Stessi filtri di struttura/canale/periodo della
+  tabella, non un filtro separato.
+- ⚠️ **Reimport: l'identità di una prenotazione non può più essere la UNIQUE di dedup esistente**
+  (`uq_prenotazione_cancellata_dedup`, che include `importo` fra le colonne) — se Welcome ricalcola
+  l'importo su una modifica reale, la vecchia chiave non troverebbe più la riga come "già presente"
+  e la inserirebbe come riga duplicata invece di riconoscerla. Per le righe del formato "Elenco
+  Prenotazioni" (le uniche con `numero_prenotazione` sempre valorizzato — vedi sopra), l'identità
+  per il reimport diventa `(hotel_code, numero_prenotazione, tipo_camera)`, indipendente
+  dall'importo. `POST /prenotazioni-cancellate/import` accetta ora `on_conflict=salta|aggiorna`
+  (default `salta`, stesso nome parametro già in uso in Corrispettivi/Produzione) e per ogni riga
+  con questa identità:
+  - non esiste ancora → inserita normalmente (via la UNIQUE esistente, invariata, come rete di
+    sicurezza contro duplicati letterali);
+  - esiste ed è `modificato_manualmente=true` → **mai toccata**, aggiunta a `messaggi_bloccate`
+    nella risposta (es. "La prenotazione 6097 (D101, DPH) non è stata inserita perché è già
+    presente ed è stata modificata manualmente.") — per rientrare una prenotazione modificata va
+    prima cancellata a mano (azione sopra), poi reimportata;
+  - esiste, non modificata, `on_conflict=salta` (default, checkbox "Sovrascrivi" non spuntata in
+    `TabImportaCancellazioni`) → comportamento storico, salta senza messaggio;
+  - esiste, non modificata, `on_conflict=aggiorna` → aggiornata con i valori del file (tutti i
+    campi tranne l'identità e `data_rilevata`, che resta la data della prima osservazione).
+  Le righe del vecchio formato "PrenotazioniWeb" (senza `numero_prenotazione`) restano sul
+  comportamento storico invariato (nessuna identità affidabile per distinguerle tra import diversi).
+  Risposta arricchita con `n_aggiornate`/`n_bloccate_modificate`/`messaggi_bloccate`.
+  Verificato con un file in due versioni (stessa identità, importo diverso): la riga modificata a
+  mano resta bloccata in entrambe le modalità, quella non modificata viene aggiornata solo con
+  `on_conflict=aggiorna`.
+
 ---
 
 ## Modulo Budget

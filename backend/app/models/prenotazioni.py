@@ -93,6 +93,10 @@ class PrenotazioneCancellata(Base):
     trattamento = Column(String(100), nullable=True)
     mercato = Column(String(50), nullable=True)
     importo = Column(Float, nullable=False, default=0.0)
+    # True se corretta a mano via PUT /prenotazioni-cancellate/{id} (stesso pattern di
+    # corrispettivi_documenti.modificato_manualmente): protegge la riga da un reimport futuro,
+    # che altrimenti la sovrascriverebbe silenziosamente con il dato (sbagliato) del file Welcome.
+    modificato_manualmente = Column(Boolean, nullable=False, default=False)
     is_test = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

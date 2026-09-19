@@ -731,12 +731,22 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const [arrivoA, setArrivoA] = useState('')
   const [prenotazioneDa, setPrenotazioneDa] = useState('')
   const [prenotazioneA, setPrenotazioneA] = useState('')
+  const [ricercaInput, setRicercaInput] = useState('')
+  const [ricerca, setRicerca] = useState('')
 
   const [dati, setDati] = useState(null)
   const [righe, setRighe] = useState(null)
   const [pagina, setPagina] = useState(1)
   const [errore, setErrore] = useState(null)
   const [caricandoDati, setCaricandoDati] = useState(false)
+  const [rigaInModifica, setRigaInModifica] = useState(null)
+  const [eliminandoId, setEliminandoId] = useState(null)
+
+  // Debounce della ricerca libera: evita una richiesta per ogni carattere digitato.
+  useEffect(() => {
+    const t = setTimeout(() => setRicerca(ricercaInput), 400)
+    return () => clearTimeout(t)
+  }, [ricercaInput])
 
   const paramsFiltri = {
     anno,
@@ -765,15 +775,28 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const caricaRighe = useCallback(async () => {
     try {
       const r = await api.get('/prenotazioni-cancellate/', {
-        params: { ...paramsFiltri, pagina, per_pagina: 20 },
+        params: { ...paramsFiltri, q: ricerca || undefined, pagina, per_pagina: 20 },
       })
       setRighe(r.data)
     } catch {}
-  }, [anno, hotelFiltro, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, pagina])
+  }, [anno, hotelFiltro, canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, ricerca, pagina])
 
   useEffect(() => { caricaReport() }, [caricaReport])
   useEffect(() => { caricaRighe() }, [caricaRighe])
-  useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelFiltro])
+  useEffect(() => { setPagina(1) }, [canale, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelFiltro, ricerca])
+
+  async function handleElimina(riga) {
+    if (!window.confirm(`Eliminare definitivamente la prenotazione ${riga.numero_prenotazione || riga.id} (${riga.cliente || 'senza nome'}, ${riga.hotel_code})?`)) return
+    setEliminandoId(riga.id)
+    try {
+      await api.delete(`/prenotazioni-cancellate/${riga.id}?conferma=true`)
+      caricaRighe()
+    } catch (e) {
+      alert(mostraErrore(e))
+    } finally {
+      setEliminandoId(null)
+    }
+  }
 
   const datiGrafico = dati ? dati.per_mese.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
   const datiGraficoArrivo = dati ? dati.per_mese_arrivo.map(m => ({ mese: m.mese_label, n: m.n, importo: m.importo })) : []
@@ -896,7 +919,16 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
             </div>
           </div>
 
-          <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9rem', color: '#374151' }}>Dettaglio prenotazioni cancellate</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.6rem' }}>
+            <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#374151' }}>Dettaglio prenotazioni cancellate</h4>
+            <input
+              type="text"
+              placeholder="Cerca su tutti i campi (cliente, camera, codice, importo, data...)"
+              value={ricercaInput}
+              onChange={e => setRicercaInput(e.target.value)}
+              style={{ ...stileSelect, minWidth: 320 }}
+            />
+          </div>
           {righe && (
             <>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
@@ -906,6 +938,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                     <Th align="center">Data prenotazione</Th><Th align="center">Data cancellazione</Th>
                     <Th align="center">Arrivo</Th><Th align="center">Partenza</Th>
                     <Th>Cliente</Th><Th>Camera</Th><Th align="right">Importo</Th>
+                    <Th align="center">Azioni</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -913,7 +946,12 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                     <tr key={r.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                       <td style={stCella}>{r.hotel_code}</td>
                       <td style={stCella}>{r.canale}</td>
-                      <td style={stCella}>{r.numero_prenotazione || <span style={{ color: '#d1d5db' }}>—</span>}</td>
+                      <td style={stCella}>
+                        {r.numero_prenotazione || <span style={{ color: '#d1d5db' }}>—</span>}
+                        {r.modificato_manualmente && (
+                          <span title="Corretta manualmente — non verrà mai sovrascritta da un reimport" style={{ marginLeft: 5, fontSize: '0.75rem' }}>✏️</span>
+                        )}
+                      </td>
                       <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.data_prenotazione)}</td>
                       <td style={{ ...stCella, textAlign: 'center' }}>
                         {r.data_cancellazione
@@ -927,6 +965,25 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                       <td style={stCella}>{r.cliente}</td>
                       <td style={stCella}>{r.tipo_camera}</td>
                       <td style={{ ...stCella, textAlign: 'right', color: '#dc2626', fontWeight: 600 }}>{formatEuro(r.importo)}</td>
+                      <td style={{ ...stCella, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {isAdmin() && (
+                          <>
+                            <button
+                              onClick={() => setRigaInModifica(r)}
+                              style={{ border: '1px solid #d1d5db', background: '#fff', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', fontSize: '0.8rem', marginRight: 4 }}
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={() => handleElimina(r)}
+                              disabled={eliminandoId === r.id}
+                              style={{ border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', fontSize: '0.8rem' }}
+                            >
+                              {eliminandoId === r.id ? '…' : '🗑'}
+                            </button>
+                          </>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -940,6 +997,119 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
           )}
         </>
       )}
+
+      {rigaInModifica && (
+        <ModaleModificaCancellazione
+          riga={rigaInModifica}
+          hotels={hotels}
+          onClose={() => setRigaInModifica(null)}
+          onSalvato={() => { setRigaInModifica(null); caricaRighe() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Modale — modifica prenotazione cancellata
+// ---------------------------------------------------------------------------
+
+function ModaleModificaCancellazione({ riga, hotels, onClose, onSalvato }) {
+  const [form, setForm] = useState({
+    hotel_code: riga.hotel_code || '',
+    canale: riga.canale || '',
+    canale_vendita: riga.canale_vendita || '',
+    codice_ota: riga.codice_ota || '',
+    numero_prenotazione: riga.numero_prenotazione || '',
+    data_cancellazione: riga.data_cancellazione || '',
+    data_prenotazione: riga.data_prenotazione || '',
+    arrivo: riga.arrivo || '',
+    partenza: riga.partenza || '',
+    pax: riga.pax ?? 0,
+    cliente: riga.cliente || '',
+    email: riga.email || '',
+    tipo_camera: riga.tipo_camera || '',
+    trattamento: riga.trattamento || '',
+    mercato: riga.mercato || '',
+    importo: riga.importo ?? 0,
+  })
+  const [salvando, setSalvando] = useState(false)
+  const [errore, setErrore] = useState(null)
+
+  function set(campo, valore) { setForm(f => ({ ...f, [campo]: valore })) }
+
+  async function salva() {
+    setSalvando(true)
+    setErrore(null)
+    try {
+      await api.put(`/prenotazioni-cancellate/${riga.id}`, {
+        ...form,
+        data_cancellazione: form.data_cancellazione || null,
+        email: form.email || null,
+        trattamento: form.trattamento || null,
+        mercato: form.mercato || null,
+        numero_prenotazione: form.numero_prenotazione || null,
+        pax: Number(form.pax) || 0,
+        importo: Number(form.importo) || 0,
+      })
+      onSalvato()
+    } catch (e) {
+      setErrore(mostraErrore(e))
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const campo = (label, key, tipo = 'text') => (
+    <div>
+      <label style={stileLabel}>{label}</label>
+      <input type={tipo} value={form[key]} onChange={e => set(key, e.target.value)} style={{ ...stileSelect, width: '100%' }} />
+    </div>
+  )
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+    }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: '1.5rem', width: 640, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
+        <h3 style={{ margin: '0 0 1rem', fontSize: '1.05rem', color: '#1a1a2e' }}>Modifica prenotazione cancellata</h3>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '1rem' }}>
+          <div>
+            <label style={stileLabel}>Hotel</label>
+            <select value={form.hotel_code} onChange={e => set('hotel_code', e.target.value)} style={{ ...stileSelect, width: '100%' }}>
+              {hotels.map(h => <option key={h.code} value={h.code}>{h.name}</option>)}
+            </select>
+          </div>
+          {campo('Codice Prenotazione', 'numero_prenotazione')}
+          {campo('Canale', 'canale')}
+          {campo('Canale vendita', 'canale_vendita')}
+          {campo('Codice OTA', 'codice_ota')}
+          {campo('Camera', 'tipo_camera')}
+          {campo('Data prenotazione', 'data_prenotazione', 'date')}
+          {campo('Data cancellazione', 'data_cancellazione', 'date')}
+          {campo('Arrivo', 'arrivo', 'date')}
+          {campo('Partenza', 'partenza', 'date')}
+          {campo('Pax', 'pax', 'number')}
+          {campo('Importo (€)', 'importo', 'number')}
+          {campo('Cliente', 'cliente')}
+          {campo('Email', 'email')}
+          {campo('Trattamento', 'trattamento')}
+          {campo('Mercato', 'mercato')}
+        </div>
+
+        {errore && <div style={{ marginBottom: '1rem' }}><Errore msg={errore} /></div>}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+          <button onClick={onClose} disabled={salvando} style={{ padding: '0.5rem 1.1rem', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
+            Annulla
+          </button>
+          <button onClick={salva} disabled={salvando} style={{ padding: '0.5rem 1.1rem', borderRadius: 6, border: 'none', background: '#8B5CF6', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+            {salvando ? 'Salvataggio…' : 'Salva'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -951,6 +1121,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
 function TabImportaCancellazioni() {
   const [meseUpload, setMeseUpload] = useState('') // '' = intera stagione (nessun filtro/etichetta di mese)
   const [annoUpload, setAnnoUpload] = useState(new Date().getFullYear())
+  const [sovrascrivi, setSovrascrivi] = useState(false)
   const [caricando, setCaricando] = useState(false)
   const [esitoImport, setEsitoImport] = useState(null)
   const inputRef = useRef(null)
@@ -979,14 +1150,18 @@ function TabImportaCancellazioni() {
     form.append('file', file)
     try {
       const qsMese = meseUpload ? `&mese=${meseUpload}` : ''
+      const onConflict = sovrascrivi ? 'aggiorna' : 'salta'
       const { data } = await api.post(
-        `/prenotazioni-cancellate/import?anno=${annoUpload}${qsMese}`,
+        `/prenotazioni-cancellate/import?anno=${annoUpload}&on_conflict=${onConflict}${qsMese}`,
         form, { headers: { 'Content-Type': 'multipart/form-data' } }
       )
       setEsitoImport({
         ok: true,
-        msg: `Importate ${data.n_inserite} righe (${data.n_saltate} già presenti).`
+        msg: `Importate ${data.n_inserite} righe`
+          + (data.n_aggiornate ? `, aggiornate ${data.n_aggiornate}` : '')
+          + ` (${data.n_saltate} già presenti, non toccate).`
           + (data.warning.length ? ' ' + data.warning.join(' ') : ''),
+        bloccate: data.messaggi_bloccate || [],
       })
       caricaStorico()
     } catch (err) {
@@ -1042,12 +1217,24 @@ function TabImportaCancellazioni() {
           <input ref={inputRef} type="file" accept=".csv,.xlsx" onChange={e => handleUpload(e.target.files[0])} disabled={caricando} />
           {caricando && <span style={{ color: '#9a3412', fontSize: '0.85rem' }}>Caricamento…</span>}
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.7rem', fontSize: '0.85rem', color: '#9a3412', cursor: 'pointer' }}>
+          <input type="checkbox" checked={sovrascrivi} onChange={e => setSovrascrivi(e.target.checked)} />
+          Sovrascrivi prenotazioni già presenti (solo quelle mai modificate a mano — le modificate non vengono mai toccate)
+        </label>
         {esitoImport && (
           <div style={{
             marginTop: '0.7rem', padding: '0.6rem 0.9rem', borderRadius: 8, fontSize: '0.85rem',
             background: esitoImport.ok ? '#dcfce7' : '#fee2e2', color: esitoImport.ok ? '#166534' : '#991b1b',
           }}>
             {esitoImport.ok ? '✓ ' : '✗ '}{esitoImport.msg}
+          </div>
+        )}
+        {esitoImport?.bloccate?.length > 0 && (
+          <div style={{ marginTop: '0.6rem', padding: '0.6rem 0.9rem', borderRadius: 8, fontSize: '0.82rem', background: '#fef3c7', color: '#92400e' }}>
+            <strong>{esitoImport.bloccate.length} prenotazioni non importate perché già modificate a mano:</strong>
+            <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem' }}>
+              {esitoImport.bloccate.map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
           </div>
         )}
       </div>

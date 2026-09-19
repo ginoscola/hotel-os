@@ -11,7 +11,8 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from sqlalchemy import func
+from pydantic import BaseModel
+from sqlalchemy import String, cast, func, or_, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -43,6 +44,20 @@ def _fmt_import(imp: PrenotazioneCancellataImport) -> dict:
 # Import
 # ---------------------------------------------------------------------------
 
+# Campi aggiornati su una prenotazione già presente quando on_conflict=aggiorna — esclude
+# gli 3 campi identità (hotel_code, numero_prenotazione, tipo_camera, già uguali per costruzione,
+# vedi _identita_riga) e data_rilevata (resta la data della prima osservazione, non quella del
+# reimport).
+_CAMPI_AGGIORNABILI = [
+    "canale", "canale_vendita", "codice_ota", "data_cancellazione", "data_prenotazione",
+    "arrivo", "partenza", "notti", "pax", "cliente", "email", "trattamento", "mercato", "importo",
+]
+
+
+def _identita_riga(r: dict):
+    return (r["hotel_code"], r["numero_prenotazione"], r["tipo_camera"])
+
+
 @router.post("/import")
 def importa_csv(
     mese: Optional[int] = Query(
@@ -53,6 +68,11 @@ def importa_csv(
     ),
     anno: int = Query(...),
     is_test: bool = Query(False),
+    on_conflict: str = Query(
+        "salta", pattern="^(salta|aggiorna)$",
+        description="'aggiorna' sovrascrive le prenotazioni già presenti ma MAI modificate a mano "
+        "(vedi modificato_manualmente); 'salta' (default) non tocca nulla di già presente",
+    ),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     utente=Depends(richiedi_admin),
@@ -91,17 +111,64 @@ def importa_csv(
     db.add(imp)
     db.flush()
 
+    righe = risultato["righe"]
+    # Solo le righe con un ID prenotazione nativo (formato "Elenco Prenotazioni") possono essere
+    # riconosciute come "la stessa prenotazione già presente" tra import diversi — il vecchio
+    # formato "PrenotazioniWeb" non ha un ID affidabile e resta sul comportamento storico
+    # (inserimento diretto, scarto silenzioso solo se identica su tutti i campi della UNIQUE).
+    con_identita = [r for r in righe if r.get("numero_prenotazione")]
+    senza_identita = [r for r in righe if not r.get("numero_prenotazione")]
+
+    esistenti = {}
+    chiavi = {_identita_riga(r) for r in con_identita}
+    if chiavi:
+        for row in db.query(PrenotazioneCancellata).filter(
+            PrenotazioneCancellata.is_test == is_test,
+            tuple_(
+                PrenotazioneCancellata.hotel_code,
+                PrenotazioneCancellata.numero_prenotazione,
+                PrenotazioneCancellata.tipo_camera,
+            ).in_(chiavi),
+        ):
+            esistenti[(row.hotel_code, row.numero_prenotazione, row.tipo_camera)] = row
+
+    da_inserire = list(senza_identita)
+    da_aggiornare = []
+    messaggi_bloccate = []
+    n_saltate_esistenti = 0
+
+    for r in con_identita:
+        riga_esistente = esistenti.get(_identita_riga(r))
+        if riga_esistente is None:
+            da_inserire.append(r)
+        elif riga_esistente.modificato_manualmente:
+            messaggi_bloccate.append(
+                f"La prenotazione {r['numero_prenotazione']} ({r['tipo_camera']}, {r['hotel_code']}) "
+                "non è stata inserita perché è già presente ed è stata modificata manualmente."
+            )
+        elif on_conflict == "aggiorna":
+            da_aggiornare.append((riga_esistente, r))
+        else:
+            n_saltate_esistenti += 1
+
     CHUNK_SIZE = 500
     n_inserite = 0
+    n_aggiornate = 0
     try:
-        righe = risultato["righe"]
-        for i in range(0, len(righe), CHUNK_SIZE):
-            blocco = righe[i:i + CHUNK_SIZE]
+        for i in range(0, len(da_inserire), CHUNK_SIZE):
+            blocco = da_inserire[i:i + CHUNK_SIZE]
             valori = [dict(import_id=imp.id, is_test=is_test, **riga) for riga in blocco]
             stmt = pg_insert(PrenotazioneCancellata).values(valori)
             stmt = stmt.on_conflict_do_nothing(constraint="uq_prenotazione_cancellata_dedup")
             res = db.execute(stmt)
             n_inserite += res.rowcount or 0
+
+        for riga_esistente, nuovi_valori in da_aggiornare:
+            for campo in _CAMPI_AGGIORNABILI:
+                setattr(riga_esistente, campo, nuovi_valori[campo])
+            riga_esistente.import_id = imp.id
+            n_aggiornate += 1
+
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -110,7 +177,10 @@ def importa_csv(
     return {
         "id": imp.id,
         "n_inserite": n_inserite,
-        "n_saltate": len(risultato["righe"]) - n_inserite,
+        "n_aggiornate": n_aggiornate,
+        "n_saltate": (len(da_inserire) - n_inserite) + n_saltate_esistenti,
+        "n_bloccate_modificate": len(messaggi_bloccate),
+        "messaggi_bloccate": messaggi_bloccate,
         "n_righe_totali": risultato["n_righe_totali"],
         "n_righe_fuori_mese": risultato["n_righe_fuori_mese"],
         "warning": risultato["warning"],
@@ -159,6 +229,59 @@ def _applica_filtri(query, hotel_code, canale, prenotazione_da, prenotazione_a, 
     if arrivo_a:
         query = query.filter(PrenotazioneCancellata.arrivo <= arrivo_a)
     return query
+
+
+def _applica_ricerca(query, q: Optional[str]):
+    """Ricerca libera su tutti i campi mostrati in tabella — testuali via ILIKE diretto,
+    numerici/data castati a testo per poter cercare anche importi ("540") o date ("2026-07")."""
+    if not q:
+        return query
+    pattern = f"%{q}%"
+    campi = [
+        PrenotazioneCancellata.hotel_code,
+        PrenotazioneCancellata.canale,
+        PrenotazioneCancellata.canale_vendita,
+        PrenotazioneCancellata.codice_ota,
+        PrenotazioneCancellata.numero_prenotazione,
+        PrenotazioneCancellata.cliente,
+        PrenotazioneCancellata.email,
+        PrenotazioneCancellata.tipo_camera,
+        PrenotazioneCancellata.trattamento,
+        PrenotazioneCancellata.mercato,
+        cast(PrenotazioneCancellata.importo, String),
+        cast(PrenotazioneCancellata.pax, String),
+        cast(PrenotazioneCancellata.notti, String),
+        cast(PrenotazioneCancellata.data_prenotazione, String),
+        cast(PrenotazioneCancellata.arrivo, String),
+        cast(PrenotazioneCancellata.partenza, String),
+        cast(PrenotazioneCancellata.data_cancellazione, String),
+    ]
+    return query.filter(or_(*(c.ilike(pattern) for c in campi)))
+
+
+def _fmt_riga(r: PrenotazioneCancellata) -> dict:
+    return {
+        "id": r.id,
+        "hotel_code": r.hotel_code,
+        "canale": r.canale,
+        "canale_vendita": r.canale_vendita,
+        "codice_ota": r.codice_ota,
+        "numero_prenotazione": r.numero_prenotazione,
+        "data_cancellazione": r.data_cancellazione.isoformat() if r.data_cancellazione else None,
+        "data_rilevata": r.data_rilevata.isoformat(),
+        "data_prenotazione": r.data_prenotazione.isoformat(),
+        "arrivo": r.arrivo.isoformat(),
+        "partenza": r.partenza.isoformat(),
+        "notti": r.notti,
+        "pax": r.pax,
+        "cliente": r.cliente,
+        "email": r.email,
+        "tipo_camera": r.tipo_camera,
+        "trattamento": r.trattamento,
+        "mercato": r.mercato,
+        "importo": r.importo,
+        "modificato_manualmente": r.modificato_manualmente,
+    }
 
 
 @router.get("/report", dependencies=[Depends(richiedi_utente_attivo)])
@@ -235,6 +358,7 @@ def lista_righe(
     arrivo_a: Optional[date] = Query(default=None),
     prenotazione_da: Optional[date] = Query(default=None),
     prenotazione_a: Optional[date] = Query(default=None),
+    q: Optional[str] = Query(default=None, description="Ricerca libera su tutti i campi della tabella"),
     is_test: bool = Query(False),
     pagina: int = Query(1, ge=1),
     per_pagina: int = Query(50, ge=1, le=500),
@@ -244,6 +368,7 @@ def lista_righe(
         func.extract("year", PrenotazioneCancellata.arrivo) == anno
     )
     query = _applica_filtri(query, hotel_code, canale, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test)
+    query = _applica_ricerca(query, q)
     totale = query.count()
     righe = (
         query.order_by(PrenotazioneCancellata.data_prenotazione.desc())
@@ -255,29 +380,56 @@ def lista_righe(
         "totale": totale,
         "pagina": pagina,
         "per_pagina": per_pagina,
-        "righe": [
-            {
-                "id": r.id,
-                "hotel_code": r.hotel_code,
-                "canale": r.canale,
-                "canale_vendita": r.canale_vendita,
-                "codice_ota": r.codice_ota,
-                "numero_prenotazione": r.numero_prenotazione,
-                "data_cancellazione": r.data_cancellazione.isoformat() if r.data_cancellazione else None,
-                "data_rilevata": r.data_rilevata.isoformat(),
-                "data_prenotazione": r.data_prenotazione.isoformat(),
-                "arrivo": r.arrivo.isoformat(),
-                "partenza": r.partenza.isoformat(),
-                "notti": r.notti,
-                "pax": r.pax,
-                "cliente": r.cliente,
-                "tipo_camera": r.tipo_camera,
-                "trattamento": r.trattamento,
-                "importo": r.importo,
-            }
-            for r in righe
-        ],
+        "righe": [_fmt_riga(r) for r in righe],
     }
+
+
+class PrenotazioneCancellataUpdate(BaseModel):
+    hotel_code: str
+    canale: str
+    canale_vendita: str = ""
+    codice_ota: str = ""
+    numero_prenotazione: Optional[str] = None
+    data_cancellazione: Optional[date] = None
+    data_prenotazione: date
+    arrivo: date
+    partenza: date
+    pax: int = 0
+    cliente: str = ""
+    email: Optional[str] = None
+    tipo_camera: str = ""
+    trattamento: Optional[str] = None
+    mercato: Optional[str] = None
+    importo: float = 0.0
+
+
+@router.put("/{riga_id}", dependencies=[Depends(richiedi_admin)])
+def modifica_riga(riga_id: int, dati: PrenotazioneCancellataUpdate, db: Session = Depends(get_db)):
+    riga = db.query(PrenotazioneCancellata).filter(PrenotazioneCancellata.id == riga_id).first()
+    if not riga:
+        raise HTTPException(status_code=404, detail="Prenotazione non trovata")
+    if dati.partenza <= dati.arrivo:
+        raise HTTPException(status_code=422, detail="La data di partenza deve essere successiva all'arrivo")
+
+    for campo, valore in dati.model_dump().items():
+        setattr(riga, campo, valore)
+    riga.notti = (dati.partenza - dati.arrivo).days
+    riga.modificato_manualmente = True
+    db.commit()
+    db.refresh(riga)
+    return _fmt_riga(riga)
+
+
+@router.delete("/{riga_id}", dependencies=[Depends(richiedi_admin)])
+def elimina_riga(riga_id: int, conferma: bool = Query(False), db: Session = Depends(get_db)):
+    if not conferma:
+        raise HTTPException(status_code=400, detail="Aggiungere ?conferma=true per confermare l'eliminazione")
+    riga = db.query(PrenotazioneCancellata).filter(PrenotazioneCancellata.id == riga_id).first()
+    if not riga:
+        raise HTTPException(status_code=404, detail="Prenotazione non trovata")
+    db.delete(riga)
+    db.commit()
+    return {"eliminato": riga_id}
 
 
 # ---------------------------------------------------------------------------
