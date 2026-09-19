@@ -985,6 +985,17 @@ prima di quella data.
   nulla se le colonne mancano del tutto (comportamento identico a prima, verificato). Non fanno
   parte della chiave di dedup (restano popolate solo sulla prima riga inserita, non sovrascritte
   dai re-import successivi).
+  ⚠️ **`pax` è nella chiave di dedup** (migrazione `prenot003_2026`) dopo un bug reale al primo
+  import vero: due camere della stessa prenotazione (stesso hotel/data/tipo camera/importo/cliente,
+  es. due D-Smart identiche a 432,90€) con `pax` diverso (2 e 1) collidevano sulla chiave originale
+  e la seconda veniva scartata come falso duplicato — stesso tipo di problema già visto in
+  `prod_righe` con ospite vuoto. Verificare sempre `n_inserite` vs righe attese nel CSV dopo un
+  import con più camere per prenotazione.
+  ⚠️ **`GET /report` e `GET /` filtrano per anno di `data_prenotazione`**, non per il mese/anno
+  dichiarato in fase di import: le righe "fuori mese" (dataPren a cavallo di fine anno, es.
+  prenotazioni di fine dicembre incluse nell'export di gennaio) restano nell'anno solare corretto
+  della loro data reale, non in quello dichiarato — visibili solo filtrando quell'anno specifico,
+  non nell'anno della stagione. Impatto oggi minimo (2 righe isolate su tutto il 2026), non risolto.
 - **`data_rilevata`** (obbligatoria, = data dell'import): fallback pratico quando manca
   `data_cancellazione` — con import ripetuti nel tempo dello stesso mese di prenotazione, una riga
   mai vista prima negli import precedenti (quindi non scartata dalla dedup) prende come

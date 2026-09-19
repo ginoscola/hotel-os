@@ -93,9 +93,14 @@ class PrenotazioneCancellata(Base):
     import_ = relationship("PrenotazioneCancellataImport", back_populates="righe")
 
     __table_args__ = (
+        # ⚠️ pax fa parte della chiave: senza, due camere diverse della stessa prenotazione con
+        # stesso tipo camera e stesso importo (es. due D-Smart identiche) collidono e la seconda
+        # viene scartata come falso duplicato — bug reale riscontrato al primo import vero
+        # (prenotazione 127, due camere con pax 2 e 1, importo identico 432,90€), stesso tipo di
+        # problema già documentato per prod_righe con ospite vuoto.
         UniqueConstraint(
             "is_test", "hotel_code", "codice_ota", "data_prenotazione", "arrivo", "partenza",
-            "tipo_camera", "importo", "cliente",
+            "tipo_camera", "importo", "cliente", "pax",
             name="uq_prenotazione_cancellata_dedup",
         ),
     )

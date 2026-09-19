@@ -125,10 +125,15 @@ def parse_csv(raw: bytes, mese_atteso: int, anno_atteso: int, data_rilevata) -> 
             canale_vendita=(riga.get("parametroCanaleVendita.descrizione") or "").strip(),
             codice_ota=(riga.get("codiceOTA") or "").strip(),
             # Colonne opzionali, non nell'export Welcome originale — compilate solo se l'utente
-            # le ha aggiunte a mano al CSV, con gli stessi nomi usati a schermo in Welcome
-            # (vedi _parse_data_manuale per i formati data accettati).
-            numero_prenotazione=(riga.get("Codice Prenotazione") or "").strip() or None,
-            data_cancellazione=_parse_data_manuale(riga.get("Data cancellazione", "")),
+            # le ha aggiunte a mano al CSV. Accetta sia il nome a schermo in Welcome ("Codice
+            # Prenotazione", con spazio) sia lo stile camelCase coerente col resto del file
+            # (codicePrenotazione) — verificato che l'utente usa quest'ultimo in pratica.
+            numero_prenotazione=(
+                riga.get("codicePrenotazione") or riga.get("Codice Prenotazione") or ""
+            ).strip() or None,
+            data_cancellazione=_parse_data_manuale(
+                riga.get("dataCancellazione") or riga.get("Data cancellazione") or ""
+            ),
             data_rilevata=data_rilevata,
             data_prenotazione=data_pren,
             arrivo=arrivo,
