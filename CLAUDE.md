@@ -1091,6 +1091,23 @@ reimport li sovrascrivesse silenziosamente.
   in `order_by()`. Frontend: componente `ThOrd` (intestazione cliccabile, freccia ▲/▼ sulla colonna
   attiva, secondo click sulla stessa colonna inverte la direzione), stato `ordinaPer`/`direzione` in
   `TabCancellazioni`, reset pagina a 1 al cambio come per gli altri filtri.
+- **`dati_grezzi`** (JSON nullable, `prenot007_2026`): l'intera riga del file "Elenco
+  Prenotazioni" così com'è — tutte le colonne, comprese quelle non mappate a un campo proprio
+  (es. Segmento, Fonte, Nazione) — non solo i pochi campi già modellati. Nato da una richiesta
+  esplicita dell'utente: "dati che magari non uso ora ma potrebbero essere utili in futuro", per
+  non dover aggiungere una colonna dedicata (e una migrazione) ogni volta che serve un nuovo campo
+  del file. `_serializza_grezzo()` in `prenotazioni_parser.py` converte date/datetime delle celle
+  xlsx native in stringa ISO prima di salvarle (altrimenti non serializzabili in JSON). **Non
+  modificabile da `PUT /prenotazioni-cancellate/{id}`** (resta lo snapshot dell'import originale
+  anche dopo una correzione manuale dei campi "veri" — coerente con lo scopo di audit/riferimento).
+  Incluso nella ricerca libera (`cast(dati_grezzi, String).ilike(...)`): cerca anche dentro ai campi
+  non ancora promossi a colonna propria. Frontend: sezione `<details>` collassata "Dati grezzi dal
+  file" in fondo al modale di modifica, tabella chiave/valore di sola lettura, nascosta del tutto se
+  `dati_grezzi` è `NULL` (righe importate prima di questa modifica, o formato legacy
+  "PrenotazioniWeb" — anche lì popolato dal parser ma con molti meno campi disponibili in origine).
+  ⚠️ Non richiede alcun reimport dei dati esistenti: è additivo, le righe già in DB (comprese quelle
+  già modificate/cancellate a mano) restano invariate con `dati_grezzi=NULL` finché non vengono
+  reimportate (rispettando comunque la stessa protezione `modificato_manualmente` di sempre).
 - **Vista mensile in ordine di anno commerciale (ott→set), non anno solare (gen→dic)**:
   `_MESI_ORDINE_COMMERCIALE = [10,11,12,1,...,9]` in `prenotazioni.py` — la stagione operativa è
   maggio-settembre (`hotel_seasons`), quindi le prenotazioni fatte a ottobre/novembre/dicembre sono

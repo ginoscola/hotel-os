@@ -1163,6 +1163,24 @@ function ModaleModificaCancellazione({ riga, hotels, onClose, onSalvato }) {
           {campo('Mercato', 'mercato')}
         </div>
 
+        {riga.dati_grezzi && Object.keys(riga.dati_grezzi).length > 0 && (
+          <details style={{ marginBottom: '1rem' }}>
+            <summary style={{ cursor: 'pointer', fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>
+              Dati grezzi dal file (sola lettura, {Object.keys(riga.dati_grezzi).length} campi)
+            </summary>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', marginTop: '0.6rem' }}>
+              <tbody>
+                {Object.entries(riga.dati_grezzi).map(([k, v]) => (
+                  <tr key={k} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '0.3rem 0.6rem', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{k}</td>
+                    <td style={{ padding: '0.3rem 0.6rem', color: '#374151' }}>{v === null || v === '' ? '—' : String(v)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        )}
+
         {errore && <div style={{ marginBottom: '1rem' }}><Errore msg={errore} /></div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>

@@ -57,6 +57,7 @@ def _fmt_import(imp: PrenotazioneCancellataImport) -> dict:
 _CAMPI_AGGIORNABILI = [
     "canale", "canale_vendita", "codice_ota", "data_cancellazione", "data_prenotazione",
     "arrivo", "partenza", "notti", "pax", "cliente", "email", "trattamento", "mercato", "importo",
+    "dati_grezzi",
 ]
 
 
@@ -270,6 +271,7 @@ def _applica_ricerca(query, q: Optional[str]):
         cast(PrenotazioneCancellata.arrivo, String),
         cast(PrenotazioneCancellata.partenza, String),
         cast(PrenotazioneCancellata.data_cancellazione, String),
+        cast(PrenotazioneCancellata.dati_grezzi, String),
     ]
     return query.filter(or_(*(c.ilike(pattern) for c in campi)))
 
@@ -310,6 +312,7 @@ def _fmt_riga(r: PrenotazioneCancellata) -> dict:
         "mercato": r.mercato,
         "importo": r.importo,
         "modificato_manualmente": r.modificato_manualmente,
+        "dati_grezzi": r.dati_grezzi,
     }
 
 

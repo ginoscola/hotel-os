@@ -95,6 +95,22 @@ def _parse_data_it(v) -> date:
     return datetime.strptime(v, "%d/%m/%Y").date()
 
 
+def _serializza_grezzo(riga: Dict) -> Dict:
+    """Copia JSON-safe della riga originale del file (tutte le colonne, comprese quelle non
+    ancora mappate a un campo proprio, es. Segmento/Fonte/Nazione) — le celle xlsx con
+    formattazione data/ora arrivano come oggetti `date`/`datetime` nativi, non serializzabili
+    direttamente in JSON, vanno convertite a stringa prima di salvarle in `dati_grezzi`."""
+    out = {}
+    for k, v in riga.items():
+        if isinstance(v, (datetime, date)):
+            out[k] = v.isoformat()
+        elif v is None or isinstance(v, (str, int, float, bool)):
+            out[k] = v
+        else:
+            out[k] = str(v)
+    return out
+
+
 def _hotel_da_ubicazione(ubicazione: str) -> str:
     u = (ubicazione or "").upper()
     if "DU PARC" in u or "DUPARC" in u:
@@ -186,6 +202,7 @@ def parse_elenco_prenotazioni(raw: bytes, righe_grezze: List[Dict], mese_atteso:
             trattamento=(str(riga.get("Trattamento") or "")).strip() or None,
             mercato=(str(riga.get("Mercato") or "")).strip() or None,
             importo=_num_it(riga.get("Totale")),
+            dati_grezzi=_serializza_grezzo(riga),
         )
 
         # Stessa prenotazione+camera vista più volte = versioni storiche: tiene solo quella
@@ -323,6 +340,7 @@ def _parse_csv_prenotazioniweb(raw: bytes, mese_atteso: int, anno_atteso: int, d
             trattamento=(riga.get("trattamento.nome") or "").strip() or None,
             mercato=(riga.get("parametroMercato.descrizione") or "").strip() or None,
             importo=_num(riga.get("importo", "")),
+            dati_grezzi=_serializza_grezzo(riga),
         ))
 
     if not righe:

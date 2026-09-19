@@ -14,7 +14,7 @@ cancellazione nativi).
 """
 
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String,
+    JSON, Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String,
     UniqueConstraint, func,
 )
 from sqlalchemy.orm import relationship
@@ -97,6 +97,12 @@ class PrenotazioneCancellata(Base):
     # corrispettivi_documenti.modificato_manualmente): protegge la riga da un reimport futuro,
     # che altrimenti la sovrascriverebbe silenziosamente con il dato (sbagliato) del file Welcome.
     modificato_manualmente = Column(Boolean, nullable=False, default=False)
+    # Riga intera del file così com'è (tutte le colonne, comprese quelle non ancora mappate a un
+    # campo proprio, es. Segmento/Fonte/Nazione) — non modificabile da PUT (resta lo snapshot
+    # dell'import originale anche dopo una correzione manuale dei campi "veri"). NULL sulle righe
+    # importate prima dell'introduzione di questo campo. Utile per dati non ancora usati oggi ma
+    # che potrebbero servire in futuro, senza dover reimportare per ognuno.
+    dati_grezzi = Column(JSON, nullable=True)
     is_test = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
