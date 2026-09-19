@@ -53,14 +53,14 @@ export default function Forecast() {
     }
   }
 
-  const stileTab = (t) => ({
+  const stileTab = (t, coloreAttivo = '#8B5CF6') => ({
     padding: '0.55rem 1.2rem',
     border: 'none',
-    borderBottom: tabAttiva === t ? '3px solid #8B5CF6' : '3px solid transparent',
+    borderBottom: tabAttiva === t ? `3px solid ${coloreAttivo}` : '3px solid transparent',
     background: 'none',
     cursor: 'pointer',
     fontWeight: tabAttiva === t ? 700 : 400,
-    color: tabAttiva === t ? '#8B5CF6' : '#555',
+    color: tabAttiva === t ? coloreAttivo : '#555',
     fontSize: '0.95rem',
     transition: 'all 0.15s',
   })
@@ -87,7 +87,7 @@ export default function Forecast() {
         <button style={stileTab('riepilogo')} onClick={() => setTabAttiva('riepilogo')}>Riepilogo Stagione</button>
         <button style={stileTab('pace')} onClick={() => setTabAttiva('pace')}>Pace Chart</button>
         <button style={stileTab('maturato')} onClick={() => setTabAttiva('maturato')}>Maturato</button>
-        <button style={stileTab('cancellazioni')} onClick={() => setTabAttiva('cancellazioni')}>Cancellazioni</button>
+        <button style={stileTab('cancellazioni', '#0ea5e9')} onClick={() => setTabAttiva('cancellazioni')}>Cancellazioni</button>
         <button style={stileTab('importa-cancellazioni')} onClick={() => setTabAttiva('importa-cancellazioni')}>Importa Cancellazioni Welcome</button>
       </div>
 
@@ -837,6 +837,9 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const metricaKey = fatturato ? 'importo' : 'n'
   const metricaNome = fatturato ? 'Importo cancellato' : 'Camere cancellate'
   const metricaFormatter = v => fatturato ? formatEuro(v) : v
+  // Recharts colora di default il testo della legenda come la serie — qui si vuole solo il
+  // quadratino colorato, il testo resta nero come il resto dei titoli.
+  const legendaNera = v => <span style={{ color: '#111827' }}>{v}</span>
 
   return (
     <div>
@@ -884,14 +887,14 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
       {dati && !caricandoDati && (
         <>
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-            <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#8B5CF6" />
-            <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#8B5CF6" />
+            <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#0ea5e9" />
+            <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#0ea5e9" />
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginLeft: 'auto' }}>
-              <div style={{ display: 'inline-flex', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: 3 }}>
+              <div style={{ display: 'inline-flex', background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: 8, padding: 3 }}>
                 <button onClick={() => setVistaPeriodo('mensile')} style={stileToggleBtn(vistaPeriodo === 'mensile')}>Mensile</button>
                 <button onClick={() => setVistaPeriodo('giornaliero')} style={stileToggleBtn(vistaPeriodo === 'giornaliero')}>Giornaliero</button>
               </div>
-              <div style={{ display: 'inline-flex', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: 3 }}>
+              <div style={{ display: 'inline-flex', background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: 8, padding: 3 }}>
                 <button onClick={() => setVistaMetrica('prenotazioni')} style={stileToggleBtn(vistaMetrica === 'prenotazioni')}>Prenotazioni</button>
                 <button onClick={() => setVistaMetrica('fatturato')} style={stileToggleBtn(vistaMetrica === 'fatturato')}>Fatturato</button>
               </div>
@@ -909,8 +912,8 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                   <XAxis dataKey="giorno" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
                   <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
                   <Tooltip formatter={metricaFormatter} />
-                  <Legend />
-                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#8B5CF6" strokeWidth={2} dot={false} />
+                  <Legend formatter={legendaNera} />
+                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#0ea5e9" strokeWidth={2} dot={false} />
                 </LineChart>
               ) : (
                 <BarChart data={datiGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
@@ -918,8 +921,8 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                   <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
                   <Tooltip formatter={metricaFormatter} />
-                  <Legend />
-                  <Bar dataKey={metricaKey} name={metricaNome} fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+                  <Legend formatter={legendaNera} />
+                  <Bar dataKey={metricaKey} name={metricaNome} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
                 </BarChart>
               )}
             </ResponsiveContainer>
@@ -936,8 +939,8 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                   <XAxis dataKey="giorno" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
                   <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
                   <Tooltip formatter={metricaFormatter} />
-                  <Legend />
-                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#7c3aed" strokeWidth={2} dot={false} />
+                  <Legend formatter={legendaNera} />
+                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#0ea5e9" strokeWidth={2} dot={false} />
                 </LineChart>
               ) : (
                 <BarChart data={datiGraficoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
@@ -945,8 +948,8 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                   <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
                   <Tooltip formatter={metricaFormatter} />
-                  <Legend />
-                  <Bar dataKey={metricaKey} name={metricaNome} fill="#7c3aed" radius={[4, 4, 0, 0]} />
+                  <Legend formatter={legendaNera} />
+                  <Bar dataKey={metricaKey} name={metricaNome} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
                 </BarChart>
               )}
             </ResponsiveContainer>
@@ -1036,7 +1039,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
                       <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.partenza)}</td>
                       <td style={stCella}>{r.cliente}</td>
                       <td style={stCella}>{r.tipo_camera}</td>
-                      <td style={{ ...stCella, textAlign: 'right', color: '#8B5CF6', fontWeight: 600 }}>{formatEuro(r.importo)}</td>
+                      <td style={{ ...stCella, textAlign: 'right', color: '#0ea5e9', fontWeight: 600 }}>{formatEuro(r.importo)}</td>
                       <td style={{ ...stCella, textAlign: 'center', whiteSpace: 'nowrap' }}>
                         {isAdmin() && (
                           <>
@@ -1444,6 +1447,8 @@ const stileLabel = {
   fontWeight: 500,
 }
 
+// Usata solo nella tab Cancellazioni: blu invece dell'arancione condiviso IVA inclusa/esclusa,
+// per allinearsi al tema blu (colore Club Hotel in Corrispettivi) scelto per questa tab.
 function stileToggleBtn(attivo) {
   return {
     padding: '0.4rem 0.9rem',
@@ -1452,7 +1457,7 @@ function stileToggleBtn(attivo) {
     cursor: 'pointer',
     fontSize: '0.83rem',
     fontWeight: attivo ? 700 : 500,
-    background: attivo ? '#ea580c' : 'transparent',
-    color: attivo ? '#fff' : '#9a3412',
+    background: attivo ? '#0ea5e9' : 'transparent',
+    color: attivo ? '#fff' : '#075985',
   }
 }

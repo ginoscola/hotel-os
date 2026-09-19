@@ -1138,16 +1138,30 @@ reimport li sovrascrivesse silenziosamente.
   e quello in basso restano allineati ai bordi superiore/inferiore delle card — messo inizialmente
   come due righe separate ("accanto" poi "sotto" il primo toggle), corretto su richiesta esplicita
   perché spezzava il layout.
-- **Colore card KPI/grafici allineato al resto di `Forecast.jsx`**: la tab nasceva con un rosso
-  (`#dc2626`/`#b91c1c`) usato solo qui, mentre il resto della pagina (tab bar attiva, pulsanti,
-  card KPI e linea OTB in "Pace Chart") usa sempre il viola `#8B5CF6` — stonava, segnalato
-  dall'utente. Uniformato: card KPI e serie dei due grafici ora in viola (`#8B5CF6` per il grafico
-  "per mese/giorno di prenotazione", `#7c3aed` — già in uso altrove in questo stesso file, es.
-  `ReferenceLine` di Maturato — per quello "di arrivo", per mantenere le due serie visivamente
-  distinguibili). Le pillole arancioni dei toggle restano invariate: quelle sono la convenzione
-  condivisa tra moduli (vedi sezione "Uniformità grafica tra pagine"), non lo stile specifico di
-  questa pagina. Nessun file di costanti colore condiviso esiste nel progetto — le uniche
-  convenzioni cross-pagina sono documentate qui in CLAUDE.md, non centralizzate in codice.
+- **Tema colore della tab: azzurro `#0ea5e9` (colore Club Hotel in Corrispettivi), non il viola
+  del resto di `Forecast.jsx`** — due iterazioni: prima uniformata al viola `#8B5CF6` usato nel
+  resto della pagina (tab bar, Pace Chart), poi l'utente ha chiesto esplicitamente un colore
+  diverso ("non mi piace il viola"), indicando lo stesso azzurro/`#0ea5e9` già usato per
+  identificare CLB in `TabGiornalieri.jsx`/`TabFatturati.jsx` (Corrispettivi) — nessun legame col
+  Club Hotel come struttura, solo il colore in sé come preferenza estetica per questa tab. Applicato
+  a: tab "Cancellazioni" nella barra (bordo/testo attivo, `stileTab()` reso parametrico con un
+  secondo argomento `coloreAttivo`, default `#8B5CF6` per tutte le altre tab), le due card KPI, le
+  serie di entrambi i grafici (stesso azzurro per entrambi, nessuna distinzione di tonalità tra
+  "prenotazione"/"arrivo" richiesta), l'importo nella tabella dettaglio, e le pillole dei due toggle
+  Mensile/Giornaliero e Prenotazioni/Fatturato (`stileToggleBtn()`, contenitore `#f0f9ff`/`#7dd3fc`,
+  bottone attivo `#0ea5e9`) — **deviazione consapevole** dalla pillola arancione condivisa
+  documentata in "Uniformità grafica tra pagine": `stileToggleBtn()` e i due contenitori pillola
+  sono usati solo in questa tab (verificato, nessun altro punto del file li richiama), quindi il
+  cambio non tocca il pattern arancione altrove nell'app.
+  ⚠️ **Testo della legenda dei grafici sempre nero, mai del colore della serie**: Recharts colora
+  di default `.recharts-legend-item-text` come la serie (`fill`/`stroke`), non solo il quadratino —
+  comportamento non voluto qui. Fix: prop `formatter` su `<Legend>` che avvolge il testo in uno
+  `<span style={{color:'#111827'}}>`; funziona perché lo stile inline sul figlio vince comunque
+  sull'ereditarietà del colore dal genitore colorato, non serve sovrascrivere lo span esterno di
+  Recharts. Nessun file di costanti colore condiviso esiste nel progetto — le convenzioni
+  cross-pagina (pillola IVA, colori hotel) sono documentate qui in CLAUDE.md, non centralizzate in
+  codice: ogni pagina che introduce un proprio tema locale (come questa) va tenuta a mente come
+  eccezione esplicita, non generalizzata altrove senza una richiesta analoga.
 - **Filtro canale — select singola** (`canale`/`Tutti`, invariata nell'aspetto): provata una
   variante a checkbox multi-selezione (una per canale, su una riga sotto i filtri data) per
   poter filtrare su più canali insieme — **scartata subito dopo, giudicata dall'utente troppo
