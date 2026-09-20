@@ -1268,11 +1268,13 @@ denominatore (il totale prenotato quel mese, cancellato o no).
   come i tre grafici sopra: le altre due colonne della stessa tabella (N./Importo) non rispondono
   già a quel toggle, quindi introdurlo solo per questa colonna sarebbe stato incoerente con la
   tabella stessa.
-- **Pulsante "Anno {anno}"** dopo le 4 date (Arrivo da/a, Prenotazione da/a): imposta tutte e
-  quattro a 1° gennaio–31 dicembre dell'**anno selezionato in cima alla pagina** (non l'anno solare
-  di oggi — scelta esplicita dell'utente, così funziona anche navigando dati di stagioni passate),
-  per non doverle scrivere a mano quando si vuole vedere l'intero anno. Un solo pulsante per
-  entrambe le coppie di date (non uno per coppia).
+- **Pulsante "Anno com. {anno}"** ("com." = commerciale, abbreviato per stare sulla stessa riga
+  delle 4 date) dopo Arrivo da/a e Prenotazione da/a: imposta tutte e quattro a **1° ottobre
+  dell'anno precedente – 30 settembre dell'anno selezionato in cima alla pagina** (non l'anno
+  solare gen–dic, coerente con l'anno commerciale ott→set già usato nell'ordine dei grafici mensili
+  di questa stessa tab — non l'anno solare di oggi: scelta esplicita dell'utente, così funziona
+  anche navigando dati di stagioni passate). Un solo pulsante per entrambe le coppie di date (non
+  uno per coppia). `whiteSpace: 'nowrap'` sul pulsante per non spezzare l'etichetta su due righe.
 
 ---
 

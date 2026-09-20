@@ -904,14 +904,16 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
           <label style={{ ...stileLabel, visibility: 'hidden' }}>Anno</label>
           <button
             onClick={() => {
-              setArrivoDa(`${anno}-01-01`)
-              setArrivoA(`${anno}-12-31`)
-              setPrenotazioneDa(`${anno}-01-01`)
-              setPrenotazioneA(`${anno}-12-31`)
+              // Anno commerciale: 1 ottobre dell'anno precedente - 30 settembre di "anno"
+              // (coerente con l'ordine ott→set già usato nei grafici mensili di questa tab).
+              setArrivoDa(`${anno - 1}-10-01`)
+              setArrivoA(`${anno}-09-30`)
+              setPrenotazioneDa(`${anno - 1}-10-01`)
+              setPrenotazioneA(`${anno}-09-30`)
             }}
-            style={{ ...stileSelect, cursor: 'pointer', background: '#f0f9ff', borderColor: '#7dd3fc', color: '#075985', fontWeight: 600 }}
+            style={{ ...stileSelect, cursor: 'pointer', background: '#f0f9ff', borderColor: '#7dd3fc', color: '#075985', fontWeight: 600, whiteSpace: 'nowrap' }}
           >
-            Anno {anno}
+            Anno com. {anno}
           </button>
         </div>
       </div>
