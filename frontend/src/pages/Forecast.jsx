@@ -857,6 +857,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
         totale: fatturato ? v.totale_prenotato_importo : v.totale_prenotato,
       }))
     : []
+  const tassoPerCanale = Object.fromEntries((datiTasso?.per_canale || []).map(c => [c.canale, c.tasso_pct]))
   // Recharts colora di default il testo della legenda come la serie — qui si vuole solo il
   // quadratino colorato, il testo resta nero come il resto dei titoli.
   const legendaNera = v => <span style={{ color: '#111827' }}>{v}</span>
@@ -1041,12 +1042,15 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
             <div>
               <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9rem', color: '#374151' }}>Per canale</h4>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead><tr style={{ background: '#f3f4f6' }}><Th>Canale</Th><Th align="right">N.</Th><Th align="right">Importo</Th></tr></thead>
+                <thead><tr style={{ background: '#f3f4f6' }}><Th>Canale</Th><Th align="right">N.</Th><Th align="right">% Disdette</Th><Th align="right">Importo</Th></tr></thead>
                 <tbody>
                   {dati.per_canale.map(c => (
                     <tr key={c.canale} style={{ borderBottom: '1px solid #e5e7eb' }}>
                       <td style={stCella}>{c.canale}</td>
                       <td style={{ ...stCella, textAlign: 'right' }}>{c.n}</td>
+                      <td style={{ ...stCella, textAlign: 'right', color: '#0ea5e9' }}>
+                        {tassoPerCanale[c.canale] != null ? `${tassoPerCanale[c.canale]}%` : '—'}
+                      </td>
                       <td style={{ ...stCella, textAlign: 'right' }}>{formatEuro(c.importo)}</td>
                     </tr>
                   ))}

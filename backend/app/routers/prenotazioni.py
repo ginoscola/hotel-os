@@ -468,6 +468,7 @@ def tasso_cancellazione(
     righe = base.all()
 
     per_mese = {m: {"totale": 0, "cancellate": 0, "totale_imp": 0.0, "cancellate_imp": 0.0} for m in range(1, 13)}
+    per_canale: dict = {}
 
     per_giorno = {}
     if righe:
@@ -489,6 +490,13 @@ def tasso_cancellazione(
             per_giorno[r.data_prenotazione]["cancellate"] += 1
             per_giorno[r.data_prenotazione]["cancellate_imp"] += r.importo
 
+        per_canale.setdefault(r.canale, {"totale": 0, "cancellate": 0, "totale_imp": 0.0, "cancellate_imp": 0.0})
+        per_canale[r.canale]["totale"] += 1
+        per_canale[r.canale]["totale_imp"] += r.importo
+        if r.cancellata:
+            per_canale[r.canale]["cancellate"] += 1
+            per_canale[r.canale]["cancellate_imp"] += r.importo
+
     totale_imp = sum(r.importo for r in righe)
     cancellato_imp = sum(r.importo for r in righe if r.cancellata)
 
@@ -505,6 +513,10 @@ def tasso_cancellazione(
         "per_giorno": [
             {"data": d.isoformat(), **_tasso_dict(v["totale"], v["cancellate"], v["totale_imp"], v["cancellate_imp"])}
             for d, v in sorted(per_giorno.items())
+        ],
+        "per_canale": [
+            {"canale": c, **_tasso_dict(v["totale"], v["cancellate"], v["totale_imp"], v["cancellate_imp"])}
+            for c, v in per_canale.items()
         ],
     }
 

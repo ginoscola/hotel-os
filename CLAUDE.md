@@ -1259,6 +1259,15 @@ denominatore (il totale prenotato quel mese, cancellato o no).
   stessa formula cancellate/totale ma senza raggruppare per mese) — coerente con la regola del
   progetto "mai medie semplici, sempre totali aggregati": non è la media dei tassi mensili, è il
   tasso vero sul totale del periodo.
+- **`per_canale`** aggiunto anche a `GET /tasso-cancellazione` (stesso giro sui dati di
+  `per_mese`/`per_giorno`, chiave = nome canale invece del mese): alimenta la nuova colonna
+  "% Disdette" nella tabella "Per canale" sotto i tre grafici, tra "N." e "Importo" — lookup lato
+  frontend (`tassoPerCanale`, mappa canale→`tasso_pct`) perché quella tabella viene da
+  `dati.per_canale` (solo cancellate, endpoint `/report`), mentre il tasso serve dall'endpoint con
+  tutte le righe. Sempre il tasso su conteggio (`tasso_pct`), non toggled da Prenotazioni/Fatturato
+  come i tre grafici sopra: le altre due colonne della stessa tabella (N./Importo) non rispondono
+  già a quel toggle, quindi introdurlo solo per questa colonna sarebbe stato incoerente con la
+  tabella stessa.
 
 ---
 
