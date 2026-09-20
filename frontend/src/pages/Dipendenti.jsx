@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import api from '../api/client'
 import { formatEuro, formatPerc, mostraErrore } from '../utils/format'
@@ -408,8 +408,8 @@ export default function Dipendenti() {
                   </thead>
                   <tbody>
                     {report.dipendenti.map((d, idx) => (
-                      <>
-                        <tr key={d.employee_id} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                      <Fragment key={d.employee_id}>
+                        <tr style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
                           <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                               <button onClick={() => setVoceExpanded(voceExpanded === d.employee_id ? null : d.employee_id)}
@@ -482,7 +482,7 @@ export default function Dipendenti() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     ))}
                     {/* Riga totale */}
                     {(() => {
@@ -1618,14 +1618,14 @@ function AnalisiCC() {
                   <th style={{ ...thStyle, minWidth: 160, background: '#2d6a9f', position: 'sticky', left: 0, zIndex: 3 }}>Centro di costo</th>
                   {mesiUnione.map(m => (
                     confronta ? (
-                      <>
-                        <th key={`${m}-curr`} style={{ ...thStyle, textAlign: 'right', borderLeft: '1px solid #3b82f6', minWidth: 90, background: '#2d6a9f' }}>
+                      <Fragment key={m}>
+                        <th style={{ ...thStyle, textAlign: 'right', borderLeft: '1px solid #3b82f6', minWidth: 90, background: '#2d6a9f' }}>
                           {anno}
                         </th>
-                        <th key={`${m}-prec`} style={{ ...thStyle, textAlign: 'right', minWidth: 80, background: '#374f6b', fontSize: 11 }}>
+                        <th style={{ ...thStyle, textAlign: 'right', minWidth: 80, background: '#374f6b', fontSize: 11 }}>
                           {anno - 1}
                         </th>
-                      </>
+                      </Fragment>
                     ) : (
                       <th key={m} style={{ ...thStyle, textAlign: 'right', minWidth: 100 }}>
                         {MESI_BREVI[m]}
@@ -1670,8 +1670,8 @@ function AnalisiCC() {
                         const curr = getCosto(centriVis, code, m)
                         const prec = datiPrec ? getCosto(centriPrecVis, code, m) : null
                         return confronta ? (
-                          <>
-                            <td key={`${m}-curr`} style={{ ...tdStyle, textAlign: 'right', borderLeft: '1px solid #e2e8f0' }}>
+                          <Fragment key={m}>
+                            <td style={{ ...tdStyle, textAlign: 'right', borderLeft: '1px solid #e2e8f0' }}>
                               {curr != null ? (
                                 <>
                                   <span>{formatEuro(curr)}</span>
@@ -1679,10 +1679,10 @@ function AnalisiCC() {
                                 </>
                               ) : <span style={{ color: '#e2e8f0' }}>—</span>}
                             </td>
-                            <td key={`${m}-prec`} style={{ ...tdStyle, textAlign: 'right', color: '#94a3b8', fontSize: 12 }}>
+                            <td style={{ ...tdStyle, textAlign: 'right', color: '#94a3b8', fontSize: 12 }}>
                               {prec != null ? formatEuro(prec) : <span style={{ color: '#e2e8f0' }}>—</span>}
                             </td>
-                          </>
+                          </Fragment>
                         ) : (
                           <td key={m} style={{ ...tdStyle, textAlign: 'right' }}>
                             {curr != null ? formatEuro(curr) : <span style={{ color: '#e2e8f0' }}>—</span>}
@@ -1715,15 +1715,15 @@ function AnalisiCC() {
                     const curr = totaliMeseVis[String(m)] ?? null
                     const prec = totaliMesePrecVis[String(m)] ?? null
                     return confronta ? (
-                      <>
-                        <td key={`${m}-curr`} style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700, borderLeft: '1px solid #334155' }}>
+                      <Fragment key={m}>
+                        <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700, borderLeft: '1px solid #334155' }}>
                           {curr != null ? formatEuro(curr) : '—'}
                           {curr != null && prec != null && cellaDelta(curr, prec)}
                         </td>
-                        <td key={`${m}-prec`} style={{ ...tdStyle, background: '#1e293b', textAlign: 'right', color: '#cbd5e1', fontSize: 12, fontWeight: 600 }}>
+                        <td style={{ ...tdStyle, background: '#1e293b', textAlign: 'right', color: '#cbd5e1', fontSize: 12, fontWeight: 600 }}>
                           {prec != null ? formatEuro(prec) : '—'}
                         </td>
-                      </>
+                      </Fragment>
                     ) : (
                       <td key={m} style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>
                         {curr != null ? formatEuro(curr) : '—'}

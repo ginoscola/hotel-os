@@ -380,6 +380,16 @@ più centri (es. Balducci Annie su 3 reparti Pasticceria CLB/DPH/INT), visibili 
 espanso la card (che li carica separatamente da `GET /dipendenti/{id}/centri-di-costo`).
 File test: `uploads/202604_costi  aziendali .pdf` (8 dipendenti, aprile 2026).
 
+⚠️ **`key` React su tre `<>...</>` dentro `.map()` era messa sui `<td>`/`<tr>` interni invece che
+sul Fragment**, che è l'elemento davvero restituito a ogni iterazione (righe dipendenti in "Report
+mensile" + due punti di "Analisi CC" con confronto anno attivo, colonne mese corrente/precedente
+affiancate). React se ne lamentava in console ("Each child in a list should have a unique key
+prop") ma soprattutto non riconciliava correttamente la lista a ogni cambio di dati, rischiando
+scambi di stato tra righe (es. riga espansa "sbagliata" dopo un refresh). Fix: `<>` → `<Fragment
+key={...}>` (import da `react`), key spostata dal figlio al Fragment stesso; i `<td>`/`<tr>` interni
+non ne hanno più bisogno (non sono loro l'elemento nell'array). Verificato: nessun warning residuo
+in console, tabelle invariate a schermo.
+
 ⚠️ **`payroll_parser.py` non usa più indici di riga fissi per indirizzo/qualifica/mansione/sommario**:
 per alcuni tirocinanti/stagisti il PDF non stampa affatto la riga "indirizzo dipendente" (campo vuoto),
 il che scalava di una posizione tutte le righe successive e faceva leggere uno dei 13 valori numerici
