@@ -1043,9 +1043,11 @@ righe già lette (da CSV con `csv.DictReader(delimiter=";")` o da XLSX con `open
 convertite nello stesso formato dict-per-riga prima di entrare nella logica comune). `_num_it()`/
 `_parse_data_it()` gestiscono sia stringhe (CSV) sia tipi nativi Excel (float/datetime già tipizzati
 in celle xlsx formattate) — verificato con entrambi i casi reali.
-- Frontend: **5° tab separato "Importa Cancellazioni Welcome"** (solo admin — non un pannello fisso
-  in cima alla tab di consultazione come nella primissima versione, spostato su richiesta esplicita
-  per non sporcare la pagina quando si va solo a guardare i dati): pannello upload + storico import
+- Frontend: **5° tab separato "Importa Welcome"** (rinominata da "Importa Cancellazioni Welcome"
+  dopo l'aggiunta dell'import "Prenotazioni non disdette" — non è più solo cancellazioni; solo
+  admin — non un pannello fisso in cima alla tab di consultazione come nella primissima versione,
+  spostato su richiesta esplicita per non sporcare la pagina quando si va solo a guardare i dati):
+  pannello upload + storico import
   con eliminazione. La tab "Cancellazioni" resta solo consultazione (filtri, **due grafici a
   barre mensili** — per mese di prenotazione e, subito sotto, per mese di **arrivo** [`per_mese_arrivo`
   nella response di `/report`, stesso calcolo ma su `r.arrivo.month`] — utile perché le due viste

@@ -88,7 +88,7 @@ export default function Forecast() {
         <button style={stileTab('pace')} onClick={() => setTabAttiva('pace')}>Pace Chart</button>
         <button style={stileTab('maturato')} onClick={() => setTabAttiva('maturato')}>Maturato</button>
         <button style={stileTab('cancellazioni', '#0ea5e9')} onClick={() => setTabAttiva('cancellazioni')}>Cancellazioni</button>
-        <button style={stileTab('importa-cancellazioni')} onClick={() => setTabAttiva('importa-cancellazioni')}>Importa Cancellazioni Welcome</button>
+        <button style={stileTab('importa-cancellazioni')} onClick={() => setTabAttiva('importa-cancellazioni')}>Importa Welcome</button>
       </div>
 
       {tabAttiva === 'riepilogo' && (
@@ -1301,7 +1301,7 @@ function ModaleModificaCancellazione({ riga, hotels, onClose, onSalvato }) {
 }
 
 // ---------------------------------------------------------------------------
-// Tab 5 — Importa Cancellazioni Welcome
+// Tab 5 — Importa Welcome
 // ---------------------------------------------------------------------------
 
 function TabImportaCancellazioni() {
