@@ -1268,6 +1268,11 @@ denominatore (il totale prenotato quel mese, cancellato o no).
   come i tre grafici sopra: le altre due colonne della stessa tabella (N./Importo) non rispondono
   già a quel toggle, quindi introdurlo solo per questa colonna sarebbe stato incoerente con la
   tabella stessa.
+- **Pulsante "Anno {anno}"** dopo le 4 date (Arrivo da/a, Prenotazione da/a): imposta tutte e
+  quattro a 1° gennaio–31 dicembre dell'**anno selezionato in cima alla pagina** (non l'anno solare
+  di oggi — scelta esplicita dell'utente, così funziona anche navigando dati di stagioni passate),
+  per non doverle scrivere a mano quando si vuole vedere l'intero anno. Un solo pulsante per
+  entrambe le coppie di date (non uno per coppia).
 
 ---
 

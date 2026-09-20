@@ -900,6 +900,20 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
           <label style={stileLabel}>Prenotazione a</label>
           <input type="date" value={prenotazioneA} onChange={e => setPrenotazioneA(e.target.value)} style={stileSelect} />
         </div>
+        <div>
+          <label style={{ ...stileLabel, visibility: 'hidden' }}>Anno</label>
+          <button
+            onClick={() => {
+              setArrivoDa(`${anno}-01-01`)
+              setArrivoA(`${anno}-12-31`)
+              setPrenotazioneDa(`${anno}-01-01`)
+              setPrenotazioneA(`${anno}-12-31`)
+            }}
+            style={{ ...stileSelect, cursor: 'pointer', background: '#f0f9ff', borderColor: '#7dd3fc', color: '#075985', fontWeight: 600 }}
+          >
+            Anno {anno}
+          </button>
+        </div>
       </div>
 
       {caricandoDati && <Caricamento />}
