@@ -110,6 +110,15 @@ da `prod004_2026` come modulo separato da USALI) sia `forecast` (`/forecast`), q
 restava evidenziato "Statistiche" (default di fallback della funzione). Corretto aggiungendo entrambi
 i prefissi mancanti — ma resta un passo manuale da ricordare a ogni nuovo modulo, non automatico.
 Placeholder: `WorkInProgress.jsx`.
+⚠️ **`getSubnav()` (`NavBar.jsx`) mostrava "— in sviluppo" sotto la NavBar per ogni modulo diverso
+da `revenue`** (unico con una vera sotto-nav propria, i link agli hotel): un fallback rimasto da
+quando gli altri moduli erano effettivamente non ancora fatti, mai aggiornato mano a mano che sono
+stati completati — visibile ancora a settembre 2026 su Forecast, Dipendenti, Corrispettivi e
+Statistiche Produzione, tutti e quattro pienamente funzionanti (hanno le proprie tab interne, che
+già fanno da sotto-navigazione). Corretto facendoli rientrare in un caso a parte che ritorna `[]`
+(nessuna sotto-nav, il banner non compare perché il rendering è condizionato a `subnav.length > 0`)
+invece di cadere nel fallback "non ancora implementato". **Budget e Usali non toccati** (non
+richiesto): mostrano ancora "in sviluppo" finché non verrà chiesto esplicitamente anche per loro.
 
 ## Area Admin (`/admin` → AdminUnificato.jsx, sidebar `?s=`)
 **Comune**: `utenti` (CRUD), `stagioni` (stagioni operative), `moduli` (attiva/disattiva/permessi)
