@@ -1202,6 +1202,64 @@ reimport li sovrascrivesse silenziosamente.
   mano resta bloccata in entrambe le modalità, quella non modificata viene aggiornata solo con
   `on_conflict=aggiorna`.
 
+**Tasso di cancellazione per mese di prenotazione** (`prenot008_2026`, settembre 2026): richiesto
+dall'utente per sapere, es., "che % delle prenotazioni fatte a gennaio è stata poi cancellata" — non
+calcolabile prima perché la tabella conteneva solo il numeratore (le cancellazioni), mai il
+denominatore (il totale prenotato quel mese, cancellato o no).
+- **`PrenotazioneCancellata.cancellata`** (Boolean, default `true` per compatibilità con tutte le
+  righe già in DB, che erano — e restano — solo cancellazioni). ⚠️ **Nonostante il nome, la tabella
+  `prenotazioni_cancellate` può ora contenere anche prenotazioni mai cancellate**: Welcome non
+  permette di esportare in un unico file "tutte le prenotazioni" con lo stato incluso, va generato
+  un file separato (stessa struttura "Elenco Prenotazioni") per le prenotazioni ancora valide. Non
+  rinominata la tabella/il modello per non toccare tutti i punti del codice che già la referenziano
+  — la sua semantica reale oggi è "prenotazioni importate da Welcome", `cancellata` distingue le due
+  categorie. Preferita una tabella unica a due tabelle separate proprio pensando a import settimanali
+  futuri: la stessa prenotazione può passare da valida a cancellata da una settimana all'altra, e la
+  logica di identità/reimport già esistente (hotel+codice+camera) aggiorna il flag sulla riga
+  esistente invece di dover riconciliare due tabelle indipendenti nel tempo.
+- **`POST /import` accetta `tipo=disdetta|non_disdetta`** (default `disdetta`, compatibile con
+  l'uso storico): scrive `cancellata` su ogni riga in base al **tipo di import scelto**, non
+  deducendolo dal contenuto del file (più affidabile: nel file "non disdette" `Data cancellazione`
+  è sempre vuota per costruzione, ma dedurlo dalla sola presenza/assenza di quel campo sarebbe
+  fragile). `PrenotazioneCancellataImport.tipo` aggiunto alla UNIQUE dell'import
+  (`mese`+`anno`+`nome_file`+`tipo`) — così lo stesso nome file può essere usato per entrambi i tipi
+  senza falsi conflitti "import già presente". `cancellata` è tra i `_CAMPI_AGGIORNABILI`: una
+  prenotazione importata come "non_disdetta" e poi ritrovata nel file "disdette" di un import
+  successivo (`on_conflict=aggiorna`) aggiorna da sola il flag, verificato end-to-end.
+  ⚠️ **Bug corretto nello stesso lavoro**: `parse_elenco_prenotazioni()` richiedeva sempre una `Data
+  cancellazione` valida, scartando con "data non valida" ogni riga del file "non disdette" (dove
+  quel campo è sempre vuoto per definizione) — l'intero import falliva con "nessuna riga valida
+  trovata". Fix: quel campo è l'unico tra le date della riga per cui l'assenza è un dato legittimo,
+  non un errore di formato — vuoto/None → `None`, nessuna eccezione.
+- **`_applica_filtri(..., cancellata=True)`**: default `True` preserva **esattamente** il
+  comportamento storico di `GET /report`/`GET /`/`GET /canali` (mostrano solo le cancellate, come
+  sempre) senza dover toccare i loro call site — verificato che i 947 record reali del 2026 restano
+  invariati dopo la migrazione. Il nuovo `GET /tasso-cancellazione` è l'unico endpoint che passa
+  `cancellata=None` (nessun filtro, prende tutte le righe) per calcolare sia numeratore sia
+  denominatore dalla stessa tabella.
+- Frontend: terzo grafico "Tasso di cancellazione per mese/giorno di prenotazione" in
+  `TabCancellazioni`, tooltip custom (`TooltipTasso`) che mostra anche `cancellate su totale`
+  (formattato in € quando la metrica è Fatturato), non solo la percentuale. `TabImportaCancellazioni`:
+  pillola arancione (stile a parte, `stileToggleBtnArancio` — il tema blu di `stileToggleBtn` è
+  specifico alla tab "Cancellazioni", non a questa) per scegliere `tipo=disdetta|non_disdetta` prima
+  di caricare; storico import mostra una nuova colonna "Tipo" (badge rosso/verde). Terza `CardKpi`
+  "% Cancellazioni" accanto alle due esistenti (tutte e tre ristrette a 130px — `CardKpi` ha un nuovo
+  prop `larghezza`, default 160px invariato per gli altri usi nel file, es. Pace Chart) per fare
+  spazio senza spezzare la riga con la colonna dei toggle.
+- ⚠️ **Il terzo grafico segue gli stessi due toggle degli altri due** (Mensile/Giornaliero,
+  Prenotazioni/Fatturato) — non è rimasto "sempre mensile" come nella primissima versione, corretto
+  su richiesta esplicita subito dopo. `GET /tasso-cancellazione` calcola quindi, nello stesso giro
+  sui dati, sia `per_mese` sia `per_giorno` (stesso range-sui-dati-effettivi di `/report`) sia,
+  per ciascuno, sia il tasso su conteggio sia su importo (`_tasso_dict()`, un unico helper per non
+  ripetere quattro volte la stessa formula `round(cancellate/totale*100, 1)`). Il frontend sceglie
+  l'array (`per_mese`/`per_giorno`) e i campi (`tasso_pct`/`tasso_importo_pct`, ecc.) in base ai due
+  toggle già esistenti — nessun terzo stato locale per questo grafico.
+  Sotto la descrizione, una riga "Tasso di cancellazione (media periodo X%)" usa il tasso aggregato
+  a livello di **intero periodo filtrato** (`tasso_pct`/`tasso_importo_pct` in cima alla risposta,
+  stessa formula cancellate/totale ma senza raggruppare per mese) — coerente con la regola del
+  progetto "mai medie semplici, sempre totali aggregati": non è la media dei tassi mensili, è il
+  tasso vero sul totale del periodo.
+
 ---
 
 ## Modulo Budget

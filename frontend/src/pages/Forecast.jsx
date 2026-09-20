@@ -736,6 +736,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const [ricerca, setRicerca] = useState('')
 
   const [dati, setDati] = useState(null)
+  const [datiTasso, setDatiTasso] = useState(null)
   const [righe, setRighe] = useState(null)
   const [pagina, setPagina] = useState(1)
   const [errore, setErrore] = useState(null)
@@ -802,6 +803,15 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
     }
   }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
 
+  const caricaTasso = useCallback(async () => {
+    try {
+      const r = await api.get('/prenotazioni-cancellate/tasso-cancellazione', { params: paramsFiltri })
+      setDatiTasso(r.data)
+    } catch {
+      setDatiTasso(null)
+    }
+  }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
+
   const caricaRighe = useCallback(async () => {
     try {
       const r = await api.get('/prenotazioni-cancellate/', {
@@ -812,6 +822,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, ricerca, ordinaPer, direzione, pagina])
 
   useEffect(() => { caricaReport() }, [caricaReport])
+  useEffect(() => { caricaTasso() }, [caricaTasso])
   useEffect(() => { caricaRighe() }, [caricaRighe])
   useEffect(() => { setPagina(1) }, [canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelFiltro, ricerca, ordinaPer, direzione])
 
@@ -837,6 +848,15 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const metricaKey = fatturato ? 'importo' : 'n'
   const metricaNome = fatturato ? 'Importo cancellato' : 'Camere cancellate'
   const metricaFormatter = v => fatturato ? formatEuro(v) : v
+  // Stessi due assi degli altri due grafici della tab: mensile/giornaliero e conteggio/importo.
+  const datiGraficoTasso = datiTasso
+    ? (giornaliero ? datiTasso.per_giorno : datiTasso.per_mese).map(v => ({
+        periodo: v.data ? v.data.slice(5) : v.mese_label,
+        tasso: fatturato ? v.tasso_importo_pct : v.tasso_pct,
+        cancellate: fatturato ? v.totale_cancellato_importo : v.totale_cancellato,
+        totale: fatturato ? v.totale_prenotato_importo : v.totale_prenotato,
+      }))
+    : []
   // Recharts colora di default il testo della legenda come la serie — qui si vuole solo il
   // quadratino colorato, il testo resta nero come il resto dei titoli.
   const legendaNera = v => <span style={{ color: '#111827' }}>{v}</span>
@@ -887,8 +907,14 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
       {dati && !caricandoDati && (
         <>
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-            <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#0ea5e9" />
-            <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#0ea5e9" />
+            <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#0ea5e9" larghezza="130px" />
+            <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#0ea5e9" larghezza="130px" />
+            <CardKpi
+              titolo="% Cancellazioni"
+              valore={datiTasso?.tasso_pct != null ? `${datiTasso.tasso_pct}%` : '—'}
+              colore="#0ea5e9"
+              larghezza="130px"
+            />
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginLeft: 'auto' }}>
               <div style={{ display: 'inline-flex', background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: 8, padding: 3 }}>
                 <button onClick={() => setVistaPeriodo('mensile')} style={stileToggleBtn(vistaPeriodo === 'mensile')}>Mensile</button>
@@ -954,6 +980,47 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
               )}
             </ResponsiveContainer>
           </div>
+
+          {datiTasso && (
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: '0 0 0.3rem', fontSize: '1rem', color: '#374151' }}>
+                Tasso di cancellazione per {giornaliero ? 'giorno' : 'mese'} di prenotazione
+                {fatturato ? ' (su fatturato)' : ' (su numero prenotazioni)'} — {anno} · {datiTasso.hotel_code}
+              </h3>
+              <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+                Richiede sia l'import "Disdette" sia "Prenotazioni non disdette" per questo periodo —
+                senza il secondo il totale prenotato è incompleto e il tasso risulta gonfiato.
+              </p>
+              <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: '#0ea5e9', fontWeight: 700 }}>
+                Tasso di cancellazione (media periodo {
+                  (fatturato ? datiTasso.tasso_importo_pct : datiTasso.tasso_pct) != null
+                    ? `${fatturato ? datiTasso.tasso_importo_pct : datiTasso.tasso_pct}%`
+                    : 'n/d'
+                })
+              </p>
+              <ResponsiveContainer width="100%" height={280}>
+                {giornaliero ? (
+                  <LineChart data={datiGraficoTasso} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                    <XAxis dataKey="periodo" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
+                    <YAxis tick={{ fontSize: 11 }} width={45} unit="%" />
+                    <Tooltip content={<TooltipTasso fatturato={fatturato} />} />
+                    <Legend formatter={legendaNera} />
+                    <Line type="monotone" dataKey="tasso" name="Tasso cancellazione" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+                  </LineChart>
+                ) : (
+                  <BarChart data={datiGraficoTasso} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                    <XAxis dataKey="periodo" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} width={45} unit="%" />
+                    <Tooltip content={<TooltipTasso fatturato={fatturato} />} />
+                    <Legend formatter={legendaNera} />
+                    <Bar dataKey="tasso" name="Tasso cancellazione" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
             <div>
@@ -1107,6 +1174,7 @@ function ModaleModificaCancellazione({ riga, hotels, onClose, onSalvato }) {
     trattamento: riga.trattamento || '',
     mercato: riga.mercato || '',
     importo: riga.importo ?? 0,
+    cancellata: riga.cancellata ?? true,
   })
   const [salvando, setSalvando] = useState(false)
   const [errore, setErrore] = useState(null)
@@ -1149,6 +1217,11 @@ function ModaleModificaCancellazione({ riga, hotels, onClose, onSalvato }) {
     }}>
       <div style={{ background: '#fff', borderRadius: 12, padding: '1.5rem', width: 640, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
         <h3 style={{ margin: '0 0 1rem', fontSize: '1.05rem', color: '#1a1a2e' }}>Modifica prenotazione cancellata</h3>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem', fontSize: '0.85rem', color: '#374151', cursor: 'pointer' }}>
+          <input type="checkbox" checked={form.cancellata} onChange={e => set('cancellata', e.target.checked)} />
+          Prenotazione cancellata (se disattivato, conta come prenotazione ancora valida nel tasso di cancellazione)
+        </label>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '1rem' }}>
           <div>
@@ -1214,6 +1287,7 @@ function ModaleModificaCancellazione({ riga, hotels, onClose, onSalvato }) {
 function TabImportaCancellazioni() {
   const [meseUpload, setMeseUpload] = useState('') // '' = intera stagione (nessun filtro/etichetta di mese)
   const [annoUpload, setAnnoUpload] = useState(new Date().getFullYear())
+  const [tipoImport, setTipoImport] = useState('disdetta')
   const [sovrascrivi, setSovrascrivi] = useState(false)
   const [caricando, setCaricando] = useState(false)
   const [esitoImport, setEsitoImport] = useState(null)
@@ -1245,7 +1319,7 @@ function TabImportaCancellazioni() {
       const qsMese = meseUpload ? `&mese=${meseUpload}` : ''
       const onConflict = sovrascrivi ? 'aggiorna' : 'salta'
       const { data } = await api.post(
-        `/prenotazioni-cancellate/import?anno=${annoUpload}&on_conflict=${onConflict}${qsMese}`,
+        `/prenotazioni-cancellate/import?anno=${annoUpload}&tipo=${tipoImport}&on_conflict=${onConflict}${qsMese}`,
         form, { headers: { 'Content-Type': 'multipart/form-data' } }
       )
       setEsitoImport({
@@ -1290,13 +1364,19 @@ function TabImportaCancellazioni() {
     <div>
       <p style={{ margin: '0 0 1.2rem', fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
         Carica qui l'export Welcome "Elenco Prenotazioni" (o, in formato legacy, "PrenotazioniWeb"
-        foglio DISDETTE). Ogni riga porta già le proprie date reali: "Mese" qui sotto è solo
-        un'etichetta per lo storico import, lascialo su "Intera stagione" per un file che copre
-        più mesi o tutti gli hotel insieme. Il dato importato compare nella tab "Cancellazioni".
+        foglio DISDETTE). Welcome non permette di esportare in un solo file sia le prenotazioni
+        cancellate sia quelle ancora valide: per calcolare il tasso di cancellazione servono
+        entrambi i file, caricati separatamente con il tipo giusto qui sotto. Ogni riga porta già
+        le proprie date reali: "Mese" qui sotto è solo un'etichetta per lo storico import,
+        lascialo su "Intera stagione" per un file che copre più mesi o tutti gli hotel insieme.
       </p>
 
       <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: '1rem', marginBottom: '2rem' }}>
         <h3 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', color: '#9a3412' }}>Importa export Welcome</h3>
+        <div style={{ display: 'inline-flex', background: '#fff', border: '1px solid #fdba74', borderRadius: 8, padding: 3, marginBottom: '0.8rem' }}>
+          <button onClick={() => setTipoImport('disdetta')} style={stileToggleBtnArancio(tipoImport === 'disdetta')}>Disdette</button>
+          <button onClick={() => setTipoImport('non_disdetta')} style={stileToggleBtnArancio(tipoImport === 'non_disdetta')}>Prenotazioni non disdette</button>
+        </div>
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={stileLabel}>Mese (etichetta, opzionale)</label>
           <select value={meseUpload} onChange={e => setMeseUpload(e.target.value ? Number(e.target.value) : '')} style={stileSelect}>
@@ -1340,7 +1420,7 @@ function TabImportaCancellazioni() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.87rem' }}>
             <thead>
               <tr style={{ background: '#f3f4f6' }}>
-                <Th>File</Th><Th>Mese prenotazione</Th><Th align="right">Righe valide</Th>
+                <Th>File</Th><Th>Tipo</Th><Th>Mese prenotazione</Th><Th align="right">Righe valide</Th>
                 <Th align="right">Fuori mese</Th><Th align="center">Caricato il</Th><Th align="center">Azioni</Th>
               </tr>
             </thead>
@@ -1348,6 +1428,15 @@ function TabImportaCancellazioni() {
               {storico.map(imp => (
                 <tr key={imp.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={stCella}>{imp.nome_file}</td>
+                  <td style={stCella}>
+                    <span style={{
+                      fontSize: '0.75rem', fontWeight: 600, padding: '2px 7px', borderRadius: 4,
+                      background: imp.tipo === 'disdetta' ? '#fee2e2' : '#dcfce7',
+                      color: imp.tipo === 'disdetta' ? '#991b1b' : '#166534',
+                    }}>
+                      {imp.tipo_label}
+                    </span>
+                  </td>
                   <td style={stCella}>{imp.mese_label} {imp.anno}</td>
                   <td style={{ ...stCella, textAlign: 'right' }}>{imp.n_righe_valide}</td>
                   <td style={{ ...stCella, textAlign: 'right', color: imp.n_righe_fuori_mese ? '#d97706' : '#d1d5db' }}>
@@ -1377,10 +1466,23 @@ function TabImportaCancellazioni() {
 // Sottocomponenti
 // ---------------------------------------------------------------------------
 
-function CardKpi({ titolo, valore, colore }) {
+function TooltipTasso({ active, payload, label, fatturato }) {
+  if (!active || !payload || !payload.length) return null
+  const p = payload[0].payload
+  const fmt = v => fatturato ? formatEuro(v) : v
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '0.5rem 0.7rem', fontSize: '0.8rem', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}>
+      <div style={{ fontWeight: 700, marginBottom: 2 }}>{label}</div>
+      <div>Tasso: {p.tasso != null ? `${p.tasso}%` : 'n/d'}</div>
+      <div style={{ color: '#6b7280' }}>{fmt(p.cancellate)} cancellat{fatturato ? 'o' : 'e'} su {fmt(p.totale)} prenotat{fatturato ? 'o' : 'e'}</div>
+    </div>
+  )
+}
+
+function CardKpi({ titolo, valore, colore, larghezza = '160px' }) {
   return (
     <div style={{
-      flex: '1 1 160px', background: '#fff', border: '1px solid #e5e7eb',
+      flex: `1 1 ${larghezza}`, background: '#fff', border: '1px solid #e5e7eb',
       borderRadius: 10, padding: '0.9rem 1.1rem', borderTop: `3px solid ${colore}`,
     }}>
       <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '0.3rem' }}>{titolo}</div>
@@ -1459,5 +1561,20 @@ function stileToggleBtn(attivo) {
     fontWeight: attivo ? 700 : 500,
     background: attivo ? '#0ea5e9' : 'transparent',
     color: attivo ? '#fff' : '#075985',
+  }
+}
+
+// Pillola arancione condivisa (IVA inclusa/esclusa) — usata in TabImportaCancellazioni, non
+// nella tab Cancellazioni (che ha il suo tema blu, vedi sopra).
+function stileToggleBtnArancio(attivo) {
+  return {
+    padding: '0.4rem 0.9rem',
+    border: 'none',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: '0.83rem',
+    fontWeight: attivo ? 700 : 500,
+    background: attivo ? '#ea580c' : 'transparent',
+    color: attivo ? '#fff' : '#9a3412',
   }
 }

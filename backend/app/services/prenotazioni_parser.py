@@ -175,7 +175,11 @@ def parse_elenco_prenotazioni(raw: bytes, righe_grezze: List[Dict], mese_atteso:
             arrivo = _parse_data_it(riga.get("Arrivo"))
             partenza = _parse_data_it(riga.get("Partenza"))
             data_pren = _parse_data_it(riga.get("Data prenotazione"))
-            data_canc = _parse_data_it(riga.get("Data cancellazione"))
+            # Vuota per le prenotazioni ancora valide (file "non_disdetta", vedi
+            # routers/prenotazioni.py) — a differenza di arrivo/partenza/data_prenotazione, sempre
+            # obbligatorie, qui l'assenza è un dato legittimo, non un errore di formato.
+            raw_canc = riga.get("Data cancellazione")
+            data_canc = _parse_data_it(raw_canc) if raw_canc not in (None, "") else None
         except (ValueError, TypeError):
             warning.append(f"Riga con codice {codice}: data non valida, scartata")
             continue

@@ -38,6 +38,8 @@ def _fmt_import(imp: PrenotazioneCancellataImport) -> dict:
         "mese": imp.mese,
         "anno": imp.anno,
         "mese_label": MESI_IT[imp.mese - 1] if imp.mese else "Intera stagione",
+        "tipo": imp.tipo,
+        "tipo_label": "Disdette" if imp.tipo == "disdetta" else "Prenotazioni non disdette",
         "n_righe_totali": imp.n_righe_totali,
         "n_righe_valide": imp.n_righe_valide,
         "n_righe_fuori_mese": imp.n_righe_fuori_mese,
@@ -57,7 +59,7 @@ def _fmt_import(imp: PrenotazioneCancellataImport) -> dict:
 _CAMPI_AGGIORNABILI = [
     "canale", "canale_vendita", "codice_ota", "data_cancellazione", "data_prenotazione",
     "arrivo", "partenza", "notti", "pax", "cliente", "email", "trattamento", "mercato", "importo",
-    "dati_grezzi",
+    "dati_grezzi", "cancellata",
 ]
 
 
@@ -74,6 +76,13 @@ def importa_csv(
         "stagione in un colpo solo",
     ),
     anno: int = Query(...),
+    tipo: str = Query(
+        "disdetta", pattern="^(disdetta|non_disdetta)$",
+        description="Welcome non permette di esportare in un file solo tutte le prenotazioni con "
+        "lo stato incluso: 'disdetta' per il file delle cancellazioni (comportamento storico), "
+        "'non_disdetta' per il file delle prenotazioni ancora valide. Determina il valore scritto "
+        "in cancellata per tutte le righe di questo import.",
+    ),
     is_test: bool = Query(False),
     on_conflict: str = Query(
         "salta", pattern="^(salta|aggiorna)$",
@@ -88,7 +97,7 @@ def importa_csv(
         raise HTTPException(status_code=422, detail="Il file deve essere un CSV o un XLSX")
 
     esistente = db.query(PrenotazioneCancellataImport).filter_by(
-        mese=mese, anno=anno, nome_file=file.filename,
+        mese=mese, anno=anno, nome_file=file.filename, tipo=tipo,
     ).first()
     if esistente:
         label = f"mese {mese:02d}/{anno}" if mese else f"intera stagione {anno}"
@@ -109,6 +118,7 @@ def importa_csv(
         nome_file=file.filename,
         mese=mese,
         anno=anno,
+        tipo=tipo,
         n_righe_totali=risultato["n_righe_totali"],
         n_righe_valide=risultato["n_righe_valide"],
         n_righe_fuori_mese=risultato["n_righe_fuori_mese"],
@@ -119,6 +129,9 @@ def importa_csv(
     db.flush()
 
     righe = risultato["righe"]
+    cancellata_valore = (tipo == "disdetta")
+    for r in righe:
+        r["cancellata"] = cancellata_valore
     # Solo le righe con un ID prenotazione nativo (formato "Elenco Prenotazioni") possono essere
     # riconosciute come "la stessa prenotazione già presente" tra import diversi — il vecchio
     # formato "PrenotazioniWeb" non ha un ID affidabile e resta sul comportamento storico
@@ -221,8 +234,10 @@ def elimina_import(import_id: int, conferma: bool = Query(False), db: Session = 
 # Report
 # ---------------------------------------------------------------------------
 
-def _applica_filtri(query, hotel_code, canali, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test):
+def _applica_filtri(query, hotel_code, canali, prenotazione_da, prenotazione_a, arrivo_da, arrivo_a, is_test, cancellata=True):
     query = query.filter(PrenotazioneCancellata.is_test == is_test)
+    if cancellata is not None:
+        query = query.filter(PrenotazioneCancellata.cancellata == cancellata)
     if hotel_code and hotel_code.lower() != "all":
         query = query.filter(PrenotazioneCancellata.hotel_code == hotel_code.upper())
     if canali:
@@ -313,6 +328,7 @@ def _fmt_riga(r: PrenotazioneCancellata) -> dict:
         "importo": r.importo,
         "modificato_manualmente": r.modificato_manualmente,
         "dati_grezzi": r.dati_grezzi,
+        "cancellata": r.cancellata,
     }
 
 
@@ -414,6 +430,85 @@ def report(
     }
 
 
+def _tasso_dict(totale_n: int, cancellate_n: int, totale_imp: float, cancellate_imp: float) -> dict:
+    return {
+        "totale_prenotato": totale_n,
+        "totale_cancellato": cancellate_n,
+        "tasso_pct": round(cancellate_n / totale_n * 100, 1) if totale_n else None,
+        "totale_prenotato_importo": round(totale_imp, 2),
+        "totale_cancellato_importo": round(cancellate_imp, 2),
+        "tasso_importo_pct": round(cancellate_imp / totale_imp * 100, 1) if totale_imp else None,
+    }
+
+
+@router.get("/tasso-cancellazione", dependencies=[Depends(richiedi_utente_attivo)])
+def tasso_cancellazione(
+    anno: int = Query(...),
+    hotel_code: str = Query(default="all"),
+    canali: Optional[str] = Query(default=None, description="Canali separati da virgola"),
+    arrivo_da: Optional[date] = Query(default=None),
+    arrivo_a: Optional[date] = Query(default=None),
+    prenotazione_da: Optional[date] = Query(default=None),
+    prenotazione_a: Optional[date] = Query(default=None),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """% di prenotazioni cancellate per mese/giorno di prenotazione, su numero o su importo —
+    richiede sia l'import 'disdetta' sia 'non_disdetta' per quel periodo: senza il secondo il
+    denominatore (totale prenotato) è incompleto e il tasso risulterebbe artificialmente vicino
+    al 100%. Stessi due assi (Mensile/Giornaliero, Prenotazioni/Fatturato) degli altri due grafici
+    della tab, calcolati qui nello stesso giro sui dati per evitare una seconda query."""
+    base = db.query(PrenotazioneCancellata).filter(
+        func.extract("year", PrenotazioneCancellata.arrivo) == anno
+    )
+    base = _applica_filtri(
+        base, hotel_code, _parse_canali(canali), prenotazione_da, prenotazione_a, arrivo_da, arrivo_a,
+        is_test, cancellata=None,
+    )
+    righe = base.all()
+
+    per_mese = {m: {"totale": 0, "cancellate": 0, "totale_imp": 0.0, "cancellate_imp": 0.0} for m in range(1, 13)}
+
+    per_giorno = {}
+    if righe:
+        date_pren = [r.data_prenotazione for r in righe]
+        d, fine = min(date_pren), max(date_pren)
+        while d <= fine:
+            per_giorno[d] = {"totale": 0, "cancellate": 0, "totale_imp": 0.0, "cancellate_imp": 0.0}
+            d += timedelta(days=1)
+
+    for r in righe:
+        m = r.data_prenotazione.month
+        per_mese[m]["totale"] += 1
+        per_mese[m]["totale_imp"] += r.importo
+        per_giorno[r.data_prenotazione]["totale"] += 1
+        per_giorno[r.data_prenotazione]["totale_imp"] += r.importo
+        if r.cancellata:
+            per_mese[m]["cancellate"] += 1
+            per_mese[m]["cancellate_imp"] += r.importo
+            per_giorno[r.data_prenotazione]["cancellate"] += 1
+            per_giorno[r.data_prenotazione]["cancellate_imp"] += r.importo
+
+    totale_imp = sum(r.importo for r in righe)
+    cancellato_imp = sum(r.importo for r in righe if r.cancellata)
+
+    return {
+        "anno": anno,
+        "hotel_code": hotel_code,
+        **_tasso_dict(len(righe), sum(1 for r in righe if r.cancellata), totale_imp, cancellato_imp),
+        "per_mese": [
+            {"mese": m, "mese_label": MESI_IT[m - 1], **_tasso_dict(
+                per_mese[m]["totale"], per_mese[m]["cancellate"], per_mese[m]["totale_imp"], per_mese[m]["cancellate_imp"],
+            )}
+            for m in _MESI_ORDINE_COMMERCIALE
+        ],
+        "per_giorno": [
+            {"data": d.isoformat(), **_tasso_dict(v["totale"], v["cancellate"], v["totale_imp"], v["cancellate_imp"])}
+            for d, v in sorted(per_giorno.items())
+        ],
+    }
+
+
 @router.get("/canali", dependencies=[Depends(richiedi_utente_attivo)])
 def lista_canali(
     anno: int = Query(...),
@@ -491,6 +586,7 @@ class PrenotazioneCancellataUpdate(BaseModel):
     trattamento: Optional[str] = None
     mercato: Optional[str] = None
     importo: float = 0.0
+    cancellata: bool = True
 
 
 @router.put("/{riga_id}", dependencies=[Depends(richiedi_admin)])

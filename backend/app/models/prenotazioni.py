@@ -11,6 +11,18 @@ cancellazione — solo la data di prenotazione originale — quindi non è possi
 un incrocio mese prenotazione × mese cancellazione, solo il totale cancellato per mese di
 prenotazione. Il formato "Elenco Prenotazioni" non ha questo limite (ID e data
 cancellazione nativi).
+
+⚠️ Nonostante il nome, dal `prenot008_2026` la tabella `prenotazioni_cancellate` può contenere
+anche prenotazioni MAI cancellate (colonna `cancellata`) — Welcome non permette di esportare in
+un solo file "tutte le prenotazioni" con lo stato incluso: bisogna generare due file separati
+(stessa struttura), uno per le disdette (`tipo='disdetta'` in fase di import) e uno per le
+prenotazioni ancora valide (`tipo='non_disdetta'`). Non è stata scelta una tabella separata per le
+"non disdette" perché con import settimanali futuri la stessa prenotazione può passare da valida a
+cancellata da una settimana all'altra: la logica di identità/reimport già esistente (hotel+codice
+prenotazione+camera) aggiorna il flag `cancellata` sulla stessa riga invece di dover riconciliare
+due tabelle indipendenti. Il nome tabella non è stato cambiato per non toccare tutti i punti del
+codice che già la referenziano — la sua semantica reale oggi è "prenotazioni importate da Welcome",
+il valore di `cancellata` distingue le due categorie.
 """
 
 from sqlalchemy import (
@@ -36,6 +48,10 @@ class PrenotazioneCancellataImport(Base):
     # riga per riga).
     mese = Column(Integer, nullable=True)
     anno = Column(Integer, nullable=False)
+    # 'disdetta' (comportamento storico) o 'non_disdetta' — quale dei due file separati che
+    # Welcome costringe a generare è stato caricato (vedi docstring del modulo). Determina il
+    # valore di PrenotazioneCancellata.cancellata scritto per tutte le righe di questo import.
+    tipo = Column(String(20), nullable=False, server_default="disdetta")
     n_righe_totali = Column(Integer, nullable=False, default=0)
     n_righe_valide = Column(Integer, nullable=False, default=0)
     n_righe_fuori_mese = Column(Integer, nullable=False, default=0)
@@ -48,7 +64,7 @@ class PrenotazioneCancellataImport(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("mese", "anno", "nome_file", name="uq_prenotazioni_cancellate_import"),
+        UniqueConstraint("mese", "anno", "nome_file", "tipo", name="uq_prenotazioni_cancellate_import"),
     )
 
 
@@ -97,6 +113,11 @@ class PrenotazioneCancellata(Base):
     # corrispettivi_documenti.modificato_manualmente): protegge la riga da un reimport futuro,
     # che altrimenti la sovrascriverebbe silenziosamente con il dato (sbagliato) del file Welcome.
     modificato_manualmente = Column(Boolean, nullable=False, default=False)
+    # False = prenotazione ancora valida al momento dell'import "non_disdetta"; True = cancellata
+    # (comportamento storico, unica categoria esistente prima di prenot008_2026 — le righe già in
+    # DB diventano tutte True via server_default in migrazione). Aggiornato dal reimport come ogni
+    # altro campo (una prenotazione valida può risultare cancellata in un import successivo).
+    cancellata = Column(Boolean, nullable=False, server_default="true")
     # Riga intera del file così com'è (tutte le colonne, comprese quelle non ancora mappate a un
     # campo proprio, es. Segmento/Fonte/Nazione) — non modificabile da PUT (resta lo snapshot
     # dell'import originale anche dopo una correzione manuale dei campi "veri"). NULL sulle righe
