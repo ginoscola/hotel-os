@@ -1336,8 +1336,9 @@ salvataggio di una singola settimana non aveva mai funzionato dal 25/05/2026:
 Modulo separato (non più dentro USALI — spostato su richiesta esplicita dopo la prima versione),
 route `/statistiche-produzione`, code modulo `produzione`, in NavBar tra Statistiche (revenue) e
 Budget. `StatisticheProduzione.jsx` è il tab router (Import, Produzione giornaliera, Analisi canali,
-Analisi trattamenti, Analisi tipo ospite, Report mensile, Ricavi camere, Dati di test — 8 tab), toggle
-IVA globale `localStorage('produzione_lordo')` su tutte tranne Import/Dati di test. `Usali.jsx` ha 2 tab proprie:
+Analisi trattamenti, Analisi tipo ospite, Report mensile, Conteggio pasti, Ricavi camere, Dati di
+test — 9 tab), toggle IVA globale `localStorage('produzione_lordo')` su tutte tranne Import/Conteggio
+pasti/Dati di test. `Usali.jsx` ha 2 tab proprie:
 "Conto Economico" (`UsaliContoEconomico.jsx`, invariato) e "Movimenti Attivi" (`UsaliMovimentiAttivi.jsx`,
 vedi sezione dedicata più sotto) — quest'ultima aggiunta dopo la prima separazione dei moduli, legge
 dati aggregati da Produzione/Corrispettivi.
@@ -1506,6 +1507,22 @@ causa del timeout osservato in campo). Se il backend riceve un timeout dal front
 grande, controllare prima nei log/DB se l'import è comunque andato a buon fine (`GET
 /produzione/import/storico`) prima di far ricaricare il file: il commit lato server può completare
 anche dopo che il browser ha già mostrato l'errore.
+
+### Tab "Conteggio pasti" (`produzione/TabConteggioPasti.jsx`, settembre 2026)
+Numero di colazioni/colazioni extra/pranzi/cene (non il ricavo) per mese, struttura (DPH/CLB/INT —
+BON escluso, coerente col resto del modulo) e complessivo gruppo. `GET
+/produzione/report/conteggio-pasti?anno=&struttura_code=` in `produzione_report.py`, stesso pattern
+di `/report/mensile` (`query_report()` + iterazione sui 12 mesi) ma `_conta_pasti()` al posto di
+`aggrega()`: **`COUNT(*)` per categoria, non `SUM(quantita)`** — ogni riga di `prod_righe` è già un
+singolo pasto/persona (un Oid Welcome = un addebito, mai una riga aggregata con quantità multipla,
+vedi `UniqueConstraint` sul modello), quindi contare le righe è l'unico conteggio coerente col resto
+del modulo; il campo `quantita` sul modello resta comunque non utilizzato da nessun report. Colazioni
+extra (`colazione_extra`) è una voce a sé, non sommata dentro "Colazioni" (supplemento acquistato a
+parte, non il pasto del trattamento standard) — scelta esplicita dell'utente.
+Frontend: stessa struttura/interazione di `TabReportMensile.jsx` (selettore anno con frecce +
+struttura, tabella Mese×Struttura con click per espandere il dettaglio per categoria, riga ANNO in
+fondo) ma senza toggle IVA (è un conteggio, non un importo — tab aggiunta a `TAB_SENZA_TOGGLE_IVA` in
+`StatisticheProduzione.jsx`) e senza export (non richiesto in questa v1).
 
 ### Tab "Ricavi camere" (`produzione/TabRicaviCamere.jsx`, settembre 2026 — nata in Corrispettivi, spostata qui subito perché la fonte è `prod_righe`)
 Ricavi per singola camera in un periodo scelto (default: 01/01–31/12 anno solare corrente), per

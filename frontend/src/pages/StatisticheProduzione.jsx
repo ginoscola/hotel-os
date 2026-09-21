@@ -5,6 +5,7 @@ import TabCanali from './produzione/TabCanali'
 import TabTrattamenti from './produzione/TabTrattamenti'
 import TabTipoOspite from './produzione/TabTipoOspite'
 import TabReportMensile from './produzione/TabReportMensile'
+import TabConteggioPasti from './produzione/TabConteggioPasti'
 import TabRicaviCamere from './produzione/TabRicaviCamere'
 import TabTest from './produzione/TabTest'
 import { isAdmin, LS_TAB, LS_LORDO } from '../utils/produzioneHelpers'
@@ -16,12 +17,14 @@ const TABS_BASE = [
   { id: 'prod-trattamenti', label: 'Analisi trattamenti' },
   { id: 'prod-tipo-ospite', label: 'Analisi tipo ospite' },
   { id: 'prod-mensile', label: 'Report mensile' },
+  { id: 'prod-conteggio-pasti', label: 'Conteggio pasti' },
   { id: 'prod-ricavi-camere', label: 'Ricavi camere' },
 ]
 const TABS_ADMIN = [...TABS_BASE, { id: 'prod-test', label: 'Dati di test' }]
 
-// Tutte le tab di questo modulo mostrano il toggle IVA globale
-const TAB_SENZA_TOGGLE_IVA = new Set(['prod-import', 'prod-test'])
+// Tutte le tab di questo modulo mostrano il toggle IVA globale, tranne quelle che non
+// mostrano importi (Import/Dati di test) o mostrano un conteggio, non un ricavo (Conteggio pasti)
+const TAB_SENZA_TOGGLE_IVA = new Set(['prod-import', 'prod-test', 'prod-conteggio-pasti'])
 
 export default function StatisticheProduzione() {
   const tabsDisponibili = isAdmin() ? TABS_ADMIN : TABS_BASE
@@ -81,6 +84,7 @@ export default function StatisticheProduzione() {
       {tab === 'prod-trattamenti' && <TabTrattamenti lordo={lordo} key={refreshKey} />}
       {tab === 'prod-tipo-ospite' && <TabTipoOspite lordo={lordo} key={refreshKey} />}
       {tab === 'prod-mensile' && <TabReportMensile lordo={lordo} key={refreshKey} />}
+      {tab === 'prod-conteggio-pasti' && <TabConteggioPasti key={refreshKey} />}
       {tab === 'prod-ricavi-camere' && <TabRicaviCamere lordo={lordo} key={refreshKey} />}
       {tab === 'prod-test' && isAdmin() && <TabTest onPulito={() => setRefreshKey(k => k + 1)} />}
     </div>

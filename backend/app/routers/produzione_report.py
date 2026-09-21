@@ -182,6 +182,47 @@ def report_mensile(
     return risposta
 
 
+CODICI_PASTI = ['colazione', 'colazione_extra', 'pranzo', 'cena']
+
+
+def _conta_pasti(righe: list[ProdRiga], categorie_by_id: dict) -> dict:
+    """Conta (non somma importi) le righe per le 4 categorie pasto — un Oid Welcome = un
+    pasto/persona, mai una riga aggregata con quantità multipla (vedi UniqueConstraint su
+    ProdRiga), quindi COUNT(*) per categoria è il conteggio corretto."""
+    conteggio = {code: 0 for code in CODICI_PASTI}
+    for r in righe:
+        cat = categorie_by_id.get(r.categoria_id)
+        if cat and cat.code in conteggio:
+            conteggio[cat.code] += 1
+    conteggio['totale'] = sum(conteggio[c] for c in CODICI_PASTI)
+    return conteggio
+
+
+@router.get("/report/conteggio-pasti")
+def report_conteggio_pasti(
+    anno: int = Query(..., ge=2020, le=2035),
+    struttura_code: Optional[str] = Query(None),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """Conteggio (non ricavo) di colazioni/colazione extra/pranzi/cene per mese, struttura
+    (solo DPH/CLB/INT, coerente col resto del modulo — BON escluso) e complessivo gruppo."""
+    categorie_by_id = {c.id: c for c in db.query(ProdCategoria).all()}
+    strutture = [struttura_code] if struttura_code else STRUTTURE_HOTEL
+
+    mesi_out = []
+    for m in range(1, 13):
+        da = date(anno, m, 1)
+        a = date(anno, m, calendar.monthrange(anno, m)[1])
+        righe = query_report(db, da, a, struttura_code, None, None, None, is_test).all()
+        righe = [r for r in righe if r.struttura_code in strutture]
+        per_struttura = {sc: _conta_pasti([r for r in righe if r.struttura_code == sc], categorie_by_id) for sc in strutture}
+        mesi_out.append({'mese': m, 'per_struttura': per_struttura, 'totale': _conta_pasti(righe, categorie_by_id)})
+
+    totale_anno = {code: sum(mo['totale'][code] for mo in mesi_out) for code in CODICI_PASTI + ['totale']}
+    return {'anno': anno, 'mesi': mesi_out, 'totale_anno': totale_anno}
+
+
 def _per_dimensione(
     db: Session, campo: str, data_da: date, data_a: date,
     struttura_code: Optional[str], is_test: bool,
