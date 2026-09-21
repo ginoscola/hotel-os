@@ -51,6 +51,11 @@ class ProdDettaglioCategoria(Base):
     # nessuna tariffa combacia. Es. "Parcheggio extra": 91€ (=7×13) -> Parcheggio Esterno,
     # 20€ -> Parcheggio Hotel, un importo che non è multiplo di nessuna tariffa nota -> fallback.
     categoria_da_prezzo = Column(Boolean, nullable=False, default=False, server_default='false')
+    # True: la riga rappresenta un pasto vero (una a persona/pasto, es. "Quota Cena") ed entra nei
+    # conteggi di "Conteggio pasti". False (default) per le singole voci di menu (piatti/bevande/
+    # coperti) mappate nella stessa categoria colazione/pranzo/cena solo per finalità di ricavo —
+    # vedi migrazione prod006_2026 per il bug reale che ha reso necessario questo flag.
+    conta_come_pasto    = Column(Boolean, nullable=False, default=False, server_default='false')
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
 
     categoria = relationship("ProdCategoria")

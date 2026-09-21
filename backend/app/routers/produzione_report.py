@@ -185,14 +185,23 @@ def report_mensile(
 CODICI_PASTI = ['colazione', 'colazione_extra', 'pranzo', 'cena']
 
 
-def _conta_pasti(righe: list[ProdRiga], categorie_by_id: dict) -> dict:
-    """Conta (non somma importi) le righe per le 4 categorie pasto — un Oid Welcome = un
-    pasto/persona, mai una riga aggregata con quantità multipla (vedi UniqueConstraint su
-    ProdRiga), quindi COUNT(*) per categoria è il conteggio corretto."""
+def _carica_conta_come_pasto(db: Session) -> set[str]:
+    """Dettaglio_originale (normalizzato lower/trim) delle voci di mapping marcate
+    conta_come_pasto=true — solo queste rappresentano un pasto vero (una riga a persona/pasto,
+    es. "Quota Cena"), non i singoli piatti/bevande/coperti mappati nella stessa categoria
+    colazione/pranzo/cena per finalità di ricavo (vedi migrazione prod006_2026)."""
+    righe = db.query(ProdDettaglioCategoria).filter(ProdDettaglioCategoria.conta_come_pasto.is_(True)).all()
+    return {r.dettaglio_originale.strip().lower() for r in righe}
+
+
+def _conta_pasti(righe: list[ProdRiga], categorie_by_id: dict, conta_pasto: set[str]) -> dict:
+    """Conta (non somma importi) solo le righe 'quota' delle 4 categorie pasto — un Oid Welcome
+    con dettaglio_originale marcato conta_come_pasto=true è un pasto/persona vero; le altre righe
+    della stessa categoria (piatti/bevande/coperti) sono escluse dal conteggio."""
     conteggio = {code: 0 for code in CODICI_PASTI}
     for r in righe:
         cat = categorie_by_id.get(r.categoria_id)
-        if cat and cat.code in conteggio:
+        if cat and cat.code in conteggio and (r.dettaglio_originale or '').strip().lower() in conta_pasto:
             conteggio[cat.code] += 1
     conteggio['totale'] = sum(conteggio[c] for c in CODICI_PASTI)
     return conteggio
@@ -208,6 +217,7 @@ def report_conteggio_pasti(
     """Conteggio (non ricavo) di colazioni/colazione extra/pranzi/cene per mese, struttura
     (solo DPH/CLB/INT, coerente col resto del modulo — BON escluso) e complessivo gruppo."""
     categorie_by_id = {c.id: c for c in db.query(ProdCategoria).all()}
+    conta_pasto = _carica_conta_come_pasto(db)
     strutture = [struttura_code] if struttura_code else STRUTTURE_HOTEL
 
     mesi_out = []
@@ -216,8 +226,8 @@ def report_conteggio_pasti(
         a = date(anno, m, calendar.monthrange(anno, m)[1])
         righe = query_report(db, da, a, struttura_code, None, None, None, is_test).all()
         righe = [r for r in righe if r.struttura_code in strutture]
-        per_struttura = {sc: _conta_pasti([r for r in righe if r.struttura_code == sc], categorie_by_id) for sc in strutture}
-        mesi_out.append({'mese': m, 'per_struttura': per_struttura, 'totale': _conta_pasti(righe, categorie_by_id)})
+        per_struttura = {sc: _conta_pasti([r for r in righe if r.struttura_code == sc], categorie_by_id, conta_pasto) for sc in strutture}
+        mesi_out.append({'mese': m, 'per_struttura': per_struttura, 'totale': _conta_pasti(righe, categorie_by_id, conta_pasto)})
 
     totale_anno = {code: sum(mo['totale'][code] for mo in mesi_out) for code in CODICI_PASTI + ['totale']}
     return {'anno': anno, 'mesi': mesi_out, 'totale_anno': totale_anno}
@@ -344,6 +354,7 @@ class MappingInput(BaseModel):
     dettaglio_originale: str
     categoria_id: int
     categoria_da_prezzo: bool = False
+    conta_come_pasto: bool = False
 
 
 @router.get("/mapping-dettagli")
@@ -353,7 +364,7 @@ def lista_mapping(db: Session = Depends(get_db)):
     return [
         {'id': r.id, 'dettaglio_originale': r.dettaglio_originale,
          'categoria_id': r.categoria_id, 'categoria_code': r.categoria.code, 'categoria_name': r.categoria.name,
-         'categoria_da_prezzo': r.categoria_da_prezzo}
+         'categoria_da_prezzo': r.categoria_da_prezzo, 'conta_come_pasto': r.conta_come_pasto}
         for r in righe
     ]
 
@@ -394,6 +405,7 @@ def crea_mapping(body: MappingInput, db: Session = Depends(get_db), _=Depends(ri
     riga = ProdDettaglioCategoria(
         dettaglio_originale=body.dettaglio_originale.strip(),
         categoria_id=body.categoria_id, categoria_da_prezzo=body.categoria_da_prezzo,
+        conta_come_pasto=body.conta_come_pasto,
     )
     db.add(riga)
     db.commit()
@@ -408,6 +420,7 @@ def aggiorna_mapping(mapping_id: int, body: MappingInput, db: Session = Depends(
     riga.dettaglio_originale = body.dettaglio_originale.strip()
     riga.categoria_id = body.categoria_id
     riga.categoria_da_prezzo = body.categoria_da_prezzo
+    riga.conta_come_pasto = body.conta_come_pasto
     db.commit()
     return {'id': riga.id}
 

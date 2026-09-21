@@ -1529,6 +1529,23 @@ Nessun cambiamento lato backend: `_conta_pasti()` restituiva già tutti e 4 i co
 sufficiente per questa vista. Niente toggle IVA (è un conteggio, non un importo — tab aggiunta a
 `TAB_SENZA_TOGGLE_IVA` in `StatisticheProduzione.jsx`) e nessun export (non richiesto in questa v1).
 
+⚠️ **Bug reale scoperto lo stesso giorno (segnalato dall'utente: "le cene del Du Parc mi sembrano
+troppe")**: la prima versione contava tutte le righe della categoria `pranzo`/`cena`, ma per Du Parc
+quella categoria (usata anche da `_somma_maremosso()` in `usali.py` per il ricavo di Movimenti Attivi)
+contiene **sia** la riga quota (`Quota Cena`, una a persona/notte) **sia ogni singolo piatto/bevanda/
+coperto ordinato al ristorante Maremosso**, mappati lì apposta per finalità di ricavo — una cena reale
+genera 4-6 righe, gonfiando il conteggio di ~3x (verificato: agosto 2026 DPH mostrava 1.575 "cene",
+di cui solo 476 erano `Quota Cena` vera). Colazione DPH era pulita (100% `Quota Colazione`) e CLB/INT
+erano quasi puliti (`cena`/`pranzo` = quasi solo `Quota Cena`/`Quota Pranzo`, 1-2 righe estranee), il
+bug era specifico di DPH ma avrebbe potuto ripresentarsi silenziosamente su qualunque nuova voce di
+menu mappata in futuro. Fix: nuova colonna `prod_dettaglio_categoria.conta_come_pasto` (migrazione
+`prod006_2026`, come `categoria_da_prezzo`, editabile da admin in `?s=prod-mapping` →
+`ProdMappingDettagli`, checkbox "Conta come pasto") — solo le righe marcate true (backfillate su
+`quota colazione`/`quota pranzo`/`quota cena`/`colazione extra`) entrano nel conteggio; le singole
+voci di menu restano `false` di default e continuano a contribuire al ricavo (categoria `pranzo`/
+`cena` invariata) senza contribuire al conteggio pasti. `_conta_pasti()` filtra su questo flag oltre
+che sulla categoria — vedi `_carica_conta_come_pasto()` in `produzione_report.py`.
+
 ### Tab "Ricavi camere" (`produzione/TabRicaviCamere.jsx`, settembre 2026 — nata in Corrispettivi, spostata qui subito perché la fonte è `prod_righe`)
 Ricavi per singola camera in un periodo scelto (default: 01/01–31/12 anno solare corrente), per
 struttura `[DPH][CLB][INT][Gruppo]`. Toggle vista **Per categoria** ↔ **Per trattamento**

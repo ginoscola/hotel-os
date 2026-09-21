@@ -1511,8 +1511,8 @@ function ProdMappingDettagli() {
   const [loadingSmistare, setLoadingSmistare] = useState(true)
   const [smistaCat, setSmistaCat] = useState({}) // dettaglio_originale → categoria_id scelta
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState({}) // id → {categoria_id, categoria_da_prezzo}
-  const [nuovo, setNuovo] = useState({ dettaglio_originale: '', categoria_id: '', categoria_da_prezzo: false })
+  const [editing, setEditing] = useState({}) // id → {categoria_id, categoria_da_prezzo, conta_come_pasto}
+  const [nuovo, setNuovo] = useState({ dettaglio_originale: '', categoria_id: '', categoria_da_prezzo: false, conta_come_pasto: false })
   const [ricalcolando, setRicalcolando] = useState(false)
   const [msg, fb] = useFeedback()
 
@@ -1553,6 +1553,7 @@ function ProdMappingDettagli() {
         dettaglio_originale: r.dettaglio_originale,
         categoria_id: Number(ed.categoria_id),
         categoria_da_prezzo: ed.categoria_da_prezzo,
+        conta_come_pasto: ed.conta_come_pasto,
       })
       fb('Mapping aggiornato', 'ok')
       setEditing(prev => { const n = { ...prev }; delete n[r.id]; return n })
@@ -1576,8 +1577,9 @@ function ProdMappingDettagli() {
         dettaglio_originale: nuovo.dettaglio_originale.trim(),
         categoria_id: Number(nuovo.categoria_id),
         categoria_da_prezzo: nuovo.categoria_da_prezzo,
+        conta_come_pasto: nuovo.conta_come_pasto,
       })
-      setNuovo({ dettaglio_originale: '', categoria_id: '', categoria_da_prezzo: false })
+      setNuovo({ dettaglio_originale: '', categoria_id: '', categoria_da_prezzo: false, conta_come_pasto: false })
       fb('Mapping creato', 'ok')
       carica()
       caricaSmistare()
@@ -1626,6 +1628,10 @@ function ProdMappingDettagli() {
         "Assegna per prezzo" ignora il testo e sceglie la categoria in base a un multiplo esatto
         della "Tariffa €" della categoria (vedi tab Categorie) — usato per "Parcheggio extra", dove
         lo stesso testo può indicare sia Parcheggio Hotel (20€) sia Esterno (13€) a seconda dei giorni.
+        "Conta come pasto" marca le voci che rappresentano un pasto vero, una a persona/pasto (es.
+        "Quota Cena", "Quota Colazione") — usato dalla tab "Conteggio pasti" di Statistiche Produzione
+        per non contare anche i singoli piatti/bevande/coperti mappati nella stessa categoria
+        colazione/pranzo/cena solo per finalità di ricavo (es. il ristorante Maremosso per Du Parc).
       </p>
 
       <div style={{ marginBottom: 20 }}>
@@ -1700,6 +1706,7 @@ function ProdMappingDettagli() {
             <th style={{ padding: '9px 12px', textAlign: 'left' }}>Testo Welcome (Articolo)</th>
             <th style={{ padding: '9px 12px', textAlign: 'left' }}>Categoria</th>
             <th style={{ padding: '9px 12px', textAlign: 'center' }}>Assegna per prezzo</th>
+            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Conta come pasto</th>
             <th style={{ padding: '9px 12px' }} />
           </tr>
         </thead>
@@ -1731,6 +1738,16 @@ function ProdMappingDettagli() {
                       : <span style={{ color: '#94a3b8' }}>—</span>
                   )}
                 </td>
+                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                  {ed ? (
+                    <input type="checkbox" checked={ed.conta_come_pasto}
+                      onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], conta_come_pasto: e.target.checked } }))} />
+                  ) : (
+                    r.conta_come_pasto
+                      ? <span style={{ background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>pasto</span>
+                      : <span style={{ color: '#94a3b8' }}>—</span>
+                  )}
+                </td>
                 <td style={{ padding: '8px 12px', textAlign: 'right' }}>
                   {ed ? (
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
@@ -1743,7 +1760,7 @@ function ProdMappingDettagli() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      <button onClick={() => setEditing(prev => ({ ...prev, [r.id]: { categoria_id: r.categoria_id, categoria_da_prezzo: r.categoria_da_prezzo } }))}
+                      <button onClick={() => setEditing(prev => ({ ...prev, [r.id]: { categoria_id: r.categoria_id, categoria_da_prezzo: r.categoria_da_prezzo, conta_come_pasto: r.conta_come_pasto } }))}
                         style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#475569' }}>
                         Modifica
                       </button>
@@ -1773,6 +1790,11 @@ function ProdMappingDettagli() {
           <input type="checkbox" checked={nuovo.categoria_da_prezzo}
             onChange={e => setNuovo(v => ({ ...v, categoria_da_prezzo: e.target.checked }))} />
           assegna per prezzo
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#374151' }}>
+          <input type="checkbox" checked={nuovo.conta_come_pasto}
+            onChange={e => setNuovo(v => ({ ...v, conta_come_pasto: e.target.checked }))} />
+          conta come pasto
         </label>
         <button onClick={crea} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
       </div>
