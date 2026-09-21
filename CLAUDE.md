@@ -1519,10 +1519,15 @@ vedi `UniqueConstraint` sul modello), quindi contare le righe è l'unico contegg
 del modulo; il campo `quantita` sul modello resta comunque non utilizzato da nessun report. Colazioni
 extra (`colazione_extra`) è una voce a sé, non sommata dentro "Colazioni" (supplemento acquistato a
 parte, non il pasto del trattamento standard) — scelta esplicita dell'utente.
-Frontend: stessa struttura/interazione di `TabReportMensile.jsx` (selettore anno con frecce +
-struttura, tabella Mese×Struttura con click per espandere il dettaglio per categoria, riga ANNO in
-fondo) ma senza toggle IVA (è un conteggio, non un importo — tab aggiunta a `TAB_SENZA_TOGGLE_IVA` in
-`StatisticheProduzione.jsx`) e senza export (non richiesto in questa v1).
+Frontend: header a due righe con colonne raggruppate per struttura (stesso pattern grafico di
+`TabGiornalieri.jsx` in Corrispettivi — riga 1 struttura con `colSpan`, riga 2 sotto-colonne con
+bordoGruppo/bordoSotto per marcare i confini), 3 sotto-colonne per struttura: **Colazione | Pranzo |
+Cena**. "Colazione" è trattamento+extra sommati (il numero di colazioni davvero servite); click sulla
+cella (sottolineatura tratteggiata) espande una riga con la scomposizione Colazione
+trattamento/Colazione extra per quella struttura/mese — Pranzo/Cena non hanno sotto-voci da espandere.
+Nessun cambiamento lato backend: `_conta_pasti()` restituiva già tutti e 4 i conteggi separati,
+sufficiente per questa vista. Niente toggle IVA (è un conteggio, non un importo — tab aggiunta a
+`TAB_SENZA_TOGGLE_IVA` in `StatisticheProduzione.jsx`) e nessun export (non richiesto in questa v1).
 
 ### Tab "Ricavi camere" (`produzione/TabRicaviCamere.jsx`, settembre 2026 — nata in Corrispettivi, spostata qui subito perché la fonte è `prod_righe`)
 Ricavi per singola camera in un periodo scelto (default: 01/01–31/12 anno solare corrente), per

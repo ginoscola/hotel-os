@@ -2,8 +2,17 @@ import { Fragment, useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import { STRUTTURE_HOTEL, NOMI, meseNome, thSt, tdSt, inpSt } from '../../utils/produzioneHelpers'
 
-const LABEL_CATEGORIA = { colazione: 'Colazioni', colazione_extra: 'Colazioni extra', pranzo: 'Pranzi', cena: 'Cene' }
-const ORDINE_CATEGORIA = ['colazione', 'colazione_extra', 'pranzo', 'cena']
+const SOTTOCOLONNE = ['colazione', 'pranzo', 'cena']
+const LABEL_SOTTOCOLONNA = { colazione: 'Colazione', pranzo: 'Pranzo', cena: 'Cena' }
+
+// Colazione = trattamento + extra sommati (numero pasti serviti); il dettaglio si vede
+// espandendo la colonna. Pranzo/Cena non hanno sotto-categorie da espandere.
+function colazioneTotale(agg) {
+  return (agg?.colazione || 0) + (agg?.colazione_extra || 0)
+}
+function valoreSotto(agg, code) {
+  return code === 'colazione' ? colazioneTotale(agg) : (agg?.[code] || 0)
+}
 
 export default function TabConteggioPasti() {
   const oggi = new Date()
@@ -11,9 +20,10 @@ export default function TabConteggioPasti() {
   const [struttura, setStruttura] = useState('')
   const [dati, setDati] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [espanso, setEspanso] = useState(null) // `${mese}_${sc}` oppure null
+  const [espanso, setEspanso] = useState(null) // `${mese}_${sc}` oppure null (dettaglio colazione)
 
   const strutture = struttura ? [struttura] : STRUTTURE_HOTEL
+  const totColonne = 2 + strutture.length * SOTTOCOLONNE.length
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -29,6 +39,10 @@ export default function TabConteggioPasti() {
   useEffect(() => { carica() }, [carica])
 
   const selSt = { ...inpSt, fontSize: '0.82rem' }
+  const bordoGruppo = '3px solid #4a6fa5'
+  const bordoSotto = '1px solid #3d6a9a'
+
+  const totaleAnnoSotto = (sc, code) => dati.mesi.reduce((s, mo) => s + valoreSotto(mo.per_struttura[sc], code), 0)
 
   return (
     <div>
@@ -40,7 +54,7 @@ export default function TabConteggioPasti() {
           <option value="">Tutte le strutture</option>
           {STRUTTURE_HOTEL.map(sc => <option key={sc} value={sc}>{NOMI[sc]}</option>)}
         </select>
-        <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Clicca una struttura per il dettaglio colazioni/pranzi/cene</span>
+        <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Clicca su Colazione per il dettaglio trattamento/extra</span>
       </div>
 
       {loading && <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>}
@@ -49,10 +63,24 @@ export default function TabConteggioPasti() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.85rem' }}>
             <thead>
+              {/* Riga 1: strutture */}
               <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                <th style={{ ...thSt, textAlign: 'left' }}>Mese</th>
-                {strutture.map(sc => <th key={sc} style={thSt}>{NOMI[sc]}</th>)}
-                <th style={thSt}>Totale pasti</th>
+                <th style={{ ...thSt, textAlign: 'left' }} rowSpan={2}>Mese</th>
+                {strutture.map(sc => (
+                  <th key={sc} style={{ ...thSt, borderLeft: bordoGruppo }} colSpan={SOTTOCOLONNE.length}>{NOMI[sc]}</th>
+                ))}
+                <th style={{ ...thSt, borderLeft: bordoGruppo }} rowSpan={2}>Totale pasti</th>
+              </tr>
+              {/* Riga 2: colazione/pranzo/cena */}
+              <tr style={{ background: '#2d4f7c', color: '#cbd5e1' }}>
+                {strutture.map(sc => (
+                  SOTTOCOLONNE.map((code, i) => (
+                    <th key={`${sc}_${code}`} style={{
+                      ...thSt, color: '#cbd5e1', fontSize: '0.75rem', fontWeight: 400,
+                      borderLeft: i === 0 ? bordoGruppo : bordoSotto,
+                    }}>{LABEL_SOTTOCOLONNA[code]}</th>
+                  ))
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -61,31 +89,39 @@ export default function TabConteggioPasti() {
                   <tr style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
                     <td style={{ ...tdSt, textAlign: 'left', fontWeight: 600 }}>{meseNome(mo.mese)}</td>
                     {strutture.map(sc => {
-                      const v = mo.per_struttura[sc]?.totale || 0
+                      const agg = mo.per_struttura[sc]
                       const chiave = `${mo.mese}_${sc}`
-                      return (
-                        <td key={sc} style={{ ...tdSt, cursor: v ? 'pointer' : 'default', color: v ? '#1e293b' : '#e2e8f0' }}
-                          onClick={() => v && setEspanso(espanso === chiave ? null : chiave)}>
-                          {v || '—'}
-                        </td>
-                      )
+                      return SOTTOCOLONNE.map((code, i) => {
+                        const v = valoreSotto(agg, code)
+                        const cliccabile = code === 'colazione' && v > 0
+                        return (
+                          <td key={`${sc}_${code}`} style={{
+                            ...tdSt, borderLeft: i === 0 ? bordoGruppo : bordoSotto,
+                            cursor: cliccabile ? 'pointer' : 'default',
+                            color: v ? '#1e293b' : '#e2e8f0',
+                            textDecoration: cliccabile ? 'underline dotted' : 'none',
+                          }}
+                            onClick={() => cliccabile && setEspanso(espanso === chiave ? null : chiave)}
+                            title={cliccabile ? 'Clicca per il dettaglio trattamento/extra' : undefined}
+                          >
+                            {v || '—'}
+                          </td>
+                        )
+                      })
                     })}
-                    <td style={{ ...tdSt, fontWeight: 700 }}>{mo.totale.totale || 0}</td>
+                    <td style={{ ...tdSt, fontWeight: 700, borderLeft: bordoGruppo }}>{mo.totale.totale || 0}</td>
                   </tr>
                   {strutture.map(sc => {
                     const chiave = `${mo.mese}_${sc}`
                     if (espanso !== chiave) return null
-                    const perCat = mo.per_struttura[sc] || {}
+                    const agg = mo.per_struttura[sc] || {}
                     return (
                       <tr key={chiave}>
-                        <td colSpan={strutture.length + 2} style={{ padding: '0.5rem 1rem 0.75rem 2rem', background: '#eff6ff' }}>
+                        <td colSpan={totColonne} style={{ padding: '0.5rem 1rem 0.75rem 2rem', background: '#eff6ff' }}>
                           <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.8rem' }}>
-                            {ORDINE_CATEGORIA.map(code => (
-                              <div key={code}>
-                                <span style={{ color: '#64748b' }}>{LABEL_CATEGORIA[code]}: </span>
-                                <strong>{perCat[code] || 0}</strong>
-                              </div>
-                            ))}
+                            <span style={{ color: '#64748b' }}>{NOMI[sc]} — {meseNome(mo.mese)}:</span>
+                            <div><span style={{ color: '#64748b' }}>Colazione trattamento: </span><strong>{agg.colazione || 0}</strong></div>
+                            <div><span style={{ color: '#64748b' }}>Colazione extra: </span><strong>{agg.colazione_extra || 0}</strong></div>
                           </div>
                         </td>
                       </tr>
@@ -96,11 +132,18 @@ export default function TabConteggioPasti() {
               <tr style={{ background: '#1e3a5f', color: '#fff', fontWeight: 800 }}>
                 <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', textAlign: 'left', borderBottom: 'none' }}>ANNO</td>
                 {strutture.map(sc => (
-                  <td key={sc} style={{ ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none' }}>
-                    {dati.mesi.reduce((s, mo) => s + (mo.per_struttura[sc]?.totale || 0), 0)}
-                  </td>
+                  SOTTOCOLONNE.map((code, i) => (
+                    <td key={`tot_${sc}_${code}`} style={{
+                      ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none',
+                      borderLeft: i === 0 ? bordoGruppo : bordoSotto,
+                    }}>
+                      {totaleAnnoSotto(sc, code) || 0}
+                    </td>
+                  ))
                 ))}
-                <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none' }}>{dati.totale_anno.totale || 0}</td>
+                <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none', borderLeft: bordoGruppo }}>
+                  {dati.totale_anno.totale || 0}
+                </td>
               </tr>
             </tbody>
           </table>
