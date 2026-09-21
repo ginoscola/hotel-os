@@ -208,7 +208,7 @@ export default function Dipendenti() {
   // ─── RENDER ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ padding: '24px', maxWidth: 1200, margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ padding: '24px', fontFamily: 'system-ui, sans-serif' }}>
       {/* Titolo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <span style={{ fontSize: 28 }}>👥</span>

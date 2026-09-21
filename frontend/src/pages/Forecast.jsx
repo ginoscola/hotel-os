@@ -66,7 +66,7 @@ export default function Forecast() {
   })
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <div>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.2rem', flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#1a1a2e' }}>📈 Forecast & OTB</h1>
