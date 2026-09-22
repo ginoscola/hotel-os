@@ -392,6 +392,20 @@ non `192.168.100.x` come il resto, raggiungibile comunque via routing) e Raspber
 (`ssh-copy-id`, password inserita manualmente dall'utente) — verificato login passwordless e
 lettura della cartella backup.
 
+**⚠️ `ufw` bloccava le porte 8080/8081**: la policy di default nega tutto il traffico in ingresso
+tranne SSH (`sudo ufw status numbered` mostrava solo le regole OpenSSH) — sintomo: pagina che non
+si apre e **nessun errore visibile** nel browser (pacchetti droppati in silenzio, non un rifiuto
+attivo, quindi niente "connessione rifiutata"; solo un timeout silenzioso se si aspetta abbastanza).
+Fix: `sudo ufw allow from 192.168.100.0/24 to any port 8080 proto tcp` (e stessa cosa per 8081) —
+aperto solo alla LAN, non "Anywhere" come SSH, coerente con la fase di solo test interno. Da
+ricordare per la Fase 8: quando si pubblicano gli hostname sul tunnel, il traffico da Cloudflare
+arriva comunque da localhost (il tunnel è un processo sulla stessa macchina), quindi queste regole
+LAN non serviranno per l'accesso pubblico via tunnel, ma vanno mantenute (o allargate) se si vuole
+comunque continuare a testare/accedere anche dalla LAN diretta in parallelo.
+
+**✅ Verificato dall'utente (22 settembre 2026)**: login funzionante da browser reale su
+`http://192.168.100.40:8080`, dati reali visibili. Fasi 1-7 considerate concluse.
+
 **Non ancora fatto, da chiudere prima del cutover vero**:
 - Porting backup da launchd a systemd (vedi sezione dedicata sopra — script bash già portabile,
   serve solo l'unit + timer systemd)
