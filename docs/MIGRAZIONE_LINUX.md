@@ -406,9 +406,54 @@ comunque continuare a testare/accedere anche dalla LAN diretta in parallelo.
 **✅ Verificato dall'utente (22 settembre 2026)**: login funzionante da browser reale su
 `http://192.168.100.40:8080`, dati reali visibili. Fasi 1-7 considerate concluse.
 
+## Backup — porting da launchd a systemd (fatto, 22 settembre 2026)
+Eseguito subito dopo la verifica delle fasi 1-7, stessa sessione. Script `hotelos-backup.sh`
+invariato nella logica, reso portabile in due punti scoperti solo provandolo davvero sul server
+(entrambi committati, valgono anche per il Mac, nessuna regressione — testato di nuovo lì dopo la
+modifica):
+- **`pg_dump` non più a path assoluto Homebrew** (`/opt/homebrew/bin/pg_dump`, esisteva solo su
+  macOS): cercato con `command -v`, fallback su path noti Mac/Linux. Su Linux è semplicemente
+  `/usr/bin/pg_dump`.
+- **Host e password letti da `DATABASE_URL`**, non solo `DB_NAME`/`DB_USER` come prima: sul Mac
+  l'auth locale non richiede password (`ginoscola@localhost`, peer/trust), ma il server usa un
+  utente DB con password (`hotelos_user`) — senza questo `pg_dump` avrebbe fallito ogni notte,
+  stesso tipo di bug silenzioso già capitato in passato con la regex `DB_USER` (vedi nota storica
+  sopra). `DB_HOST`/`DB_PASSWORD` vuoti sul Mac restano innocui (nessun comportamento diverso).
+
+**Identità git mai configurata sull'utente `gino` del server** (`git commit` nel repo di backup
+falliva con "Please tell me who you are"): `git config --global user.name/user.email` impostati
+una tantum, stessi valori del Mac.
+
+**Seconda deploy key GitHub, stavolta in scrittura**: `~/.ssh/hotelos_backup_deploy_key` sul
+server, deploy key su `hotelos-backup` con "Allow write access" (a differenza della chiave
+`hotel-os` sola-lettura). Per non dover riscrivere l'URL del repo nello script (`git@github.com:
+ginoscola/hotelos-backup.git`, letterale, uguale su Mac e server), l'alias in `~/.ssh/config` del
+server è sul vero hostname (`Host github.com` → questa chiave) invece che su un alias custom come
+per `hotel-os` (`Host github-hotelos` → chiave sola-lettura, riferita esplicitamente nell'URL di
+clone) — i due `Host` non confliggono, uno è literal match su `github.com`, l'altro su un nome
+inventato.
+
+**Unit systemd**: `hotelos-backup.service` (`Type=oneshot`, `User=gino` — non l'utente di servizio
+`hotelos` del backend, serve l'identità con le chiavi SSH verso Raspberry/GitHub e l'ambiente HOME
+corretto) + `hotelos-backup.timer` (`OnCalendar=*-*-* 03:00:00`, stessa ora del Mac,
+`Persistent=true` — a differenza di launchd, systemd non recupera automaticamente un run perso se
+il server era spento, va dichiarato esplicitamente). Log su file dedicati
+(`~/hotelos-backups/logs/backup-{stdout,stderr}.log`, non più `launchd.log`/`launchd-error.log`) +
+lo stesso `backup_log.jsonl` strutturato di sempre, invariato.
+
+**Verificato end-to-end due volte**: prima lanciando lo script a mano via SSH, poi con
+`sudo systemctl start hotelos-backup.service` (ambiente systemd reale, più minimale di una shell
+SSH interattiva — verifica non ridondante, un `PATH`/`HOME` diverso avrebbe potuto rompere
+qualcosa che a mano funzionava). Entrambe le volte: dump locale OK, copia su Raspberry Pi OK, push
+GitHub OK, riga `"esito":"success"` in `backup_log.jsonl`. Timer attivo e schedulato (confermato
+con `systemctl list-timers`).
+⚠️ **Doppio backup in parallelo durante la transizione**: finché il Mac resta acceso, entrambe le
+macchine faranno un backup alle 03:00 — innocuo (il Raspberry accumula dump da entrambe le fonti,
+la retention tiene comunque solo gli ultimi 7; il push GitHub è `--force` quindi l'ultimo dei due
+che gira "vince", nessun dato perso perché il Raspberry ha comunque entrambe le copie). Da non
+preoccuparsene fino alla decisione finale su quando spegnere il Mac (vedi "Domande aperte").
+
 **Non ancora fatto, da chiudere prima del cutover vero**:
-- Porting backup da launchd a systemd (vedi sezione dedicata sopra — script bash già portabile,
-  serve solo l'unit + timer systemd)
 - Restore fresco finale (quello di oggi sarà vecchio di giorni al momento del cutover)
 - Fase 8: pubblicazione dei due hostname sul tunnel, test end-to-end, ok esplicito prima dello switch
 
