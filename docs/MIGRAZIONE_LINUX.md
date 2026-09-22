@@ -1,13 +1,12 @@
 # HotelOS — Migrazione dal Mac Mini a un box Linux
 
-> **Stato: pianificata per la settimana del 21-27 settembre 2026, ad albergo chiuso** (decisione
-> dell'utente il 18 settembre 2026 — non ancora la data esatta, solo la settimana). La macchina
-> esiste già e l'accesso remoto è pronto (vedi "Server Ubuntu e accesso remoto" sotto),
-> provisionati a settembre 2026 prima ancora di partire con la migrazione vera e propria.
-> Questo file è un taccuino di lavoro — aggiungere idee/decisioni qui man mano, anche in forma
-> sparsa, prima di partire davvero. Quando si parte, seguire questo file insieme a
-> [`GUIDA_DEPLOY.md`](GUIDA_DEPLOY.md) (i passi generici di deploy da zero — qui ci sono solo le
-> differenze/aggiunte specifiche della migrazione).
+> **Stato: HotelOS gira sul server Linux e funziona, pubblicato e verificato anche da remoto**
+> (22 settembre 2026 — vedi "Fasi 1-7", "Backup" e "Fase 8" sotto per tutti i dettagli). L'utente
+> ha confermato l'accesso funzionante da telefono fuori dalla LAN (`https://hotelos.kmdimare-hub.com`).
+> **Resta solo da decidere quando spegnere il Mac** (vedi "Domande aperte" e l'ultima sezione in
+> fondo) — fino ad allora il Mac resta acceso come fallback in sola lettura, l'utente lavora già
+> sul server nuovo. Questo file resta un taccuino di lavoro — aggiungere idee/decisioni qui man
+> mano. Riferimento generico di deploy: [`GUIDA_DEPLOY.md`](GUIDA_DEPLOY.md).
 
 ## Server Ubuntu e accesso remoto (fatto, settembre 2026)
 Macchina: Ubuntu 26.04.1 LTS, IP locale `192.168.100.40` (stessa LAN del Raspberry Pi di backup),
@@ -499,13 +498,15 @@ ma silenziosamente senza effetto finché non si riavvia.
 
 **Verificato end-to-end** (login reale via `curl`, non solo `HTTP 200` sulla home): funziona sia
 `https://hotelos.kmdimare-hub.com` (pubblico) sia `http://192.168.100.40:8080` (LAN diretta),
-stesso backend, stesso database. **Resta da fare**: conferma dall'utente con un vero browser reale
-(non solo curl) prima di considerare la fase davvero conclusa.
+stesso backend, stesso database.
+
+**✅ Confermato dall'utente (22 settembre 2026, stesso pomeriggio) da telefono, fuori LAN**:
+`https://hotelos.kmdimare-hub.com` funzionante da un vero browser mobile su rete diversa da quella
+dell'hotel — non solo `curl` dal Mac. Fase 8 considerata conclusa a tutti gli effetti.
 
 ## Non ancora fatto, da chiudere prima del cutover vero (spegnimento Mac)
 - Restore fresco finale (i dati di oggi sono comunque aggiornati ad oggi — rifarlo solo se passano
   altri giorni prima dello spegnimento vero e proprio del Mac)
-- Verifica esplicita da browser reale dell'utente sull'hostname pubblico
 - Decidere quando spegnere il Mac (vedi "Domande aperte" in cima al file, ancora aperta)
 
 ## Idee / note sparse
