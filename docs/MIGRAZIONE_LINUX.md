@@ -453,9 +453,60 @@ la retention tiene comunque solo gli ultimi 7; il push GitHub è `--force` quind
 che gira "vince", nessun dato perso perché il Raspberry ha comunque entrambe le copie). Da non
 preoccuparsene fino alla decisione finale su quando spegnere il Mac (vedi "Domande aperte").
 
-**Non ancora fatto, da chiudere prima del cutover vero**:
-- Restore fresco finale (quello di oggi sarà vecchio di giorni al momento del cutover)
-- Fase 8: pubblicazione dei due hostname sul tunnel, test end-to-end, ok esplicito prima dello switch
+## Fase 8 — pubblicazione sul tunnel (fatto, 22 settembre 2026, stesso pomeriggio)
+Verificato dall'utente che i dati erano invariati rispetto al restore di stamattina (nessun lavoro
+nel frattempo sul Mac) prima di procedere — **testata anche `import-da-stampante` per davvero**
+(non solo ping) su RT1 e RT2 con `on_conflict=salta` su una data già presente in DB (nessuna
+scrittura, solo lettura): entrambe le stampanti raggiunte e parsate correttamente dal server nuovo,
+valori (incluso un legittimo 0,00€ su RT2) coincidenti esattamente con quanto già salvato. Deciso
+che l'utente può già usare il server nuovo per il lavoro quotidiano **in LAN**, trattando il Mac
+come solo fallback in lettura da questo momento (nessun lavoro in parallelo sui due, per non far
+divergere i database).
+
+**Route sul tunnel create dall'utente via dashboard Cloudflare Zero Trust** (Networks → Tunnels →
+`server-kmdimare` → Public Hostname — stesso posto/procedura già usata per `ssh`/`status`, gestione
+del tunnel "remotely-managed" via token, nessun `config.yml` locale sul server: **le route non sono
+automatizzabili da Claude Code**, richiedono la dashboard):
+- `hotelos.kmdimare-hub.com` → HTTP → `localhost:8080` (frontend)
+- `hotelos-api.kmdimare-hub.com` → HTTP → `localhost:8081` (backend)
+- Nessuna Cloudflare Access Application su nessuna delle due (deciso il 21 settembre, vedi sopra).
+
+⚠️ **Rebuild frontend fatto due volte, la prima annullata subito**: la prima build con
+`VITE_API_URL=https://hotelos-api.kmdimare-hub.com` è stata fatta PRIMA che l'utente creasse
+davvero le route sul tunnel — avrebbe rotto l'accesso LAN che l'utente poteva star usando in quel
+momento (il frontend richiama sempre l'origine API scelta in build, non quella da cui è stato
+caricato). Ripristinata subito la build puntata alla LAN (`http://192.168.100.40:8081`), rifatta
+quella pubblica solo dopo aver verificato che entrambe le route rispondevano per davvero
+(`curl`, non solo "salvato nella dashboard"). Da ricordare per un domani: **non rifare mai la build
+di produzione finché la route Cloudflare non è confermata raggiungibile**, l'ordine conta.
+
+⚠️ **DNS della seconda route non propagato subito sul resolver locale del Mac** (`curl: Could not
+resolve host`) pur essendo già visibile interrogando direttamente `1.1.1.1` (resolver Cloudflare) —
+verificato con `dig @1.1.1.1`, poi confermato il funzionamento reale con `curl --resolve` (forza
+l'IP, bypassa la cache DNS locale) prima di aspettare la propagazione naturale. Non un problema
+della route in sé, solo un ritardo di cache DNS locale — si è risolto da solo in pochi minuti.
+
+**`cors_origins` impostato su entrambe le origini** (non solo quella pubblica):
+`https://hotelos.kmdimare-hub.com,http://192.168.100.40:8080` — l'utente continua a poter accedere
+anche dalla LAN diretta, non solo da fuori, senza errori CORS. Verificato con richieste reali
+(header `Origin` impostato a mano) per entrambe le origini, risposta `access-control-allow-origin`
+corretta su entrambe.
+⚠️ **`cors_origins` letto dal backend solo all'avvio** (`main.py`, nota già nota — vedi sezione
+Configurazione app in CLAUDE.md), non a ogni richiesta: dopo l'`UPDATE` su `app_config` è servito
+`sudo systemctl restart hotelos-backend` (altro comando sudo, altro giro di copia-incolla
+dell'utente) prima che il nuovo CORS avesse effetto — altrimenti la modifica risulta "fatta" nel DB
+ma silenziosamente senza effetto finché non si riavvia.
+
+**Verificato end-to-end** (login reale via `curl`, non solo `HTTP 200` sulla home): funziona sia
+`https://hotelos.kmdimare-hub.com` (pubblico) sia `http://192.168.100.40:8080` (LAN diretta),
+stesso backend, stesso database. **Resta da fare**: conferma dall'utente con un vero browser reale
+(non solo curl) prima di considerare la fase davvero conclusa.
+
+## Non ancora fatto, da chiudere prima del cutover vero (spegnimento Mac)
+- Restore fresco finale (i dati di oggi sono comunque aggiornati ad oggi — rifarlo solo se passano
+  altri giorni prima dello spegnimento vero e proprio del Mac)
+- Verifica esplicita da browser reale dell'utente sull'hostname pubblico
+- Decidere quando spegnere il Mac (vedi "Domande aperte" in cima al file, ancora aperta)
 
 ## Idee / note sparse
 _(aggiungere qui nel tempo)_
