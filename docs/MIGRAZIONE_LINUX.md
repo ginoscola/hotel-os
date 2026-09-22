@@ -68,6 +68,39 @@ regola a parte, non tocca la policy "solo io" già esistente per l'accesso umano
   toccare le altre — scelta consigliata, non imposta tecnicamente (le stesse credenziali
   funzionerebbero comunque se copiate).
 
+**⏳ In sospeso (22 settembre 2026): stesso accesso per il Mac di casa dell'utente**, per poter
+lavorare con Claude Code/VSCode Remote-SSH anche da lì, non solo da questo Mac. Fatto fin qui:
+- Nuovo service token dedicato **`claude-code-mac-casa`** creato (Access controls → **Service
+  credentials**, non più "Service Tokens" nella UI attuale — rinominato), Client ID/Secret salvati
+  dall'utente in un password manager (mai passati in chat).
+- Nuova policy **Service Auth** aggiunta sull'Access Application SSH esistente ("SSH Server
+  kmdimare"), Include → Selector **"Service Token"** → Value = `claude-code-mac-casa` — senza
+  toccare la policy "solo io" già esistente per l'accesso umano via browser.
+
+**Da fare quando l'utente è fisicamente al Mac di casa** (comandi pronti, solo da eseguire lì —
+Client ID/Secret dal password manager al posto dei segnaposto):
+```bash
+brew install cloudflared
+
+mkdir -p ~/.ssh
+cat > ~/.ssh/kmdimare-access-env << 'EOF'
+export TUNNEL_SERVICE_TOKEN_ID="INCOLLA_QUI_IL_CLIENT_ID"
+export TUNNEL_SERVICE_TOKEN_SECRET="INCOLLA_QUI_IL_CLIENT_SECRET"
+EOF
+chmod 600 ~/.ssh/kmdimare-access-env
+
+cat >> ~/.ssh/config << 'EOF'
+
+Host kmdimare-remote
+    HostName ssh.kmdimare-hub.com
+    User gino
+    ProxyCommand bash -c 'source ~/.ssh/kmdimare-access-env && exec cloudflared access ssh --hostname %h'
+EOF
+```
+Poi `ssh kmdimare-remote` (accetta la nuova host key la prima volta) — stesso pattern già testato e
+funzionante su questo Mac. Una volta dentro: VSCode → Remote-SSH: Connect to Host → `kmdimare-remote`
+→ apri `/srv/progetti/hotel-os`.
+
 **Decisione presa (21 settembre 2026): niente Cloudflare Access sull'hostname HTTP di HotelOS.**
 Ripensato rispetto alla nota del 17 settembre sotto (lista email/Access Group) — l'utente ha
 chiesto qualcosa di più semplice da gestire lui stesso: l'hostname HTTP (es.
