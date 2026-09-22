@@ -69,13 +69,24 @@ regola a parte, non tocca la policy "solo io" già esistente per l'accesso umano
   toccare le altre — scelta consigliata, non imposta tecnicamente (le stesse credenziali
   funzionerebbero comunque se copiate).
 
-**Nuovo requisito emerso (17 settembre 2026)**: quando HotelOS sarà sulla macchina Linux, dovrà
-essere raggiungibile dall'esterno non solo dal proprietario ma anche da **persone fidate** a cui
-verranno dati accessi (staff/collaboratori) — quindi la Cloudflare Access Application che
-proteggerà l'hostname HTTP di HotelOS (quando creata) non potrà usare una policy "solo io" a
-singola email come quella SSH attuale, ma una policy con una **lista di email** (o un Access
-Group dedicato, più comodo da aggiornare quando cambia lo staff con accesso). Da progettare nel
-dettaglio quando si arriva a pubblicare l'hostname HotelOS, non ancora fatto.
+**Decisione presa (21 settembre 2026): niente Cloudflare Access sull'hostname HTTP di HotelOS.**
+Ripensato rispetto alla nota del 17 settembre sotto (lista email/Access Group) — l'utente ha
+chiesto qualcosa di più semplice da gestire lui stesso: l'hostname HTTP (es.
+`hotelos.kmdimare-hub.com`) sarà pubblicato sul tunnel come route HTTP **senza** una Cloudflare
+Access Application davanti, stesso pattern già in uso per `status.kmdimare-hub.com` (pubblico,
+TLS terminato da Cloudflare, nessun login Cloudflare). L'accesso è gestito interamente
+dall'autenticazione già presente in HotelOS (JWT 8h, ruoli admin/viewer, rate limit 5/15min per IP
+sul login — vedi sezione "Autenticazione" in CLAUDE.md): assegnare/revocare un accesso = creare o
+disattivare un utente in Admin → Utenti, un solo posto invece di due liste (Cloudflare + HotelOS)
+da tenere sincronizzate. Compromesso accettato consapevolmente: la pagina di login e le API sono
+raggiungibili da chiunque su internet, protette solo dall'auth applicativa (non da un filtro di
+rete prima ancora di arrivare all'app, come invece fa SSH). Se in futuro dovesse servire un filtro
+di rete aggiuntivo senza tornare a una lista puntuale, un Access Group ampio (es. intero dominio
+email aziendale) resta un'opzione di mezzo, non fatta ora.
+
+~~Nota superata (17 settembre 2026)~~: si era ipotizzata una Cloudflare Access Application con
+lista email/Access Group per lo staff, invece della policy "solo io" usata per SSH — sostituita
+dalla decisione sopra.
 
 ## Dashboard di stato server + avvisi automatici (fatto, 18 settembre 2026)
 Non parte della migrazione HotelOS in senso stretto, ma costruita sullo stesso server nel tempo
@@ -217,11 +228,17 @@ stessa ora (03:00).
    già (vedi "Server Ubuntu e accesso remoto" sopra), da qui in poi si parla di installarci sopra
    HotelOS stesso (repo, venv, dipendenze, nginx davanti a uvicorn)
 3. Verifica dati: confronto conteggio righe tabelle chiave Mac vs Linux
-4. **Pubblicare HotelOS sul tunnel già esistente**: nuovo "Published application route" sullo
-   stesso tunnel `server-kmdimare` (non un tunnel nuovo), hostname tipo `hotelos.kmdimare-hub.com`
-   → tipo **HTTP** → `localhost:80` (o la porta di nginx) + nuova Cloudflare Access Application
-   con policy a **lista di email** (staff fidato — vedi nota sopra, non "solo io"). Nessun DNS da
-   toccare al router/registrar per il resto: è la stessa infrastruttura già pronta da oggi.
+4. **Pubblicare HotelOS sul tunnel già esistente**: **due** "Published application route" sullo
+   stesso tunnel `server-kmdimare` (non un tunnel nuovo) — architettura rivista il 22 settembre
+   (vedi sezione "Fasi 1-7 completate" sotto: frontend e backend su porte separate, non un'unica
+   origine con proxy per prefissi):
+   - `hotelos.kmdimare-hub.com` → tipo **HTTP** → `localhost:8080` (frontend)
+   - `hotelos-api.kmdimare-hub.com` → tipo **HTTP** → `localhost:8081` (backend)
+   **Senza** Cloudflare Access davanti a nessuno dei due (vedi decisione 21 settembre sopra —
+   accesso gestito dal login HotelOS, non da Cloudflare). Nessun DNS da toccare al router/registrar
+   per il resto: è la stessa infrastruttura già pronta da oggi. Prima di pubblicare: rebuild
+   frontend con `VITE_API_URL=https://hotelos-api.kmdimare-hub.com` e aggiornare `cors_origins`
+   nel DB allo stesso hostname.
    Da quel momento anche l'accesso sviluppo (VSCode Remote-SSH, Claude Code) punta al server Linux
    invece che al Mac Mini, riusando lo stesso alias `kmdimare-remote` già configurato e testato —
    nessuna nuova configurazione SSH necessaria, cambia solo cosa c'è nella cartella del progetto.
@@ -234,6 +251,152 @@ stessa ora (03:00).
       sopra), nessun certbot necessario, TLS terminato da Cloudflare.
 - [ ] Il Mac Mini resta acceso come fallback per un periodo di transizione dopo lo switch, o si
       spegne subito?
+
+## Ricognizione fatta il 21 settembre 2026 (inizio lavoro vero, rimandato a domani per budget)
+Sessione Claude Code avviata per iniziare davvero il trasferimento. Fatta solo ricognizione
+(nessuna modifica al server né al Mac), rimandata l'esecuzione a domani per poco budget
+settimanale residuo — il Mac Mini nel frattempo continua a funzionare invariato.
+
+**Stato server rilevato** (`ssh gino@192.168.100.40`, raggiungibile anche in LAN oltre che via
+tunnel):
+- Ubuntu 26.04.1 LTS ("resolute")
+- Python di sistema: **3.14.4** — `python3.11` (quello usato oggi dal venv sul Mac) **non è più
+  nei repo apt** di questa release. Deciso di usare **Python 3.14 di sistema** invece di
+  aggiungere il PPA deadsnakes (rischio: potrebbe non supportare ancora una distro così recente).
+  Da verificare al momento del setup backend che tutte le dipendenze di `requirements.txt`
+  (in particolare `bcrypt==4.0.1` pinned, `psycopg2-binary`, `pdfplumber`) abbiano wheel
+  compatibili con 3.14 — se qualcuna non va, alzare la versione minima necessaria nel file.
+- Node: v22.22.1 (ok, requirement è ≥18)
+- PostgreSQL: 18.6, cluster `main` già attivo su porta 5432 — **più recente della 16.13 in uso sul
+  Mac** (Homebrew): `pg_restore -F c` supporta il restore di un dump da una versione precedente in
+  un cluster più recente, nessun problema atteso.
+- nginx 1.28.3 già attivo (per la pagina di benvenuto e hotelos-status esistenti)
+- `/srv/progetti` (LV dedicata) ha 56GB liberi — HotelOS andrà in `/srv/progetti/hotel-os`, non
+  `/opt` come nella guida generica, per coerenza con gli altri progetti già lì
+- Nessuna chiave SSH verso GitHub configurata sul server: servirà una **deploy key** (sola
+  lettura) sul repo `hotel-os` — da generare sul server e far aggiungere all'utente su GitHub
+  (Settings → Deploy keys), non automatizzabile senza il suo intervento
+
+**Backup locale verificato aggiornato**: ultimo dump `hotelos_20260921_030003.dump` (03:00 di
+oggi), tutte e 3 le copie (locale/Raspberry/GitHub) `success`. Per il restore di test sul server
+si userà uno `scp` diretto Mac→server dell'ultimo dump (stessa LAN, più semplice che dare accesso
+al repo privato `hotelos-backup` a una seconda macchina).
+
+**Decisione accesso esterno**: vedi sezione sopra ("Decisione presa 21 settembre 2026") — niente
+Cloudflare Access sull'hostname HTTP, login gestito da HotelOS stesso.
+
+**Piano concordato per la ripresa (fasi 1-7, nessun impatto sul Mac, nessuna esposizione
+pubblica)**:
+1. Pacchetti server (`python3-venv`, ecc.) + DB `hotel_os` con utente dedicato
+2. Deploy key GitHub + clone in `/srv/progetti/hotel-os`
+3. venv Python 3.14 + `pip install -r requirements.txt` (verificare compatibilità) + `.env` nuovo
+   (nuova `SECRET_KEY` → tutti gli utenti dovranno rifare login dopo il cutover, atteso)
+4. Restore dati: `scp` ultimo dump dal Mac + `pg_restore -F c` + verifica conteggio righe tabelle
+   chiave Mac vs server (non fidarsi della sola assenza di errori)
+5. Frontend: `npm install && npm run build`
+6. systemd `hotelos-backend.service` (utente dedicato non-root) + nginx site (non esposto
+   pubblicamente in questa fase)
+7. `uploads/` via `rsync` dal Mac (mai stato nel backup automatico) + verifica raggiungibilità
+   stampanti RT e Raspberry Pi di backup dal server (stessa LAN, atteso ok)
+
+Poi (fase 8 in poi, solo dopo verifica interna): pubblicazione hostname sul tunnel Cloudflare,
+test end-to-end, e solo con ok esplicito dell'utente il cutover reale — **prima del cutover vero
+serve un restore fresco finale** (quello di test sarà ormai vecchio di giorni, il Mac continua ad
+accumulare dati nel frattempo).
+
+## Fasi 1-7 completate e verificate (22 settembre 2026)
+Eseguite in una sessione Claude Code, testate end-to-end. Nessun impatto sul Mac (resta invariato,
+continua a girare), nessuna esposizione pubblica (tutto raggiungibile solo dalla LAN per ora).
+Accesso app di test: **`http://192.168.100.40:8080`** (vedi architettura nginx sotto).
+
+**`sudo` non automatizzabile da Claude Code** (richiede password interattiva, confermato):
+tutti i passi che lo richiedono sono stati preparati come blocchi di comandi pronti da incollare,
+eseguiti manualmente dall'utente sul server. Tutto il resto (git, venv, pip, npm, psql come utente
+applicativo, rsync, ssh-keygen) eseguito direttamente da Claude Code via SSH.
+
+**Pacchetti già tutti presenti** (fase 1): nessun `apt install` servito — Python 3.14 di sistema ha
+già il modulo `venv`, pip, git, node/npm, client psql e nginx erano già installati dalla
+provisione iniziale del server. L'unico passo sudo della fase 1 è stata la creazione di DB/utente:
+- Database **`hotel_os`** (rinominato rispetto a `revenue_master` usato sul Mac — solo il nome
+  cambia, il contenuto del dump è identico e il restore non dipende dal nome del DB sorgente)
+- Utente **`hotelos_user`** con password dedicata (generata, salvata solo in `backend/.env` sul
+  server, permessi 640)
+
+**Deploy key GitHub** (fase 2): chiave ed25519 dedicata sola-lettura (`~/.ssh/hotelos_deploy_key`
+sul server), alias SSH `github-hotelos` in `~/.ssh/config` del server. Clone in
+`/srv/progetti/hotel-os` riuscito.
+
+**venv Python 3.14** (fase 3): `pip install -r requirements.txt` completato **senza nessun problema
+di compatibilità** — inclusi i pacchetti a rischio identificati nella ricognizione (`bcrypt==4.0.1`
+pinned, ha wheel `cp36-abi3` quindi universale; `psycopg2-binary` e `pdfplumber` hanno entrambi
+wheel precompilate per `cp314`). Nessun bisogno del PPA deadsnakes, la scelta di Python 3.14 di
+sistema si è rivelata corretta.
+
+**Restore dati** (fase 4): dump del 22 settembre (03:00, lo stesso giorno) trasferito via `scp`
+diretto Mac→server (stessa LAN). `pg_restore -F c --no-owner --role=hotelos_user`. **Verificato
+riga per riga**, non solo assenza di errori: conteggio di 9 tabelle chiave (daily_revenue,
+corrispettivi_documenti, prod_righe, employees, employee_monthly, users, hotels, rt_chiusure,
+prenotazioni_cancellate) identico Mac vs server, e `alembic_version` (`prod006_2026`) coincide
+anche con l'head del repo — nessun drift.
+
+**Frontend** (fase 5): `npm install && npm run build` senza problemi.
+
+**systemd + nginx** (fase 6) — **⚠️ architettura rivista rispetto al piano originale**: il piano
+iniziale prevedeva un solo hostname/porta con nginx che facesse da proxy verso il backend per una
+lista di prefissi (`/auth`, `/dashboard`, `/corrispettivi`, ecc.), lasciando tutto il resto alla
+SPA. **Scoperto un bug reale testando**: pagine del frontend come `/dashboard/gruppo` condividono
+**esattamente lo stesso path** del relativo endpoint API (`GET /dashboard/gruppo`, chiamato via
+AJAX dalla pagina stessa una volta caricata) — stesso problema per `/admin`, `/budget`,
+`/corrispettivi`, `/dipendenti`, `/forecast`, `/home`, `/usali` (tutti prefissi router backend che
+coincidono con una route React Router). Su un'unica origine non c'è modo di distinguere "il
+browser vuole la pagina HTML" da "il JS della pagina vuole i dati JSON" sullo stesso URL — la
+richiesta bare `/dashboard/gruppo` finiva sempre proxata al backend, che risponde 404 JSON invece
+di servire `index.html`. **Fix**: frontend e backend su **porte separate**, non un'unica origine
+con proxy per prefissi:
+- `hotelos.nginx.conf` → porta **8080**, serve solo `frontend/dist` con `try_files ... /index.html`
+  (SPA fallback puro, nessun proxy)
+- `hotelos-api.nginx.conf` → porta **8081**, proxy puro verso `127.0.0.1:8000` (backend), nessuna
+  logica di path
+- `VITE_API_URL=http://192.168.100.40:8081` nella build frontend; `cors_origins` in DB aggiornato a
+  `http://192.168.100.40:8080` (ora necessario: origini diverse, prima con tutto sulla stessa
+  origine il CORS non serviva) — verificato con una richiesta cross-origin reale (header
+  `Origin: http://192.168.100.40:8080`), risposta include `access-control-allow-origin` corretto.
+  Nessuna lista di prefissi da mantenere sincronizzata con `main.py` in futuro (il rischio esatto
+  che la nota "instabile" di `GUIDA_DEPLOY.md` sui prefissi aveva già previsto).
+- **Impatto sulla fase 8 (pubblicazione)**: serviranno **due hostname sul tunnel Cloudflare**, non
+  uno solo — es. `hotelos.kmdimare-hub.com` → `localhost:8080` (frontend) e
+  `hotelos-api.kmdimare-hub.com` → `localhost:8081` (backend), con build frontend finale
+  `VITE_API_URL=https://hotelos-api.kmdimare-hub.com` e `cors_origins` aggiornato di conseguenza.
+  Stesso pattern "sottodominio dedicato" già indicato come alternativa in `GUIDA_DEPLOY.md`, solo
+  risolto via porta invece che sottodominio in questa fase di test LAN.
+- Backend gira come utente di servizio dedicato **`hotelos`** (system user, no login shell, membro
+  del gruppo `gino` per leggere codice/`.env` senza allargare permessi oltre il necessario) —
+  stesso principio già applicato a `statusapp` per hotelos-status. Unit systemd:
+  `ExecStart=.../venv/bin/python3 -m uvicorn ...` (non `venv/bin/uvicorn` diretto), stessa
+  precauzione già documentata per hotelos-status sullo shebang assoluto — qui non stiamo spostando
+  la venv, ma il pattern è comunque più portabile e costa zero.
+- nginx: **non toccata** la configurazione esistente (`default`, porta 80, pagina di benvenuto) —
+  HotelOS vive su porte proprie, stesso principio già in uso per hotelos-status (porta 8001,
+  raggiunta dal tunnel direttamente, non tramite nginx come gateway condiviso).
+- File di config generati in `/srv/progetti/hotel-os/deploy/` (nel repo del server, non
+  committati — `hotelos-backend.service`, `hotelos.nginx.conf`, `hotelos-api.nginx.conf`) prima di
+  copiarli nei percorsi di sistema con sudo: permette di prepararli/rivederli senza sudo e ridurre
+  i blocchi di comandi da far incollare all'utente a uno per volta.
+
+**`uploads/`** (fase 7): 18 file, 26MB, trasferiti via `rsync` dal Mac, verificato stesso conteggio.
+
+**Raggiungibilità di rete** (fase 7): confermata per tutti e tre — RT1 (Du Parc/Club Hotel,
+`192.168.100.134`), RT2 (International, **`192.168.10.110`** — nota: subnet diversa `192.168.10.x`,
+non `192.168.100.x` come il resto, raggiungibile comunque via routing) e Raspberry Pi di backup
+(`192.168.100.149`). Nuova chiave SSH dedicata generata sul server e autorizzata sul Raspberry
+(`ssh-copy-id`, password inserita manualmente dall'utente) — verificato login passwordless e
+lettura della cartella backup.
+
+**Non ancora fatto, da chiudere prima del cutover vero**:
+- Porting backup da launchd a systemd (vedi sezione dedicata sopra — script bash già portabile,
+  serve solo l'unit + timer systemd)
+- Restore fresco finale (quello di oggi sarà vecchio di giorni al momento del cutover)
+- Fase 8: pubblicazione dei due hostname sul tunnel, test end-to-end, ok esplicito prima dello switch
 
 ## Idee / note sparse
 _(aggiungere qui nel tempo)_

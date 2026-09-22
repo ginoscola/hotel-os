@@ -1,0 +1,16 @@
+[Unit]
+Description=HotelOS Backend
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=hotelos
+Group=gino
+WorkingDirectory=/srv/progetti/hotel-os/backend
+ExecStart=/srv/progetti/hotel-os/backend/venv/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/srv/progetti/hotel-os/backend/.env
+
+[Install]
+WantedBy=multi-user.target
