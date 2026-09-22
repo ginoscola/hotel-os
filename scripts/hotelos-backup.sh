@@ -11,8 +11,31 @@ ENV_FILE="$SCRIPT_DIR/../backend/.env"
 # causando "role \"ginoscola@localhost\" does not exist" (bug reale, presente dal commit iniziale
 # del sistema di backup: pg_dump falliva ogni notte, mai un backup riuscito). Stessa logica già
 # corretta in backup.py (_leggi_db_config), da cui questa regex era divergente.
-DB_NAME=$(grep '^DATABASE_URL' "$ENV_FILE" | sed 's/.*\/\([^?]*\).*/\1/')
-DB_USER=$(grep '^DATABASE_URL' "$ENV_FILE" | sed -E 's#.*://([^:@/]+).*#\1#')
+DB_URL_LINE=$(grep '^DATABASE_URL' "$ENV_FILE")
+DB_NAME=$(echo "$DB_URL_LINE" | sed 's/.*\/\([^?]*\).*/\1/')
+DB_USER=$(echo "$DB_URL_LINE" | sed -E 's#.*://([^:@/]+).*#\1#')
+# Host e password: assenti sul Mac (auth locale via peer, "user@host/db"), presenti sul server
+# Linux (auth via password, "user:pass@host/db" — vedi migrazione settembre 2026). DB_PASSWORD
+# resta vuota se il pattern "user:pass@" non c'è, PGPASSWORD vuota è innocua per pg_dump.
+DB_HOST=$(echo "$DB_URL_LINE" | sed -E 's#.*@([^:/]+).*#\1#')
+DB_PASSWORD=$(echo "$DB_URL_LINE" | sed -nE 's#.*://[^:@/]+:([^@]+)@.*#\1#p')
+if [ -n "$DB_PASSWORD" ]; then
+  export PGPASSWORD="$DB_PASSWORD"
+fi
+
+# pg_dump: path assoluto per non dipendere dal PATH minimale di launchd/systemd — cercato invece
+# di hardcoded, per restare portabile tra macOS (Homebrew, Intel o Apple Silicon) e Linux
+# (migrazione settembre 2026, dove pg_dump è semplicemente /usr/bin/pg_dump).
+PG_DUMP_BIN=$(command -v pg_dump || true)
+if [ -z "$PG_DUMP_BIN" ]; then
+  for candidate in /opt/homebrew/bin/pg_dump /usr/local/bin/pg_dump /usr/bin/pg_dump; do
+    if [ -x "$candidate" ]; then PG_DUMP_BIN="$candidate"; break; fi
+  done
+fi
+if [ -z "$PG_DUMP_BIN" ]; then
+  echo "pg_dump non trovato" >&2
+  exit 1
+fi
 
 BACKUP_BASE="$HOME/hotelos-backups"
 BACKUP_DB="$BACKUP_BASE/db"
@@ -62,7 +85,7 @@ mkdir -p "$BACKUP_DB" "$BACKUP_BASE/logs"
 
 # ── 2. Dump PostgreSQL ──────────────────────────
 echo "[$(date)] Avvio dump PostgreSQL..."
-if ! /opt/homebrew/bin/pg_dump -U "$DB_USER" -d "$DB_NAME" -F c -f "$DUMP_FILE"; then
+if ! "$PG_DUMP_BIN" -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -F c -f "$DUMP_FILE"; then
   log_result "error" "pg_dump fallito"
   exit 1
 fi
