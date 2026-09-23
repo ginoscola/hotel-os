@@ -1,0 +1,12 @@
+[Unit]
+Description=HotelOS Backup (dump + Raspberry Pi + GitHub)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gino
+WorkingDirectory=/srv/progetti/hotel-os
+ExecStart=/bin/bash /srv/progetti/hotel-os/scripts/hotelos-backup.sh
+StandardOutput=append:/home/gino/hotelos-backups/logs/backup-stdout.log
+StandardError=append:/home/gino/hotelos-backups/logs/backup-stderr.log

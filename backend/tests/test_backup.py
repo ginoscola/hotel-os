@@ -1,7 +1,7 @@
 """Test per gli endpoint di backup automatico (/admin/backup/*).
 
 Nessun endpoint tocca il database: tutto letto da file (log JSONL, directory dump).
-subprocess (launchctl, ping, Popen) è sempre mockato — non esegue mai pg_dump/rsync reali.
+subprocess (systemctl, ping, Popen) è sempre mockato — non esegue mai pg_dump/rsync reali.
 """
 import json
 from unittest.mock import MagicMock, patch
@@ -76,8 +76,8 @@ def test_status_200(client, percorsi_temp):
 
     def side_effect(cmd, **kwargs):
         risultato = MagicMock()
-        if cmd[0] == "launchctl":
-            risultato.stdout = "1234\t0\tit.hotelos.backup\n"
+        if cmd[0] == "systemctl":
+            risultato.stdout = "active\n"
         elif cmd[0] == "ping":
             risultato.returncode = 0
         return risultato
@@ -89,7 +89,7 @@ def test_status_200(client, percorsi_temp):
     data = resp.json()
     assert data["ultimo_backup"]["esito"] == "success"
     assert data["backup_locali"] == 1
-    assert data["launchd_attivo"] is True
+    assert data["scheduler_attivo"] is True
     assert data["raspberry_raggiungibile"] is True
     assert data["prossimo_backup"] == "03:00"
     assert mock_run.called
@@ -102,7 +102,7 @@ def test_status_nessun_backup(client, percorsi_temp):
     data = resp.json()
     assert data["ultimo_backup"] is None
     assert data["backup_locali"] == 0
-    assert data["launchd_attivo"] is False
+    assert data["scheduler_attivo"] is False
     assert data["raspberry_raggiungibile"] is False
 
 

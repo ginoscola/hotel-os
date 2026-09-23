@@ -3,7 +3,7 @@
 Prefix: /admin/backup — tutti gli endpoint richiedono ruolo admin.
 
 Endpoint:
-  GET  /admin/backup/status                 → riepilogo ultimo backup + stato launchd/Raspberry
+  GET  /admin/backup/status                 → riepilogo ultimo backup + stato scheduler(systemd)/Raspberry
   GET  /admin/backup/logs                   → storico backup da backup_log.jsonl
   GET  /admin/backup/files                  → dump .dump presenti in locale
   POST /admin/backup/esegui-ora             → lancia hotelos-backup.sh in background
@@ -30,7 +30,7 @@ BACKUP_DB_DIR = BACKUP_BASE / "db"
 BACKUP_LOG_FILE = BACKUP_BASE / "logs" / "backup_log.jsonl"
 SCRIPT_PATH = _ROOT_DIR / "scripts" / "hotelos-backup.sh"
 ENV_FILE = _ROOT_DIR / "backend" / ".env"
-LAUNCHD_LABEL = "it.hotelos.backup"
+SYSTEMD_TIMER = "hotelos-backup.timer"
 RASPBERRY_HOST = "192.168.100.149"
 ORARIO_BACKUP = "03:00"
 
@@ -58,12 +58,14 @@ def _leggi_ultimo_backup() -> Optional[dict]:
     return sorted(record, key=lambda r: r.get("timestamp", ""))[-1]
 
 
-def _launchd_attivo() -> bool:
+def _scheduler_attivo() -> bool:
+    """Timer systemd che lancia lo script di backup (server Linux, migrazione settembre 2026:
+    prima si controllava launchctl/Mac — non più rilevante, il progetto gira solo su Linux ora)."""
     try:
         risultato = subprocess.run(
-            ["launchctl", "list"], capture_output=True, text=True, timeout=5
+            ["systemctl", "is-active", SYSTEMD_TIMER], capture_output=True, text=True, timeout=5
         )
-        return LAUNCHD_LABEL in risultato.stdout
+        return risultato.stdout.strip() == "active"
     except Exception:
         return False
 
@@ -98,7 +100,7 @@ def stato_backup() -> dict:
     return {
         "ultimo_backup": ultimo,
         "backup_locali": backup_locali,
-        "launchd_attivo": _launchd_attivo(),
+        "scheduler_attivo": _scheduler_attivo(),
         "raspberry_raggiungibile": _raspberry_raggiungibile(),
         "prossimo_backup": ORARIO_BACKUP,
     }

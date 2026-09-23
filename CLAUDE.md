@@ -144,6 +144,17 @@ Frontend: `VITE_API_URL` in `.env` / `.env.production`. **Mai URL hardcoded.**
 `api/client.js` usa `import.meta.env.VITE_API_URL || 'http://localhost:8000'`.
 Deploy Linux: nginx (reverse proxy) → uvicorn (systemd) → PostgreSQL. SSL via certbot.
 Aggiornare `cors_origins` in DB dopo deploy.
+⚠️ **Il frontend in produzione è servito da nginx come file statici da `frontend/dist/`
+(config `hotelos`, porta 8080 → root `frontend/dist`), non dal dev server Vite**: dopo ogni
+modifica frontend serve `cd frontend && npm run build` prima che sia visibile agli utenti — un
+riavvio del solo backend (`systemctl restart hotelos-backend`) non basta e non c'entra, sono due
+processi indipendenti. Bug reale (23/09/2026): dopo il fix del pannello Backup (vedi sotto),
+il backend rispondeva già correttamente ma il browser continuava a mostrare il vecchio testo
+perché `dist/` risaliva a prima della modifica — l'utente aveva riavviato il backend pensando
+bastasse, il problema persisteva finché non si è rigenerata la build. Il backend invece **ha**
+un riavvio esplicito da fare (niente `--reload` in produzione, vedi `hotelos-backend.service`)
+dopo modifiche Python. Verifica rapida che il bundle sia aggiornato: confrontare la data di
+`dist/assets/index-*.js` con quella dell'ultima modifica ai file `.jsx` toccati.
 
 ## Comandi sviluppo
 ```bash
@@ -1721,12 +1732,15 @@ Router: `GET|POST|PUT /lookup/tipi-pagamento`.
 ---
 
 ## Sistema di backup automatico notturno
-**3 copie**: locale (Mac Mini) → Raspberry Pi (rsync via SSH) → repository GitHub privato `hotelos-backup`.
+**3 copie**: locale (server) → Raspberry Pi (rsync via SSH) → repository GitHub privato `hotelos-backup`.
 - Script principale: `scripts/hotelos-backup.sh` (pg_dump formato custom `-F c`, legge `DB_NAME`/`DB_USER`
-  da `backend/.env` con lo stesso parsing usato dal router `backup.py` — non duplicare la logica altrove).
-- Installazione (una tantum): `bash scripts/installa-backup.sh` → copia `scripts/it.hotelos.backup.plist`
-  in `~/Library/LaunchAgents/`, `launchctl load`. Label `it.hotelos.backup` (coerente con
-  `it.hotelos.backend`/`it.hotelos.frontend` già presenti), esecuzione ogni notte alle 03:00.
+  da `backend/.env` con lo stesso parsing usato dal router `backup.py` — non duplicare la logica altrove;
+  path `pg_dump`/host/password resi portabili Mac↔Linux nella migrazione di settembre 2026).
+- **Scheduling: systemd timer** (`deploy/hotelos-backup.timer` + `deploy/hotelos-backup.service`,
+  installati in `/etc/systemd/system/`, `WantedBy=timers.target`, esecuzione ogni notte alle 03:00) —
+  sostituisce il vecchio launchd di macOS (`scripts/it.hotelos.backup.plist` + `scripts/installa-backup.sh`,
+  rimasti nel repo come riferimento storico/Mac ma non più il meccanismo attivo dopo la migrazione al
+  server Linux di settembre 2026). Verifica: `systemctl status hotelos-backup.timer`.
 - Test manuale: `bash scripts/test-backup.sh` (esegue un backup reale con output verbose).
 - Stato senza eseguire nulla: `bash scripts/verifica-backup.sh`.
 - Log: `~/hotelos-backups/logs/backup_log.jsonl` (una riga JSON per esecuzione: esito
@@ -1770,6 +1784,15 @@ directory` — lo script assume che `~/hotelos-backups/db` esista già sul Raspb
 (a differenza di quanto fa in locale con `mkdir -p`): creata una tantum con
 `ssh ginoscola@192.168.100.149 "mkdir -p ~/hotelos-backups/db"`. Con entrambe risolte, backup
 verificato `success` su tutti e tre i livelli (locale+Raspberry+GitHub).
+
+⚠️ **`GET /admin/backup/status` restava bloccato su "non caricato" anche col timer systemd attivo**
+(bug reale, corretto 23/09/2026): `_launchd_attivo()` in `backup.py` chiamava ancora `launchctl list`
+(comando macOS, non esiste sul server Linux) — l'eccezione veniva silenziata dal `try/except` e
+tornava sempre `False`, indipendentemente dallo stato vero del timer. Il timer era in realtà `active`
+fin dall'installazione (verificato `systemctl status hotelos-backup.timer`): il pannello Admin
+mostrava un falso allarme, non un problema reale di scheduling. Fix: `_launchd_attivo()` →
+`_scheduler_attivo()`, controlla `systemctl is-active hotelos-backup.timer`; campo risposta rinominato
+`launchd_attivo` → `scheduler_attivo` (frontend `AdminBackup.jsx` ed entrambi i test aggiornati).
 
 ---
 

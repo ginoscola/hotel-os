@@ -120,7 +120,7 @@ export default function AdminBackup() {
             </div>
 
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-              <span>launchd: {status.launchd_attivo ? '✅ attivo' : '⚠️ non caricato'}</span>
+              <span>Scheduler: {status.scheduler_attivo ? '✅ attivo' : '⚠️ non caricato'}</span>
               <span>Raspberry raggiungibile ora: {status.raspberry_raggiungibile ? '✅' : '❌'}</span>
               <span>Backup locali presenti: {status.backup_locali}</span>
             </div>
