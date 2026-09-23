@@ -173,7 +173,9 @@ cd backend && source venv/bin/activate && pytest tests/ -v
 backend pronto + status), `./restart_server.sh --build` per ricompilare anche il frontend. Mai
 uccidere/rilanciare uvicorn a mano sulla porta 8000: il backend è un servizio systemd (utente
 `hotelos`, `Restart=on-failure`), systemd lo riavvierebbe e i due processi si contenderebbero la
-porta. Gli script solo-Mac (`dev.sh`, `Avvia HotelOS.command`, `installa-backup.sh` + `.plist`
+porta. Regola sudoers `/etc/sudoers.d/hotelos` (NOPASSWD solo per
+`/usr/bin/systemctl restart hotelos-backend`): Claude può riavviare con `sudo -n`, ma **solo su
+richiesta esplicita dell'utente**, mai di propria iniziativa. Gli script solo-Mac (`dev.sh`, `Avvia HotelOS.command`, `installa-backup.sh` + `.plist`
 launchd) sono in `scripts/mac-legacy/`, tenuti solo come riferimento — non funzionano su Linux
 (osascript, brew, launchd).
 File test: `uploads/PlanningForecast-{CLB,DPH,INT}{1,2}.csv`.
