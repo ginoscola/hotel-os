@@ -25,7 +25,7 @@ fi
 
 echo ""
 echo "── File su Raspberry Pi ──"
-if ping -c 1 -t 2 "$RASPBERRY_HOST" > /dev/null 2>&1; then
+if ping -c 1 -W 2 "$RASPBERRY_HOST" > /dev/null 2>&1; then
   echo "Raspberry Pi raggiungibile ($RASPBERRY_HOST)."
   ssh -o ConnectTimeout=5 "$RASPBERRY_USER@$RASPBERRY_HOST" \
     "ls -lht $RASPBERRY_DIR/db/*.dump 2>/dev/null" || echo "Impossibile leggere la cartella remota."

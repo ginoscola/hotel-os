@@ -250,8 +250,9 @@ export default function AdminBackup() {
               Verifica che la chiave SSH esistente abbia accesso al nuovo repo (già usata per hotel-os, non serve crearne una nuova).
             </li>
             <li>
-              Installa il backup automatico:<br />
-              <code>cd ~/hotel-os && bash scripts/installa-backup.sh</code>
+              Installa il backup automatico (timer systemd, ogni notte alle 03:00):<br />
+              <code>sudo cp deploy/hotelos-backup.service deploy/hotelos-backup.timer /etc/systemd/system/</code><br />
+              <code>sudo systemctl daemon-reload && sudo systemctl enable --now hotelos-backup.timer</code>
             </li>
             <li>
               Testa subito:<br />

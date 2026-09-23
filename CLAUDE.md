@@ -169,6 +169,13 @@ cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8
 cd frontend && npm run dev
 cd backend && source venv/bin/activate && pytest tests/ -v
 ```
+**Riavvio sul server**: `./restart_server.sh` (= `sudo systemctl restart hotelos-backend` + attesa
+backend pronto + status), `./restart_server.sh --build` per ricompilare anche il frontend. Mai
+uccidere/rilanciare uvicorn a mano sulla porta 8000: il backend è un servizio systemd (utente
+`hotelos`, `Restart=on-failure`), systemd lo riavvierebbe e i due processi si contenderebbero la
+porta. Gli script solo-Mac (`dev.sh`, `Avvia HotelOS.command`, `installa-backup.sh` + `.plist`
+launchd) sono in `scripts/mac-legacy/`, tenuti solo come riferimento — non funzionano su Linux
+(osascript, brew, launchd).
 File test: `uploads/PlanningForecast-{CLB,DPH,INT}{1,2}.csv`.
 ⚠️ La fixture `client` nei test di integrazione deve sovrascrivere anche `richiedi_admin`/
 `richiedi_utente_attivo` (non solo `get_db`), altrimenti gli endpoint protetti rispondono 401 e i
@@ -1753,7 +1760,7 @@ resa portabile path/host/password, vedi doc migrazione), non per dove gira oggi.
   path `pg_dump`/host/password resi portabili Mac↔Linux nella migrazione di settembre 2026).
 - **Scheduling: systemd timer** (`deploy/hotelos-backup.timer` + `deploy/hotelos-backup.service`,
   installati in `/etc/systemd/system/`, `WantedBy=timers.target`, esecuzione ogni notte alle 03:00) —
-  sostituisce il vecchio launchd di macOS (`scripts/it.hotelos.backup.plist` + `scripts/installa-backup.sh`,
+  sostituisce il vecchio launchd di macOS (`scripts/mac-legacy/it.hotelos.backup.plist` + `scripts/mac-legacy/installa-backup.sh`,
   rimasti nel repo come riferimento storico/Mac ma non più il meccanismo attivo dopo la migrazione al
   server Linux di settembre 2026). Verifica: `systemctl status hotelos-backup.timer`.
 - Test manuale: `bash scripts/test-backup.sh` (esegue un backup reale con output verbose).
