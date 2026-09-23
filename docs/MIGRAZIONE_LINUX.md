@@ -1,13 +1,11 @@
 # HotelOS — Migrazione dal Mac Mini a un box Linux
 
-> **Stato: pianificata per la settimana del 21-27 settembre 2026, ad albergo chiuso** (decisione
-> dell'utente il 18 settembre 2026 — non ancora la data esatta, solo la settimana). La macchina
-> esiste già e l'accesso remoto è pronto (vedi "Server Ubuntu e accesso remoto" sotto),
-> provisionati a settembre 2026 prima ancora di partire con la migrazione vera e propria.
-> Questo file è un taccuino di lavoro — aggiungere idee/decisioni qui man mano, anche in forma
-> sparsa, prima di partire davvero. Quando si parte, seguire questo file insieme a
-> [`GUIDA_DEPLOY.md`](GUIDA_DEPLOY.md) (i passi generici di deploy da zero — qui ci sono solo le
-> differenze/aggiunte specifiche della migrazione).
+> **Stato: migrazione completata.** HotelOS gira sul server Linux (pubblicato e verificato anche da
+> remoto, 22 settembre 2026), sviluppo e lavoro quotidiano avvengono lì, backup automatico solo lì.
+> **Dal 23 settembre 2026 il Mac Mini è completamente inerte** (nessun servizio HotelOS attivo,
+> nessun backup automatico) ma resta acceso, non spento fisicamente — vedi "Sviluppo spostato sul
+> server, Mac reso inerte" in fondo al file. Questo file resta un taccuino di lavoro — aggiungere
+> idee/decisioni qui man mano. Riferimento generico di deploy: [`GUIDA_DEPLOY.md`](GUIDA_DEPLOY.md).
 
 ## Server Ubuntu e accesso remoto (fatto, settembre 2026)
 Macchina: Ubuntu 26.04.1 LTS, IP locale `192.168.100.40` (stessa LAN del Raspberry Pi di backup),
@@ -68,6 +66,39 @@ regola a parte, non tocca la policy "solo io" già esistente per l'accesso umano
   dedicato (non riusare `claude-code-mac`) per poter revocare l'accesso di una macchina senza
   toccare le altre — scelta consigliata, non imposta tecnicamente (le stesse credenziali
   funzionerebbero comunque se copiate).
+
+**⏳ In sospeso (22 settembre 2026): stesso accesso per il Mac di casa dell'utente**, per poter
+lavorare con Claude Code/VSCode Remote-SSH anche da lì, non solo da questo Mac. Fatto fin qui:
+- Nuovo service token dedicato **`claude-code-mac-casa`** creato (Access controls → **Service
+  credentials**, non più "Service Tokens" nella UI attuale — rinominato), Client ID/Secret salvati
+  dall'utente in un password manager (mai passati in chat).
+- Nuova policy **Service Auth** aggiunta sull'Access Application SSH esistente ("SSH Server
+  kmdimare"), Include → Selector **"Service Token"** → Value = `claude-code-mac-casa` — senza
+  toccare la policy "solo io" già esistente per l'accesso umano via browser.
+
+**Da fare quando l'utente è fisicamente al Mac di casa** (comandi pronti, solo da eseguire lì —
+Client ID/Secret dal password manager al posto dei segnaposto):
+```bash
+brew install cloudflared
+
+mkdir -p ~/.ssh
+cat > ~/.ssh/kmdimare-access-env << 'EOF'
+export TUNNEL_SERVICE_TOKEN_ID="INCOLLA_QUI_IL_CLIENT_ID"
+export TUNNEL_SERVICE_TOKEN_SECRET="INCOLLA_QUI_IL_CLIENT_SECRET"
+EOF
+chmod 600 ~/.ssh/kmdimare-access-env
+
+cat >> ~/.ssh/config << 'EOF'
+
+Host kmdimare-remote
+    HostName ssh.kmdimare-hub.com
+    User gino
+    ProxyCommand bash -c 'source ~/.ssh/kmdimare-access-env && exec cloudflared access ssh --hostname %h'
+EOF
+```
+Poi `ssh kmdimare-remote` (accetta la nuova host key la prima volta) — stesso pattern già testato e
+funzionante su questo Mac. Una volta dentro: VSCode → Remote-SSH: Connect to Host → `kmdimare-remote`
+→ apri `/srv/progetti/hotel-os`.
 
 **Decisione presa (21 settembre 2026): niente Cloudflare Access sull'hostname HTTP di HotelOS.**
 Ripensato rispetto alla nota del 17 settembre sotto (lista email/Access Group) — l'utente ha
@@ -249,8 +280,9 @@ stessa ora (03:00).
 - [x] Distro Linux esatta → **Ubuntu 26.04.1 LTS**, macchina già provisionata (vedi sopra).
 - [x] Dominio pubblico / certbot → **risolto**: Cloudflare Tunnel su `kmdimare-hub.com` (vedi
       sopra), nessun certbot necessario, TLS terminato da Cloudflare.
-- [ ] Il Mac Mini resta acceso come fallback per un periodo di transizione dopo lo switch, o si
-      spegne subito?
+- [x] Il Mac Mini resta acceso come fallback per un periodo di transizione dopo lo switch, o si
+      spegne subito? → **Deciso 23 settembre 2026**: resta acceso ma completamente inerte, non
+      spento fisicamente — vedi "Sviluppo spostato sul server" più sotto per i dettagli.
 
 ## Ricognizione fatta il 21 settembre 2026 (inizio lavoro vero, rimandato a domani per budget)
 Sessione Claude Code avviata per iniziare davvero il trasferimento. Fatta solo ricognizione
@@ -406,11 +438,142 @@ comunque continuare a testare/accedere anche dalla LAN diretta in parallelo.
 **✅ Verificato dall'utente (22 settembre 2026)**: login funzionante da browser reale su
 `http://192.168.100.40:8080`, dati reali visibili. Fasi 1-7 considerate concluse.
 
-**Non ancora fatto, da chiudere prima del cutover vero**:
-- Porting backup da launchd a systemd (vedi sezione dedicata sopra — script bash già portabile,
-  serve solo l'unit + timer systemd)
-- Restore fresco finale (quello di oggi sarà vecchio di giorni al momento del cutover)
-- Fase 8: pubblicazione dei due hostname sul tunnel, test end-to-end, ok esplicito prima dello switch
+## Backup — porting da launchd a systemd (fatto, 22 settembre 2026)
+Eseguito subito dopo la verifica delle fasi 1-7, stessa sessione. Script `hotelos-backup.sh`
+invariato nella logica, reso portabile in due punti scoperti solo provandolo davvero sul server
+(entrambi committati, valgono anche per il Mac, nessuna regressione — testato di nuovo lì dopo la
+modifica):
+- **`pg_dump` non più a path assoluto Homebrew** (`/opt/homebrew/bin/pg_dump`, esisteva solo su
+  macOS): cercato con `command -v`, fallback su path noti Mac/Linux. Su Linux è semplicemente
+  `/usr/bin/pg_dump`.
+- **Host e password letti da `DATABASE_URL`**, non solo `DB_NAME`/`DB_USER` come prima: sul Mac
+  l'auth locale non richiede password (`ginoscola@localhost`, peer/trust), ma il server usa un
+  utente DB con password (`hotelos_user`) — senza questo `pg_dump` avrebbe fallito ogni notte,
+  stesso tipo di bug silenzioso già capitato in passato con la regex `DB_USER` (vedi nota storica
+  sopra). `DB_HOST`/`DB_PASSWORD` vuoti sul Mac restano innocui (nessun comportamento diverso).
+
+**Identità git mai configurata sull'utente `gino` del server** (`git commit` nel repo di backup
+falliva con "Please tell me who you are"): `git config --global user.name/user.email` impostati
+una tantum, stessi valori del Mac.
+
+**Seconda deploy key GitHub, stavolta in scrittura**: `~/.ssh/hotelos_backup_deploy_key` sul
+server, deploy key su `hotelos-backup` con "Allow write access" (a differenza della chiave
+`hotel-os` sola-lettura). Per non dover riscrivere l'URL del repo nello script (`git@github.com:
+ginoscola/hotelos-backup.git`, letterale, uguale su Mac e server), l'alias in `~/.ssh/config` del
+server è sul vero hostname (`Host github.com` → questa chiave) invece che su un alias custom come
+per `hotel-os` (`Host github-hotelos` → chiave sola-lettura, riferita esplicitamente nell'URL di
+clone) — i due `Host` non confliggono, uno è literal match su `github.com`, l'altro su un nome
+inventato.
+
+**Unit systemd**: `hotelos-backup.service` (`Type=oneshot`, `User=gino` — non l'utente di servizio
+`hotelos` del backend, serve l'identità con le chiavi SSH verso Raspberry/GitHub e l'ambiente HOME
+corretto) + `hotelos-backup.timer` (`OnCalendar=*-*-* 03:00:00`, stessa ora del Mac,
+`Persistent=true` — a differenza di launchd, systemd non recupera automaticamente un run perso se
+il server era spento, va dichiarato esplicitamente). Log su file dedicati
+(`~/hotelos-backups/logs/backup-{stdout,stderr}.log`, non più `launchd.log`/`launchd-error.log`) +
+lo stesso `backup_log.jsonl` strutturato di sempre, invariato.
+
+**Verificato end-to-end due volte**: prima lanciando lo script a mano via SSH, poi con
+`sudo systemctl start hotelos-backup.service` (ambiente systemd reale, più minimale di una shell
+SSH interattiva — verifica non ridondante, un `PATH`/`HOME` diverso avrebbe potuto rompere
+qualcosa che a mano funzionava). Entrambe le volte: dump locale OK, copia su Raspberry Pi OK, push
+GitHub OK, riga `"esito":"success"` in `backup_log.jsonl`. Timer attivo e schedulato (confermato
+con `systemctl list-timers`).
+⚠️ **Doppio backup in parallelo durante la transizione**: finché il Mac resta acceso, entrambe le
+macchine faranno un backup alle 03:00 — innocuo (il Raspberry accumula dump da entrambe le fonti,
+la retention tiene comunque solo gli ultimi 7; il push GitHub è `--force` quindi l'ultimo dei due
+che gira "vince", nessun dato perso perché il Raspberry ha comunque entrambe le copie). Da non
+preoccuparsene fino alla decisione finale su quando spegnere il Mac (vedi "Domande aperte").
+
+## Fase 8 — pubblicazione sul tunnel (fatto, 22 settembre 2026, stesso pomeriggio)
+Verificato dall'utente che i dati erano invariati rispetto al restore di stamattina (nessun lavoro
+nel frattempo sul Mac) prima di procedere — **testata anche `import-da-stampante` per davvero**
+(non solo ping) su RT1 e RT2 con `on_conflict=salta` su una data già presente in DB (nessuna
+scrittura, solo lettura): entrambe le stampanti raggiunte e parsate correttamente dal server nuovo,
+valori (incluso un legittimo 0,00€ su RT2) coincidenti esattamente con quanto già salvato. Deciso
+che l'utente può già usare il server nuovo per il lavoro quotidiano **in LAN**, trattando il Mac
+come solo fallback in lettura da questo momento (nessun lavoro in parallelo sui due, per non far
+divergere i database).
+
+**Route sul tunnel create dall'utente via dashboard Cloudflare Zero Trust** (Networks → Tunnels →
+`server-kmdimare` → Public Hostname — stesso posto/procedura già usata per `ssh`/`status`, gestione
+del tunnel "remotely-managed" via token, nessun `config.yml` locale sul server: **le route non sono
+automatizzabili da Claude Code**, richiedono la dashboard):
+- `hotelos.kmdimare-hub.com` → HTTP → `localhost:8080` (frontend)
+- `hotelos-api.kmdimare-hub.com` → HTTP → `localhost:8081` (backend)
+- Nessuna Cloudflare Access Application su nessuna delle due (deciso il 21 settembre, vedi sopra).
+
+⚠️ **Rebuild frontend fatto due volte, la prima annullata subito**: la prima build con
+`VITE_API_URL=https://hotelos-api.kmdimare-hub.com` è stata fatta PRIMA che l'utente creasse
+davvero le route sul tunnel — avrebbe rotto l'accesso LAN che l'utente poteva star usando in quel
+momento (il frontend richiama sempre l'origine API scelta in build, non quella da cui è stato
+caricato). Ripristinata subito la build puntata alla LAN (`http://192.168.100.40:8081`), rifatta
+quella pubblica solo dopo aver verificato che entrambe le route rispondevano per davvero
+(`curl`, non solo "salvato nella dashboard"). Da ricordare per un domani: **non rifare mai la build
+di produzione finché la route Cloudflare non è confermata raggiungibile**, l'ordine conta.
+
+⚠️ **DNS della seconda route non propagato subito sul resolver locale del Mac** (`curl: Could not
+resolve host`) pur essendo già visibile interrogando direttamente `1.1.1.1` (resolver Cloudflare) —
+verificato con `dig @1.1.1.1`, poi confermato il funzionamento reale con `curl --resolve` (forza
+l'IP, bypassa la cache DNS locale) prima di aspettare la propagazione naturale. Non un problema
+della route in sé, solo un ritardo di cache DNS locale — si è risolto da solo in pochi minuti.
+
+**`cors_origins` impostato su entrambe le origini** (non solo quella pubblica):
+`https://hotelos.kmdimare-hub.com,http://192.168.100.40:8080` — l'utente continua a poter accedere
+anche dalla LAN diretta, non solo da fuori, senza errori CORS. Verificato con richieste reali
+(header `Origin` impostato a mano) per entrambe le origini, risposta `access-control-allow-origin`
+corretta su entrambe.
+⚠️ **`cors_origins` letto dal backend solo all'avvio** (`main.py`, nota già nota — vedi sezione
+Configurazione app in CLAUDE.md), non a ogni richiesta: dopo l'`UPDATE` su `app_config` è servito
+`sudo systemctl restart hotelos-backend` (altro comando sudo, altro giro di copia-incolla
+dell'utente) prima che il nuovo CORS avesse effetto — altrimenti la modifica risulta "fatta" nel DB
+ma silenziosamente senza effetto finché non si riavvia.
+
+**Verificato end-to-end** (login reale via `curl`, non solo `HTTP 200` sulla home): funziona sia
+`https://hotelos.kmdimare-hub.com` (pubblico) sia `http://192.168.100.40:8080` (LAN diretta),
+stesso backend, stesso database.
+
+**✅ Confermato dall'utente (22 settembre 2026, stesso pomeriggio) da telefono, fuori LAN**:
+`https://hotelos.kmdimare-hub.com` funzionante da un vero browser mobile su rete diversa da quella
+dell'hotel — non solo `curl` dal Mac. Fase 8 considerata conclusa a tutti gli effetti.
+
+## Sviluppo spostato sul server, Mac reso inerte (23 settembre 2026)
+Deciso dall'utente: **da qui in avanti lo sviluppo avviene sul server** (via VSCode Remote-SSH,
+alias `kmdimare-remote` da fuori LAN / `gino@192.168.100.40` da dentro), non più sul Mac Mini —
+quindi anche backup DB e file devono essere solo quelli del server, non più duplicati.
+
+**Scoperta non pianificata durante la verifica**: il Mac non aveva solo il vecchio backup
+(`it.hotelos.backup`, launchd) ancora attivo in parallelo (già saputo, considerato innocuo) — aveva
+**anche l'app stessa ancora viva**, `it.hotelos.backend` (uvicorn `--reload`, porta 8000) e
+`it.hotelos.frontend` (`npm run dev`, porta 5173), entrambi con riavvio automatico (`KeepAlive`).
+Non erano mai stati menzionati esplicitamente nel piano di migrazione (solo `it.hotelos.backup` era
+documentato) — scoperti solo controllando `launchctl list` su richiesta esplicita dell'utente
+("possiamo dire che tutto è ora legato al server?"), non qualcosa che sarebbe emerso da solo. Se
+fossero rimasti attivi, chiunque avesse ancora usato il Mac (anche per sbaglio, es. un bookmark
+vecchio) avrebbe scritto dati nel vecchio DB `revenue_master`, separato e mai più sincronizzato con
+`hotel_os` sul server — esattamente il rischio di divergenza discusso fin dall'inizio dell'uso
+quotidiano sul server nuovo.
+
+**Fix**: tutti e tre i launchd agent (`backend`, `frontend`, `backup`) fermati
+(`launchctl unload`) e **spostati fuori** da `~/Library/LaunchAgents/` (in
+`~/hotelos-launchagents-disabled-20260923/`, non cancellati — recuperabili se mai servisse tornare
+indietro). ⚠️ **`launchctl unload` da solo non bastava per il backend**: il processo uvicorn reale
+(PID verificato via `lsof -iTCP:8000`) risultava già scollegato dalla supervisione di launchd
+(`launchctl list` lo mostrava come non in esecuzione, ma la porta 8000 rispondeva comunque, PPID 1 —
+orfano, probabilmente avviato una volta a mano o da `dev.sh`/`Avvia HotelOS.command` fuori dal
+controllo di launchd) — richiesto un `kill` esplicito del PID reale dopo l'unload, verificato con
+`lsof` che la porta fosse davvero libera prima di considerarlo concluso.
+
+**Stato finale**: Mac Mini resta acceso (non spento fisicamente) ma **completamente inerte** per
+HotelOS — nessun servizio in ascolto, nessun backup automatico, codice e dati ancora presenti sul
+disco per un'eventuale emergenza, ma nulla parte da solo. Verificato con `launchctl list` (nessuna
+voce `it.hotelos.*`) e `lsof` su entrambe le porte (8000/5173 libere) dopo il fix.
+
+## Non ancora fatto
+- Restore fresco finale del DB sul server (i dati di oggi sono comunque aggiornati ad oggi —
+  rifarlo solo se passano altri giorni prima di considerare la migrazione definitivamente chiusa)
+- Accesso da Mac di casa dell'utente (service token e policy Cloudflare già pronti, comandi in
+  attesa — vedi sezione dedicata sopra)
 
 ## Idee / note sparse
 _(aggiungere qui nel tempo)_
