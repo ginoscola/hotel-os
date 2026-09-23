@@ -1,12 +1,11 @@
 # HotelOS — Migrazione dal Mac Mini a un box Linux
 
-> **Stato: HotelOS gira sul server Linux e funziona, pubblicato e verificato anche da remoto**
-> (22 settembre 2026 — vedi "Fasi 1-7", "Backup" e "Fase 8" sotto per tutti i dettagli). L'utente
-> ha confermato l'accesso funzionante da telefono fuori dalla LAN (`https://hotelos.kmdimare-hub.com`).
-> **Resta solo da decidere quando spegnere il Mac** (vedi "Domande aperte" e l'ultima sezione in
-> fondo) — fino ad allora il Mac resta acceso come fallback in sola lettura, l'utente lavora già
-> sul server nuovo. Questo file resta un taccuino di lavoro — aggiungere idee/decisioni qui man
-> mano. Riferimento generico di deploy: [`GUIDA_DEPLOY.md`](GUIDA_DEPLOY.md).
+> **Stato: migrazione completata.** HotelOS gira sul server Linux (pubblicato e verificato anche da
+> remoto, 22 settembre 2026), sviluppo e lavoro quotidiano avvengono lì, backup automatico solo lì.
+> **Dal 23 settembre 2026 il Mac Mini è completamente inerte** (nessun servizio HotelOS attivo,
+> nessun backup automatico) ma resta acceso, non spento fisicamente — vedi "Sviluppo spostato sul
+> server, Mac reso inerte" in fondo al file. Questo file resta un taccuino di lavoro — aggiungere
+> idee/decisioni qui man mano. Riferimento generico di deploy: [`GUIDA_DEPLOY.md`](GUIDA_DEPLOY.md).
 
 ## Server Ubuntu e accesso remoto (fatto, settembre 2026)
 Macchina: Ubuntu 26.04.1 LTS, IP locale `192.168.100.40` (stessa LAN del Raspberry Pi di backup),
@@ -281,8 +280,9 @@ stessa ora (03:00).
 - [x] Distro Linux esatta → **Ubuntu 26.04.1 LTS**, macchina già provisionata (vedi sopra).
 - [x] Dominio pubblico / certbot → **risolto**: Cloudflare Tunnel su `kmdimare-hub.com` (vedi
       sopra), nessun certbot necessario, TLS terminato da Cloudflare.
-- [ ] Il Mac Mini resta acceso come fallback per un periodo di transizione dopo lo switch, o si
-      spegne subito?
+- [x] Il Mac Mini resta acceso come fallback per un periodo di transizione dopo lo switch, o si
+      spegne subito? → **Deciso 23 settembre 2026**: resta acceso ma completamente inerte, non
+      spento fisicamente — vedi "Sviluppo spostato sul server" più sotto per i dettagli.
 
 ## Ricognizione fatta il 21 settembre 2026 (inizio lavoro vero, rimandato a domani per budget)
 Sessione Claude Code avviata per iniziare davvero il trasferimento. Fatta solo ricognizione
@@ -537,10 +537,43 @@ stesso backend, stesso database.
 `https://hotelos.kmdimare-hub.com` funzionante da un vero browser mobile su rete diversa da quella
 dell'hotel — non solo `curl` dal Mac. Fase 8 considerata conclusa a tutti gli effetti.
 
-## Non ancora fatto, da chiudere prima del cutover vero (spegnimento Mac)
-- Restore fresco finale (i dati di oggi sono comunque aggiornati ad oggi — rifarlo solo se passano
-  altri giorni prima dello spegnimento vero e proprio del Mac)
-- Decidere quando spegnere il Mac (vedi "Domande aperte" in cima al file, ancora aperta)
+## Sviluppo spostato sul server, Mac reso inerte (23 settembre 2026)
+Deciso dall'utente: **da qui in avanti lo sviluppo avviene sul server** (via VSCode Remote-SSH,
+alias `kmdimare-remote` da fuori LAN / `gino@192.168.100.40` da dentro), non più sul Mac Mini —
+quindi anche backup DB e file devono essere solo quelli del server, non più duplicati.
+
+**Scoperta non pianificata durante la verifica**: il Mac non aveva solo il vecchio backup
+(`it.hotelos.backup`, launchd) ancora attivo in parallelo (già saputo, considerato innocuo) — aveva
+**anche l'app stessa ancora viva**, `it.hotelos.backend` (uvicorn `--reload`, porta 8000) e
+`it.hotelos.frontend` (`npm run dev`, porta 5173), entrambi con riavvio automatico (`KeepAlive`).
+Non erano mai stati menzionati esplicitamente nel piano di migrazione (solo `it.hotelos.backup` era
+documentato) — scoperti solo controllando `launchctl list` su richiesta esplicita dell'utente
+("possiamo dire che tutto è ora legato al server?"), non qualcosa che sarebbe emerso da solo. Se
+fossero rimasti attivi, chiunque avesse ancora usato il Mac (anche per sbaglio, es. un bookmark
+vecchio) avrebbe scritto dati nel vecchio DB `revenue_master`, separato e mai più sincronizzato con
+`hotel_os` sul server — esattamente il rischio di divergenza discusso fin dall'inizio dell'uso
+quotidiano sul server nuovo.
+
+**Fix**: tutti e tre i launchd agent (`backend`, `frontend`, `backup`) fermati
+(`launchctl unload`) e **spostati fuori** da `~/Library/LaunchAgents/` (in
+`~/hotelos-launchagents-disabled-20260923/`, non cancellati — recuperabili se mai servisse tornare
+indietro). ⚠️ **`launchctl unload` da solo non bastava per il backend**: il processo uvicorn reale
+(PID verificato via `lsof -iTCP:8000`) risultava già scollegato dalla supervisione di launchd
+(`launchctl list` lo mostrava come non in esecuzione, ma la porta 8000 rispondeva comunque, PPID 1 —
+orfano, probabilmente avviato una volta a mano o da `dev.sh`/`Avvia HotelOS.command` fuori dal
+controllo di launchd) — richiesto un `kill` esplicito del PID reale dopo l'unload, verificato con
+`lsof` che la porta fosse davvero libera prima di considerarlo concluso.
+
+**Stato finale**: Mac Mini resta acceso (non spento fisicamente) ma **completamente inerte** per
+HotelOS — nessun servizio in ascolto, nessun backup automatico, codice e dati ancora presenti sul
+disco per un'eventuale emergenza, ma nulla parte da solo. Verificato con `launchctl list` (nessuna
+voce `it.hotelos.*`) e `lsof` su entrambe le porte (8000/5173 libere) dopo il fix.
+
+## Non ancora fatto
+- Restore fresco finale del DB sul server (i dati di oggi sono comunque aggiornati ad oggi —
+  rifarlo solo se passano altri giorni prima di considerare la migrazione definitivamente chiusa)
+- Accesso da Mac di casa dell'utente (service token e policy Cloudflare già pronti, comandi in
+  attesa — vedi sezione dedicata sopra)
 
 ## Idee / note sparse
 _(aggiungere qui nel tempo)_

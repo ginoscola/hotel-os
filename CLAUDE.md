@@ -142,10 +142,21 @@ eredita comportamento e persistenza automaticamente.
 ## Variabili ambiente e deploy
 Frontend: `VITE_API_URL` in `.env` / `.env.production`. **Mai URL hardcoded.**
 `api/client.js` usa `import.meta.env.VITE_API_URL || 'http://localhost:8000'`.
-Deploy Linux: nginx (reverse proxy) → uvicorn (systemd) → PostgreSQL. SSL via certbot.
-Aggiornare `cors_origins` in DB dopo deploy.
+Deploy Linux (attivo dal 23 settembre 2026, server `kmdimare-server`): nginx serve il frontend
+statico e fa da reverse proxy verso uvicorn (systemd, `hotelos-backend`) — **su origini/porte
+separate**, non un unico proxy per prefissi (bug reale trovato migrando: pagine come
+`/dashboard/gruppo` collidono col path dell'endpoint API omonimo). Nessun certbot: TLS terminato da
+Cloudflare Tunnel. Dettagli completi, template di config e motivazioni in `docs/MIGRAZIONE_LINUX.md`
+e `docs/GUIDA_DEPLOY.md` (+ `deploy/` per i file pronti). Aggiornare `cors_origins` in DB dopo deploy
+(richiede anche `sudo systemctl restart hotelos-backend`: letto solo all'avvio, non a ogni richiesta).
 
 ## Comandi sviluppo
+⚠️ **Dal 23 settembre 2026 lo sviluppo avviene sul server Linux**, non più sul Mac Mini (migrazione
+completata — vedi `docs/MIGRAZIONE_LINUX.md`): VSCode Remote-SSH (alias `kmdimare-remote` da fuori
+LAN, IP diretto `gino@192.168.100.40` da dentro) sulla cartella `/srv/progetti/hotel-os`, non più
+`/Users/ginoscola/hotel-os`. I comandi sotto restano identici, cambia solo dove/su quale macchina si
+lanciano — il backend/frontend del Mac Mini sono stati fermati e disattivati (non più avviati da
+launchd, `it.hotelos.backend`/`frontend`/`backup` spostati fuori da `~/Library/LaunchAgents/`).
 ```bash
 cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev
@@ -1721,7 +1732,15 @@ Router: `GET|POST|PUT /lookup/tipi-pagamento`.
 ---
 
 ## Sistema di backup automatico notturno
-**3 copie**: locale (Mac Mini) → Raspberry Pi (rsync via SSH) → repository GitHub privato `hotelos-backup`.
+⚠️ **Dal 23 settembre 2026: il backup gira solo sul server Linux** (`hotelos-backup.timer`/
+`.service`, systemd, stessa ora 03:00), non più sul Mac Mini — vedi `docs/MIGRAZIONE_LINUX.md` per
+tutti i dettagli della migrazione. Il Mac Mini non esegue più né il backup né l'app stessa (backend/
+frontend/backup launchd disattivati e spostati fuori da `~/Library/LaunchAgents/`, non cancellati).
+La cronologia sotto (bug, fix, installazione via launchd) resta riferimento storico valido per la
+**logica dello script** (`hotelos-backup.sh`, invariata, portata su systemd senza riscriverla — solo
+resa portabile path/host/password, vedi doc migrazione), non per dove gira oggi.
+
+**3 copie**: locale (server) → Raspberry Pi (rsync via SSH) → repository GitHub privato `hotelos-backup`.
 - Script principale: `scripts/hotelos-backup.sh` (pg_dump formato custom `-F c`, legge `DB_NAME`/`DB_USER`
   da `backend/.env` con lo stesso parsing usato dal router `backup.py` — non duplicare la logica altrove).
 - Installazione (una tantum): `bash scripts/installa-backup.sh` → copia `scripts/it.hotelos.backup.plist`
