@@ -217,7 +217,10 @@ coerenza col resto, appena creata la LV dedicata.
   anche il blocco `<Directory /srv/progetti/apache-www/>` in `apache2.conf` (l'unico già presente
   concedeva accesso solo su `/var/www/`, non su `/srv/`) — verificato solo con `apache2ctl
   configtest` (sintassi), il servizio resta `failed` finché non si risolve il conflitto di porta con
-  nginx, fuori dallo scope di questo spostamento.
+  nginx, fuori dallo scope di questo spostamento. **Disabilitato all'avvio il 25/09/2026**
+  (`systemctl disable apache2`, dopo il riavvio per l'aggiornamento kernel): prima compariva come
+  `failed` a ogni boot. Installazione e config restano intatte — per riusarlo va prima risolto il
+  conflitto sulla porta 80, poi `sudo systemctl enable --now apache2`.
 
 ## Obiettivo
 Sostituire il Mac Mini attuale con una macchina Linux come **unica** macchina dev+produzione
