@@ -4,6 +4,7 @@ import AdminUtenti from './AdminUtenti.jsx'
 import AdminCentriDiCosto from './AdminCentriDiCosto.jsx'
 import AdminBackup from './admin/AdminBackup.jsx'
 import AdminCruscottoSoglie from './admin/AdminCruscottoSoglie.jsx'
+import AdminUiKit from './admin/AdminUiKit.jsx'
 import api from '../api/client.js'
 import { mostraErrore } from '../utils/format.js'
 import { APP_VERSION, APP_VERSION_DATE } from '../version.js'
@@ -67,6 +68,7 @@ const SEZIONI = [
     voci: [
       { id: 'sistema-debug', label: 'Debug & diagnostica' },
       { id: 'backup',        label: 'Backup' },
+      { id: 'ui-kit',        label: 'Libreria UI' },
     ],
   },
 ]
@@ -246,6 +248,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'prod-mapping')         return <ProdMappingDettagli />
   if (sezione === 'sistema-debug')        return <SistemaDebug />
   if (sezione === 'backup')               return <AdminBackup />
+  if (sezione === 'ui-kit')               return <AdminUiKit />
   return <Placeholder sezione={sezione} />
 }
 

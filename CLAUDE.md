@@ -221,6 +221,47 @@ UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % 
 - `formatEuro(v)`, `formatEuroK(v)` (≥1000 → "Xk €"), `formatPerc(v)`, `formatN(v)`, `formatData(iso)`, `addDays(isoDate, n)`, `calcolaDelta(val, ref)`
 - `mostraErrore(e)` — **OBBLIGATORIO in ogni catch block**. Se `localStorage('debug_errori')==='true'` → stack trace completo; altrimenti prima riga. **Mai** usare inline `e.response?.data?.detail || e.message`.
 
+## Libreria UI (`components/ui/` + `styles/tokens.js` + `styles/ui.css`) — settembre 2026
+Nata per uniformare grafica e testi dell'intera app (prima: 135 colori esadecimali diversi, ~25
+dimensioni di testo, barre tab riscritte in ogni modulo con 4 stili, `alert()`/`confirm()` nativi).
+Il vecchio `styles/common.js` (mai importato da nessun file, e con pulsante primario ambra in
+contrasto con l'app reale) è stato eliminato.
+- **`styles/tokens.js`**: UNICA sorgente di colori/testi/spazi in JS (per Recharts, SVG, stili
+  calcolati). **`styles/ui.css`**: stessi valori come variabili CSS (`--color-*`, `--fs-*`) + classi
+  `ui-*`, importato in `main.jsx` DOPO `index.css`. Cambiando un valore, allinearlo in entrambi.
+- **Colore principale unico** `#1e3a5f` (blu notte): tab, pulsanti principali, intestazioni tabelle,
+  in TUTTI i moduli — scelta esplicita dell'utente. Il colore del modulo (`modules.colore`) resta
+  **solo** nella NavBar in alto. Eccezione voluta: la pillola arancione IVA (`ToggleIva`). Grigi: solo
+  la famiglia slate (`#64748b`, `#94a3b8`, `#1e293b`…), non più anche gray (`#6b7280`, `#374151`…).
+- **Colori strutture** `COLORI_STRUTTURA`/`coloreStruttura()`: DPH verde `#10b981`, CLB blu
+  `#3b82f6`, INT ambra `#f59e0b` (scelti dall'utente), MMS teal / BON ambra scuro (tonalità "sorelle"
+  della struttura fisica). Uguali ovunque: le ridefinizioni locali (`COLORI_HOTEL` in
+  `produzioneHelpers.js`/`DashboardGruppo.jsx`, `TabFatturati.jsx`, `Dipendenti.jsx`) vanno sostituite
+  migrando le pagine.
+- **Componenti** (`import { ... } from '../components/ui'`): `Button` (primary/secondary/danger/
+  danger-soft/ghost, sm), `PageHeader`, `SectionTitle`, `Card`, `Tabs`, `SegmentedControl`,
+  `ToggleIva`, `NavMese`, `Input`/`Select`/`Field`, `Table`/`Th`/`Td` (`num` = destra + cifre
+  allineate, `tot` = colonna totale), `Badge`, `Dot`, `HotelTag`, `Messaggio`, `Loading`,
+  `StatoVuoto`, `Modal`. Catalogo visivo: Admin → Sistema → Libreria UI (`?s=ui-kit`,
+  `pages/admin/AdminUiKit.jsx`) — aggiornarlo quando si aggiunge un componente.
+- **Conferme e avvisi**: `useConferma()` al posto di `window.confirm()` (`await conferma({titolo,
+  messaggio, pericolo, ritardoMs})` → boolean; `ritardoMs` per azioni irreversibili tipo Chiusura Z),
+  `useAvvisi()` al posto di `alert()` (`successo`/`info` spariscono da soli dopo 4s,
+  `errore`/`attenzione` restano finché chiusi). `<UiProvider>` montato una volta in `App.jsx`.
+- **Tabelle**: righe speciali con classe sulla `<tr>` (`ui-riga-subtotale`, `ui-riga-sezione`,
+  `ui-riga-risultato`, `ui-riga-totale`) — il CSS colora le `<td>`, quindi il bug riga pari/dispari
+  (vedi "Righe tabella con sfondo custom") non si presenta. I selettori `.ui-table > tbody > tr > td`
+  hanno specificità più alta delle regole globali th/td di `index.css` apposta.
+- **Migrazione a fasi, un modulo alla volta** (verifica visiva dell'utente dopo ciascuno):
+  ✅ USALI (pilota, v3.15.0). Da fare: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
+  (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
+  si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati
+  negli helper (`thSt`/`tdSt`/`inpSt` in `corrispettiviHelpers.js`/`produzioneHelpers.js`): toccarle
+  prima romperebbe le pagine non ancora migrate. Export xlsx/pdf (colori nel backend) fuori ambito.
+- Nelle pagine migrate: nessun colore esadecimale scritto a mano, nessun `fontSize` fuori scala
+  (11/12/13/14/16/18/22), nessun `alert()`/`confirm()`.
+
 ## Componenti grafici condivisi
 **`PastReferenceArea`** (`frontend/src/components/PastReferenceArea.jsx`): sfondo scuro sui periodi già trascorsi in un grafico Recharts, per distinguere visivamente "maturato" (passato) da "OTB" (futuro).
 - Props: `data` (array punti), `dateKey` (chiave ISO YYYY-MM-DD per confronto con oggi), `displayKey` (chiave usata su XAxis se diversa da `dateKey`)
@@ -1871,7 +1912,10 @@ bottoni) solo perché è più veloce da scrivere in quel momento.
   bordo `#fdba74`, bottone attivo `#ea580c`) con due bottoni "IVA inclusa"/"IVA esclusa", identica in
   `Corrispettivi.jsx`, `StatisticheProduzione.jsx` e `UsaliMovimentiAttivi.jsx` — la prima versione di
   quest'ultima usava una semplice checkbox, corretta su richiesta esplicita (luglio 2026).
-- Se un componente riutilizzabile esiste già (es. `PastReferenceArea`, `ExportMenu`), usarlo invece di
+- Dal settembre 2026 la pillola è il componente `ToggleIva` della libreria UI (vedi sezione "Libreria
+  UI"): nelle pagine migrate usare quello, non il markup inline.
+- Se un componente riutilizzabile esiste già (es. `PastReferenceArea`, `ExportMenu`, tutto
+  `components/ui/`), usarlo invece di
   reimplementare lo stesso markup inline in una nuova pagina.
 - localStorage key per preferenze di visualizzazione (es. toggle IVA) resta per-modulo (`corrispettivi_lordo`,
   `produzione_lordo`, `usali_movimenti_lordo`, ecc.) — l'uniformità è sullo stile, non sullo stato condiviso.

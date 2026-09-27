@@ -16,9 +16,11 @@ import Corrispettivi from './pages/Corrispettivi.jsx'
 import AdminCentriDiCosto from './pages/AdminCentriDiCosto.jsx'
 import Forecast from './pages/Forecast.jsx'
 import AdminUnificato from './pages/AdminUnificato.jsx'
+import { UiProvider } from './components/ui'
 
 export default function App() {
   return (
+    <UiProvider>
     <BrowserRouter>
       <NavBar />
       <main style={{ padding: '1.5rem 2rem' }}>
@@ -79,5 +81,6 @@ export default function App() {
         </Routes>
       </main>
     </BrowserRouter>
+    </UiProvider>
   )
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import UsaliContoEconomico from './UsaliContoEconomico'
 import UsaliMovimentiAttivi from './UsaliMovimentiAttivi'
+import { PageHeader, Tabs } from '../components/ui'
 
 const LS_TAB = 'usali_tab'
 
@@ -18,21 +19,9 @@ export default function Usali() {
   }
 
   return (
-    <div style={{ padding: '20px 24px' }}>
-      <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#1e293b', margin: '0 0 1.25rem' }}>USALI</h1>
-
-      <div style={{ display: 'flex', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem', gap: 0 }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => cambiaTab(t.id)} style={{
-            padding: '8px 18px', border: 'none',
-            borderBottom: tab === t.id ? '2px solid #1e3a5f' : '2px solid transparent',
-            background: 'none', cursor: 'pointer', fontSize: '0.88rem',
-            fontWeight: tab === t.id ? 700 : 400,
-            color: tab === t.id ? '#1e3a5f' : '#64748b',
-            marginBottom: -2, transition: 'all .15s',
-          }}>{t.label}</button>
-        ))}
-      </div>
+    <div>
+      <PageHeader title="USALI" />
+      <Tabs tabs={TABS} value={tab} onChange={cambiaTab} />
 
       {tab === 'conto-economico' && <UsaliContoEconomico />}
       {tab === 'movimenti-attivi' && <UsaliMovimentiAttivi />}
