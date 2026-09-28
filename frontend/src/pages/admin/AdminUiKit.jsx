@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   Button, PageHeader, SectionTitle, Card, Badge, Dot, HotelTag, Loading, StatoVuoto, Messaggio,
   Tabs, SegmentedControl, ToggleIva, Input, Select, Field, NavMese,
-  Table, Th, Td, Modal, useConferma, useAvvisi,
+  Table, Th, Td, Modal, useConferma, useAvvisi, KpiTile, FileButton,
 } from '../../components/ui'
 import { colors, COLORI_STRUTTURA, fontSize } from '../../styles/tokens.js'
 import { formatEuro } from '../../utils/format.js'
@@ -116,6 +116,20 @@ export default function AdminUiKit() {
         <Field label="Scelta"><Select defaultValue="b"><option value="a">Opzione A</option><option value="b">Opzione B</option></Select></Field>
       </Blocco>
 
+      <Card title="Riquadri KPI" style={{ marginBottom: 20 }}>
+        <div className="ui-kpi-row" style={{ marginBottom: 0 }}>
+          <KpiTile label="Budget Revenue" value={formatEuro(1250000)} />
+          <KpiTile label="Scostamento €" value={formatEuro(42300)} colore={colors.success} />
+          <KpiTile label="Scostamento %" value="-3,2%" colore={colors.danger} />
+          <KpiTile label="Cam. Vend. Budget" value="12.450" sub="→ 12.980" />
+          <KpiTile label="Principale (size lg)" value={formatEuro(3400000)} size="lg" />
+        </div>
+      </Card>
+
+      <Blocco titolo="Caricamento file">
+        <FileButton accept=".xlsx" onFile={f => avvisi.info(`Scelto: ${f.name}`)}>Importa da Excel</FileButton>
+      </Blocco>
+
       <Blocco titolo="Badge e pallini">
         <Badge>NEUTRO</Badge><Badge tono="info">AUTO</Badge><Badge tono="ok">OK</Badge>
         <Badge tono="warn">ATTENZIONE</Badge><Badge tono="err">ERRORE</Badge>
@@ -149,6 +163,9 @@ export default function AdminUiKit() {
             <tr><Td>Ricavi camere</Td><Td num>{formatEuro(125430.5)}</Td><Td num>{formatEuro(98210)}</Td><Td num tot>{formatEuro(223640.5)}</Td></tr>
             <tr><Td>Ricavi ristorante</Td><Td num>{formatEuro(40210)}</Td><Td num>{formatEuro(31022.4)}</Td><Td num tot>{formatEuro(71232.4)}</Td></tr>
             <tr><Td>Extra</Td><Td num muted>—</Td><Td num>{formatEuro(1200)}</Td><Td num tot>{formatEuro(1200)}</Td></tr>
+            <tr className="ui-riga-attenuata"><Td>Dati assenti (ui-riga-attenuata)</Td><Td num>—</Td><Td num>—</Td><Td num tot>—</Td></tr>
+            <tr className="ui-riga-avviso"><Td>Da compilare (ui-riga-avviso)</Td><Td num>{formatEuro(0)}</Td><Td num>{formatEuro(0)}</Td><Td num tot>{formatEuro(0)}</Td></tr>
+            <tr className="ui-riga-ok"><Td>Completata (ui-riga-ok)</Td><Td num>{formatEuro(1000)}</Td><Td num>{formatEuro(900)}</Td><Td num tot>{formatEuro(1900)}</Td></tr>
             <tr className="ui-riga-subtotale"><Td>Subtotale (ui-riga-subtotale)</Td><Td num>{formatEuro(165640.5)}</Td><Td num>{formatEuro(130432.4)}</Td><Td num tot>{formatEuro(296072.9)}</Td></tr>
             <tr className="ui-riga-sezione"><Td>Totale sezione (ui-riga-sezione)</Td><Td num>{formatEuro(165640.5)}</Td><Td num>{formatEuro(130432.4)}</Td><Td num tot>{formatEuro(296072.9)}</Td></tr>
             <tr className="ui-riga-risultato"><Td>Risultato (ui-riga-risultato)</Td><Td num>{formatEuro(52000)}</Td><Td num>{formatEuro(41000)}</Td><Td num tot>{formatEuro(93000)}</Td></tr>

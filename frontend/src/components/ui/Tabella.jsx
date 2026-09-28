@@ -1,6 +1,7 @@
 // Tabelle standard. Le classi ui-table battono le regole globali th/td di index.css.
 //
 // Righe speciali: className sulla <tr>
+//   ui-riga-attenuata (dati assenti) · ui-riga-avviso (da compilare) · ui-riga-ok (completata)
 //   ui-riga-subtotale · ui-riga-sezione · ui-riga-risultato · ui-riga-totale
 // Lo sfondo è applicato alle <td> dal CSS (non alla <tr>): niente più bug riga pari/dispari.
 import { cx } from './classi.js'

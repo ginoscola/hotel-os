@@ -242,18 +242,22 @@ contrasto con l'app reale) è stato eliminato.
   danger-soft/ghost, sm), `PageHeader`, `SectionTitle`, `Card`, `Tabs`, `SegmentedControl`,
   `ToggleIva`, `NavMese`, `Input`/`Select`/`Field`, `Table`/`Th`/`Td` (`num` = destra + cifre
   allineate, `tot` = colonna totale), `Badge`, `Dot`, `HotelTag`, `Messaggio`, `Loading`,
-  `StatoVuoto`, `Modal`. Catalogo visivo: Admin → Sistema → Libreria UI (`?s=ui-kit`,
+  `StatoVuoto`, `Modal`, `KpiTile` (etichetta + valore + sub, in fila dentro `<div
+  className="ui-kpi-row">`), `FileButton` (pulsante che apre la scelta file). Catalogo visivo: Admin → Sistema → Libreria UI (`?s=ui-kit`,
   `pages/admin/AdminUiKit.jsx`) — aggiornarlo quando si aggiunge un componente.
 - **Conferme e avvisi**: `useConferma()` al posto di `window.confirm()` (`await conferma({titolo,
   messaggio, pericolo, ritardoMs})` → boolean; `ritardoMs` per azioni irreversibili tipo Chiusura Z),
   `useAvvisi()` al posto di `alert()` (`successo`/`info` spariscono da soli dopo 4s,
   `errore`/`attenzione` restano finché chiusi). `<UiProvider>` montato una volta in `App.jsx`.
-- **Tabelle**: righe speciali con classe sulla `<tr>` (`ui-riga-subtotale`, `ui-riga-sezione`,
+- **Tabelle**: righe speciali con classe sulla `<tr>` (`ui-riga-attenuata` dati assenti,
+  `ui-riga-avviso` da compilare, `ui-riga-ok` completata, `ui-riga-subtotale`, `ui-riga-sezione`,
   `ui-riga-risultato`, `ui-riga-totale`) — il CSS colora le `<td>`, quindi il bug riga pari/dispari
   (vedi "Righe tabella con sfondo custom") non si presenta. I selettori `.ui-table > tbody > tr > td`
   hanno specificità più alta delle regole globali th/td di `index.css` apposta.
 - **Migrazione a fasi, un modulo alla volta** (verifica visiva dell'utente dopo ciascuno):
-  ✅ USALI (pilota, v3.15.0). Da fare: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  ✅ USALI (pilota, v3.15.0), ✅ Budget (v3.15.1 — ora ha un titolo pagina con hotel come
+  `SegmentedControl`, anno/versione in `PageHeader`; colori grafici Budget/Actual = `textSubtle`/`info`).
+  Da fare: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati

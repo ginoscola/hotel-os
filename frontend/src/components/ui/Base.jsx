@@ -91,3 +91,33 @@ export function Messaggio({ tipo = 'err', children, onChiudi }) {
     </div>
   )
 }
+
+/**
+ * Riquadro KPI: etichetta piccola + valore grande (+ riga secondaria opzionale).
+ * colore: colore del valore (es. colors.success per scostamento positivo).
+ * size 'lg' per il KPI principale di una vista.
+ */
+export function KpiTile({ label, value, sub, colore, size = 'md', minWidth = 150 }) {
+  return (
+    <div className={cx('ui-kpi', size === 'lg' && 'ui-kpi-lg')} style={{ minWidth }}>
+      <div className="ui-kpi-label">{label}</div>
+      <div className="ui-kpi-valore ui-num" style={colore ? { color: colore } : undefined}>{value ?? '—'}</div>
+      {sub != null && <div className="ui-kpi-sub ui-num">{sub}</div>}
+    </div>
+  )
+}
+
+/** Pulsante che apre la selezione file (input nascosto). onFile(File) — l'input viene azzerato dopo. */
+export function FileButton({ children, accept, onFile, variant = 'secondary', size = 'md' }) {
+  return (
+    <label className={cx('ui-btn', `ui-btn-${variant}`, size === 'sm' && 'ui-btn-sm')}>
+      {children}
+      <input
+        type="file"
+        accept={accept}
+        style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
+      />
+    </label>
+  )
+}
