@@ -150,6 +150,12 @@
   min-width: 150px; text-align: center; font-weight: 700; font-size: var(--fs-md); color: var(--color-text);
 }
 
+.ui-navmese .ui-navmese-scelta {
+  position: relative; cursor: pointer; padding: 3px 8px; border-radius: var(--radius-md); border: 1px solid transparent;
+}
+.ui-navmese .ui-navmese-scelta:hover { border-color: var(--color-border); }
+.ui-navmese .ui-navmese-scelta input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+
 /* ── Card ──────────────────────────────────────────────────────────────────── */
 .ui-card {
   background: var(--color-surface); border: 1px solid var(--color-border);
@@ -169,6 +175,13 @@
 .ui-kpi .ui-kpi-valore { font-size: var(--fs-xl); font-weight: 700; color: var(--color-text); margin-top: 2px; }
 .ui-kpi .ui-kpi-sub { font-size: var(--fs-sm); color: var(--color-text-muted); margin-top: 2px; }
 .ui-kpi.ui-kpi-lg .ui-kpi-valore { font-size: var(--fs-xxl); }
+
+.ui-sezione-toggle {
+  display: inline-flex; align-items: baseline; gap: 8px; padding: 0; margin: 0;
+  background: none; border: none; border-radius: 0; cursor: pointer; text-align: left; font-family: inherit; font-weight: 400;
+}
+.ui-sezione-toggle .ui-sezione-freccia { color: var(--color-text-muted); width: 12px; }
+.ui-sezione-toggle:hover .ui-section-title { color: var(--color-primary); }
 
 /* ── Badge ─────────────────────────────────────────────────────────────────── */
 .ui-badge {
@@ -250,6 +263,7 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: var(--fs-bas
 .ui-table > tbody > tr.ui-riga-attenuata > td { background: var(--color-surface-soft); color: var(--color-text-subtle); }
 .ui-table > tbody > tr.ui-riga-avviso > td { background: #fffbeb; }
 .ui-table > tbody > tr.ui-riga-ok > td { background: #f0fdf4; }
+.ui-table > tbody > tr.ui-riga-errore > td { background: #fef2f2; }
 .ui-table > tbody > tr.ui-riga-annullata > td { background: #fef9f9; opacity: .6; }
 .ui-table > tbody > tr.ui-riga-modificata > td:first-child { box-shadow: inset 3px 0 0 var(--color-warning); }
 .ui-table > tbody > tr.ui-riga-evidenza > td { background: var(--color-info-soft); }

@@ -50,8 +50,19 @@ export function Card({ title, actions, children, className, style }) {
   )
 }
 
-/** Etichetta colorata. tono: 'neutral' | 'info' | 'ok' | 'warn' | 'err' */
-export function Badge({ tono = 'neutral', children, title, style }) {
+/**
+ * Etichetta colorata. tono: 'neutral' | 'info' | 'ok' | 'warn' | 'err'
+ * colore: colore libero (es. da DB) → sfondo tenue + testo e bordo di quel colore (ha priorità su tono).
+ */
+export function Badge({ tono = 'neutral', colore, children, title, style }) {
+  if (colore) {
+    return (
+      <span className="ui-badge" title={title}
+        style={{ background: colore + '1f', color: colore, border: `1px solid ${colore}55`, ...style }}>
+        {children}
+      </span>
+    )
+  }
   return <span className={cx('ui-badge', `ui-badge-${tono}`)} title={title} style={style}>{children}</span>
 }
 
@@ -62,12 +73,7 @@ export function Dot({ colore, title }) {
 
 /** Codice struttura col suo colore ufficiale (DPH verde, CLB blu, INT ambra, ...). */
 export function HotelTag({ code, label }) {
-  const c = coloreStruttura(code)
-  return (
-    <span className="ui-badge" style={{ background: c + '1f', color: c, border: `1px solid ${c}55` }}>
-      {label ?? code}
-    </span>
-  )
+  return <Badge colore={coloreStruttura(code)}>{label ?? code}</Badge>
 }
 
 export function Loading({ testo = 'Caricamento…' }) {
@@ -125,30 +131,55 @@ export function FileButton({ children, accept, onFile, variant = 'secondary', si
 
 /**
  * Area per trascinare un file (o cliccare per sceglierlo).
- * onFile(File); accept come per <input type=file>; disabled durante il caricamento.
+ * onFile(File) — con multiple, chiamata una volta per ogni file; accept come per <input type=file>;
+ * disabled durante il caricamento.
  */
-export function DropZone({ onFile, accept, titolo, sottotitolo, disabled, icona }) {
+export function DropZone({ onFile, accept, titolo, sottotitolo, disabled, icona, multiple = false }) {
   const [sopra, setSopra] = useState(false)
   const inputRef = useRef(null)
-  const scegli = (f) => { if (f && !disabled) onFile(f) }
+  const scegliTutti = (lista) => {
+    if (disabled || !lista?.length) return
+    const files = multiple ? Array.from(lista) : [lista[0]]
+    files.forEach(f => f && onFile(f))
+  }
   return (
     <div
       className={cx('ui-dropzone', sopra && 'attiva', disabled && 'disattivata')}
       onDragOver={e => { e.preventDefault(); setSopra(true) }}
       onDragLeave={() => setSopra(false)}
-      onDrop={e => { e.preventDefault(); setSopra(false); scegli(e.dataTransfer.files[0]) }}
+      onDrop={e => { e.preventDefault(); setSopra(false); scegliTutti(e.dataTransfer.files) }}
       onClick={() => !disabled && inputRef.current?.click()}
       role="button"
       tabIndex={0}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click() }}
     >
       <input
-        ref={inputRef} type="file" accept={accept} style={{ display: 'none' }}
-        onChange={e => { scegli(e.target.files[0]); e.target.value = '' }}
+        ref={inputRef} type="file" accept={accept} multiple={multiple} style={{ display: 'none' }}
+        onChange={e => { scegliTutti(e.target.files); e.target.value = '' }}
       />
       {icona && <div style={{ fontSize: 28, marginBottom: 6 }}>{icona}</div>}
       <p className="ui-dropzone-titolo">{titolo}</p>
       {sottotitolo && <p className="ui-dropzone-sub">{sottotitolo}</p>}
+    </div>
+  )
+}
+
+/**
+ * Sezione con titolo cliccabile che apre/chiude il contenuto (▸ / ▾).
+ * nota: testo tenue accanto al titolo. Stato gestito dal chiamante (aperta/onToggle).
+ */
+export function SezioneApribile({ titolo, nota, aperta, onToggle, azioni, children }) {
+  return (
+    <div style={{ marginBottom: aperta ? 24 : 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: aperta ? 12 : 0 }}>
+        <button type="button" onClick={onToggle} aria-expanded={aperta} className="ui-sezione-toggle">
+          <span className="ui-sezione-freccia">{aperta ? '▾' : '▸'}</span>
+          <span className="ui-section-title" style={{ margin: 0 }}>{titolo}</span>
+          {nota && <span className="ui-text-muted" style={{ fontStyle: 'italic', fontWeight: 400 }}>{nota}</span>}
+        </button>
+        {azioni && <div style={{ marginLeft: 'auto' }}>{azioni}</div>}
+      </div>
+      {aperta && children}
     </div>
   )
 }

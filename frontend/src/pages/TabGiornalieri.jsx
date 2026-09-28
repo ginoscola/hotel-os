@@ -2,9 +2,16 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../api/client'
 import { formatEuro, mostraErrore } from '../utils/format'
 import {
-  STRUTTURE_HOTEL, STRUTTURE_MANUALI, NOMI, NOME_CAT, thSt, tdSt, inpSt,
-  isAdmin, fmtD, meseNome, primoGiorno, ultimoGiorno, giornoSettimana, applyToggle,
+  STRUTTURE_HOTEL, STRUTTURE_MANUALI, NOMI, NOME_CAT,
+  isAdmin, fmtD, primoGiorno, ultimoGiorno, giornoSettimana, applyToggle,
 } from '../utils/corrispettiviHelpers'
+import {
+  Badge, Button, Card, Dot, Drawer, Field, Input, Loading, Messaggio, Modal, NavMese, SectionTitle,
+  SegmentedControl, StatoVuoto, Table, Td, Th, useAvvisi,
+} from '../components/ui'
+import { colors, coloreStruttura } from '../styles/tokens.js'
+
+const VUOTO = colors.borderStrong
 
 // ── Drawer documenti ──────────────────────────────────────────────────────────
 
@@ -32,56 +39,44 @@ function DrawerDocumenti({ info, onClose }) {
     : docs
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, right: 0, height: '100vh', width: 480,
-      background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
-      zIndex: 1000, display: 'flex', flexDirection: 'column',
-    }}>
-      <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <strong style={{ color: '#1e293b' }}>{info.tipo === 'fatture' ? 'Fatture' : 'Scontrini'} — {NOMI[info.struttura_code]}</strong>
-          <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-            {fmtD(info.data)}{info.categoria ? ` · ${NOME_CAT[info.categoria]}` : ''}
-          </p>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1rem' }}>
-        {loading ? (
-          <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>
-        ) : errore ? (
-          <p style={{ color: '#dc2626', fontSize: '0.85rem' }}>{errore}</p>
-        ) : docsFiltrati.length === 0 ? (
-          <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Nessun documento per questa selezione.</p>
-        ) : docsFiltrati.map(d => (
-          <div key={d.id} style={{
-            border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.65rem 0.85rem',
-            marginBottom: '0.5rem', opacity: d.annullato ? 0.45 : 1,
-            borderLeft: d.modificato_manualmente ? '3px solid #f59e0b' : undefined,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: '0.85rem', color: d.annullato ? '#94a3b8' : '#1e293b' }}>
-                {d.suffisso} {d.numero}{d.annullato ? ' · ANNULLATO' : ''}{d.modificato_manualmente ? ' ✏️' : ''}
-              </span>
-              <span style={{ fontWeight: 700, fontSize: '0.88rem', color: d.totale_lordo < 0 ? '#ef4444' : '#1e293b' }}>
-                {formatEuro(d.totale_lordo)}
-              </span>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 3 }}>
-              {d.camera && <span>Cam. {d.camera} · </span>}
-              {d.intestazione && <span>{d.intestazione.split('\n')[0]} · </span>}
-              <span style={{ background: '#f1f5f9', borderRadius: 3, padding: '1px 5px' }}>{NOME_CAT[d.categoria] || d.categoria}</span>
-            </div>
-            {d.ospiti && (
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>Ospiti: {d.ospiti}</div>
-            )}
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>
-              Imp. {formatEuro(d.imponibile)} · IVA {formatEuro(d.iva)} ({d.aliquota_pct}%)
-            </div>
+    <Drawer
+      titolo={`${info.tipo === 'fatture' ? 'Fatture' : 'Scontrini'} — ${NOMI[info.struttura_code]}`}
+      sottotitolo={`${fmtD(info.data)}${info.categoria ? ` · ${NOME_CAT[info.categoria]}` : ''}`}
+      onChiudi={onClose}
+    >
+      {loading ? (
+        <Loading />
+      ) : errore ? (
+        <Messaggio tipo="err">{errore}</Messaggio>
+      ) : docsFiltrati.length === 0 ? (
+        <StatoVuoto>Nessun documento per questa selezione.</StatoVuoto>
+      ) : docsFiltrati.map(d => (
+        <div key={d.id} className="ui-drawer-item" style={{
+          opacity: d.annullato ? 0.45 : 1,
+          boxShadow: d.modificato_manualmente ? `inset 3px 0 0 ${colors.warning}` : undefined,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 600, color: d.annullato ? colors.textSubtle : colors.text }}>
+              {d.suffisso} {d.numero}{d.annullato ? ' · ANNULLATO' : ''}{d.modificato_manualmente ? ' ✏️' : ''}
+            </span>
+            <span className="ui-num" style={{ fontWeight: 700, color: d.totale_lordo < 0 ? colors.danger : colors.text }}>
+              {formatEuro(d.totale_lordo)}
+            </span>
           </div>
-        ))}
-      </div>
-    </div>
+          <div className="ui-text-muted" style={{ marginTop: 3 }}>
+            {d.camera && <span>Cam. {d.camera} · </span>}
+            {d.intestazione && <span>{d.intestazione.split('\n')[0]} · </span>}
+            <Badge>{NOME_CAT[d.categoria] || d.categoria}</Badge>
+          </div>
+          {d.ospiti && (
+            <div style={{ fontSize: 'var(--fs-xs)', color: colors.textSubtle, marginTop: 2 }}>Ospiti: {d.ospiti}</div>
+          )}
+          <div className="ui-num" style={{ fontSize: 'var(--fs-xs)', color: colors.textSubtle, marginTop: 2 }}>
+            Imp. {formatEuro(d.imponibile)} · IVA {formatEuro(d.iva)} ({d.aliquota_pct}%)
+          </div>
+        </div>
+      ))}
+    </Drawer>
   )
 }
 
@@ -126,59 +121,41 @@ function ModaleIncassoManuale({ info, onClose, onSalvato }) {
     }
   }
 
+  const pieno = { width: '100%', textAlign: 'right' }
+
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,23,42,0.4)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: '#fff', borderRadius: 12, padding: '1.5rem', width: 320,
-        boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-      }}>
-        <h3 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: '#1e293b' }}>
-          {NOMI[info.struttura_code]} — {fmtD(info.data)}
-        </h3>
-        <p style={{ margin: '0 0 1rem', fontSize: '0.78rem', color: '#64748b' }}>
-          Incasso del giorno (lordo, IVA 10% inclusa)
-        </p>
+    <Modal
+      titolo={`${NOMI[info.struttura_code]} — ${fmtD(info.data)}`}
+      onChiudi={onClose}
+      larghezza={360}
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Annulla</Button>
+        <Button onClick={salva} disabled={saving || elettEccessivo}>{saving ? 'Salvataggio…' : 'Salva'}</Button>
+      </>}
+    >
+      <div style={{ whiteSpace: 'normal', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="ui-text-muted" style={{ marginTop: -4 }}>Incasso del giorno (lordo, IVA 10% inclusa)</div>
 
-        <label style={{ display: 'block', marginBottom: '0.6rem' }}>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Totale incasso</span>
-          <input type="number" step="0.01" min="0" value={totale} placeholder="0.00"
-            onChange={e => setTotale(e.target.value)}
-            style={{ ...inpSt, width: '100%', boxSizing: 'border-box', textAlign: 'right', fontWeight: 700 }} />
-        </label>
+        <Field label="Totale incasso" style={{ width: '100%' }}>
+          <Input type="number" step="0.01" min="0" value={totale} placeholder="0.00" className="ui-num"
+            onChange={e => setTotale(e.target.value)} style={{ ...pieno, fontWeight: 700 }} autoFocus />
+        </Field>
 
-        <div style={{ borderTop: '1px solid #e2e8f0', margin: '0.5rem 0 0.75rem' }} />
+        <div style={{ borderTop: `1px solid ${colors.border}` }} />
 
-        <label style={{ display: 'block', marginBottom: '0.6rem' }}>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Pagamento elettronico</span>
-          <input type="number" step="0.01" min="0" value={elettronico} placeholder="0.00"
-            onChange={e => setElettronico(e.target.value)}
-            style={{ ...inpSt, width: '100%', boxSizing: 'border-box', textAlign: 'right' }} />
-        </label>
+        <Field label="Pagamento elettronico" style={{ width: '100%' }}>
+          <Input type="number" step="0.01" min="0" value={elettronico} placeholder="0.00" className="ui-num"
+            onChange={e => setElettronico(e.target.value)} style={pieno} />
+        </Field>
 
-        <label style={{ display: 'block', marginBottom: '0.4rem' }}>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Contante (calcolato)</span>
-          <input type="text" readOnly value={formatEuro(contante)}
-            style={{
-              ...inpSt, width: '100%', boxSizing: 'border-box', textAlign: 'right',
-              background: '#f1f5f9', color: elettEccessivo ? '#ef4444' : '#1e293b',
-            }} />
-        </label>
+        <Field label="Contante (calcolato)" style={{ width: '100%' }}>
+          <Input type="text" readOnly value={formatEuro(contante)} className="ui-num"
+            style={{ ...pieno, background: colors.surfaceAlt, color: elettEccessivo ? colors.danger : colors.text }} />
+        </Field>
 
-        {errore && <p style={{ color: '#ef4444', fontSize: '0.78rem', marginTop: '0.5rem' }}>{errore}</p>}
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
-            Annulla
-          </button>
-          <button onClick={salva} disabled={saving || elettEccessivo}
-            style={{ ...inpSt, cursor: 'pointer', background: '#1e3a5f', color: '#fff', border: 'none' }}>
-            {saving ? 'Salvataggio…' : 'Salva'}
-          </button>
-        </div>
+        <Messaggio tipo="err">{errore}</Messaggio>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -196,6 +173,7 @@ export default function TabGiornalieri({ lordo }) {
   const [loading, setLoading] = useState(false)
   const [drawer, setDrawer] = useState(null)  // { data, struttura_code, tipo, categoria }
   const [modaleIncasso, setModaleIncasso] = useState(null)  // { data, struttura_code, row }
+  const avvisi = useAvvisi()
 
   const da = primoGiorno(anno, mese)
   const a = ultimoGiorno(anno, mese)
@@ -284,260 +262,197 @@ export default function TabGiornalieri({ lordo }) {
   })
   giorni.forEach(data => { totMeseGlobale += byData[data]?.totale_giorno || 0 })
 
-  const navMese = (delta) => {
-    let m = mese + delta
-    let a = anno
-    if (m > 12) { m = 1; a++ }
-    if (m < 1) { m = 12; a-- }
-    setMese(m)
-    setAnno(a)
-  }
-
   const applyL = (v, aliq = 10) => lordo ? (v || 0) : applyToggle(v, lordo, aliq)
   const fmtL = (v, aliq = 10) => {
     const vv = applyL(v, aliq)
-    return vv === 0 ? <span style={{ color: '#e2e8f0' }}>—</span> : formatEuro(vv)
+    return vv === 0 ? <span style={{ color: VUOTO }}>—</span> : formatEuro(vv)
   }
 
   const cellStyle = (v) => ({
-    ...tdSt,
-    color: v < 0 ? '#ef4444' : v === 0 ? '#e2e8f0' : '#1e293b',
+    color: v < 0 ? colors.danger : v === 0 ? VUOTO : undefined,
     cursor: v !== 0 ? 'pointer' : 'default',
   })
 
   // Contatore giorni completati (entrambi MMS e BON inseriti con valore > 0)
   const giorniCompletati = giorni.filter(d => manuali[`${d}_MMS`] && manuali[`${d}_BON`]).length
 
+  const esportaExcel = async () => {
+    try {
+      const res = await api.get('/corrispettivi/export/giornaliero', {
+        params: { anno, mese, tipo, lordo },
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `corrispettivi_giornaliero_${anno}_${String(mese).padStart(2, '0')}.xlsx`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      avvisi.errore(mostraErrore(e, 'Errore export'))
+    }
+  }
+
+  // Riga "voce — importo" dei riquadri di CHECK
+  const RigaCheck = ({ colore, etichetta, valore, sotto }) => (
+    <div style={{ padding: '3px 0', fontSize: 'var(--fs-base)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: colors.textSecond }}>
+          <Dot colore={valore > 0 ? colore : colors.borderStrong} />{etichetta}
+        </span>
+        <span className="ui-num" style={{ fontWeight: 600, color: valore > 0 ? colors.text : colors.textSubtle }}>{formatEuro(valore)}</span>
+      </div>
+      {sotto && <div style={{ fontSize: 'var(--fs-xs)', color: colors.textSubtle, paddingLeft: 15 }}>{sotto}</div>}
+    </div>
+  )
+  const RigaTotaleCheck = ({ etichetta, valore }) => (
+    <div className="ui-num" style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${colors.border}`, marginTop: 6, paddingTop: 6, fontWeight: 700 }}>
+      <span>{etichetta}</span><span>{formatEuro(valore)}</span>
+    </div>
+  )
+
   return (
     <div>
-      {/* Navigazione mese */}
-      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
-        <button onClick={() => navMese(-1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9', border: '1px solid #e2e8f0' }}>←</button>
-        <label title="Clicca per selezionare mese" style={{ cursor: 'pointer', position: 'relative', display: 'inline-block' }}>
-          <span style={{ fontWeight: 700, fontSize: '1rem', minWidth: 120, textAlign: 'center', display: 'inline-block', padding: '4px 8px', borderRadius: 6, border: '1px solid transparent', userSelect: 'none' }}
-            onMouseEnter={e => e.currentTarget.style.border = '1px solid #e2e8f0'}
-            onMouseLeave={e => e.currentTarget.style.border = '1px solid transparent'}>
-            {meseNome(mese)} {anno} ▾
-          </span>
-          <input type="month"
-            value={`${anno}-${String(mese).padStart(2, '0')}`}
-            onChange={e => {
-              const [y, m] = e.target.value.split('-').map(Number)
-              if (y && m) { setAnno(y); setMese(m) }
-            }}
-            style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }} />
-        </label>
-        <button onClick={() => navMese(1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9', border: '1px solid #e2e8f0' }}>→</button>
-
-        {/* Toggle tipo */}
-        <div style={{ display: 'flex', gap: 4, marginLeft: '0.5rem' }}>
-          {[['tutti', 'Tutti'], ['scontrini', 'Scontrini'], ['fatture', 'Fatture']].map(([v, l]) => (
-            <button key={v} onClick={() => setTipo(v)} style={{
-              padding: '5px 12px', borderRadius: 6, border: '1px solid', fontSize: '0.82rem',
-              cursor: 'pointer', fontWeight: tipo === v ? 700 : 400,
-              background: tipo === v ? '#1e3a5f' : '#f8fafc',
-              color: tipo === v ? '#fff' : '#64748b',
-              borderColor: tipo === v ? '#1e3a5f' : '#e2e8f0',
-            }}>{l}</button>
-          ))}
-        </div>
-
-        <button onClick={async () => {
-          try {
-            const res = await api.get('/corrispettivi/export/giornaliero', {
-              params: { anno, mese, tipo, lordo },
-              responseType: 'blob',
-            })
-            const url = URL.createObjectURL(res.data)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `corrispettivi_giornaliero_${anno}_${String(mese).padStart(2, '0')}.xlsx`
-            a.click()
-            URL.revokeObjectURL(url)
-          } catch (e) {
-            alert(mostraErrore(e, 'Errore export'))
-          }
-        }} style={{
-          marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '5px 14px', borderRadius: 6, background: '#16a34a', color: '#fff',
-          fontWeight: 600, fontSize: '0.82rem', border: 'none', cursor: 'pointer',
-        }}>
-          ⬇ Esporta Excel
-        </button>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        <NavMese anno={anno} mese={mese} selettore onChange={({ anno: y, mese: m }) => { setAnno(y); setMese(m) }} />
+        <SegmentedControl value={tipo} onChange={setTipo}
+          options={[{ value: 'tutti', label: 'Tutti' }, { value: 'scontrini', label: 'Scontrini' }, { value: 'fatture', label: 'Fatture' }]} />
+        <Button variant="secondary" size="sm" onClick={esportaExcel} style={{ marginLeft: 'auto' }}>⬇ Esporta Excel</Button>
       </div>
 
-      {loading && <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>}
+      {loading && <Loading />}
 
       {/* Tabella principale */}
-      <div style={{ overflowX: 'auto', fontSize: '0.78rem' }}>
-        <table style={{ borderCollapse: 'collapse', minWidth: 900 }}>
-          <thead>
-            {/* Riga 1: strutture */}
-            <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-              <th style={{ ...thSt, textAlign: 'left', minWidth: 70 }} rowSpan={2}>Data</th>
-              {STRUTTURE_HOTEL.map(sc => (
-                <th key={sc} style={{ ...thSt, textAlign: 'center', borderLeft: '2px solid #334e78' }} colSpan={5}>
-                  {sc}
-                </th>
-              ))}
-              <th style={{ ...thSt, textAlign: 'center', borderLeft: '2px solid #334e78' }}>MMS</th>
-              <th style={{ ...thSt, textAlign: 'center', borderLeft: '1px solid #334e78' }}>BON</th>
-              <th style={{ ...thSt, borderLeft: '2px solid #334e78' }}>TOT. GIORNO</th>
-            </tr>
-            {/* Riga 2: categorie */}
-            <tr style={{ background: '#2d4f7c', color: '#cbd5e1' }}>
-              {STRUTTURE_HOTEL.map(sc => (
-                ['Arrangiamenti', 'Tassa di Soggiorno', 'Penali', 'Shop/ricariche', 'Tot.'].map((l, i) => (
-                  <th key={`${sc}_${i}`} style={{
-                    ...thSt, color: '#cbd5e1', fontSize: '0.7rem',
-                    borderLeft: i === 0 ? '3px solid #4a6fa5' : '1px solid #3d6a9a',
-                    fontWeight: i === 4 ? 700 : 400,
-                  }}>{l}</th>
-                ))
-              ))}
-              <th style={{ ...thSt, color: '#cbd5e1', borderLeft: '3px solid #4a6fa5', fontSize: '0.7rem' }}>Chiusura RT</th>
-              <th style={{ ...thSt, color: '#cbd5e1', borderLeft: '1px solid #3d6a9a', fontSize: '0.7rem' }}>Chiusura RT</th>
-              <th style={{ ...thSt, borderLeft: '3px solid #4a6fa5' }} />
-            </tr>
-          </thead>
-          <tbody>
-            {giorni.map((data, idx) => {
-              const g = byData[data]
-              const gg = giornoSettimana(data)
-              const isSab = gg === 'sab'
-              const rigaBg = isSab ? '#eff6ff' : idx % 2 === 0 ? '#fff' : '#f8fafc'
-              let totGiorno = g?.totale_giorno || 0
+      <Table compact minWidth={900}>
+        <thead>
+          {/* Riga 1: strutture */}
+          <tr>
+            <Th rowSpan={2} style={{ minWidth: 80, verticalAlign: 'bottom' }}>Data</Th>
+            {STRUTTURE_HOTEL.map(sc => <Th key={sc} center gruppo colSpan={5}>{sc}</Th>)}
+            <Th center gruppo>MMS</Th>
+            <Th center>BON</Th>
+            <Th num tot rowSpan={2} style={{ verticalAlign: 'bottom' }}>TOT. GIORNO</Th>
+          </tr>
+          {/* Riga 2: categorie */}
+          <tr className="sub">
+            {STRUTTURE_HOTEL.map(sc => (
+              ['Arrangiamenti', 'Tassa di Soggiorno', 'Penali', 'Shop/ricariche', 'Tot.'].map((l, i) => (
+                <Th key={`${sc}_${i}`} num gruppo={i === 0} style={i === 4 ? { fontWeight: 700 } : undefined}>{l}</Th>
+              ))
+            ))}
+            <Th num gruppo>Chiusura RT</Th>
+            <Th num>Chiusura RT</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {giorni.map(data => {
+            const g = byData[data]
+            const gg = giornoSettimana(data)
+            const isSab = gg === 'sab'
+            let totGiorno = g?.totale_giorno || 0
 
-              return (
-                <tr key={data} style={{ background: rigaBg }}>
-                  <td style={{ ...tdSt, textAlign: 'left', fontWeight: isSab ? 700 : 400, color: '#475569' }}>
-                    {fmtD(data)} <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>{gg}</span>
-                  </td>
+            return (
+              <tr key={data} className={isSab ? 'ui-riga-evidenza' : undefined}>
+                <Td style={{ fontWeight: isSab ? 700 : 400, color: colors.textSecond, whiteSpace: 'nowrap' }}>
+                  {fmtD(data)} <span style={{ color: colors.textSubtle, fontSize: 'var(--fs-xs)' }}>{gg}</span>
+                </Td>
 
-                  {STRUTTURE_HOTEL.map(sc => {
-                    const s = g?.strutture?.find(x => x.struttura_code === sc)
-                    const getCombinato = (cat) => {
-                      if (tipo === 'tutti') return (s?.scontrini?.[cat] || 0) + (s?.fatture?.[cat] || 0)
-                      return s?.[tipo === 'scontrini' ? 'scontrini' : 'fatture']?.[cat] || 0
-                    }
-                    // Totale netto: somma per categoria con aliquote corrette (no media singola)
-                    const cats4 = [['arrangiamenti', 10], ['tassa_soggiorno', 0], ['penali', 0], ['shop', 22]]
-                    const totNetto = cats4.reduce((sum, [cat, aliq]) =>
-                      sum + applyToggle(getCombinato(cat), lordo, aliq), 0
-                    ) + applyToggle(getCombinato('altro'), lordo, 10)
-                    const totS = getTot(s, tipo === 'tutti' ? 'tutti' : tipo === 'fatture' ? 'fatture' : 'scontrini')
+                {STRUTTURE_HOTEL.map(sc => {
+                  const s = g?.strutture?.find(x => x.struttura_code === sc)
+                  const getCombinato = (cat) => {
+                    if (tipo === 'tutti') return (s?.scontrini?.[cat] || 0) + (s?.fatture?.[cat] || 0)
+                    return s?.[tipo === 'scontrini' ? 'scontrini' : 'fatture']?.[cat] || 0
+                  }
+                  // Totale netto: somma per categoria con aliquote corrette (no media singola)
+                  const cats4 = [['arrangiamenti', 10], ['tassa_soggiorno', 0], ['penali', 0], ['shop', 22]]
+                  const totNetto = cats4.reduce((sum, [cat, aliq]) =>
+                    sum + applyToggle(getCombinato(cat), lordo, aliq), 0
+                  ) + applyToggle(getCombinato('altro'), lordo, 10)
+                  const totS = getTot(s, tipo === 'tutti' ? 'tutti' : tipo === 'fatture' ? 'fatture' : 'scontrini')
 
-                    return cats4.map(([cat, aliq], i) => {
-                      const v = getCombinato(cat)
-                      return (
-                        <td key={`${sc}_${cat}`} style={{
-                          ...cellStyle(v),
-                          borderLeft: i === 0 ? '3px solid #7baec8' : '1px solid #86a8bf',
-                        }}
-                          onClick={() => v !== 0 && setDrawer({ data, struttura_code: sc, tipo: tipo === 'tutti' ? 'scontrini' : tipo, categoria: cat })}
-                          title={v !== 0 ? 'Clicca per vedere documenti' : undefined}
-                        >
-                          {fmtL(v, aliq)}
-                        </td>
-                      )
-                    }).concat(
-                      <td key={`${sc}_tot`} style={{
-                        ...tdSt, fontWeight: 700, borderLeft: '1px solid #86a8bf',
-                        color: totNetto < 0 ? '#ef4444' : totNetto === 0 ? '#e2e8f0' : '#1e293b',
-                        cursor: totS !== 0 ? 'pointer' : 'default',
-                      }}
-                        onClick={() => totS !== 0 && setDrawer({ data, struttura_code: sc, tipo: tipo === 'tutti' ? 'scontrini' : tipo })}
+                  return cats4.map(([cat, aliq], i) => {
+                    const v = getCombinato(cat)
+                    return (
+                      <Td key={`${sc}_${cat}`} num gruppo={i === 0} style={cellStyle(v)}
+                        onClick={() => v !== 0 && setDrawer({ data, struttura_code: sc, tipo: tipo === 'tutti' ? 'scontrini' : tipo, categoria: cat })}
+                        title={v !== 0 ? 'Clicca per vedere documenti' : undefined}
                       >
-                        {totNetto === 0 ? <span style={{ color: '#e2e8f0' }}>—</span> : formatEuro(totNetto)}
-                      </td>
+                        {fmtL(v, aliq)}
+                      </Td>
                     )
-                  })}
+                  }).concat(
+                    <Td key={`${sc}_tot`} num style={{
+                      fontWeight: 700,
+                      color: totNetto < 0 ? colors.danger : totNetto === 0 ? VUOTO : undefined,
+                      cursor: totS !== 0 ? 'pointer' : 'default',
+                    }}
+                      onClick={() => totS !== 0 && setDrawer({ data, struttura_code: sc, tipo: tipo === 'tutti' ? 'scontrini' : tipo })}
+                    >
+                      {totNetto === 0 ? '—' : formatEuro(totNetto)}
+                    </Td>
+                  )
+                })}
 
-                  {/* MMS */}
-                  <td style={{ ...tdSt, borderLeft: '3px solid #7baec8' }}>
-                    {(manuali[`${data}_MMS`] || 0) > 0
-                      ? fmtL(parseFloat(manuali[`${data}_MMS`] || 0))
-                      : <span style={{ color: '#e2e8f0' }}>—</span>}
-                  </td>
-                  {/* BON */}
-                  <td style={{ ...tdSt, borderLeft: '1px solid #86a8bf' }}>
-                    {(manuali[`${data}_BON`] || 0) > 0
-                      ? fmtL(parseFloat(manuali[`${data}_BON`] || 0))
-                      : <span style={{ color: '#e2e8f0' }}>—</span>}
-                  </td>
-                  {/* Totale giorno */}
-                  <td style={{ ...tdSt, fontWeight: 700, borderLeft: '3px solid #7baec8', color: totGiorno === 0 ? '#e2e8f0' : '#1e293b' }}>
-                    {totGiorno === 0 ? '—' : formatEuro(totGiorno)}
-                  </td>
-                </tr>
+                {/* MMS */}
+                <Td num gruppo>
+                  {(manuali[`${data}_MMS`] || 0) > 0 ? fmtL(parseFloat(manuali[`${data}_MMS`] || 0)) : <span style={{ color: VUOTO }}>—</span>}
+                </Td>
+                {/* BON */}
+                <Td num>
+                  {(manuali[`${data}_BON`] || 0) > 0 ? fmtL(parseFloat(manuali[`${data}_BON`] || 0)) : <span style={{ color: VUOTO }}>—</span>}
+                </Td>
+                {/* Totale giorno */}
+                <Td num tot style={{ fontWeight: 700, color: totGiorno === 0 ? VUOTO : undefined }}>
+                  {totGiorno === 0 ? '—' : formatEuro(totGiorno)}
+                </Td>
+              </tr>
+            )
+          })}
+
+          {/* Riga totale mese */}
+          <tr className="ui-riga-totale">
+            <Td>TOTALE</Td>
+            {STRUTTURE_HOTEL.map(sc => (
+              [
+                [totMese[sc].arr, 10],
+                [totMese[sc].ts, 0],
+                [totMese[sc].pen, 0],
+                [totMese[sc].shop, 22],
+              ].map(([v, aliq], i) => (
+                <Td key={`tot_${sc}_${i}`} num gruppo={i === 0}>
+                  {applyL(v, aliq) === 0 ? '—' : formatEuro(applyL(v, aliq))}
+                </Td>
+              )).concat(
+                <Td key={`tot_${sc}_t`} num style={{ fontWeight: 800 }}>
+                  {(() => {
+                    const t = applyL(totMese[sc].arr, 10) + totMese[sc].ts + totMese[sc].pen + applyL(totMese[sc].shop, 22) + applyL(totMese[sc].alt, 10)
+                    return t === 0 ? '—' : formatEuro(t)
+                  })()}
+                </Td>
               )
-            })}
-
-            {/* Riga totale mese */}
-            <tr className="riga-totale" style={{ background: '#1e3a5f', color: '#fff', fontWeight: 700 }}>
-              <td style={{ ...tdSt, color: '#fff', borderBottom: 'none', textAlign: 'left' }}>TOTALE</td>
-              {STRUTTURE_HOTEL.map(sc => (
-                [
-                  [totMese[sc].arr, 10],
-                  [totMese[sc].ts, 0],
-                  [totMese[sc].pen, 0],
-                  [totMese[sc].shop, 22],
-                ].map(([v, aliq], i) => (
-                  <td key={`tot_${sc}_${i}`} style={{
-                    ...tdSt, color: '#fff', borderBottom: 'none',
-                    borderLeft: i === 0 ? '3px solid #4a6fa5' : '1px solid #3d6a9a',
-                  }}>
-                    {applyL(v, aliq) === 0 ? '—' : formatEuro(applyL(v, aliq))}
-                  </td>
-                )).concat(
-                  <td key={`tot_${sc}_t`} style={{ ...tdSt, color: '#fff', fontWeight: 800, borderBottom: 'none' }}>
-                    {(() => {
-                      const t = applyL(totMese[sc].arr, 10) + totMese[sc].ts + totMese[sc].pen + applyL(totMese[sc].shop, 22) + applyL(totMese[sc].alt, 10)
-                      return t === 0 ? '—' : formatEuro(t)
-                    })()}
-                  </td>
-                )
-              ))}
-              <td style={{ ...tdSt, color: '#fff', borderBottom: 'none', borderLeft: '3px solid #4a6fa5' }}>
-                {totMese['MMS'].arr === 0 ? '—' : formatEuro(applyL(totMese['MMS'].arr))}
-              </td>
-              <td style={{ ...tdSt, color: '#fff', borderBottom: 'none', borderLeft: '1px solid #4a6fa5' }}>
-                {totMese['BON'].arr === 0 ? '—' : formatEuro(applyL(totMese['BON'].arr))}
-              </td>
-              <td style={{ ...tdSt, color: '#fff', fontWeight: 800, borderBottom: 'none', borderLeft: '3px solid #4a6fa5' }}>
-                {totMeseGlobale === 0 ? '—' : formatEuro(totMeseGlobale)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+            ))}
+            <Td num gruppo>{totMese['MMS'].arr === 0 ? '—' : formatEuro(applyL(totMese['MMS'].arr))}</Td>
+            <Td num>{totMese['BON'].arr === 0 ? '—' : formatEuro(applyL(totMese['BON'].arr))}</Td>
+            <Td num tot style={{ fontWeight: 800 }}>{totMeseGlobale === 0 ? '—' : formatEuro(totMeseGlobale)}</Td>
+          </tr>
+        </tbody>
+      </Table>
 
       {/* Sezione inserimento manuale MMS/BON */}
       {isAdmin() && (
-        <div style={{
-          marginTop: '1.5rem', border: '1px solid #e2e8f0', borderRadius: 10,
-          padding: '1rem 1.25rem', background: '#fafafa',
-        }}>
-          <h3 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: '#1e293b' }}>
-            Inserimento manuale — Maremosso (MMS) e Buona Onda (BON)
-          </h3>
-          <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 0.75rem' }}>
+        <Card title="Inserimento manuale — Maremosso (MMS) e Buona Onda (BON)" style={{ marginTop: 24 }}>
+          <p className="ui-text-muted" style={{ margin: '0 0 8px' }}>
             Inserire il totale lordo del giorno (IVA 10% inclusa) e la quota di pagamento
             elettronico. Il contante è calcolato come differenza; imponibile e IVA sono automatici.
           </p>
-
-          <p style={{ fontSize: '0.78rem', color: giorniCompletati === giorni.length ? '#22c55e' : '#64748b', margin: '0 0 0.75rem' }}>
+          <p style={{ fontSize: 'var(--fs-sm)', color: giorniCompletati === giorni.length ? colors.success : colors.textMuted, margin: '0 0 12px', fontWeight: giorniCompletati === giorni.length ? 600 : 400 }}>
             {giorniCompletati === giorni.length
               ? `✓ Tutti i ${giorni.length} giorni del mese sono stati inseriti.`
               : `${giorniCompletati} / ${giorni.length} giorni inseriti`}
           </p>
-          <table style={{ borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+          <Table compact style={{ display: 'inline-block', maxWidth: '100%' }}>
             <thead>
-              <tr style={{ background: '#f1f5f9' }}>
-                {['Data', 'MMS', '', 'BON', ''].map((h, i) => (
-                  <th key={i} style={{ ...thSt, textAlign: i === 0 ? 'left' : 'right', padding: '6px 10px', color: '#475569' }}>{h}</th>
-                ))}
-              </tr>
+              <tr><Th>Data</Th><Th num>MMS</Th><Th></Th><Th num gruppo>BON</Th><Th></Th></tr>
             </thead>
             <tbody>
               {giorni.map((data) => {
@@ -547,33 +462,31 @@ export default function TabGiornalieri({ lordo }) {
                 const totBON = manuali[`${data}_BON`] || 0
                 return (
                   <tr key={data}>
-                    <td style={{ ...tdSt, textAlign: 'left' }}>
-                      {fmtD(data)} {giornoSettimana(data)}
-                    </td>
-                    <td style={{ ...tdSt, color: totMMS ? '#1e293b' : '#94a3b8', fontWeight: totMMS ? 600 : 400 }}>
+                    <Td style={{ whiteSpace: 'nowrap' }}>{fmtD(data)} <span style={{ color: colors.textSubtle }}>{giornoSettimana(data)}</span></Td>
+                    <Td num style={{ color: totMMS ? undefined : colors.textSubtle, fontWeight: totMMS ? 600 : 400 }}>
                       {totMMS ? formatEuro(totMMS) : '—'}
-                    </td>
-                    <td style={tdSt}>
-                      <button onClick={() => setModaleIncasso({ data, struttura_code: 'MMS', row: rowMMS })}
-                        style={{ ...inpSt, cursor: 'pointer', background: rowMMS ? '#16a34a' : '#f59e0b', color: '#fff', border: 'none', fontSize: '0.78rem', padding: '4px 10px' }}>
+                    </Td>
+                    <Td>
+                      <Button size="sm" variant={rowMMS ? 'secondary' : 'primary'}
+                        onClick={() => setModaleIncasso({ data, struttura_code: 'MMS', row: rowMMS })}>
                         {rowMMS ? 'Modifica' : 'Inserisci'}
-                      </button>
-                    </td>
-                    <td style={{ ...tdSt, color: totBON ? '#1e293b' : '#94a3b8', fontWeight: totBON ? 600 : 400 }}>
+                      </Button>
+                    </Td>
+                    <Td num gruppo style={{ color: totBON ? undefined : colors.textSubtle, fontWeight: totBON ? 600 : 400 }}>
                       {totBON ? formatEuro(totBON) : '—'}
-                    </td>
-                    <td style={tdSt}>
-                      <button onClick={() => setModaleIncasso({ data, struttura_code: 'BON', row: rowBON })}
-                        style={{ ...inpSt, cursor: 'pointer', background: rowBON ? '#16a34a' : '#f59e0b', color: '#fff', border: 'none', fontSize: '0.78rem', padding: '4px 10px' }}>
+                    </Td>
+                    <Td>
+                      <Button size="sm" variant={rowBON ? 'secondary' : 'primary'}
+                        onClick={() => setModaleIncasso({ data, struttura_code: 'BON', row: rowBON })}>
                         {rowBON ? 'Modifica' : 'Inserisci'}
-                      </button>
-                    </td>
+                      </Button>
+                    </Td>
                   </tr>
                 )
               })}
             </tbody>
-          </table>
-        </div>
+          </Table>
+        </Card>
       )}
 
       {modaleIncasso && (
@@ -585,107 +498,53 @@ export default function TabGiornalieri({ lordo }) {
         const hotelConDati = STRUTTURE_HOTEL.filter(sc => (check[sc] || 0) > 0)
         const tuttiOk = hotelConDati.length === STRUTTURE_HOTEL.length
         const nessunDato = hotelConDati.length === 0
-        const semaforo = nessunDato ? { bg: '#fef2f2', border: '#fca5a5', dot: '#ef4444', label: 'Nessun dato hotel' }
-          : tuttiOk ? { bg: '#f0fdf4', border: '#86efac', dot: '#16a34a', label: 'Tutte le strutture presenti' }
-          : { bg: '#fffbeb', border: '#fcd34d', dot: '#d97706', label: `${hotelConDati.length}/${STRUTTURE_HOTEL.length} hotel con dati` }
+        const semaforo = nessunDato ? { tono: 'err', colore: colors.danger, label: 'Nessun dato hotel' }
+          : tuttiOk ? { tono: 'ok', colore: colors.success, label: 'Tutte le strutture presenti' }
+          : { tono: 'warn', colore: colors.warning, label: `${hotelConDati.length}/${STRUTTURE_HOTEL.length} hotel con dati` }
+        const sedi = [
+          { label: 'Du Parc', strutture: ['DPH', 'MMS'], colore: coloreStruttura('DPH') },
+          { label: 'Club Hotel', strutture: ['CLB'], colore: coloreStruttura('CLB') },
+          { label: 'International', strutture: ['INT', 'BON'], colore: coloreStruttura('INT') },
+        ]
+        const totSedi = sedi.reduce((sum, s) => sum + s.strutture.reduce((a, sc) => a + (check[sc] || 0), 0), 0)
         return (
-          <div style={{ marginTop: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div style={{ flex: 1, minWidth: 280, border: `1.5px solid ${semaforo.border}`, background: semaforo.bg, borderRadius: 10, padding: '1rem 1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '0.5rem' }}>
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: semaforo.dot, display: 'inline-block', flexShrink: 0 }} />
-                <h4 style={{ margin: 0, fontSize: '0.88rem', color: '#475569' }}>
-                  Hotel ({check.label_hotel}) — <span style={{ color: semaforo.dot, fontWeight: 700 }}>{semaforo.label}</span>
-                </h4>
+          <div style={{ marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <Card style={{ flex: 1, minWidth: 280, boxShadow: `inset 4px 0 0 ${semaforo.colore}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                <SectionTitle as="h4" style={{ margin: 0, fontSize: 'var(--fs-md)' }}>Hotel ({check.label_hotel})</SectionTitle>
+                <Badge tono={semaforo.tono}>{semaforo.label}</Badge>
               </div>
-              {STRUTTURE_HOTEL.map(sc => {
-                const v = check[sc] || 0
-                const presente = v > 0
-                return (
-                  <div key={sc} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', fontSize: '0.85rem' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#475569' }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: presente ? '#16a34a' : '#d1d5db', display: 'inline-block' }} />
-                      {sc}
-                    </span>
-                    <span style={{ fontWeight: 600, color: presente ? '#1e293b' : '#94a3b8' }}>{formatEuro(v)}</span>
-                  </div>
-                )
-              })}
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', marginTop: 6, paddingTop: 6, fontWeight: 700 }}>
-                <span>TOTALE HOTEL</span>
-                <span>{formatEuro(check.totale_hotel || 0)}</span>
-              </div>
-            </div>
-            <div style={{ flex: 1, minWidth: 200, border: '1.5px solid #fcd34d', borderRadius: 10, padding: '1rem 1.25rem', background: '#fffbeb' }}>
-              <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.88rem', color: '#b45309' }}>
-                Ristoranti ({check.label_ristoranti})
-              </h4>
-              {STRUTTURE_MANUALI.map(sc => {
-                const v = check[sc] || 0
-                return (
-                  <div key={sc} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', fontSize: '0.85rem' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#475569' }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: v > 0 ? '#f59e0b' : '#d1d5db', display: 'inline-block' }} />
-                      {NOMI[sc]}
-                    </span>
-                    <span style={{ fontWeight: 600, color: v > 0 ? '#1e293b' : '#94a3b8' }}>{formatEuro(v)}</span>
-                  </div>
-                )
-              })}
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #fcd34d', marginTop: 6, paddingTop: 6, fontWeight: 700 }}>
-                <span>TOTALE RISTORANTI</span>
-                <span>{formatEuro(check.totale_ristoranti || 0)}</span>
-              </div>
-            </div>
-            {/* Box per sede fisica */}
-            {(() => {
-              const sedi = [
-                { label: 'Du Parc', strutture: ['DPH', 'MMS'], color: '#1e3a5f' },
-                { label: 'Club Hotel', strutture: ['CLB'], color: '#0ea5e9' },
-                { label: 'International', strutture: ['INT', 'BON'], color: '#6366f1' },
-              ]
-              const totSedi = sedi.reduce((sum, s) => sum + s.strutture.reduce((a, sc) => a + (check[sc] || 0), 0), 0)
-              return (
-                <div style={{ flex: 1, minWidth: 220, border: '1.5px solid #67e8f9', borderRadius: 10, padding: '1rem 1.25rem', background: '#ecfeff' }}>
-                  <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.88rem', color: '#0891b2' }}>
-                    Per sede fisica
-                  </h4>
-                  {sedi.map(({ label, strutture, color }) => {
-                    const v = strutture.reduce((sum, sc) => sum + (check[sc] || 0), 0)
-                    const dettaglio = strutture.map(sc => NOMI[sc]).join(' + ')
-                    return (
-                      <div key={label} style={{ padding: '4px 0', fontSize: '0.85rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: v > 0 ? color : '#d1d5db', display: 'inline-block', flexShrink: 0 }} />
-                            <span style={{ fontWeight: 600, color: '#1e293b' }}>{label}</span>
-                          </span>
-                          <span style={{ fontWeight: 700, color: v > 0 ? '#1e293b' : '#94a3b8' }}>{formatEuro(v)}</span>
-                        </div>
-                        {strutture.length > 1 && (
-                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', paddingLeft: 12 }}>{dettaglio}</div>
-                        )}
-                      </div>
-                    )
-                  })}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #67e8f9', marginTop: 6, paddingTop: 6, fontWeight: 700 }}>
-                    <span>TOTALE SEDI</span>
-                    <span>{formatEuro(totSedi)}</span>
-                  </div>
-                </div>
-              )
-            })()}
+              {STRUTTURE_HOTEL.map(sc => (
+                <RigaCheck key={sc} colore={coloreStruttura(sc)} etichetta={sc} valore={check[sc] || 0} />
+              ))}
+              <RigaTotaleCheck etichetta="TOTALE HOTEL" valore={check.totale_hotel || 0} />
+            </Card>
+            <Card style={{ flex: 1, minWidth: 220 }}>
+              <SectionTitle as="h4" style={{ margin: '0 0 8px', fontSize: 'var(--fs-md)' }}>Ristoranti ({check.label_ristoranti})</SectionTitle>
+              {STRUTTURE_MANUALI.map(sc => (
+                <RigaCheck key={sc} colore={coloreStruttura(sc)} etichetta={NOMI[sc]} valore={check[sc] || 0} />
+              ))}
+              <RigaTotaleCheck etichetta="TOTALE RISTORANTI" valore={check.totale_ristoranti || 0} />
+            </Card>
+            <Card style={{ flex: 1, minWidth: 220 }}>
+              <SectionTitle as="h4" style={{ margin: '0 0 8px', fontSize: 'var(--fs-md)' }}>Per sede fisica</SectionTitle>
+              {sedi.map(({ label, strutture, colore }) => (
+                <RigaCheck key={label} colore={colore} etichetta={<strong style={{ color: colors.text }}>{label}</strong>}
+                  valore={strutture.reduce((sum, sc) => sum + (check[sc] || 0), 0)}
+                  sotto={strutture.length > 1 ? strutture.map(sc => NOMI[sc]).join(' + ') : null} />
+              ))}
+              <RigaTotaleCheck etichetta="TOTALE SEDI" valore={totSedi} />
+            </Card>
             <div style={{
-              alignSelf: 'center', background: '#1e3a5f', color: '#fff',
-              borderRadius: 10, padding: '1rem 1.5rem', textAlign: 'center', minWidth: 160,
-              border: `3px solid ${semaforo.dot}`,
+              alignSelf: 'center', background: colors.primary, color: '#fff',
+              borderRadius: 10, padding: '16px 24px', textAlign: 'center', minWidth: 170,
+              border: `3px solid ${semaforo.colore}`,
             }}>
-              <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>TOTALE GENERALE</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 700, marginTop: 4 }}>
+              <div style={{ fontSize: 'var(--fs-sm)', opacity: 0.8 }}>TOTALE GENERALE</div>
+              <div className="ui-num" style={{ fontSize: 'var(--fs-xxl)', fontWeight: 700, marginTop: 4 }}>
                 {formatEuro(check.totale_generale || 0)}
               </div>
-              <div style={{ marginTop: 6, fontSize: '0.72rem', background: semaforo.dot, borderRadius: 4, padding: '2px 6px', display: 'inline-block' }}>
-                {semaforo.label}
-              </div>
+              <div style={{ marginTop: 6 }}><Badge tono={semaforo.tono}>{semaforo.label}</Badge></div>
             </div>
           </div>
         )
@@ -693,10 +552,6 @@ export default function TabGiornalieri({ lordo }) {
 
       {/* Drawer documenti */}
       {drawer && <DrawerDocumenti info={drawer} onClose={() => setDrawer(null)} />}
-      {drawer && (
-        <div onClick={() => setDrawer(null)}
-          style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.1)' }} />
-      )}
     </div>
   )
 }

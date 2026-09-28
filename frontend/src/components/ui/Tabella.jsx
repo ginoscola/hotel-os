@@ -2,6 +2,7 @@
 //
 // Righe speciali: className sulla <tr>
 //   ui-riga-attenuata (dati assenti) · ui-riga-avviso (da compilare) · ui-riga-ok (completata)
+//   ui-riga-errore (differenza / da verificare)
 //   ui-riga-evidenza (es. sabato) · ui-riga-dettaglio (riga espansa sotto una riga, con colSpan)
 //   ui-riga-annullata (documento annullato, attenuato) · ui-riga-modificata (barra ambra: corretto a mano)
 //   ui-riga-subtotale · ui-riga-sezione · ui-riga-risultato · ui-riga-totale

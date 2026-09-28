@@ -5,7 +5,7 @@ import {
   Button, PageHeader, SectionTitle, Card, Badge, Dot, HotelTag, Loading, StatoVuoto, Messaggio,
   Tabs, SegmentedControl, ToggleIva, Input, Select, Field, NavMese,
   Table, Th, Td, Modal, useConferma, useAvvisi, KpiTile, FileButton,
-  ThOrdinabile, Paginazione, Textarea, Checkbox, DropZone, Drawer, NavAnno,
+  ThOrdinabile, Paginazione, Textarea, Checkbox, DropZone, Drawer, NavAnno, SezioneApribile,
 } from '../../components/ui'
 import { colors, COLORI_STRUTTURA, fontSize } from '../../styles/tokens.js'
 import { formatEuro } from '../../utils/format.js'
@@ -40,6 +40,7 @@ export default function AdminUiKit() {
   const [spunta, setSpunta] = useState(true)
   const [drawer, setDrawer] = useState(false)
   const [annoDemo, setAnnoDemo] = useState(2026)
+  const [apertaDemo, setApertaDemo] = useState(false)
   const ordina = (campo) => setOrd(o => o.ordinaPer === campo
     ? { ...o, direzione: o.direzione === 'asc' ? 'desc' : 'asc' }
     : { ordinaPer: campo, direzione: 'asc' })
@@ -120,6 +121,7 @@ export default function AdminUiKit() {
           options={[{ value: 'salta', label: 'Salta' }, { value: 'aggiorna', label: 'Aggiorna' }]} />
         <NavMese anno={periodo.anno} mese={periodo.mese} onChange={setPeriodo} />
         <NavAnno anno={annoDemo} onChange={setAnnoDemo} />
+        <NavMese anno={periodo.anno} mese={periodo.mese} onChange={setPeriodo} selettore />
       </Blocco>
 
       <Blocco titolo="Campi">
@@ -152,6 +154,7 @@ export default function AdminUiKit() {
       <Blocco titolo="Badge e pallini">
         <Badge>NEUTRO</Badge><Badge tono="info">AUTO</Badge><Badge tono="ok">OK</Badge>
         <Badge tono="warn">ATTENZIONE</Badge><Badge tono="err">ERRORE</Badge>
+        <Badge colore="#eda100">RO</Badge><Badge colore="#2a78d6">BB</Badge>
         <span><Dot colore={colors.success} /> In range</span>
         <span><Dot colore={colors.warning} /> Sotto range</span>
         <span><Dot colore={colors.danger} /> Fuori range</span>
@@ -188,6 +191,7 @@ export default function AdminUiKit() {
             <tr className="ui-riga-ok"><Td>Completata (ui-riga-ok)</Td><Td num>{formatEuro(1000)}</Td><Td num>{formatEuro(900)}</Td><Td num tot>{formatEuro(1900)}</Td></tr>
             <tr className="ui-riga-evidenza"><Td>Evidenziata, es. sabato (ui-riga-evidenza)</Td><Td num>{formatEuro(500)}</Td><Td num>{formatEuro(400)}</Td><Td num tot>{formatEuro(900)}</Td></tr>
             <tr className="ui-riga-dettaglio"><Td colSpan={4}>Riga di dettaglio espansa (ui-riga-dettaglio): alloggio {formatEuro(300)} · colazione {formatEuro(120)}</Td></tr>
+            <tr className="ui-riga-errore"><Td>Con differenza (ui-riga-errore)</Td><Td num>{formatEuro(1200)}</Td><Td num>{formatEuro(1150)}</Td><Td num tot>{formatEuro(50)}</Td></tr>
             <tr className="ui-riga-annullata"><Td>Documento annullato (ui-riga-annullata)</Td><Td num>{formatEuro(-80)}</Td><Td num>—</Td><Td num tot>{formatEuro(-80)}</Td></tr>
             <tr className="ui-riga-modificata"><Td>Corretto a mano (ui-riga-modificata)</Td><Td num>{formatEuro(210)}</Td><Td num>—</Td><Td num tot>{formatEuro(210)}</Td></tr>
             <tr className="ui-riga-subtotale"><Td>Subtotale (ui-riga-subtotale)</Td><Td num>{formatEuro(165640.5)}</Td><Td num>{formatEuro(130432.4)}</Td><Td num tot>{formatEuro(296072.9)}</Td></tr>
@@ -250,6 +254,9 @@ export default function AdminUiKit() {
       </div>
 
       <SectionTitle style={{ marginTop: 24 }}>SectionTitle (titolo di sezione)</SectionTitle>
+      <SezioneApribile titolo="Sezione apribile" nota="(clicca sul titolo)" aperta={apertaDemo} onToggle={() => setApertaDemo(v => !v)}>
+        <Card>Contenuto della sezione apribile.</Card>
+      </SezioneApribile>
 
       {drawer && (
         <Drawer titolo="Hotel Du Parc — Colazione" sottotitolo="12/08/2026" onChiudi={() => setDrawer(false)}>

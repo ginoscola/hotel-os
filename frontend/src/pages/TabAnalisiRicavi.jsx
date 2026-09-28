@@ -7,6 +7,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer } from 'recharts'
 import api from '../api/client'
 import { formatEuro, mostraErrore } from '../utils/format'
+import {
+  Badge, Button, Card, Checkbox, Dot, DropZone, HotelTag, Input, Loading, Messaggio, SectionTitle,
+  SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
+} from '../components/ui'
+import { colors, PALETTE_CATEGORICA, coloreSerie } from '../styles/tokens.js'
 
 const MESI = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
               'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
@@ -20,16 +25,13 @@ function pctFmt(v) {
   return v.toFixed(1) + '%'
 }
 
-// ── Palette categorie ─────────────────────────────────────────────────────────
+// ── Colori categorie trattamento (ripiego se non configurati in Admin) ────────
+// Stesse tinte di sempre (RO giallo, BB blu, HB verde, FB arancio, AI rosso), prese dalla
+// palette validata dell'app.
 const CATEGORIA_COLORI = {
-  RO: '#fde047', BB: '#3b82f6', HB: '#10b981', FB: '#ea6a00', AI: '#ef4444',
+  RO: PALETTE_CATEGORICA[2], BB: PALETTE_CATEGORICA[0], HB: PALETTE_CATEGORICA[1],
+  FB: PALETTE_CATEGORICA[7], AI: PALETTE_CATEGORICA[5],
 }
-
-// Palette generica per voci senza categoria
-const PALETTE = [
-  '#6366f1','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
-  '#06b6d4','#84cc16','#f97316','#ec4899','#14b8a6','#a78bfa',
-]
 
 // ── Colori voci (usata da tabella e torta) ────────────────────────────────────
 function assegnaColori(voci) {
@@ -37,7 +39,7 @@ function assegnaColori(voci) {
   return voci.filter(v => v.valore > 0).map(v => {
     const chiave = v.codice || v.categoria || v.reparto || ''
     // Priorità: colore salvato in DB → colore per categoria → palette generica
-    const colore = v.colore || CATEGORIA_COLORI[v.categoria] || PALETTE[idx++ % PALETTE.length]
+    const colore = v.colore || CATEGORIA_COLORI[v.categoria] || coloreSerie(idx++)
     return { ...v, _colore: colore, _chiave: chiave }
   })
 }
@@ -55,41 +57,22 @@ function TortaRicavi({ voci, totale }) {
   if (!dati.length) return null
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <ResponsiveContainer width="100%" height={440}>
+    <Card style={{ marginTop: 16 }}>
+      <ResponsiveContainer width="100%" height={420}>
         <PieChart>
-          <Pie
-            data={dati}
-            dataKey="value"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            outerRadius={160}
-            innerRadius={72}
-          >
-            {dati.map((d, i) => (
-              <Cell key={i} fill={d.colore} />
-            ))}
+          <Pie data={dati} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={160} innerRadius={72}>
+            {dati.map((d, i) => <Cell key={i} fill={d.colore} />)}
           </Pie>
-          <ReTooltip
-            formatter={(val, name) => [formatEuro(val), name]}
-            contentStyle={{ fontSize: 12 }}
-          />
+          <ReTooltip formatter={(val, name) => [formatEuro(val), name]} contentStyle={{ fontSize: 12 }} />
         </PieChart>
       </ResponsiveContainer>
-    </div>
+    </Card>
   )
 }
 
 function categoriaBadge(cat) {
-  if (!cat) return <span style={{ fontSize: 11, color: '#999' }}>—</span>
-  const bg = CATEGORIA_COLORI[cat] || '#64748b'
-  return (
-    <span style={{ background: bg, color: '#fff', borderRadius: 4,
-                   padding: '1px 7px', fontSize: 11, fontWeight: 600 }}>
-      {cat}
-    </span>
-  )
+  if (!cat) return <span style={{ color: colors.textSubtle }}>—</span>
+  return <Badge colore={CATEGORIA_COLORI[cat] || colors.textMuted}>{cat}</Badge>
 }
 
 // ── Componente cella valore editabile ─────────────────────────────────────────
@@ -114,12 +97,12 @@ function CellaValore({ valore, modificato, onSalva, disabled }) {
     return (
       <input
         ref={ref}
+        className="ui-input ui-num"
         value={tmp}
         onChange={e => setTmp(e.target.value)}
         onBlur={conferma}
         onKeyDown={e => { if (e.key === 'Enter') conferma(); if (e.key === 'Escape') setEditing(false) }}
-        style={{ width: 90, fontSize: 13, textAlign: 'right', border: '1px solid #6366f1',
-                 borderRadius: 4, padding: '1px 4px' }}
+        style={{ width: 100, textAlign: 'right', padding: '1px 6px' }}
       />
     )
   }
@@ -127,19 +110,11 @@ function CellaValore({ valore, modificato, onSalva, disabled }) {
     <span
       onClick={avvia}
       title={disabled ? '' : 'Clicca per modificare'}
-      style={{ cursor: disabled ? 'default' : 'pointer', color: modificato ? '#f59e0b' : undefined,
-               borderBottom: disabled ? 'none' : '1px dashed #cbd5e1' }}>
+      style={{ cursor: disabled ? 'default' : 'pointer', color: modificato ? colors.warning : undefined,
+               borderBottom: disabled ? 'none' : `1px dashed ${colors.borderStrong}` }}>
       {formatEuro(valore)}
       {modificato && <span title="Modificato manualmente" style={{ marginLeft: 4 }}>✏️</span>}
     </span>
-  )
-}
-
-// ── Dot colore ────────────────────────────────────────────────────────────────
-function DotColore({ colore }) {
-  return (
-    <span style={{ width: 10, height: 10, borderRadius: '50%', background: colore,
-                   flexShrink: 0, display: 'inline-block' }} />
   )
 }
 
@@ -148,6 +123,7 @@ function TabellaTrattamenti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDe
   const [dati, setDati] = useState(null)
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState(null)
+  const avvisi = useAvvisi()
 
   const carica = useCallback(async () => {
     if (!hotelCode || !anno || !mese) return
@@ -172,13 +148,13 @@ function TabellaTrattamenti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDe
       await api.put(`/analisi-ricavi/trattamenti/${id}`, { valore: nuovoValore })
       carica()
     } catch (e) {
-      alert(mostraErrore(e))
+      avvisi.errore(mostraErrore(e))
     }
   }
 
-  if (loading) return <p style={{ color: '#64748b' }}>Caricamento...</p>
-  if (errore) return <p style={{ color: '#ef4444' }}>{errore}</p>
-  if (!dati || !dati.trattamenti.length) return <p style={{ color: '#64748b' }}>Nessun dato per questo periodo.</p>
+  if (loading) return <Loading />
+  if (errore) return <Messaggio tipo="err">{errore}</Messaggio>
+  if (!dati || !dati.trattamenti.length) return <StatoVuoto>Nessun dato per questo periodo.</StatoVuoto>
 
   // Vista macro-categorie: aggrega per categoria
   let righe = dati.trattamenti
@@ -200,71 +176,61 @@ function TabellaTrattamenti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDe
 
   return (
     <div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <Table compact>
         <thead>
-          <tr style={{ background: '#1e293b', color: '#fff' }}>
-            {vistaDettaglio && <th style={thS}>Codice</th>}
-            <th style={thS}>{vistaDettaglio ? 'Nome' : 'Categoria'}</th>
-            {vistaDettaglio && <th style={{ ...thS, textAlign: 'center' }}>Cat.</th>}
-            <th style={{ ...thS, textAlign: 'right' }}>Valore</th>
-            <th style={{ ...thS, textAlign: 'right' }}>%</th>
-            {mostraDelta && dati.revenue_module && (
-              <th style={{ ...thS, textAlign: 'right' }}>Δ Revenue</th>
-            )}
+          <tr>
+            {vistaDettaglio && <Th>Codice</Th>}
+            <Th>{vistaDettaglio ? 'Nome' : 'Categoria'}</Th>
+            {vistaDettaglio && <Th center>Cat.</Th>}
+            <Th num>Valore</Th>
+            <Th num>%</Th>
+            {mostraDelta && dati.revenue_module && <Th num>Δ Revenue</Th>}
           </tr>
         </thead>
         <tbody>
-          {righeCon.map((t, i) => {
-            const isEven = i % 2 === 0
-            return (
-              <tr key={vistaDettaglio ? t.codice : t.categoria}
-                  style={{ background: isEven ? '#f8fafc' : '#fff' }}>
-                {vistaDettaglio && (
-                  <td style={tdS}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <DotColore colore={t._colore} />
-                      <code style={{ fontSize: 12 }}>{t.codice}</code>
-                    </span>
-                  </td>
-                )}
-                <td style={tdS}>
+          {righeCon.map(t => (
+            <tr key={vistaDettaglio ? t.codice : t.categoria}>
+              {vistaDettaglio && (
+                <Td>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    {!vistaDettaglio && <DotColore colore={t._colore} />}
-                    {vistaDettaglio ? (t.nome_display || t.codice) : t.categoria}
+                    <Dot colore={t._colore} />
+                    <code style={{ fontSize: 'var(--fs-sm)' }}>{t.codice}</code>
                   </span>
-                </td>
-                {vistaDettaglio && <td style={{ ...tdS, textAlign: 'center' }}>{categoriaBadge(t.categoria)}</td>}
-                <td style={{ ...tdS, textAlign: 'right' }}>
-                  {vistaDettaglio ? (
-                    <CellaValore
-                      valore={t.valore}
-                      modificato={t.modificato_manualmente}
-                      onSalva={v => aggiornaValore(t.id, v)}
-                      disabled={!isAdmin}
-                    />
-                  ) : formatEuro(t.valore)}
-                </td>
-                <td style={{ ...tdS, textAlign: 'right', color: '#64748b' }}>{pctFmt(t.pct)}</td>
-                {mostraDelta && dati.revenue_module && (
-                  <td style={{ ...tdS, textAlign: 'right' }}>—</td>
-                )}
-              </tr>
-            )
-          })}
-        </tbody>
-        <tfoot>
-          <tr style={{ fontWeight: 700, background: '#e2e8f0' }}>
-            {vistaDettaglio && <td style={tdS} />}
-            <td style={tdS}>Totale</td>
-            {vistaDettaglio && <td style={tdS} />}
-            <td style={{ ...tdS, textAlign: 'right' }}>{formatEuro(dati.totale)}</td>
-            <td style={{ ...tdS, textAlign: 'right' }}>100%</td>
-            {mostraDelta && dati.revenue_module && <td style={tdS} />}
+                </Td>
+              )}
+              <Td>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {!vistaDettaglio && <Dot colore={t._colore} />}
+                  {vistaDettaglio ? (t.nome_display || t.codice) : t.categoria}
+                </span>
+              </Td>
+              {vistaDettaglio && <Td center>{categoriaBadge(t.categoria)}</Td>}
+              <Td num>
+                {vistaDettaglio ? (
+                  <CellaValore
+                    valore={t.valore}
+                    modificato={t.modificato_manualmente}
+                    onSalva={v => aggiornaValore(t.id, v)}
+                    disabled={!isAdmin}
+                  />
+                ) : formatEuro(t.valore)}
+              </Td>
+              <Td num style={{ color: colors.textMuted }}>{pctFmt(t.pct)}</Td>
+              {mostraDelta && dati.revenue_module && <Td num>—</Td>}
+            </tr>
+          ))}
+          <tr className="ui-riga-sezione">
+            {vistaDettaglio && <Td />}
+            <Td>Totale</Td>
+            {vistaDettaglio && <Td />}
+            <Td num>{formatEuro(dati.totale)}</Td>
+            <Td num>100%</Td>
+            {mostraDelta && dati.revenue_module && <Td />}
           </tr>
-        </tfoot>
-      </table>
+        </tbody>
+      </Table>
       {dati.n_non_classificati > 0 && (
-        <p style={{ color: '#f59e0b', fontSize: 12, marginTop: 6 }}>
+        <p style={{ color: colors.warningText, fontSize: 'var(--fs-sm)', marginTop: 6 }}>
           ⚠ {dati.n_non_classificati} codic{dati.n_non_classificati > 1 ? 'i' : 'e'} non classificat{dati.n_non_classificati > 1 ? 'i' : 'o'} — configurare in Admin → Classificazione Trattamenti
         </p>
       )}
@@ -278,6 +244,7 @@ function TabellaReparti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDelta 
   const [dati, setDati] = useState(null)
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState(null)
+  const avvisi = useAvvisi()
 
   const carica = useCallback(async () => {
     if (!hotelCode || !anno || !mese) return
@@ -302,13 +269,13 @@ function TabellaReparti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDelta 
       await api.put(`/analisi-ricavi/reparti/${id}`, { valore: nuovoValore })
       carica()
     } catch (e) {
-      alert(mostraErrore(e))
+      avvisi.errore(mostraErrore(e))
     }
   }
 
-  if (loading) return <p style={{ color: '#64748b' }}>Caricamento...</p>
-  if (errore) return <p style={{ color: '#ef4444' }}>{errore}</p>
-  if (!dati || !dati.reparti.length) return <p style={{ color: '#64748b' }}>Nessun dato per questo periodo.</p>
+  if (loading) return <Loading />
+  if (errore) return <Messaggio tipo="err">{errore}</Messaggio>
+  if (!dati || !dati.reparti.length) return <StatoVuoto>Nessun dato per questo periodo.</StatoVuoto>
 
   const rev = dati.revenue_module
   const deltaRev = mostraDelta && rev ? rev.revenue_totale : null
@@ -316,60 +283,52 @@ function TabellaReparti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDelta 
 
   return (
     <div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <Table compact>
         <thead>
-          <tr style={{ background: '#1e293b', color: '#fff' }}>
-            <th style={thS}>Reparto</th>
-            <th style={{ ...thS, textAlign: 'right' }}>Valore</th>
-            <th style={{ ...thS, textAlign: 'right' }}>%</th>
-            {mostraDelta && rev && <th style={{ ...thS, textAlign: 'right' }}>Rev. Module</th>}
-            {mostraDelta && rev && <th style={{ ...thS, textAlign: 'right' }}>Δ</th>}
+          <tr>
+            <Th>Reparto</Th>
+            <Th num>Valore</Th>
+            <Th num>%</Th>
+            {mostraDelta && rev && <Th num>Rev. Module</Th>}
+            {mostraDelta && rev && <Th num>Δ</Th>}
           </tr>
         </thead>
         <tbody>
-          {repartiCon.map((r, i) => {
-            const isEven = i % 2 === 0
-            return (
-              <tr key={r.reparto} style={{ background: isEven ? '#f8fafc' : '#fff' }}>
-                <td style={tdS}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%',
-                                   background: r._colore, flexShrink: 0, display: 'inline-block' }} />
-                    {r.reparto}
-                  </span>
-                </td>
-                <td style={{ ...tdS, textAlign: 'right' }}>
-                  <CellaValore
-                    valore={r.valore}
-                    modificato={r.modificato_manualmente}
-                    onSalva={v => aggiorna(r.id, v)}
-                    disabled={!isAdmin}
-                  />
-                </td>
-                <td style={{ ...tdS, textAlign: 'right', color: '#64748b' }}>{pctFmt(r.pct)}</td>
-                {mostraDelta && rev && <td style={{ ...tdS, textAlign: 'right' }}>—</td>}
-                {mostraDelta && rev && <td style={{ ...tdS, textAlign: 'right' }}>—</td>}
-              </tr>
-            )
-          })}
-        </tbody>
-        <tfoot>
-          <tr style={{ fontWeight: 700, background: '#e2e8f0' }}>
-            <td style={tdS}>Totale</td>
-            <td style={{ ...tdS, textAlign: 'right' }}>{formatEuro(dati.totale)}</td>
-            <td style={{ ...tdS, textAlign: 'right' }}>100%</td>
-            {mostraDelta && rev && <td style={{ ...tdS, textAlign: 'right' }}>{formatEuro(rev.revenue_totale)}</td>}
+          {repartiCon.map(r => (
+            <tr key={r.reparto}>
+              <Td>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Dot colore={r._colore} />{r.reparto}
+                </span>
+              </Td>
+              <Td num>
+                <CellaValore
+                  valore={r.valore}
+                  modificato={r.modificato_manualmente}
+                  onSalva={v => aggiorna(r.id, v)}
+                  disabled={!isAdmin}
+                />
+              </Td>
+              <Td num style={{ color: colors.textMuted }}>{pctFmt(r.pct)}</Td>
+              {mostraDelta && rev && <Td num>—</Td>}
+              {mostraDelta && rev && <Td num>—</Td>}
+            </tr>
+          ))}
+          <tr className="ui-riga-sezione">
+            <Td>Totale</Td>
+            <Td num>{formatEuro(dati.totale)}</Td>
+            <Td num>100%</Td>
+            {mostraDelta && rev && <Td num>{formatEuro(rev.revenue_totale)}</Td>}
             {mostraDelta && rev && (
-              <td style={{ ...tdS, textAlign: 'right',
-                           color: dati.totale > rev.revenue_totale ? '#10b981' : '#ef4444' }}>
+              <Td num style={{ color: dati.totale > rev.revenue_totale ? colors.success : colors.danger }}>
                 {formatEuro(dati.totale - rev.revenue_totale)}
-              </td>
+              </Td>
             )}
           </tr>
-        </tfoot>
-      </table>
+        </tbody>
+      </Table>
       {mostraDelta && rev && (
-        <p style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>
+        <p className="ui-text-muted" style={{ marginTop: 6 }}>
           Confronto con Revenue module: camere {formatEuro(rev.revenue_rooms)} · F&B {formatEuro(rev.revenue_fnb)} · Extra {formatEuro(rev.revenue_extra)}
         </p>
       )}
@@ -387,9 +346,9 @@ function SubtabImport({ hotels, isAdmin }) {
   const [isTest, setIsTest] = useState(false)
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState(null)
-  const [conferma, setConferma] = useState(null)   // per sovrascrittura
   const [storico, setStorico] = useState([])
-  const dropRef = useRef()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const caricaStorico = useCallback(async () => {
     try {
@@ -400,20 +359,15 @@ function SubtabImport({ hotels, isAdmin }) {
 
   useEffect(() => { caricaStorico() }, [caricaStorico])
 
-  const onDrop = e => {
-    e.preventDefault()
-    const nuovi = Array.from(e.dataTransfer?.files || e.target.files || [])
-    setFiles(prev => [...prev, ...nuovi].slice(0, 2))
-  }
+  const aggiungiFile = f => setFiles(prev => [...prev, f].slice(0, 2))
 
   const rimuoviFile = i => setFiles(prev => prev.filter((_, j) => j !== i))
 
   const importa = async (sovrascrivi = false) => {
-    if (!files.length) return alert('Selezionare almeno 1 file CSV')
-    if (!hotelCode) return alert('Selezionare un hotel')
+    if (!files.length) return avvisi.attenzione('Selezionare almeno 1 file CSV')
+    if (!hotelCode) return avvisi.attenzione('Selezionare un hotel')
     setLoading(true)
     setMsg(null)
-    setConferma(null)
     const fd = new FormData()
     fd.append('hotel_code', hotelCode)
     fd.append('anno', anno)
@@ -429,7 +383,17 @@ function SubtabImport({ hotels, isAdmin }) {
       caricaStorico()
     } catch (e) {
       if (e.response?.status === 409) {
-        setConferma(e.response.data.detail || e.response.data)
+        // Dati già presenti per il periodo: chiede conferma e ritenta in modalità sovrascrittura
+        const info = e.response.data.detail || e.response.data
+        const dettaglio = info?.n_trattamenti != null ? ` (${info.n_trattamenti} trattamenti, ${info.n_reparti} reparti)` : ''
+        setLoading(false)
+        const ok = await conferma({
+          titolo: 'Sovrascrivere i dati esistenti?',
+          messaggio: `${info?.messaggio || 'Esistono già dati per questo periodo.'}${dettaglio}`,
+          confermaLabel: 'Sovrascrivi',
+          pericolo: true,
+        })
+        if (ok) await importa(true)
       } else {
         setMsg({ tipo: 'err', testo: mostraErrore(e) })
       }
@@ -439,155 +403,102 @@ function SubtabImport({ hotels, isAdmin }) {
   }
 
   const elimina = async (id) => {
-    if (!confirm('Eliminare questo import e tutti i dati collegati?')) return
+    if (!(await conferma({ titolo: 'Eliminare questo import?', messaggio: 'Verranno eliminati anche tutti i dati collegati.', pericolo: true }))) return
     try {
       await api.delete(`/analisi-ricavi/import/${id}?conferma=true`)
       setStorico(prev => prev.filter(s => s.id !== id))
     } catch (e) {
-      alert(mostraErrore(e))
+      avvisi.errore(mostraErrore(e))
     }
   }
 
-  if (!isAdmin) return <p style={{ color: '#64748b' }}>Solo gli amministratori possono importare dati.</p>
+  if (!isAdmin) return <StatoVuoto>Solo gli amministratori possono importare dati.</StatoVuoto>
 
   return (
-    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
       {/* Form import */}
-      <div style={{ flex: '0 0 360px', background: '#f8fafc', border: '1px solid #e2e8f0',
-                    borderRadius: 8, padding: 20 }}>
-        <h4 style={{ marginTop: 0 }}>Carica CSV ricavi</h4>
+      <Card title="Carica CSV ricavi" style={{ flex: '0 0 380px' }}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <select value={hotelCode} onChange={e => setHotelCode(e.target.value)}
-                  style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
+          <Select value={hotelCode} onChange={e => setHotelCode(e.target.value)} style={{ flex: 1 }} aria-label="Hotel">
             {hotels.map(h => <option key={h.code} value={h.code}>{h.code}</option>)}
-          </select>
-          <select value={mese} onChange={e => setMese(+e.target.value)}
-                  style={{ flex: 1.5, padding: '6px 8px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
+          </Select>
+          <Select value={mese} onChange={e => setMese(+e.target.value)} style={{ flex: 1.5 }} aria-label="Mese">
             {MESI.slice(1).map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
-          </select>
-          <input type="number" value={anno} onChange={e => setAnno(+e.target.value)}
-                 min={2024} max={2030} style={{ width: 70, padding: '6px 8px', borderRadius: 6,
-                 border: '1px solid #cbd5e1', textAlign: 'center' }} />
+          </Select>
+          <Input type="number" value={anno} onChange={e => setAnno(+e.target.value)}
+                 min={2024} max={2030} style={{ width: 76, textAlign: 'center' }} aria-label="Anno" />
         </div>
 
         {/* Istruzioni origine file */}
-        <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 6,
-                      padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#0c4a6e',
-                      lineHeight: 1.6 }}>
+        <Messaggio tipo="info">
           <strong>Da dove scaricare i file:</strong><br />
           Passbi → Dashboard → Ricavi Tipo Trattamento<br />
           • <em>Dettaglio ricavi trattamento</em><br />
           • <em>Dettaglio ricavi per trattamento</em><br />
-          <span style={{ color: '#0369a1' }}>⏱ Da scaricare ogni fine mese per ogni hotel.</span><br />
-          <span style={{ color: '#0369a1' }}>📄 Formato CSV con separatore <code>;</code></span>
-        </div>
+          ⏱ Da scaricare ogni fine mese per ogni hotel.<br />
+          📄 Formato CSV con separatore <code>;</code>
+        </Messaggio>
 
-        {/* Drop zone */}
-        <div
-          ref={dropRef}
-          onDragOver={e => e.preventDefault()}
-          onDrop={onDrop}
-          style={{ border: '2px dashed #94a3b8', borderRadius: 8, padding: 24, textAlign: 'center',
-                   cursor: 'pointer', background: '#fff', marginBottom: 12 }}
-          onClick={() => dropRef.current.querySelector('input')?.click()}
-        >
-          <input type="file" accept=".csv" multiple style={{ display: 'none' }}
-                 onChange={onDrop} />
-          <div style={{ color: '#64748b', fontSize: 14 }}>
-            Trascina qui i 2 file CSV oppure clicca per selezionarli
-          </div>
-          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-            Auto-rileva trattamenti e reparti
-          </div>
-        </div>
+        <DropZone
+          accept=".csv"
+          multiple
+          onFile={aggiungiFile}
+          titolo="Trascina qui i 2 file CSV oppure clicca per selezionarli"
+          sottotitolo="Auto-rileva trattamenti e reparti"
+        />
 
         {/* File selezionati */}
         {files.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             {files.map((f, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between',
-                                    alignItems: 'center', fontSize: 13, padding: '4px 0',
-                                    borderBottom: '1px solid #e2e8f0' }}>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+                                    padding: '4px 0', borderBottom: `1px solid ${colors.border}` }}>
                 <span>📄 {f.name}</span>
-                <button onClick={() => rimuoviFile(i)} style={btnDanger}>✕</button>
+                <Button variant="danger-soft" size="sm" onClick={() => rimuoviFile(i)} aria-label="Rimuovi file">✕</Button>
               </div>
             ))}
           </div>
         )}
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-                        marginBottom: 12, cursor: 'pointer' }}>
-          <input type="checkbox" checked={isTest} onChange={e => setIsTest(e.target.checked)} />
-          Dati di test
-        </label>
+        <Checkbox checked={isTest} onChange={setIsTest} label="Dati di test" style={{ marginBottom: 12 }} />
 
-        <button onClick={() => importa(false)} disabled={loading || !files.length}
-                style={btnPrimary}>
-          {loading ? 'Import in corso...' : 'Importa'}
-        </button>
+        <Button onClick={() => importa(false)} disabled={loading || !files.length} style={{ width: '100%' }}>
+          {loading ? 'Import in corso…' : 'Importa'}
+        </Button>
 
-        {msg && (
-          <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 6,
-                        background: msg.tipo === 'ok' ? '#d1fae5' : '#fee2e2',
-                        color: msg.tipo === 'ok' ? '#065f46' : '#991b1b', fontSize: 13 }}>
-            {msg.testo}
-          </div>
-        )}
-
-        {/* Dialogo conferma sovrascrittura */}
-        {conferma && (
-          <div style={{ marginTop: 12, padding: 12, background: '#fef3c7', borderRadius: 6,
-                        border: '1px solid #f59e0b' }}>
-            <p style={{ margin: '0 0 8px', fontSize: 13, color: '#92400e' }}>
-              {conferma.messaggio || 'Esistono già dati per questo periodo.'}
-              {conferma.n_trattamenti != null && ` (${conferma.n_trattamenti} trattamenti, ${conferma.n_reparti} reparti)`}
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => importa(true)} style={btnWarning}>Sovrascrivi</button>
-              <button onClick={() => setConferma(null)} style={btnSecondary}>Annulla</button>
-            </div>
-          </div>
-        )}
-      </div>
+        {msg && <div style={{ marginTop: 12 }}><Messaggio tipo={msg.tipo} onChiudi={() => setMsg(null)}>{msg.testo}</Messaggio></div>}
+      </Card>
 
       {/* Storico import */}
       <div style={{ flex: 1, minWidth: 320 }}>
-        <h4 style={{ marginTop: 0 }}>Storico import</h4>
+        <SectionTitle as="h3">Storico import</SectionTitle>
         {storico.length === 0 ? (
-          <p style={{ color: '#64748b', fontSize: 13 }}>Nessun import effettuato.</p>
+          <StatoVuoto>Nessun import effettuato.</StatoVuoto>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <Table compact>
             <thead>
-              <tr style={{ background: '#1e293b', color: '#fff' }}>
-                <th style={thS}>Hotel</th>
-                <th style={thS}>Periodo</th>
-                <th style={{ ...thS, textAlign: 'right' }}>Tratt.</th>
-                <th style={{ ...thS, textAlign: 'right' }}>Rep.</th>
-                <th style={thS}>Data</th>
-                <th style={thS} />
+              <tr>
+                <Th>Hotel</Th><Th>Periodo</Th><Th num>Tratt.</Th><Th num>Rep.</Th><Th>Data</Th><Th />
               </tr>
             </thead>
             <tbody>
-              {storico.map((s, i) => (
-                <tr key={s.id} style={{ background: i % 2 === 0 ? '#f8fafc' : '#fff' }}>
-                  <td style={tdS}>
-                    <strong>{s.hotel_code}</strong>
-                    {s.is_test && <span style={{ marginLeft: 4, fontSize: 10, background: '#fef9c3',
-                                                color: '#854d0e', padding: '1px 5px', borderRadius: 4 }}>TEST</span>}
-                  </td>
-                  <td style={tdS}>{s.mese_nome} {s.anno}</td>
-                  <td style={{ ...tdS, textAlign: 'right' }}>{s.n_trattamenti}</td>
-                  <td style={{ ...tdS, textAlign: 'right' }}>{s.n_reparti}</td>
-                  <td style={{ ...tdS, fontSize: 12, color: '#64748b' }}>
-                    {s.created_at ? new Date(s.created_at).toLocaleDateString('it-IT') : '—'}
-                  </td>
-                  <td style={tdS}>
-                    <button onClick={() => elimina(s.id)} style={btnDanger} title="Elimina">🗑</button>
-                  </td>
+              {storico.map(s => (
+                <tr key={s.id}>
+                  <Td>
+                    <HotelTag code={s.hotel_code} />
+                    {s.is_test && <Badge tono="warn" style={{ marginLeft: 4 }}>TEST</Badge>}
+                  </Td>
+                  <Td>{s.mese_nome} {s.anno}</Td>
+                  <Td num>{s.n_trattamenti}</Td>
+                  <Td num>{s.n_reparti}</Td>
+                  <Td muted>{s.created_at ? new Date(s.created_at).toLocaleDateString('it-IT') : '—'}</Td>
+                  <Td center>
+                    <Button variant="danger-soft" size="sm" onClick={() => elimina(s.id)} title="Elimina">🗑</Button>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </div>
     </div>
@@ -611,8 +522,8 @@ function VistGruppo({ anno, mese, meseFine, vistaDettaglio }) {
       .finally(() => setLoading(false))
   }, [anno, mese, meseFine])
 
-  if (loading) return <p style={{ color: '#64748b' }}>Caricamento gruppo...</p>
-  if (errore) return <p style={{ color: '#ef4444' }}>{errore}</p>
+  if (loading) return <Loading testo="Caricamento gruppo…" />
+  if (errore) return <Messaggio tipo="err">{errore}</Messaggio>
   if (!dati) return null
 
   const hotels = dati.hotel_codes
@@ -638,95 +549,84 @@ function VistGruppo({ anno, mese, meseFine, vistaDettaglio }) {
 
   return (
     <div>
-      <h4 style={{ marginBottom: 8 }}>Trattamenti — Gruppo</h4>
+      <SectionTitle as="h3">Trattamenti — Gruppo</SectionTitle>
       {trattAmostare.length === 0 ? (
-        <p style={{ color: '#64748b' }}>Nessun dato per questo periodo.</p>
+        <StatoVuoto>Nessun dato per questo periodo.</StatoVuoto>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <Table compact>
           <thead>
-            <tr style={{ background: '#1e293b', color: '#fff' }}>
-              <th style={thS}>{vistaDettaglio ? 'Codice' : 'Categoria'}</th>
-              {vistaDettaglio && <th style={{ ...thS, textAlign: 'center' }}>Cat.</th>}
-              {hotels.map(h => <th key={h} style={{ ...thS, textAlign: 'right' }}>{h}</th>)}
-              <th style={{ ...thS, textAlign: 'right' }}>Totale</th>
-              <th style={{ ...thS, textAlign: 'right' }}>%</th>
+            <tr>
+              <Th>{vistaDettaglio ? 'Codice' : 'Categoria'}</Th>
+              {vistaDettaglio && <Th center>Cat.</Th>}
+              {hotels.map(h => <Th key={h} num>{h}</Th>)}
+              <Th num tot>Totale</Th>
+              <Th num>%</Th>
             </tr>
           </thead>
           <tbody>
-            {trattAmostare.map((t, i) => {
-              const isEven = i % 2 === 0
+            {trattAmostare.map(t => {
               const label = vistaDettaglio ? (t.nome_display || t.codice) : t.categoria
               return (
-                <tr key={label} style={{ background: isEven ? '#f8fafc' : '#fff' }}>
-                  <td style={tdS}>{label}</td>
-                  {vistaDettaglio && <td style={{ ...tdS, textAlign: 'center' }}>{categoriaBadge(t.categoria)}</td>}
+                <tr key={label}>
+                  <Td>{label}</Td>
+                  {vistaDettaglio && <Td center>{categoriaBadge(t.categoria)}</Td>}
                   {hotels.map(h => (
-                    <td key={h} style={{ ...tdS, textAlign: 'right', color: '#64748b' }}>
-                      {t.per_hotel?.[h] ? formatEuro(t.per_hotel[h]) : '—'}
-                    </td>
+                    <Td key={h} num style={{ color: colors.textMuted }}>{t.per_hotel?.[h] ? formatEuro(t.per_hotel[h]) : '—'}</Td>
                   ))}
-                  <td style={{ ...tdS, textAlign: 'right', fontWeight: 600 }}>{formatEuro(t.valore)}</td>
-                  <td style={{ ...tdS, textAlign: 'right', color: '#64748b' }}>{pctFmt(t.pct)}</td>
+                  <Td num tot>{formatEuro(t.valore)}</Td>
+                  <Td num style={{ color: colors.textMuted }}>{pctFmt(t.pct)}</Td>
                 </tr>
               )
             })}
-          </tbody>
-          <tfoot>
-            <tr style={{ fontWeight: 700, background: '#e2e8f0' }}>
-              <td style={tdS}>Totale</td>
-              {vistaDettaglio && <td style={tdS} />}
+            <tr className="ui-riga-sezione">
+              <Td>Totale</Td>
+              {vistaDettaglio && <Td />}
               {hotels.map(h => (
-                <td key={h} style={{ ...tdS, textAlign: 'right' }}>
+                <Td key={h} num>
                   {formatEuro(dati.trattamenti.filter(t => t.per_hotel?.[h]).reduce((s, t) => s + (t.per_hotel[h] || 0), 0))}
-                </td>
+                </Td>
               ))}
-              <td style={{ ...tdS, textAlign: 'right' }}>{formatEuro(dati.totale_trattamenti)}</td>
-              <td style={{ ...tdS, textAlign: 'right' }}>100%</td>
+              <Td num tot>{formatEuro(dati.totale_trattamenti)}</Td>
+              <Td num>100%</Td>
             </tr>
-          </tfoot>
-        </table>
+          </tbody>
+        </Table>
       )}
 
-      <h4 style={{ marginTop: 24, marginBottom: 8 }}>Reparti — Gruppo</h4>
+      <SectionTitle as="h3" style={{ marginTop: 24 }}>Reparti — Gruppo</SectionTitle>
       {dati.reparti.length === 0 ? (
-        <p style={{ color: '#64748b' }}>Nessun dato.</p>
+        <StatoVuoto>Nessun dato.</StatoVuoto>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <Table compact>
           <thead>
-            <tr style={{ background: '#1e293b', color: '#fff' }}>
-              <th style={thS}>Reparto</th>
-              {hotels.map(h => <th key={h} style={{ ...thS, textAlign: 'right' }}>{h}</th>)}
-              <th style={{ ...thS, textAlign: 'right' }}>Totale</th>
-              <th style={{ ...thS, textAlign: 'right' }}>%</th>
+            <tr>
+              <Th>Reparto</Th>
+              {hotels.map(h => <Th key={h} num>{h}</Th>)}
+              <Th num tot>Totale</Th>
+              <Th num>%</Th>
             </tr>
           </thead>
           <tbody>
-            {dati.reparti.map((r, i) => (
-              <tr key={r.reparto} style={{ background: i % 2 === 0 ? '#f8fafc' : '#fff' }}>
-                <td style={tdS}>{r.reparto}</td>
+            {dati.reparti.map(r => (
+              <tr key={r.reparto}>
+                <Td>{r.reparto}</Td>
                 {hotels.map(h => (
-                  <td key={h} style={{ ...tdS, textAlign: 'right', color: '#64748b' }}>
-                    {r.per_hotel?.[h] ? formatEuro(r.per_hotel[h]) : '—'}
-                  </td>
+                  <Td key={h} num style={{ color: colors.textMuted }}>{r.per_hotel?.[h] ? formatEuro(r.per_hotel[h]) : '—'}</Td>
                 ))}
-                <td style={{ ...tdS, textAlign: 'right', fontWeight: 600 }}>{formatEuro(r.valore)}</td>
-                <td style={{ ...tdS, textAlign: 'right', color: '#64748b' }}>{pctFmt(r.pct)}</td>
+                <Td num tot>{formatEuro(r.valore)}</Td>
+                <Td num style={{ color: colors.textMuted }}>{pctFmt(r.pct)}</Td>
               </tr>
             ))}
-          </tbody>
-          <tfoot>
-            <tr style={{ fontWeight: 700, background: '#e2e8f0' }}>
-              <td style={tdS}>Totale</td>
+            <tr className="ui-riga-sezione">
+              <Td>Totale</Td>
               {hotels.map(h => (
-                <td key={h} style={{ ...tdS, textAlign: 'right' }}>
-                  {formatEuro(dati.reparti.reduce((s, r) => s + (r.per_hotel?.[h] || 0), 0))}
-                </td>
+                <Td key={h} num>{formatEuro(dati.reparti.reduce((s, r) => s + (r.per_hotel?.[h] || 0), 0))}</Td>
               ))}
-              <td style={{ ...tdS, textAlign: 'right' }}>{formatEuro(dati.totale_reparti)}</td>
-              <td style={{ ...tdS, textAlign: 'right' }}>100%</td>
+              <Td num tot>{formatEuro(dati.totale_reparti)}</Td>
+              <Td num>100%</Td>
             </tr>
-          </tfoot>
-        </table>
+          </tbody>
+        </Table>
       )}
     </div>
   )
@@ -754,6 +654,7 @@ export default function TabAnalisiRicavi({ hotels, isAdmin }) {
   const [rangeMode, setRangeMode] = useState(false)
   const [vistaDettaglio, setVistaDettaglio] = useState(true)
   const [mostraDelta, setMostraDelta] = useState(false)
+  const avvisi = useAvvisi()
 
   const cambiaHotel = c => { setHotelSel(c); localStorage.setItem('ar_hotel', c) }
   const isGruppo = hotelSel === 'GRUPPO'
@@ -798,134 +699,69 @@ export default function TabAnalisiRicavi({ hotels, isAdmin }) {
   // Se meseFine finisce prima di mese, aggiusta
   const meseFineEff = rangeMode ? Math.max(mese, meseFine) : mese
 
-  const HOTEL_BUTTONS = [
-    ...hotels.map(h => ({ code: h.code, label: h.code })),
-    { code: 'GRUPPO', label: 'Gruppo' },
+  const opzioniHotel = [
+    ...hotels.map(h => ({ value: h.code, label: h.code })),
+    { value: 'GRUPPO', label: 'Gruppo' },
   ]
+  const sep = <div style={{ width: 1, height: 28, background: colors.border }} />
 
-  const btnHotel = (active) => ({
-    padding: '6px 14px', borderRadius: 6, border: '1px solid #cbd5e1',
-    cursor: 'pointer', fontWeight: active ? 700 : 400, fontSize: 13,
-    background: active ? '#1e293b' : '#f8fafc',
-    color: active ? '#fff' : '#374151',
-    transition: 'all .15s',
-  })
-
-  const arrowBtn = {
-    padding: '5px 10px', borderRadius: 6, border: '1px solid #cbd5e1',
-    background: '#f8fafc', cursor: 'pointer', fontSize: 15, lineHeight: 1,
-    color: '#374151',
+  const esportaExcel = async () => {
+    try {
+      const params = { hotel_code: hotelSel, anno, mese, vista_dettaglio: vistaDettaglio }
+      if (rangeMode && meseFineEff !== mese) params.mese_fine = meseFineEff
+      const res = await api.get('/analisi-ricavi/export', { params, responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `analisi_ricavi_${hotelSel}_${anno}_${String(mese).padStart(2, '0')}.xlsx`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      avvisi.errore(mostraErrore(e, 'Errore export'))
+    }
   }
+
+  const sottoTab = [{ id: 'analisi', label: 'Analisi' }, ...(isAdmin ? [{ id: 'import', label: 'Import' }] : [])]
 
   return (
     <div>
-      {/* Sub-nav */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid #e2e8f0',
-                    paddingBottom: 0, alignItems: 'flex-end' }}>
-        <button onClick={() => setShowImport(false)} style={{
-          padding: '8px 16px', borderRadius: '6px 6px 0 0', border: 'none',
-          cursor: 'pointer', fontWeight: !showImport ? 700 : 400,
-          background: !showImport ? '#1e293b' : 'transparent',
-          color: !showImport ? '#fff' : '#64748b',
-          borderBottom: !showImport ? '2px solid #1e293b' : '2px solid transparent',
-          marginBottom: -2,
-        }}>Analisi</button>
-        {isAdmin && (
-          <button onClick={() => setShowImport(true)} style={{
-            padding: '8px 16px', borderRadius: '6px 6px 0 0', border: 'none',
-            cursor: 'pointer', fontWeight: showImport ? 700 : 400,
-            background: showImport ? '#1e293b' : 'transparent',
-            color: showImport ? '#fff' : '#64748b',
-            borderBottom: showImport ? '2px solid #1e293b' : '2px solid transparent',
-            marginBottom: -2,
-          }}>Import</button>
-        )}
-      </div>
+      <Tabs size="sm" tabs={sottoTab} value={showImport ? 'import' : 'analisi'} onChange={id => setShowImport(id === 'import')} />
 
       {showImport ? (
         <SubtabImport hotels={hotels} isAdmin={isAdmin} />
       ) : (
         <>
           {/* Barra controlli */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center',
-                        marginBottom: 16, flexWrap: 'wrap' }}>
-            {/* Bottoni hotel */}
-            <div style={{ display: 'flex', gap: 6 }}>
-              {HOTEL_BUTTONS.map(h => (
-                <button key={h.code} onClick={() => cambiaHotel(h.code)}
-                        style={btnHotel(hotelSel === h.code)}>
-                  {h.label}
-                </button>
-              ))}
-            </div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+            <SegmentedControl value={hotelSel} onChange={cambiaHotel} options={opzioniHotel} />
+            {sep}
 
-            {/* Divisore */}
-            <div style={{ width: 1, height: 28, background: '#e2e8f0' }} />
-
-            {/* Navigazione mese/anno */}
-            <button style={arrowBtn} onClick={navIndietro}>◀</button>
-
-            <select value={mese} onChange={e => setMese(+e.target.value)} style={selStyle}>
+            {/* Navigazione mese/anno (con eventuale range) */}
+            <Button variant="secondary" size="sm" onClick={navIndietro} aria-label="Indietro di un mese">◀</Button>
+            <Select value={mese} onChange={e => setMese(+e.target.value)} aria-label="Mese">
               {MESI.slice(1).map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
-            </select>
-
+            </Select>
             {rangeMode && (
               <>
-                <span style={{ color: '#94a3b8', fontSize: 13 }}>—</span>
-                <select value={meseFineEff} onChange={e => setMeseFine(+e.target.value)} style={selStyle}>
+                <span style={{ color: colors.textSubtle }}>—</span>
+                <Select value={meseFineEff} onChange={e => setMeseFine(+e.target.value)} aria-label="Mese fine">
                   {MESI.slice(1).map((m, i) => (
                     <option key={i+1} value={i+1} disabled={i+1 < mese}>{m}</option>
                   ))}
-                </select>
+                </Select>
               </>
             )}
+            <Input type="number" value={anno} onChange={e => setAnno(+e.target.value)}
+                   min={2024} max={2030} style={{ width: 80, textAlign: 'center' }} aria-label="Anno" />
+            <Button variant="secondary" size="sm" onClick={navAvanti} aria-label="Avanti di un mese">▶</Button>
+            {sep}
 
-            <input type="number" value={anno} onChange={e => setAnno(+e.target.value)}
-                   min={2024} max={2030}
-                   style={{ ...selStyle, width: 78, textAlign: 'center' }} />
+            <Checkbox checked={rangeMode} onChange={toggleRange} label="Range" />
+            <SegmentedControl value={vistaDettaglio} onChange={setVistaDettaglio}
+              options={[{ value: true, label: 'Dettaglio' }, { value: false, label: 'Macrocategorie' }]} />
+            {!isGruppo && <Checkbox checked={mostraDelta} onChange={setMostraDelta} label="Δ Revenue" />}
 
-            <button style={arrowBtn} onClick={navAvanti}>▶</button>
-
-            {/* Divisore */}
-            <div style={{ width: 1, height: 28, background: '#e2e8f0' }} />
-
-            {/* Toggle opzioni */}
-            <label style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={rangeMode} onChange={e => toggleRange(e.target.checked)} />
-              Range
-            </label>
-            <label style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={vistaDettaglio} onChange={e => setVistaDettaglio(e.target.checked)} />
-              Dettaglio
-            </label>
-            {!isGruppo && (
-              <label style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}>
-                <input type="checkbox" checked={mostraDelta} onChange={e => setMostraDelta(e.target.checked)} />
-                Δ Revenue
-              </label>
-            )}
-
-            <button onClick={async () => {
-              try {
-                const params = { hotel_code: hotelSel, anno, mese, vista_dettaglio: vistaDettaglio }
-                if (rangeMode && meseFineEff !== mese) params.mese_fine = meseFineEff
-                const res = await api.get('/analisi-ricavi/export', { params, responseType: 'blob' })
-                const url = URL.createObjectURL(res.data)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `analisi_ricavi_${hotelSel}_${anno}_${String(mese).padStart(2, '0')}.xlsx`
-                a.click()
-                URL.revokeObjectURL(url)
-              } catch (e) {
-                alert(mostraErrore(e, 'Errore export'))
-              }
-            }} style={{
-              marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '5px 14px', borderRadius: 6, background: '#16a34a', color: '#fff',
-              fontWeight: 600, fontSize: '0.82rem', border: 'none', cursor: 'pointer',
-            }}>
-              ⬇ Esporta Excel
-            </button>
+            <Button variant="secondary" size="sm" onClick={esportaExcel} style={{ marginLeft: 'auto' }}>⬇ Esporta Excel</Button>
           </div>
 
           {/* Contenuto */}
@@ -934,14 +770,14 @@ export default function TabAnalisiRicavi({ hotels, isAdmin }) {
           ) : (
             <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 320 }}>
-                <h4 style={{ marginTop: 0 }}>Trattamenti — {hotelSel}</h4>
+                <SectionTitle as="h3">Trattamenti — {hotelSel}</SectionTitle>
                 <TabellaTrattamenti
                   hotelCode={hotelSel} anno={anno} mese={mese} meseFine={meseFineEff}
                   isAdmin={isAdmin} mostraDelta={mostraDelta} vistaDettaglio={vistaDettaglio}
                 />
               </div>
               <div style={{ flex: 1, minWidth: 280 }}>
-                <h4 style={{ marginTop: 0 }}>Reparti — {hotelSel}</h4>
+                <SectionTitle as="h3">Reparti — {hotelSel}</SectionTitle>
                 <TabellaReparti
                   hotelCode={hotelSel} anno={anno} mese={mese} meseFine={meseFineEff}
                   isAdmin={isAdmin} mostraDelta={mostraDelta}
@@ -954,19 +790,3 @@ export default function TabAnalisiRicavi({ hotels, isAdmin }) {
     </div>
   )
 }
-
-// ── Stili ─────────────────────────────────────────────────────────────────────
-const thS = { padding: '8px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12 }
-const tdS = { padding: '7px 12px', borderBottom: '1px solid #f1f5f9' }
-const selStyle = { padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1',
-                   fontSize: 14, background: '#fff' }
-const btnPrimary = { padding: '8px 20px', background: '#1e293b', color: '#fff',
-                     border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600,
-                     fontSize: 14, width: '100%' }
-const btnDanger = { padding: '2px 8px', background: 'transparent', color: '#ef4444',
-                    border: '1px solid #fecaca', borderRadius: 4, cursor: 'pointer',
-                    fontSize: 13 }
-const btnWarning = { padding: '6px 14px', background: '#f59e0b', color: '#fff',
-                     border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }
-const btnSecondary = { padding: '6px 14px', background: '#e2e8f0', color: '#374151',
-                       border: 'none', borderRadius: 6, cursor: 'pointer' }

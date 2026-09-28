@@ -6,17 +6,18 @@ import {
 import api from '../api/client'
 import { ExportMenu } from '../components/ExportMenu'
 import { formatEuro, mostraErrore } from '../utils/format'
-import { STRUTTURE_HOTEL, STRUTTURE_MANUALI, NOMI, NOME_CAT, thSt, tdSt, inpSt } from '../utils/corrispettiviHelpers'
+import { STRUTTURE_HOTEL, STRUTTURE_MANUALI, NOMI, NOME_CAT } from '../utils/corrispettiviHelpers'
+import {
+  Badge, Button, Card, Dot, Field, Loading, Messaggio, SegmentedControl, SezioneApribile, Select,
+  StatoVuoto, Table, Td, Th, Checkbox, useAvvisi,
+} from '../components/ui'
+import { colors, COLORI_STRUTTURA, coloreSerie } from '../styles/tokens.js'
 
 const CATEGORIE_INCASSO = ['Contante', 'Bonifico', 'Assegno', 'Pagamento elettronico']
 
-const COLORI_STRUTTURA = {
-  DPH: '#1e3a5f', CLB: '#0ea5e9', INT: '#6366f1',
-  MMS: '#f59e0b', BON: '#10b981',
-}
-const COL_HOTEL_TOT  = '#94a3b8'
-const COL_RIST_TOT   = '#fbbf24'
-const COL_GEN_TOT    = '#334155'
+// Serie "Hotel vs Ristoranti" del grafico
+const COL_HOTEL_TOT = coloreSerie(0)
+const COL_RIST_TOT  = coloreSerie(2)
 
 // Raggruppamento per struttura FISICA (dove operano le attività, non le singole partite/casse):
 // Maremosso opera fisicamente per Du Parc, Buona Onda per International — vedi anche il
@@ -29,6 +30,19 @@ const GRUPPI_FISICI = [
 
 const annoCorrente = new Date().getFullYear()
 const meseCorrente = new Date().getMonth() + 1
+
+// Intestazione di colonna per una struttura: pallino col colore ufficiale + codice
+const ThStruttura = ({ sc }) => (
+  <Th num><Dot colore={COLORI_STRUTTURA[sc] || colors.textSubtle} /> <span style={{ marginLeft: 3 }}>{sc}</span></Th>
+)
+
+// Cella "Mese" con evidenza del mese in corso
+const TdMese = ({ m, corrente }) => (
+  <Td style={{ fontWeight: corrente ? 700 : 400, color: corrente ? colors.infoText : undefined }}>
+    {m.nome_mese}
+    {corrente && <Badge tono="info" style={{ marginLeft: 6 }}>in corso</Badge>}
+  </Td>
+)
 
 export default function TabFatturati({ lordo }) {
   const [anno, setAnno] = useState(annoCorrente)
@@ -44,6 +58,7 @@ export default function TabFatturati({ lordo }) {
   const [raggruppaPer, setRaggruppaPer] = useState('struttura')
   const [apriTs, setApriTs] = useState(false)
   const [apriControllo, setApriControllo] = useState(false)
+  const avvisi = useAvvisi()
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -65,8 +80,8 @@ export default function TabFatturati({ lordo }) {
 
   useEffect(() => { carica() }, [carica])
 
-  if (loading) return <p style={{ color: '#94a3b8', padding: '2rem 0' }}>Caricamento…</p>
-  if (errore)  return <p style={{ color: '#ef4444' }}>{errore}</p>
+  if (loading) return <Loading />
+  if (errore)  return <Messaggio tipo="err">{errore}</Messaggio>
   if (!dati)   return null
 
   const strutture = dati.strutture || []
@@ -75,7 +90,7 @@ export default function TabFatturati({ lordo }) {
   const strutHotel = strutture.filter(s => STRUTTURE_HOTEL.includes(s))
   const strutRist  = strutture.filter(s => STRUTTURE_MANUALI.includes(s))
 
-  const fmtV = (v) => (v && v !== 0) ? formatEuro(v) : <span style={{ color: '#cbd5e1' }}>—</span>
+  const fmtV = (v) => (v && v !== 0) ? formatEuro(v) : <span style={{ color: colors.borderStrong }}>—</span>
 
   // Toggle cella drill-down
   const toggleDrill = (sc, mese) => {
@@ -123,447 +138,287 @@ export default function TabFatturati({ lordo }) {
     ? datiGraficoFisico
     : mesi.map(m => ({ nome: m.nome_mese.slice(0, 3), Hotel: m.totale_hotel || 0, Ristoranti: m.totale_ristoranti || 0 }))
 
-  const stileColonnaTot = {
-    background: '#f1f5f9', fontWeight: 600,
+  const esportaExcel = async () => {
+    try {
+      const res = await api.get('/corrispettivi/export/fatturati', {
+        params: { anno, lordo },
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `corrispettivi_fatturati_${anno}.xlsx`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      avvisi.errore(mostraErrore(e, 'Errore export'))
+    }
   }
+
+  const isCorrente = (m) => anno === annoCorrente && m.mese === meseCorrente
+  // Cella cliccabile per il dettaglio per categoria
+  const tdDrill = (s, mese, contenuto) => {
+    const attivo = drillDown?.sc === s && drillDown?.mese === mese
+    return (
+      <Td key={s} num onClick={() => toggleDrill(s, mese)} title="Clicca per il dettaglio per categoria"
+        style={{ cursor: 'pointer', ...(attivo ? { background: colors.infoBg, boxShadow: `inset 0 -2px 0 ${colors.info}` } : null) }}>
+        {contenuto}
+      </Td>
+    )
+  }
+  const tsTotaleAnno = strutture.reduce((acc, s) => acc + (totAnno.per_struttura?.[s]?.tassa_soggiorno || 0), 0)
 
   return (
     <div>
       {/* Selettore anno */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <label style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>Anno:</label>
-          <select value={anno} onChange={e => setAnno(Number(e.target.value))}
-            style={{ ...inpSt, padding: '5px 10px' }}>
-            {[2024, 2025, 2026, 2027].map(a => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+        <Field label="Anno">
+          <Select value={anno} onChange={e => setAnno(Number(e.target.value))}>
+            {[2024, 2025, 2026, 2027].map(a => <option key={a} value={a}>{a}</option>)}
+          </Select>
+        </Field>
         {mesi.length > 0 && (
           <>
-            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+            <span className="ui-text-muted" style={{ alignSelf: 'center' }}>
               {mesi.length} {mesi.length === 1 ? 'mese' : 'mesi'} con dati
             </span>
-            <button onClick={async () => {
-              try {
-                const res = await api.get('/corrispettivi/export/fatturati', {
-                  params: { anno, lordo },
-                  responseType: 'blob',
-                })
-                const url = URL.createObjectURL(res.data)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `corrispettivi_fatturati_${anno}.xlsx`
-                a.click()
-                URL.revokeObjectURL(url)
-              } catch (e) {
-                alert(mostraErrore(e, 'Errore export'))
-              }
-            }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 14px', borderRadius: 6, background: '#16a34a', color: '#fff', fontWeight: 600, fontSize: '0.82rem', border: 'none', cursor: 'pointer' }}>
-              ⬇ Esporta Excel
-            </button>
+            <Button variant="secondary" size="sm" onClick={esportaExcel} style={{ alignSelf: 'center' }}>⬇ Esporta Excel</Button>
           </>
         )}
       </div>
 
       {mesi.length === 0 ? (
-        <p style={{ color: '#94a3b8', fontStyle: 'italic' }}>Nessun dato per l'anno {anno}.</p>
+        <StatoVuoto>Nessun dato per l'anno {anno}.</StatoVuoto>
       ) : (
         <>
           {/* ── Tabella principale ─────────────────────────────────────────── */}
-          <h3 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: '#1e293b', fontWeight: 700, letterSpacing: '0.02em' }}>
-            Totale Corrispettivi
-          </h3>
-          <div style={{ overflowX: 'auto', marginBottom: '2rem' }}>
-            <table style={{ minWidth: 700 }}>
-              <thead>
-                <tr>
-                  <th style={{ ...thSt, textAlign: 'left', minWidth: 90 }}>Mese</th>
-                  {strutHotel.map(s => (
-                    <th key={s} style={{ ...thSt, color: '#fff', background: COLORI_STRUTTURA[s] }}>{s}</th>
-                  ))}
-                  {strutHotel.length > 0 && (
-                    <th style={{ ...thSt, background: '#475569', color: '#fff' }}>Tot. Hotel</th>
-                  )}
-                  {strutRist.map(s => (
-                    <th key={s} style={{ ...thSt, color: '#fff', background: COLORI_STRUTTURA[s] }}>{s}</th>
-                  ))}
-                  {strutRist.length > 0 && (
-                    <th style={{ ...thSt, background: '#78350f', color: '#fff' }}>Tot. Rist.</th>
-                  )}
-                  <th style={{ ...thSt, background: '#1e293b', color: '#fff' }}>TOTALE</th>
+          <h3 className="ui-section-title">Totale Corrispettivi</h3>
+          <Table compact minWidth={700} style={{ marginBottom: 24 }}>
+            <thead>
+              <tr>
+                <Th style={{ minWidth: 100 }}>Mese</Th>
+                {strutHotel.map(s => <ThStruttura key={s} sc={s} />)}
+                {strutHotel.length > 0 && <Th num tot>Tot. Hotel</Th>}
+                {strutRist.map(s => <ThStruttura key={s} sc={s} />)}
+                {strutRist.length > 0 && <Th num tot>Tot. Rist.</Th>}
+                <Th num tot>TOTALE</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {mesi.map(m => (
+                <tr key={m.mese} className={isCorrente(m) ? 'ui-riga-evidenza' : undefined}>
+                  <TdMese m={m} corrente={isCorrente(m)} />
+                  {strutHotel.map(s => tdDrill(s, m.mese, fmtV(m.per_struttura?.[s]?.totale)))}
+                  {strutHotel.length > 0 && <Td num tot>{fmtV(m.totale_hotel)}</Td>}
+                  {strutRist.map(s => tdDrill(s, m.mese, fmtV(m.per_struttura?.[s]?.totale)))}
+                  {strutRist.length > 0 && <Td num tot>{fmtV(m.totale_ristoranti)}</Td>}
+                  <Td num tot style={{ fontWeight: 700 }}>{fmtV(m.totale_generale)}</Td>
                 </tr>
-              </thead>
-              <tbody>
-                {mesi.map(m => {
-                  const isMeseCorrente = anno === annoCorrente && m.mese === meseCorrente
-                  const rowBg = isMeseCorrente ? '#eff6ff' : undefined
-                  return (
-                    <tr key={m.mese} style={rowBg ? { background: rowBg } : undefined}>
-                      <td style={{ ...tdSt, textAlign: 'left', fontWeight: isMeseCorrente ? 700 : 400, background: rowBg, color: isMeseCorrente ? '#1d4ed8' : undefined }}>
-                        {m.nome_mese}
-                        {isMeseCorrente && <span style={{ marginLeft: 5, fontSize: '0.7rem', background: '#dbeafe', color: '#1d4ed8', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>▶</span>}
-                      </td>
-                      {strutHotel.map(s => {
-                        const val = m.per_struttura?.[s]?.totale
-                        const attivo = drillDown?.sc === s && drillDown?.mese === m.mese
-                        return (
-                          <td key={s} onClick={() => toggleDrill(s, m.mese)}
-                            style={{ ...tdSt, background: attivo ? '#dbeafe' : rowBg, cursor: 'pointer', borderBottom: attivo ? '2px solid #3b82f6' : undefined }}>
-                            {fmtV(val)}
-                          </td>
-                        )
-                      })}
-                      {strutHotel.length > 0 && (
-                        <td style={{ ...tdSt, ...stileColonnaTot, background: rowBg || stileColonnaTot.background }}>
-                          {fmtV(m.totale_hotel)}
-                        </td>
-                      )}
-                      {strutRist.map(s => {
-                        const val = m.per_struttura?.[s]?.totale
-                        const attivo = drillDown?.sc === s && drillDown?.mese === m.mese
-                        return (
-                          <td key={s} onClick={() => toggleDrill(s, m.mese)}
-                            style={{ ...tdSt, background: attivo ? '#fef9c3' : rowBg, cursor: 'pointer', borderBottom: attivo ? '2px solid #eab308' : undefined }}>
-                            {fmtV(val)}
-                          </td>
-                        )
-                      })}
-                      {strutRist.length > 0 && (
-                        <td style={{ ...tdSt, ...stileColonnaTot, background: rowBg || stileColonnaTot.background }}>
-                          {fmtV(m.totale_ristoranti)}
-                        </td>
-                      )}
-                      <td style={{ ...tdSt, fontWeight: 700, background: rowBg || '#f8fafc' }}>
-                        {fmtV(m.totale_generale)}
-                      </td>
-                    </tr>
-                  )
-                })}
+              ))}
 
-                {/* Riga TOTALE ANNO */}
-                <tr className="riga-totale">
-                  <td style={{ ...tdSt, textAlign: 'left', background: '#1e3a5f', color: '#fff', fontWeight: 700 }}>TOTALE ANNO</td>
-                  {strutHotel.map(s => {
-                    const attivo = drillDown?.sc === s && drillDown?.mese === 'totale'
-                    return (
-                      <td key={s} onClick={() => toggleDrill(s, 'totale')}
-                        style={{ background: attivo ? '#1d4ed8' : '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        {formatEuro(totAnno.per_struttura?.[s]?.totale || 0)}
-                      </td>
-                    )
-                  })}
-                  {strutHotel.length > 0 && (
-                    <td style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 700, textAlign: 'right' }}>
-                      {formatEuro(totAnno.totale_hotel || 0)}
-                    </td>
-                  )}
-                  {strutRist.map(s => {
-                    const attivo = drillDown?.sc === s && drillDown?.mese === 'totale'
-                    return (
-                      <td key={s} onClick={() => toggleDrill(s, 'totale')}
-                        style={{ background: attivo ? '#1d4ed8' : '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        {formatEuro(totAnno.per_struttura?.[s]?.totale || 0)}
-                      </td>
-                    )
-                  })}
-                  {strutRist.length > 0 && (
-                    <td style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 700, textAlign: 'right' }}>
-                      {formatEuro(totAnno.totale_ristoranti || 0)}
-                    </td>
-                  )}
-                  <td style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'right' }}>
-                    {formatEuro(totAnno.totale_generale || 0)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+              {/* Riga TOTALE ANNO */}
+              <tr className="ui-riga-totale">
+                <Td>TOTALE ANNO</Td>
+                {strutHotel.map(s => (
+                  <Td key={s} num onClick={() => toggleDrill(s, 'totale')} style={{ cursor: 'pointer', textDecoration: drillDown?.sc === s && drillDown?.mese === 'totale' ? 'underline' : undefined }}>
+                    {formatEuro(totAnno.per_struttura?.[s]?.totale || 0)}
+                  </Td>
+                ))}
+                {strutHotel.length > 0 && <Td num tot>{formatEuro(totAnno.totale_hotel || 0)}</Td>}
+                {strutRist.map(s => (
+                  <Td key={s} num onClick={() => toggleDrill(s, 'totale')} style={{ cursor: 'pointer', textDecoration: drillDown?.sc === s && drillDown?.mese === 'totale' ? 'underline' : undefined }}>
+                    {formatEuro(totAnno.per_struttura?.[s]?.totale || 0)}
+                  </Td>
+                ))}
+                {strutRist.length > 0 && <Td num tot>{formatEuro(totAnno.totale_ristoranti || 0)}</Td>}
+                <Td num tot style={{ fontWeight: 800 }}>{formatEuro(totAnno.totale_generale || 0)}</Td>
+              </tr>
+            </tbody>
+          </Table>
 
           {/* ── Drill-down categorie ───────────────────────────────────────── */}
           {drillDown && drillDati && (
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1.5rem', maxWidth: 480 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#1e293b' }}>
-                  <span style={{ color: COLORI_STRUTTURA[drillDown.sc] || '#1e3a5f', fontWeight: 700 }}>{drillDown.sc}</span>
-                  {' — '}
-                  {drillDown.mese === 'totale' ? 'Totale Anno' : (mesi.find(m => m.mese === drillDown.mese)?.nome_mese || '')}
-                </h4>
-                <button onClick={() => setDrillDown(null)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', padding: '0 4px' }}>✕</button>
-              </div>
-              <table style={{ width: '100%' }}>
+            <Card style={{ marginBottom: 24, maxWidth: 480 }}
+              title={<span>
+                <span style={{ color: COLORI_STRUTTURA[drillDown.sc] || colors.primary }}>{drillDown.sc}</span>
+                {' — '}
+                {drillDown.mese === 'totale' ? 'Totale Anno' : (mesi.find(m => m.mese === drillDown.mese)?.nome_mese || '')}
+              </span>}
+              actions={<Button variant="ghost" size="sm" onClick={() => setDrillDown(null)} aria-label="Chiudi">✕</Button>}
+            >
+              <Table compact>
                 <tbody>
                   {['arrangiamenti', 'penali', 'shop', 'altro'].map(cat => {
                     const v = drillDati[cat] || 0
                     if (v === 0) return null
                     return (
                       <tr key={cat}>
-                        <td style={{ ...tdSt, textAlign: 'left', color: '#475569' }}>{NOME_CAT[cat]}</td>
-                        <td style={{ ...tdSt, fontWeight: 600 }}>{formatEuro(v)}</td>
+                        <Td style={{ color: colors.textSecond }}>{NOME_CAT[cat]}</Td>
+                        <Td num style={{ fontWeight: 600 }}>{formatEuro(v)}</Td>
                       </tr>
                     )
                   })}
-                  <tr style={{ borderTop: '2px solid #e2e8f0' }}>
-                    <td style={{ ...tdSt, textAlign: 'left', fontWeight: 700 }}>Totale ricavi</td>
-                    <td style={{ ...tdSt, fontWeight: 700 }}>{formatEuro(drillDati.totale || 0)}</td>
+                  <tr className="ui-riga-sezione">
+                    <Td>Totale ricavi</Td>
+                    <Td num>{formatEuro(drillDati.totale || 0)}</Td>
                   </tr>
                   {(drillDati.tassa_soggiorno || 0) > 0 && (
                     <tr>
-                      <td style={{ ...tdSt, textAlign: 'left', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>
-                        Tassa soggiorno (transito, esclusa dal totale)
-                      </td>
-                      <td style={{ ...tdSt, color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>
-                        {formatEuro(drillDati.tassa_soggiorno)}
-                      </td>
+                      <Td muted style={{ fontStyle: 'italic', fontSize: 'var(--fs-xs)' }}>Tassa soggiorno (transito, esclusa dal totale)</Td>
+                      <Td num muted style={{ fontStyle: 'italic', fontSize: 'var(--fs-xs)' }}>{formatEuro(drillDati.tassa_soggiorno)}</Td>
                     </tr>
                   )}
                 </tbody>
-              </table>
-            </div>
+              </Table>
+            </Card>
           )}
 
           {/* ── Tabella Tassa di Soggiorno ─────────────────────────────────── */}
           {strutHotel.length > 0 && (
             <>
-              <h3 onClick={() => setApriTs(v => !v)}
-                style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: '#1e293b', fontWeight: 700, letterSpacing: '0.02em', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>{apriTs ? '▾' : '▸'}</span>
-                Totale Tassa di Soggiorno
-                <span style={{ marginLeft: 4, fontSize: '0.75rem', color: '#94a3b8', fontWeight: 400, fontStyle: 'italic' }}>
-                  (transito Comune — esclusa dal corrispettivo)
-                </span>
-              </h3>
-              {apriTs && (
-                <div style={{ overflowX: 'auto', marginBottom: '1.5rem' }}>
-                  <table style={{ minWidth: 500 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ ...thSt, textAlign: 'left', minWidth: 90 }}>Mese</th>
-                        {strutHotel.map(s => (
-                          <th key={s} style={{ ...thSt, color: '#fff', background: COLORI_STRUTTURA[s] }}>{s}</th>
-                        ))}
-                        <th style={{ ...thSt, background: '#475569', color: '#fff' }}>Tot. Hotel</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mesi.map(m => {
-                        const isMeseCorrente = anno === annoCorrente && m.mese === meseCorrente
-                        const rowBg = isMeseCorrente ? '#eff6ff' : undefined
-                        const totTs = strutHotel.reduce((acc, s) => acc + (m.per_struttura?.[s]?.tassa_soggiorno || 0), 0)
-                        return (
-                          <tr key={m.mese} style={rowBg ? { background: rowBg } : undefined}>
-                            <td style={{ ...tdSt, textAlign: 'left', fontWeight: isMeseCorrente ? 700 : 400, background: rowBg, color: isMeseCorrente ? '#1d4ed8' : undefined }}>
-                              {m.nome_mese}
-                              {isMeseCorrente && <span style={{ marginLeft: 5, fontSize: '0.7rem', background: '#dbeafe', color: '#1d4ed8', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>▶</span>}
-                            </td>
-                            {strutHotel.map(s => (
-                              <td key={s} style={{ ...tdSt, background: rowBg }}>
-                                {fmtV(m.per_struttura?.[s]?.tassa_soggiorno)}
-                              </td>
-                            ))}
-                            <td style={{ ...tdSt, ...stileColonnaTot, background: rowBg || stileColonnaTot.background }}>
-                              {fmtV(totTs)}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                      <tr className="riga-totale">
-                        <td style={{ ...tdSt, textAlign: 'left', background: '#1e3a5f', color: '#fff', fontWeight: 700 }}>TOTALE ANNO</td>
-                        {strutHotel.map(s => (
-                          <td key={s} style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 700, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            {formatEuro(totAnno.per_struttura?.[s]?.tassa_soggiorno || 0)}
-                          </td>
-                        ))}
-                        <td style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'right' }}>
-                          {formatEuro(strutHotel.reduce((acc, s) => acc + (totAnno.per_struttura?.[s]?.tassa_soggiorno || 0), 0))}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <SezioneApribile titolo="Totale Tassa di Soggiorno" nota="(transito Comune — esclusa dal corrispettivo)"
+                aperta={apriTs} onToggle={() => setApriTs(v => !v)}>
+                <Table compact minWidth={500}>
+                  <thead>
+                    <tr>
+                      <Th style={{ minWidth: 100 }}>Mese</Th>
+                      {strutHotel.map(s => <ThStruttura key={s} sc={s} />)}
+                      <Th num tot>Tot. Hotel</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mesi.map(m => {
+                      const totTs = strutHotel.reduce((acc, s) => acc + (m.per_struttura?.[s]?.tassa_soggiorno || 0), 0)
+                      return (
+                        <tr key={m.mese} className={isCorrente(m) ? 'ui-riga-evidenza' : undefined}>
+                          <TdMese m={m} corrente={isCorrente(m)} />
+                          {strutHotel.map(s => <Td key={s} num>{fmtV(m.per_struttura?.[s]?.tassa_soggiorno)}</Td>)}
+                          <Td num tot>{fmtV(totTs)}</Td>
+                        </tr>
+                      )
+                    })}
+                    <tr className="ui-riga-totale">
+                      <Td>TOTALE ANNO</Td>
+                      {strutHotel.map(s => <Td key={s} num>{formatEuro(totAnno.per_struttura?.[s]?.tassa_soggiorno || 0)}</Td>)}
+                      <Td num tot style={{ fontWeight: 800 }}>
+                        {formatEuro(strutHotel.reduce((acc, s) => acc + (totAnno.per_struttura?.[s]?.tassa_soggiorno || 0), 0))}
+                      </Td>
+                    </tr>
+                  </tbody>
+                </Table>
+              </SezioneApribile>
 
               {/* ── Riepilogo di controllo ──────────────────────────────────────── */}
-              <h3 onClick={() => setApriControllo(v => !v)}
-                style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: '#1e293b', fontWeight: 700, letterSpacing: '0.02em', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>{apriControllo ? '▾' : '▸'}</span>
-                Riepilogo di controllo
-                <span style={{ marginLeft: 4, fontSize: '0.75rem', color: '#94a3b8', fontWeight: 400, fontStyle: 'italic' }}>
-                  (il Totale Lordo deve coincidere con i corrispettivi giornalieri)
-                </span>
-              </h3>
-              {apriControllo && (
-                <div style={{ overflowX: 'auto', marginBottom: '2rem' }}>
-                  <table style={{ minWidth: 420 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ ...thSt, textAlign: 'left', minWidth: 90 }}>Mese</th>
-                        <th style={{ ...thSt, background: '#334155', color: '#fff' }}>Corrispettivo</th>
-                        <th style={{ ...thSt, background: '#0f766e', color: '#fff' }}>+ Tassa Soggiorno</th>
-                        <th style={{ ...thSt, background: '#1e3a5f', color: '#fff' }}>= Totale Lordo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mesi.map(m => {
-                        const isMeseCorrente = anno === annoCorrente && m.mese === meseCorrente
-                        const rowBg = isMeseCorrente ? '#eff6ff' : undefined
-                        const tsGenerale = strutture.reduce((acc, s) => acc + (m.per_struttura?.[s]?.tassa_soggiorno || 0), 0)
-                        const totLordo = (m.totale_generale || 0) + tsGenerale
-                        return (
-                          <tr key={m.mese} style={rowBg ? { background: rowBg } : undefined}>
-                            <td style={{ ...tdSt, textAlign: 'left', fontWeight: isMeseCorrente ? 700 : 400, background: rowBg, color: isMeseCorrente ? '#1d4ed8' : undefined }}>
-                              {m.nome_mese}
-                              {isMeseCorrente && <span style={{ marginLeft: 5, fontSize: '0.7rem', background: '#dbeafe', color: '#1d4ed8', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>▶</span>}
-                            </td>
-                            <td style={{ ...tdSt, background: rowBg }}>{formatEuro(m.totale_generale || 0)}</td>
-                            <td style={{ ...tdSt, background: rowBg, color: '#0f766e', fontWeight: 500 }}>{fmtV(tsGenerale)}</td>
-                            <td style={{ ...tdSt, background: rowBg, fontWeight: 700 }}>{formatEuro(totLordo)}</td>
-                          </tr>
-                        )
-                      })}
-                      <tr className="riga-totale">
-                        <td style={{ ...tdSt, textAlign: 'left', background: '#1e3a5f', color: '#fff', fontWeight: 700 }}>TOTALE ANNO</td>
-                        <td style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 700, textAlign: 'right' }}>
-                          {formatEuro(totAnno.totale_generale || 0)}
-                        </td>
-                        <td style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 700, textAlign: 'right' }}>
-                          {formatEuro(strutture.reduce((acc, s) => acc + (totAnno.per_struttura?.[s]?.tassa_soggiorno || 0), 0))}
-                        </td>
-                        <td style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'right' }}>
-                          {formatEuro(
-                            (totAnno.totale_generale || 0) +
-                            strutture.reduce((acc, s) => acc + (totAnno.per_struttura?.[s]?.tassa_soggiorno || 0), 0)
-                          )}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <SezioneApribile titolo="Riepilogo di controllo" nota="(il Totale Lordo deve coincidere con i corrispettivi giornalieri)"
+                aperta={apriControllo} onToggle={() => setApriControllo(v => !v)}>
+                <Table compact minWidth={420}>
+                  <thead>
+                    <tr>
+                      <Th style={{ minWidth: 100 }}>Mese</Th>
+                      <Th num>Corrispettivo</Th>
+                      <Th num>+ Tassa Soggiorno</Th>
+                      <Th num tot>= Totale Lordo</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mesi.map(m => {
+                      const tsGenerale = strutture.reduce((acc, s) => acc + (m.per_struttura?.[s]?.tassa_soggiorno || 0), 0)
+                      const totLordo = (m.totale_generale || 0) + tsGenerale
+                      return (
+                        <tr key={m.mese} className={isCorrente(m) ? 'ui-riga-evidenza' : undefined}>
+                          <TdMese m={m} corrente={isCorrente(m)} />
+                          <Td num>{formatEuro(m.totale_generale || 0)}</Td>
+                          <Td num>{fmtV(tsGenerale)}</Td>
+                          <Td num tot style={{ fontWeight: 700 }}>{formatEuro(totLordo)}</Td>
+                        </tr>
+                      )
+                    })}
+                    <tr className="ui-riga-totale">
+                      <Td>TOTALE ANNO</Td>
+                      <Td num>{formatEuro(totAnno.totale_generale || 0)}</Td>
+                      <Td num>{formatEuro(tsTotaleAnno)}</Td>
+                      <Td num tot style={{ fontWeight: 800 }}>{formatEuro((totAnno.totale_generale || 0) + tsTotaleAnno)}</Td>
+                    </tr>
+                  </tbody>
+                </Table>
+              </SezioneApribile>
             </>
           )}
 
           {/* ── Forme di pagamento (raggruppate: Contante / Bonifico / Assegno / Elettronico) ── */}
           {datiPag && datiPag.tipi?.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1.25rem', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b', fontWeight: 700 }}>
-                  Forme di pagamento {anno}
-                </h3>
-                <ExportMenu url={`/corrispettivi/export/tipo-incasso?anno=${anno}`} nome={`corrispettivi_forme_pagamento_${anno}`} />
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ minWidth: 500 }}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...thSt, textAlign: 'left', minWidth: 140 }}>Forma di pagamento</th>
-                      {datiPag.mesi.map(m => (
-                        <th key={m.mese} style={{ ...thSt }}>{m.nome_mese.slice(0, 3)}</th>
-                      ))}
-                      <th style={{ ...thSt, background: '#1e293b' }}>TOTALE</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {datiPag.tipi.map((tipo, idx) => {
-                      const isSpeciale = !CATEGORIE_INCASSO.includes(tipo)
-                      const bgBase = idx % 2 === 0 ? '#fff' : '#f8fafc'
-                      const borderTop = isSpeciale ? '1px solid #e2e8f0' : undefined
-                      return (
-                      <tr key={tipo} style={{ background: bgBase, borderTop }}>
-                        <td style={{ ...tdSt, textAlign: 'left', background: bgBase, fontWeight: isSpeciale ? 600 : 500, color: isSpeciale ? '#64748b' : '#374151', fontStyle: isSpeciale ? 'italic' : undefined }}>{tipo}</td>
+            <Card title={`Forme di pagamento ${anno}`} style={{ marginBottom: 24 }}
+              actions={<ExportMenu url={`/corrispettivi/export/tipo-incasso?anno=${anno}`} nome={`corrispettivi_forme_pagamento_${anno}`} />}>
+              <Table compact minWidth={500}>
+                <thead>
+                  <tr>
+                    <Th style={{ minWidth: 150 }}>Forma di pagamento</Th>
+                    {datiPag.mesi.map(m => <Th key={m.mese} num>{m.nome_mese.slice(0, 3)}</Th>)}
+                    <Th num tot>TOTALE</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {datiPag.tipi.map(tipo => {
+                    const isSpeciale = !CATEGORIE_INCASSO.includes(tipo)
+                    return (
+                      <tr key={tipo}>
+                        <Td style={{ fontWeight: isSpeciale ? 600 : 500, color: isSpeciale ? colors.textMuted : colors.textSecond, fontStyle: isSpeciale ? 'italic' : undefined }}>{tipo}</Td>
                         {datiPag.mesi.map(m => {
                           const v = datiPag.per_tipo[tipo]?.[String(m.mese)] || 0
-                          return (
-                            <td key={m.mese} style={{ ...tdSt, background: bgBase }}>
-                              {v ? formatEuro(v) : <span style={{ color: '#e2e8f0' }}>—</span>}
-                            </td>
-                          )
+                          return <Td key={m.mese} num>{v ? formatEuro(v) : <span style={{ color: colors.borderStrong }}>—</span>}</Td>
                         })}
-                        <td style={{ ...tdSt, fontWeight: 700, background: idx % 2 === 0 ? '#f1f5f9' : '#e8edf3' }}>
-                          {formatEuro(datiPag.totale_anno[tipo] || 0)}
-                        </td>
+                        <Td num tot style={{ fontWeight: 700 }}>{formatEuro(datiPag.totale_anno[tipo] || 0)}</Td>
                       </tr>
-                    )})}
-                    {/* Riga totale */}
-                    <tr className="riga-totale">
-                      <td style={{ ...tdSt, textAlign: 'left', background: '#1e3a5f', color: '#fff', fontWeight: 700 }}>TOTALE</td>
-                      {datiPag.mesi.map(m => (
-                        <td key={m.mese} style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 700, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          {formatEuro(datiPag.totale_mese[String(m.mese)] || 0)}
-                        </td>
-                      ))}
-                      <td style={{ background: '#1e3a5f', color: '#fff', padding: '5px 8px', fontSize: '0.8rem', fontWeight: 800, textAlign: 'right' }}>
-                        {formatEuro(Object.values(datiPag.totale_anno).reduce((a, v) => a + v, 0))}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p style={{ marginTop: '1rem', fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                    )
+                  })}
+                  <tr className="ui-riga-totale">
+                    <Td>TOTALE</Td>
+                    {datiPag.mesi.map(m => <Td key={m.mese} num>{formatEuro(datiPag.totale_mese[String(m.mese)] || 0)}</Td>)}
+                    <Td num tot style={{ fontWeight: 800 }}>{formatEuro(Object.values(datiPag.totale_anno).reduce((a, v) => a + v, 0))}</Td>
+                  </tr>
+                </tbody>
+              </Table>
+              <p className="ui-text-muted" style={{ marginTop: 12, marginBottom: 0, fontStyle: 'italic', fontSize: 'var(--fs-xs)' }}>
                 «Pagamento elettronico» raggruppa carte e app (Carta Credito, Bancomat, XPAY-Nexi,
                 Satispay). I totali includono gli incassi MMS e BON. Le righe in corsivo
                 (Non specificato, Caparra, Sospeso, MMS/BON manuale) sono informative e non
                 rientrano nelle 4 forme di pagamento.
               </p>
-            </div>
+            </Card>
           )}
 
           {/* ── Grafico ────────────────────────────────────────────────────── */}
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1.25rem', marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b', fontWeight: 700 }}>
-                Fatturato mensile {anno}
-              </h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                {vistaGrafico === 'struttura' && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.78rem', color: '#64748b', cursor: 'pointer', userSelect: 'none' }}>
-                    <input type="checkbox" checked={raggruppaPer === 'struttura'}
-                      onChange={e => setRaggruppaPer(e.target.checked ? 'struttura' : 'mese')}
-                      style={{ cursor: 'pointer' }} />
-                    Raggruppa per attività
-                  </label>
-                )}
-                <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 7, padding: '3px 4px', gap: 2 }}>
-                  {[
-                    { id: 'struttura', label: 'Per attività' },
-                    { id: 'fisica', label: 'Per struttura' },
-                    { id: 'gruppo', label: 'Hotel vs Ristoranti' },
-                  ].map(v => (
-                    <button key={v.id} onClick={() => setVistaGrafico(v.id)}
-                      style={{
-                        padding: '4px 12px', borderRadius: 5, border: 'none', cursor: 'pointer',
-                        fontSize: '0.78rem', fontWeight: vistaGrafico === v.id ? 700 : 400,
-                        background: vistaGrafico === v.id ? '#1e3a5f' : 'transparent',
-                        color: vistaGrafico === v.id ? '#fff' : '#64748b',
-                      }}>{v.label}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
+          <Card title={`Fatturato mensile ${anno}`} style={{ marginBottom: 24 }}
+            actions={<>
+              {vistaGrafico === 'struttura' && (
+                <Checkbox checked={raggruppaPer === 'struttura'} onChange={v => setRaggruppaPer(v ? 'struttura' : 'mese')} label="Raggruppa per attività" />
+              )}
+              <SegmentedControl value={vistaGrafico} onChange={setVistaGrafico} options={[
+                { value: 'struttura', label: 'Per attività' },
+                { value: 'fisica', label: 'Per struttura' },
+                { value: 'gruppo', label: 'Hotel vs Ristoranti' },
+              ]} />
+            </>}
+          >
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={datiGrafico} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.surfaceAlt} />
                 {vistaGrafico === 'struttura' && raggruppaPer === 'struttura' ? (
                   <XAxis dataKey="nome" height={42}
                     tick={(props) => {
-                      const { x, y, payload, index } = props
-                      const nMesi = mesi.length
-                      const sIdx = Math.floor(index / nMesi)
-                      const mIdx = index % nMesi
+                      const { x, y, payload } = props
                       return (
                         <g transform={`translate(${x},${y})`}>
-                          <text x={0} dy={14} textAnchor="middle" fill="#64748b" fontSize={10}>{payload.value}</text>
+                          <text x={0} dy={14} textAnchor="middle" fill={colors.textMuted} fontSize={10}>{payload.value}</text>
                         </g>
                       )
                     }}
                   />
                 ) : (
-                  <XAxis dataKey="nome" tick={{ fontSize: 11, fill: '#64748b' }} />
+                  <XAxis dataKey="nome" tick={{ fontSize: 11, fill: colors.textMuted }} />
                 )}
                 <YAxis tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
-                  tick={{ fontSize: 11, fill: '#64748b' }} />
+                  tick={{ fontSize: 11, fill: colors.textMuted }} />
                 {vistaGrafico === 'struttura' && raggruppaPer === 'struttura' ? (
                   <ReTooltip formatter={(v, _n, props) => [formatEuro(v), NOMI[props.payload?.struttura] || props.payload?.struttura]} />
                 ) : (
@@ -572,27 +427,27 @@ export default function TabFatturati({ lordo }) {
                 {vistaGrafico === 'struttura' && raggruppaPer === 'struttura' ? (
                   <Bar dataKey="valore" radius={[3, 3, 0, 0]}>
                     {datiGraficoPers.map((entry, i) => (
-                      <Cell key={i} fill={COLORI_STRUTTURA[entry.struttura] || '#94a3b8'} />
+                      <Cell key={i} fill={COLORI_STRUTTURA[entry.struttura] || colors.textSubtle} />
                     ))}
                   </Bar>
                 ) : vistaGrafico === 'struttura' ? (
                   <>
-                    <Legend wrapperStyle={{ fontSize: '0.78rem' }} />
+                    <Legend wrapperStyle={{ fontSize: 'var(--fs-sm)' }} />
                     {strutture.map(s => (
                       <Bar key={s} dataKey={s} name={NOMI[s] || s}
-                        fill={COLORI_STRUTTURA[s] || '#94a3b8'} radius={[3, 3, 0, 0]} />
+                        fill={COLORI_STRUTTURA[s] || colors.textSubtle} radius={[3, 3, 0, 0]} />
                     ))}
                   </>
                 ) : vistaGrafico === 'fisica' ? (
                   <>
-                    <Legend wrapperStyle={{ fontSize: '0.78rem' }} />
+                    <Legend wrapperStyle={{ fontSize: 'var(--fs-sm)' }} />
                     {GRUPPI_FISICI.map(g => (
                       <Bar key={g.id} dataKey={g.id} name={g.label} fill={g.colore} radius={[3, 3, 0, 0]} />
                     ))}
                   </>
                 ) : (
                   <>
-                    <Legend wrapperStyle={{ fontSize: '0.78rem' }} />
+                    <Legend wrapperStyle={{ fontSize: 'var(--fs-sm)' }} />
                     <Bar key="Hotel" dataKey="Hotel" name="Hotel" fill={COL_HOTEL_TOT} radius={[3, 3, 0, 0]} />
                     <Bar key="Ristoranti" dataKey="Ristoranti" name="Ristoranti" fill={COL_RIST_TOT} radius={[3, 3, 0, 0]} />
                   </>
@@ -600,16 +455,16 @@ export default function TabFatturati({ lordo }) {
               </BarChart>
             </ResponsiveContainer>
             {vistaGrafico === 'struttura' && raggruppaPer === 'struttura' && (
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, flexWrap: 'wrap' }}>
                 {strutture.map(s => (
-                  <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ width: 12, height: 12, borderRadius: 3, background: COLORI_STRUTTURA[s] || '#94a3b8', display: 'inline-block' }} />
-                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>{NOMI[s] || s}</span>
-                  </div>
+                  <span key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--fs-sm)', color: colors.textMuted }}>
+                    <span style={{ width: 12, height: 12, borderRadius: 3, background: COLORI_STRUTTURA[s] || colors.textSubtle, display: 'inline-block' }} />
+                    {NOMI[s] || s}
+                  </span>
                 ))}
               </div>
             )}
-          </div>
+          </Card>
         </>
       )}
     </div>

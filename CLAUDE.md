@@ -255,6 +255,9 @@ contrasto con l'app reale) è stato eliminato.
 - `Paginazione estremi` (con « »), `SegmentedControl label="…"` (etichetta davanti alla pillola),
   righe `ui-riga-annullata`/`ui-riga-modificata` (barra ambra = corretto a mano), classe
   `ui-console` per log tipo terminale (righe `riga-info`/`riga-ok`/`riga-err`).
+- `SezioneApribile` (titolo ▸/▾ che apre/chiude), `NavMese selettore` (click sull'etichetta apre il
+  selettore di mese del browser), `DropZone multiple`, `Badge colore="#…"` (colore libero da DB,
+  sfondo tenue — usato anche da `HotelTag`), riga `ui-riga-errore` (differenza da verificare).
 - **`colors.accent`** (viola `#7c3aed`): unico colore extra ammesso oltre ai colori di significato,
   **solo** per "valore manuale che sostituisce il dato automatico" (oggi: Maturato in Forecast). Catalogo visivo: Admin → Sistema → Libreria UI (`?s=ui-kit`,
   `pages/admin/AdminUiKit.jsx`) — aggiornarlo quando si aggiunge un componente.
@@ -273,12 +276,15 @@ contrasto con l'app reale) è stato eliminato.
   ✅ Forecast (v3.15.2 — tolto il viola "di marca" e l'azzurro di Cancellazioni, tenuto
   `colors.accent` per il Maturato; titolo senza emoji), ✅ Statistiche Produzione (v3.15.3 —
   filtro struttura come `SegmentedControl` "Tutte/hotel" via `OPZIONI_STRUTTURA` in
-  `produzioneHelpers.js`; tolto il titolo interno duplicato delle tab Analisi), 🟡 Corrispettivi
-  tranche A (v3.15.4: contenitore, Import, Scontrini/Fatture, Penali, Cassa, Stampante RT, Dati di
+  `produzioneHelpers.js`; tolto il titolo interno duplicato delle tab Analisi), ✅ Corrispettivi
+  (tranche A v3.15.4: contenitore, Import, Scontrini/Fatture, Penali, Cassa, Stampante RT, Dati di
   test — la pillola "Se già presente: Salta/Aggiorna" dell'Import non è più arancione, l'arancione
   resta solo per IVA; vista "Per hotel" di Scontrini/Fatture ora apre sul mese precedente come da
-  convenzione). Tranche B da fare: Corrispettivi giornalieri, Riepilogo Fatturati, Controllo RT,
-  Analisi Ricavi. Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  convenzione. Tranche B v3.15.5: Corrispettivi giornalieri, Riepilogo Fatturati, Controllo RT,
+  Analisi Ricavi — intestazioni per struttura e box "Per sede fisica" ora nei colori ufficiali degli
+  hotel invece dei vecchi DPH blu notte/CLB azzurro/INT indaco; in Analisi Ricavi il conflitto 409
+  "dati già presenti" usa `useConferma` invece di un pannello inline, e Dettaglio/Macrocategorie è
+  un `SegmentedControl` invece di una checkbox). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati

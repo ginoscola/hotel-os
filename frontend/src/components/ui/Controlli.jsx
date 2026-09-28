@@ -101,18 +101,34 @@ export function Field({ label, children, style }) {
  * Navigazione ◀ Mese Anno ▶.
  * onChange({ anno, mese }) — gestisce da sé il passaggio d'anno.
  * etichetta: testo alternativo al posto di "Mese Anno" (es. "Gen – Giugno 2026").
+ * selettore: se true, cliccando sull'etichetta si apre il selettore di mese del browser.
  */
-export function NavMese({ anno, mese, onChange, etichetta }) {
+export function NavMese({ anno, mese, onChange, etichetta, selettore = false }) {
   const sposta = (delta) => {
     let m = mese + delta, a = anno
     if (m > 12) { m = 1; a++ }
     if (m < 1) { m = 12; a-- }
     onChange({ anno: a, mese: m })
   }
+  const testo = etichetta ?? `${MESI[mese]} ${anno}`
   return (
     <div className="ui-navmese">
       <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => sposta(-1)} aria-label="Mese precedente">◀</button>
-      <span className="ui-navmese-label">{etichetta ?? `${MESI[mese]} ${anno}`}</span>
+      {selettore ? (
+        <label className="ui-navmese-label ui-navmese-scelta" title="Clicca per scegliere il mese">
+          {testo} ▾
+          <input
+            type="month"
+            value={`${anno}-${String(mese).padStart(2, '0')}`}
+            onChange={e => {
+              const [a, m] = e.target.value.split('-').map(Number)
+              if (a && m) onChange({ anno: a, mese: m })
+            }}
+          />
+        </label>
+      ) : (
+        <span className="ui-navmese-label">{testo}</span>
+      )}
       <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => sposta(1)} aria-label="Mese successivo">▶</button>
     </div>
   )
