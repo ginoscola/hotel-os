@@ -1934,6 +1934,21 @@ mostrava un falso allarme, non un problema reale di scheduling. Fix: `_launchd_a
 `_scheduler_attivo()`, controlla `systemctl is-active hotelos-backup.timer`; campo risposta rinominato
 `launchd_attivo` → `scheduler_attivo` (frontend `AdminBackup.jsx` ed entrambi i test aggiornati).
 
+⚠️ **Pannello Backup fermo su "Nessun backup" con i backup regolarmente eseguiti** (bug reale,
+28/09/2026, v3.16.1): il backup gira come utente `gino` (`hotelos-backup.service`, `User=gino`) e
+scrive in `/home/gino/hotelos-backups`, ma il backend gira come utente `hotelos` e `backup.py` usava
+`Path.home()` → `/home/hotelos/hotelos-backups`, vuota. Fix: `BACKUP_BASE` letto da
+`HOTELOS_BACKUP_DIR` in `backend/.env` (`/home/gino/hotelos-backups`; fallback `Path.home()`), e
+permesso di sola lettura per `hotelos` via ACL (`/home/gino` è 750):
+`setfacl -m u:hotelos:x /home/gino` + `setfacl -R -m u:hotelos:rX` e `setfacl -R -d -m u:hotelos:rX`
+su `/home/gino/hotelos-backups` (default ACL: vale anche per i dump creati dopo).
+**"Esegui adesso"** non lancia più lo script direttamente (girava come `hotelos`, senza chiavi SSH per
+Raspberry/GitHub e nella cartella sbagliata) ma `sudo -n /usr/bin/systemctl start --no-block
+hotelos-backup.service` — stesso servizio del notturno, quindi utente `gino`. Richiede in
+`/etc/sudoers.d/hotelos`: `hotelos ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block
+hotelos-backup.service` (senza, l'endpoint risponde 500 con messaggio esplicito). Corretto anche il ping
+al Raspberry: `-W 2` (timeout Linux) al posto di `-t 2` (flag Mac, su Linux è il TTL).
+
 ---
 
 ## Principi di progettazione

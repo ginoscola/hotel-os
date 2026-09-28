@@ -13,6 +13,7 @@ Legge solo log e directory già esistenti; nessun endpoint tocca il database.
 Lo script che genera i dati letti qui è scripts/hotelos-backup.sh.
 """
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,12 +26,33 @@ from app.auth import richiedi_admin
 router = APIRouter(prefix="/admin/backup", tags=["admin-backup"], dependencies=[Depends(richiedi_admin)])
 
 _ROOT_DIR = Path(__file__).resolve().parents[3]
-BACKUP_BASE = Path.home() / "hotelos-backups"
+ENV_FILE = _ROOT_DIR / "backend" / ".env"
+
+
+def _leggi_env(chiave: str) -> Optional[str]:
+    """Valore da variabile d'ambiente, altrimenti da backend/.env (stesso file letto da
+    _leggi_db_config e dallo script bash). None se assente."""
+    if os.environ.get(chiave):
+        return os.environ[chiave]
+    try:
+        for riga in ENV_FILE.read_text().splitlines():
+            if riga.startswith(f"{chiave}="):
+                return riga.split("=", 1)[1].strip().strip('"').strip("'") or None
+    except OSError:
+        pass
+    return None
+
+
+# ⚠️ Il backup gira come utente `gino` (hotelos-backup.service) e scrive in /home/gino/hotelos-backups,
+# mentre il backend gira come utente `hotelos`: Path.home() qui punterebbe a /home/hotelos, una
+# cartella vuota (bug reale, settembre 2026: pannello fermo su "Nessun backup" con 7 dump presenti).
+# HOTELOS_BACKUP_DIR in backend/.env indica la cartella vera; hotelos deve poterla leggere (ACL).
+BACKUP_BASE = Path(_leggi_env("HOTELOS_BACKUP_DIR") or (Path.home() / "hotelos-backups"))
 BACKUP_DB_DIR = BACKUP_BASE / "db"
 BACKUP_LOG_FILE = BACKUP_BASE / "logs" / "backup_log.jsonl"
 SCRIPT_PATH = _ROOT_DIR / "scripts" / "hotelos-backup.sh"
-ENV_FILE = _ROOT_DIR / "backend" / ".env"
 SYSTEMD_TIMER = "hotelos-backup.timer"
+SYSTEMD_SERVICE = "hotelos-backup.service"
 RASPBERRY_HOST = "192.168.100.149"
 ORARIO_BACKUP = "03:00"
 
@@ -73,7 +95,7 @@ def _scheduler_attivo() -> bool:
 def _raspberry_raggiungibile() -> bool:
     try:
         risultato = subprocess.run(
-            ["ping", "-c", "1", "-t", "2", RASPBERRY_HOST],
+            ["ping", "-c", "1", "-W", "2", RASPBERRY_HOST],  # -W = timeout su Linux (-t era il flag Mac)
             capture_output=True, timeout=5,
         )
         return risultato.returncode == 0
@@ -133,7 +155,24 @@ def lista_file() -> list:
 
 @router.post("/esegui-ora")
 def esegui_backup_ora() -> dict:
-    subprocess.Popen(["bash", str(SCRIPT_PATH)])
+    """Avvia lo stesso servizio systemd del backup notturno, così gira come utente `gino` (con le
+    sue chiavi SSH per Raspberry/GitHub e la sua cartella di backup). Lanciare lo script
+    direttamente lo farebbe girare come `hotelos`, senza chiavi e nella cartella sbagliata.
+    Richiede la regola sudoers NOPASSWD per `systemctl start --no-block hotelos-backup.service`.
+    --no-block: ritorna subito, il backup prosegue in background."""
+    try:
+        risultato = subprocess.run(
+            ["sudo", "-n", "/usr/bin/systemctl", "start", "--no-block", SYSTEMD_SERVICE],
+            capture_output=True, text=True, timeout=10,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Impossibile avviare il backup: {e}")
+    if risultato.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail="Impossibile avviare il backup (permesso sudo mancante per il servizio "
+                   f"{SYSTEMD_SERVICE}?): {risultato.stderr.strip() or risultato.stdout.strip()}",
+        )
     return {"messaggio": "Backup avviato in background. Controlla i log tra qualche minuto."}
 
 

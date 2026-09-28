@@ -210,12 +210,21 @@ def test_ripristina_rifiuta_path_traversal(client, percorsi_temp):
 # POST /esegui-ora
 # ---------------------------------------------------------------------------
 
-def test_esegui_ora_chiama_popen_senza_bloccare(client):
-    with patch.object(backup.subprocess, "Popen") as mock_popen:
+def test_esegui_ora_avvia_servizio_systemd(client):
+    with patch.object(backup.subprocess, "run", return_value=MagicMock(returncode=0, stdout="", stderr="")) as mock_run:
         resp = client.post("/admin/backup/esegui-ora")
 
     assert resp.status_code == 200
     assert "background" in resp.json()["messaggio"].lower()
-    mock_popen.assert_called_once()
-    args, _ = mock_popen.call_args
-    assert args[0][0] == "bash"
+    mock_run.assert_called_once()
+    args, _ = mock_run.call_args
+    assert args[0] == ["sudo", "-n", "/usr/bin/systemctl", "start", "--no-block", "hotelos-backup.service"]
+
+
+def test_esegui_ora_errore_se_sudo_non_permesso(client):
+    with patch.object(backup.subprocess, "run",
+                      return_value=MagicMock(returncode=1, stdout="", stderr="sudo: a password is required")):
+        resp = client.post("/admin/backup/esegui-ora")
+
+    assert resp.status_code == 500
+    assert "sudo" in resp.json()["detail"]
