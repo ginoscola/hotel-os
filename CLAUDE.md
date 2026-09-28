@@ -328,9 +328,13 @@ contrasto con l'app reale) è stato eliminato.
   ✅ Admin tranche A (v3.15.12: sidebar — classi `ui-admin-sidebar`/`ui-admin-gruppo`/`ui-admin-voce`,
   voce attiva blu notte invece dell'azzurro —, Utenti con modali della libreria, Stagioni, Moduli (bordo
   sinistro nel colore del modulo, come in NavBar), Soglie tachimetri (riga modificata e non salvata
-  evidenziata in ambra), Revenue Import massivo e Dati di test. Tranche B: Dipendenti (CC, Colori CC,
-  Dati di test), Corrispettivi (Classificazione, Stampanti RT), Sistema (Debug, Backup). Tranche C: USALI
-  e Statistiche Produzione). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  evidenziata in ambra), Revenue Import massivo e Dati di test), ✅ Admin tranche B (v3.15.13: Centri
+  di costo — un solo titolo, prima doppio —, Colori CC con avviso "modifiche non salvate", Dati di test
+  Dipendenti, Classificazione trattamenti — **corretto un difetto**: i messaggi di esito comparivano
+  come riquadro rosso vuoto, perché `fb(testo, tipo)` passava due argomenti a `useFeedback`, che ne
+  gestiva uno solo e poi leggeva `msg.tipo`/`msg.testo` su una stringa; ora usa `useAvvisi` —, Stampanti
+  RT, Debug, Backup. Tranche C da fare: USALI e Statistiche Produzione, che usano ancora
+  `useFeedback`/`inputSm`/`btnSm`). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati

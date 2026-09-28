@@ -7,7 +7,7 @@ import AdminCruscottoSoglie from './admin/AdminCruscottoSoglie.jsx'
 import AdminUiKit from './admin/AdminUiKit.jsx'
 import api from '../api/client.js'
 import {
-  Badge, Button, Card, Field, Input, KpiTile, Loading, Messaggio, PageHeader, Select, StatoVuoto, Table, Td, Th,
+  Badge, Button, Card, Checkbox, Field, Input, KpiTile, Loading, Messaggio, PageHeader, Select, StatoVuoto, Table, Td, Th,
   useAvvisi, useConferma,
 } from '../components/ui'
 import { colors } from '../styles/tokens.js'
@@ -548,18 +548,15 @@ function RevenueDatiTest() {
 // ---------------------------------------------------------------------------
 
 function DipCentriDiCosto() {
-  return (
-    <div>
-      <h2 style={{ marginTop: 0, marginBottom: 20 }}>Centri di Costo</h2>
-      <AdminCentriDiCosto />
-    </div>
-  )
+  return <AdminCentriDiCosto />
 }
 
 // ---------------------------------------------------------------------------
 // Dipendenti — Colori CC
 // ---------------------------------------------------------------------------
 
+// Palette automatica per reparti senza colore personalizzato — DEVE restare identica a quella
+// in Dipendenti.jsx (stesso hash → stesso colore), altrimenti l'anteprima qui non corrisponde.
 const _CC_PALETTE = [
   '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4',
   '#f97316', '#84cc16', '#ec4899', '#6366f1', '#14b8a6',
@@ -579,7 +576,7 @@ function DipColoriCC() {
   const [colori, setColori] = useState(null)
   const [modificato, setModificato] = useState(false)
   const [salvando, setSalvando] = useState(false)
-  const [esito, setEsito] = useState(null)
+  const avvisi = useAvvisi()
 
   useEffect(() => {
     api.get('/cost-centers/albero').then(r => setAlbero(r.data)).catch(() => {})
@@ -600,100 +597,83 @@ function DipColoriCC() {
       background: `rgb(${bg(r)}, ${bg(g)}, ${bg(b)})`,
       border: `1px solid rgba(${r}, ${g}, ${b}, 0.38)`,
       color: `rgb(${dark(r)}, ${dark(g)}, ${dark(b)})`,
-      padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+      padding: '1px 7px', borderRadius: 4, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
     }
   }
 
   async function salva() {
-    setSalvando(true); setEsito(null)
+    setSalvando(true)
     try {
       await api.put('/config/cc-colori/mappa', colori)
       setModificato(false)
-      setEsito({ ok: true, msg: 'Colori salvati correttamente.' })
+      avvisi.successo('Colori salvati correttamente.')
     } catch (e) {
-      setEsito({ ok: false, msg: mostraErrore(e, 'Errore nel salvataggio.') })
+      avvisi.errore(mostraErrore(e, 'Errore nel salvataggio.'))
     } finally { setSalvando(false) }
   }
 
-  if (colori === null) return <p style={{ color: '#9ca3af' }}>Caricamento…</p>
+  if (colori === null) return <Loading />
 
   const nomiDB = [...new Set(
-    albero.flatMap(s => (s.categorie || []).flatMap(cat => (cat.reparti || []).map(r => (r.name || '').toLowerCase().trim()))).filter(Boolean)
+    albero.flatMap(st => (st.categorie || []).flatMap(cat => (cat.reparti || []).map(r => (r.name || '').toLowerCase().trim()))).filter(Boolean)
   )].sort()
   const nomiExtra = Object.keys(colori).filter(k => !nomiDB.includes(k)).sort()
   const tuttiNomi = [...nomiDB, ...nomiExtra]
+  const imposta = (nome, valore) => { setColori(p => ({ ...p, [nome]: valore })); setModificato(true) }
 
   return (
     <div>
-      <h2 style={{ marginTop: 0, marginBottom: 8 }}>Colori Centri di Costo</h2>
-      <p style={{ color: '#64748b', fontSize: 13, marginBottom: 4 }}>
+      <PageHeader title="Colori centri di costo">
+        <Button onClick={salva} disabled={!modificato || salvando}>{salvando ? 'Salvataggio…' : '💾 Salva colori'}</Button>
+      </PageHeader>
+      <p className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: -8 }}>
         Scegli il colore base di ogni tipo di reparto. Le strutture usano varianti graduate automaticamente.
-      </p>
-      <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 16 }}>
         I reparti senza colore personalizzato (<em>auto</em>) usano un colore generato automaticamente.
       </p>
+      {modificato && <Messaggio tipo="warn">Ci sono modifiche non salvate.</Messaggio>}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+      <Table compact>
         <thead>
-          <tr style={{ background: '#2d6a9f' }}>
-            {['Reparto', 'Colore base', 'Hex', 'Anteprima strutture →', ''].map(h => (
-              <th key={h} style={{ padding: '10px 12px', color: '#fff', fontWeight: 700, textAlign: 'left', fontSize: 12 }}>{h}</th>
-            ))}
-          </tr>
+          <tr><Th>Reparto</Th><Th center>Colore base</Th><Th>Hex</Th><Th>Anteprima strutture →</Th><Th /></tr>
         </thead>
         <tbody>
-          {tuttiNomi.map((nome, idx) => {
+          {tuttiNomi.map(nome => {
             const hex = hexPerNome(nome)
             const isCustom = Object.prototype.hasOwnProperty.call(colori, nome) && /^#[0-9a-fA-F]{6}$/i.test(colori[nome])
             return (
-              <tr key={nome} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                <td style={{ padding: '9px 12px', fontWeight: 600, fontSize: 13, minWidth: 110 }}>
+              <tr key={nome}>
+                <Td style={{ fontWeight: 600, minWidth: 110 }}>
                   {nome}
-                  {!isCustom && <span style={{ marginLeft: 6, fontSize: 10, color: '#94a3b8', background: '#f1f5f9', borderRadius: 4, padding: '1px 4px' }}>auto</span>}
-                </td>
-                <td style={{ padding: '9px 12px', textAlign: 'center', width: 56 }}>
-                  <input type="color" value={hex}
-                    onChange={e => { setColori(p => ({ ...p, [nome]: e.target.value })); setModificato(true); setEsito(null) }}
+                  {!isCustom && <Badge style={{ marginLeft: 6 }}>auto</Badge>}
+                </Td>
+                <Td center style={{ width: 60 }}>
+                  <input type="color" value={hex} onChange={e => imposta(nome, e.target.value)} aria-label={`Colore ${nome}`}
                     style={{ width: 36, height: 28, border: 'none', borderRadius: 4, cursor: 'pointer', padding: 2, background: 'none' }} />
-                </td>
-                <td style={{ padding: '9px 12px', width: 90 }}>
-                  <input type="text" value={hex} maxLength={7} spellCheck={false}
-                    onChange={e => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) { setColori(p => ({ ...p, [nome]: e.target.value })); setModificato(true); setEsito(null) } }}
-                    style={{ width: 80, padding: '4px 6px', border: '1px solid #cbd5e1', borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }} />
-                </td>
-                <td style={{ padding: '6px 12px' }}>
+                </Td>
+                <Td style={{ width: 100 }}>
+                  <Input type="text" value={hex} maxLength={7} spellCheck={false}
+                    onChange={e => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) imposta(nome, e.target.value) }}
+                    style={{ width: 86, fontFamily: 'monospace', padding: '3px 6px' }} />
+                </Td>
+                <Td>
                   <div style={{ display: 'flex', gap: 4 }}>
-                    {[['CLB', 0.55], ['DPH', 0.72], ['INT', 0.85], ['COMUNE', 0.94]].map(([s, t]) => (
-                      <span key={s} style={badgeDaHex(hex, t)}>{s}</span>
+                    {[['CLB', 0.55], ['DPH', 0.72], ['INT', 0.85], ['COMUNE', 0.94]].map(([st, t]) => (
+                      <span key={st} style={badgeDaHex(hex, t)}>{st}</span>
                     ))}
                   </div>
-                </td>
-                <td style={{ padding: '9px 12px', textAlign: 'center', width: 80 }}>
+                </Td>
+                <Td center style={{ width: 110 }}>
                   {isCustom ? (
-                    <button onClick={() => { setColori(p => { const c = { ...p }; delete c[nome]; return c }); setModificato(true); setEsito(null) }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#64748b', textDecoration: 'underline' }}>
-                      ripristina
-                    </button>
+                    <Button variant="ghost" size="sm" onClick={() => { setColori(p => { const c = { ...p }; delete c[nome]; return c }); setModificato(true) }}>ripristina</Button>
                   ) : (
-                    <button onClick={() => { setColori(p => ({ ...p, [nome]: hex })); setModificato(true); setEsito(null) }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#2d6a9f', textDecoration: 'underline' }}>
-                      personalizza
-                    </button>
+                    <Button variant="ghost" size="sm" onClick={() => imposta(nome, hex)}>personalizza</Button>
                   )}
-                </td>
+                </Td>
               </tr>
             )
           })}
         </tbody>
-      </table>
-
-      <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
-        <button onClick={salva} disabled={!modificato || salvando}
-          style={{ padding: '9px 24px', background: modificato ? '#2d6a9f' : '#e5e7eb', color: modificato ? '#fff' : '#9ca3af', border: 'none', borderRadius: 6, cursor: modificato ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: 14 }}>
-          {salvando ? 'Salvataggio…' : '💾 Salva colori'}
-        </button>
-        {esito && <span style={{ fontSize: 13, color: esito.ok ? '#16a34a' : '#dc2626', fontWeight: 500 }}>{esito.ok ? '✓ ' : '✗ '}{esito.msg}</span>}
-      </div>
+      </Table>
     </div>
   )
 }
@@ -705,9 +685,10 @@ function DipColoriCC() {
 function DipDatiTest() {
   const [stats, setStats] = useState(null)
   const [cancellando, setCancellando] = useState(false)
-  const [esito, setEsito] = useState(null)
   const [elimImport, setElimImport]   = useState(true)
   const [elimDip, setElimDip]         = useState(false)
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const carica = useCallback(async () => {
     api.get('/dipendenti/admin/test-stats').then(r => setStats(r.data)).catch(() => {})
@@ -716,99 +697,69 @@ function DipDatiTest() {
   useEffect(() => { carica() }, [carica])
 
   async function elimina() {
-    if (!elimImport) { setEsito({ ok: false, msg: 'Seleziona almeno "Import di test" per procedere.' }); return }
-    const msg = elimDip
-      ? `Verranno eliminati ${stats.payroll_imports} import di test e ${stats.dipendenti_orfani} dipendenti senza altri dati.\nContinuare?`
-      : `Verranno eliminati ${stats.payroll_imports} import di test.\nLe anagrafiche e le classificazioni CC dei dipendenti saranno mantenute.\nContinuare?`
-    if (!confirm(msg)) return
-    setCancellando(true); setEsito(null)
+    if (!elimImport) { avvisi.attenzione('Seleziona almeno "Import di test" per procedere.'); return }
+    const messaggio = elimDip
+      ? `Verranno eliminati ${stats.payroll_imports} import di test e ${stats.dipendenti_orfani} dipendenti senza altri dati.`
+      : `Verranno eliminati ${stats.payroll_imports} import di test. Le anagrafiche e le classificazioni CC dei dipendenti saranno mantenute.`
+    if (!(await conferma({ titolo: 'Eliminare i dati di test selezionati?', messaggio, pericolo: true }))) return
+    setCancellando(true)
     try {
       const { data } = await api.delete(`/dipendenti/admin/test-data?elimina_dipendenti=${elimDip}`)
-      setEsito({ ok: true, msg: data.messaggio })
+      avvisi.successo(data.messaggio)
       await carica()
     } catch (e) {
-      setEsito({ ok: false, msg: mostraErrore(e, 'Errore nella cancellazione.') })
+      avvisi.errore(mostraErrore(e, 'Errore nella cancellazione.'))
     } finally { setCancellando(false) }
   }
 
   const nessunTest = stats && stats.payroll_imports === 0
+  // Opzione con titolo in grassetto e descrizione sotto
+  const opzione = (titolo, descrizione) => (
+    <span>
+      <span style={{ display: 'block', fontWeight: 600, color: colors.text }}>{titolo}</span>
+      <span style={{ display: 'block', fontSize: 'var(--fs-sm)', color: colors.textMuted, marginTop: 2 }}>{descrizione}</span>
+    </span>
+  )
 
   return (
     <div>
-      <h2 style={{ marginTop: 0, marginBottom: 20 }}>Dati di test — Dipendenti</h2>
-      <div className="card" style={{ border: '1px solid #fcd34d', background: '#fffbeb' }}>
-
-        {/* Contatori */}
+      <PageHeader title="Dati di test — Dipendenti" />
+      <Card style={{ maxWidth: 820 }}>
         {stats && (
-          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+          <div className="ui-kpi-row">
             {[
-              { label: 'Import di test',    value: stats.payroll_imports },
-              { label: 'Voci di costo',     value: stats.payroll_entries },
-              { label: 'Record mensili',    value: stats.employee_monthly },
+              { label: 'Import di test',        value: stats.payroll_imports },
+              { label: 'Voci di costo',         value: stats.payroll_entries },
+              { label: 'Record mensili',        value: stats.employee_monthly },
               { label: 'Dip. senza altri dati', value: stats.dipendenti_orfani },
-            ].map(s => (
-              <div key={s.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 18px', minWidth: 140, textAlign: 'center' }}>
-                <div style={{ fontSize: 26, fontWeight: 700, color: s.value > 0 ? '#d97706' : '#94a3b8' }}>{s.value}</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{s.label}</div>
-              </div>
-            ))}
+            ].map(st => <StatBox key={st.label} label={st.label} value={st.value} highlight={st.value > 0} />)}
           </div>
         )}
 
-        {nessunTest && <p style={{ color: '#94a3b8', fontSize: 13 }}>Nessun dato di test presente.</p>}
+        {nessunTest && <p className="ui-text-muted" style={{ margin: 0 }}>Nessun dato di test presente.</p>}
 
         {!nessunTest && stats && (
           <>
-            {/* Checkbox selezione */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-                <input type="checkbox" checked={elimImport} onChange={e => setElimImport(e.target.checked)}
-                  style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>
-                    Import di test ({stats.payroll_imports} import, {stats.payroll_entries} voci, {stats.employee_monthly} record mensili)
-                  </div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                    Elimina i file importati come test e tutti i dati economici collegati.
-                  </div>
-                </div>
-              </label>
-
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: stats.dipendenti_orfani === 0 ? 'not-allowed' : 'pointer', opacity: stats.dipendenti_orfani === 0 ? 0.5 : 1 }}>
-                <input type="checkbox" checked={elimDip} disabled={stats.dipendenti_orfani === 0}
-                  onChange={e => setElimDip(e.target.checked)}
-                  style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>
-                    Anagrafiche dipendenti senza altri dati ({stats.dipendenti_orfani} dipendenti)
-                  </div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                    Elimina i dipendenti che esistono solo negli import di test. Se un dipendente ha anche dati reali, viene mantenuto insieme alle sue classificazioni CC.
-                  </div>
-                </div>
-              </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
+              <Checkbox checked={elimImport} onChange={setElimImport} style={{ alignItems: 'flex-start' }}
+                label={opzione(
+                  `Import di test (${stats.payroll_imports} import, ${stats.payroll_entries} voci, ${stats.employee_monthly} record mensili)`,
+                  'Elimina i file importati come test e tutti i dati economici collegati.',
+                )} />
+              <div style={{ opacity: stats.dipendenti_orfani === 0 ? 0.5 : 1, pointerEvents: stats.dipendenti_orfani === 0 ? 'none' : undefined }}>
+                <Checkbox checked={elimDip} onChange={setElimDip} style={{ alignItems: 'flex-start' }}
+                  label={opzione(
+                    `Anagrafiche dipendenti senza altri dati (${stats.dipendenti_orfani} dipendenti)`,
+                    'Elimina i dipendenti che esistono solo negli import di test. Se un dipendente ha anche dati reali, viene mantenuto insieme alle sue classificazioni CC.',
+                  )} />
+              </div>
             </div>
-
-            <button onClick={elimina} disabled={cancellando || !elimImport}
-              style={{
-                padding: '9px 20px',
-                background: elimImport ? '#dc2626' : '#e5e7eb',
-                color: elimImport ? '#fff' : '#9ca3af',
-                border: 'none', borderRadius: 6,
-                cursor: elimImport ? 'pointer' : 'not-allowed',
-                fontWeight: 600, fontSize: 14,
-              }}>
+            <Button variant="danger" onClick={elimina} disabled={cancellando || !elimImport}>
               {cancellando ? 'Cancellazione in corso…' : '🗑️ Elimina selezionati'}
-            </button>
+            </Button>
           </>
         )}
-
-        {esito && (
-          <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: esito.ok ? '#d1fae5' : '#fee2e2', color: esito.ok ? '#065f46' : '#991b1b' }}>
-            {esito.msg}
-          </div>
-        )}
-      </div>
+      </Card>
     </div>
   )
 }
@@ -1000,7 +951,7 @@ function CorrClassificazioneTrattamenti() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState({})  // codice → {nome_display, categoria, escludi, ordine}
   const [saving, setSaving] = useState(null)
-  const [msg, fb] = useFeedback()
+  const avvisi = useAvvisi()
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -1008,11 +959,11 @@ function CorrClassificazioneTrattamenti() {
       const r = await api.get('/analisi-ricavi/classificazione')
       setRighe(r.data)
     } catch (e) {
-      fb(mostraErrore(e), 'err')
+      avvisi.errore(mostraErrore(e))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [avvisi])
 
   useEffect(() => { carica() }, [carica])
 
@@ -1040,168 +991,110 @@ function CorrClassificazioneTrattamenti() {
         ordine: Number(body.ordine),
         colore: body.colore || null,
       })
-      fb(`Classificazione '${codice}' salvata.`, 'ok')
+      avvisi.successo(`Classificazione '${codice}' salvata.`)
       cancellaEdit(codice)
       carica()
     } catch (e) {
-      fb(mostraErrore(e), 'err')
+      avvisi.errore(mostraErrore(e))
     } finally {
       setSaving(null)
     }
   }
 
-  if (loading) return <p style={{ color: '#64748b' }}>Caricamento...</p>
+  if (loading) return <Loading />
 
   const nonClassificati = righe.filter(r => !r.categoria && !r.escludi)
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>Classificazione Trattamenti</h2>
-      <p style={{ color: '#64748b', fontSize: 14 }}>
+      <PageHeader title="Classificazione trattamenti" />
+      <p className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: -8 }}>
         Mappa i codici di trattamento (listino) alle macrocategorie usate nell'Analisi Ricavi.
         I codici marcati come "Escludi" vengono redistribuiti proporzionalmente tra gli altri.
       </p>
 
-      {msg && (
-        <div style={{ padding: '8px 14px', borderRadius: 6, marginBottom: 16,
-                      background: msg.tipo === 'ok' ? '#d1fae5' : '#fee2e2',
-                      color: msg.tipo === 'ok' ? '#065f46' : '#991b1b', fontSize: 14 }}>
-          {msg.testo}
-        </div>
-      )}
-
       {nonClassificati.length > 0 && (
-        <div style={{ padding: '10px 14px', background: '#fef3c7', borderRadius: 8,
-                      border: '1px solid #f59e0b', marginBottom: 16, fontSize: 13 }}>
-          ⚠ {nonClassificati.length} codic{nonClassificati.length > 1 ? 'i' : 'e'} non classificat{nonClassificati.length > 1 ? 'i' : 'o'}:{' '}
+        <Messaggio tipo="warn">
+          {nonClassificati.length} codic{nonClassificati.length > 1 ? 'i' : 'e'} non classificat{nonClassificati.length > 1 ? 'i' : 'o'}:{' '}
           {nonClassificati.map(r => <strong key={r.codice}>{r.codice} </strong>)}
-        </div>
+        </Messaggio>
       )}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <Table compact>
         <thead>
-          <tr style={{ background: '#1e293b', color: '#fff' }}>
-            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Codice</th>
-            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Nome display</th>
-            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Categoria</th>
-            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Escludi</th>
-            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Ordine</th>
-            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Colore</th>
-            <th style={{ padding: '9px 12px' }} />
+          <tr>
+            <Th>Codice</Th><Th>Nome display</Th><Th>Categoria</Th><Th center>Escludi</Th>
+            <Th center>Ordine</Th><Th>Colore</Th><Th />
           </tr>
         </thead>
         <tbody>
-          {righe.map((r, i) => {
+          {righe.map(r => {
             const ed = editing[r.codice]
-            const isEven = i % 2 === 0
             return (
-              <tr key={r.codice} style={{ background: isEven ? '#f8fafc' : '#fff' }}>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>
-                  {r.codice}
-                  {r.escludi && !ed && (
-                    <span style={{ marginLeft: 6, fontSize: 10, background: '#fee2e2',
-                                   color: '#991b1b', padding: '1px 6px', borderRadius: 4,
-                                   fontFamily: 'inherit' }}>escluso</span>
-                  )}
-                </td>
-                <td style={{ padding: '8px 12px' }}>
+              <tr key={r.codice} className={ed ? 'ui-riga-evidenza' : undefined}>
+                <Td>
+                  <code>{r.codice}</code>
+                  {r.escludi && !ed && <Badge tono="err" style={{ marginLeft: 6 }}>escluso</Badge>}
+                </Td>
+                <Td>
                   {ed ? (
-                    <input value={ed.nome_display}
-                           onChange={e => aggiornaEdit(r.codice, 'nome_display', e.target.value)}
-                           style={{ width: '90%', padding: '4px 8px', borderRadius: 5,
-                                    border: '1px solid #cbd5e1' }} />
+                    <Input value={ed.nome_display} onChange={e => aggiornaEdit(r.codice, 'nome_display', e.target.value)} style={{ width: '95%' }} />
                   ) : r.nome_display}
-                </td>
-                <td style={{ padding: '8px 12px' }}>
+                </Td>
+                <Td>
                   {ed ? (
-                    <select value={ed.categoria || ''}
-                            onChange={e => aggiornaEdit(r.codice, 'categoria', e.target.value)}
-                            style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1' }}>
+                    <Select value={ed.categoria || ''} onChange={e => aggiornaEdit(r.codice, 'categoria', e.target.value)}>
                       <option value="">— nessuna —</option>
                       {CATEGORIE_DISPONIBILI.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  ) : (
-                    r.categoria
-                      ? <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '2px 8px',
-                                       borderRadius: 4, fontWeight: 600 }}>{r.categoria}</span>
-                      : <span style={{ color: '#94a3b8' }}>—</span>
-                  )}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    </Select>
+                  ) : (r.categoria ? <Badge tono="info">{r.categoria}</Badge> : <span style={{ color: colors.textSubtle }}>—</span>)}
+                </Td>
+                <Td center>
                   {ed ? (
-                    <input type="checkbox" checked={ed.escludi}
-                           onChange={e => aggiornaEdit(r.codice, 'escludi', e.target.checked)} />
-                  ) : (
-                    r.escludi ? '✓' : ''
-                  )}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    <input type="checkbox" checked={ed.escludi} onChange={e => aggiornaEdit(r.codice, 'escludi', e.target.checked)} aria-label="Escludi" />
+                  ) : (r.escludi ? '✓' : '')}
+                </Td>
+                <Td center>
                   {ed ? (
-                    <input type="number" value={ed.ordine}
-                           onChange={e => aggiornaEdit(r.codice, 'ordine', e.target.value)}
-                           style={{ width: 60, padding: '4px 6px', borderRadius: 5,
-                                    border: '1px solid #cbd5e1', textAlign: 'center' }} />
+                    <Input type="number" value={ed.ordine} onChange={e => aggiornaEdit(r.codice, 'ordine', e.target.value)}
+                      style={{ width: 64, textAlign: 'center', padding: '3px 6px' }} />
                   ) : r.ordine}
-                </td>
-                <td style={{ padding: '8px 12px' }}>
+                </Td>
+                <Td>
                   {ed ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      <label style={{ cursor: 'pointer', display: 'inline-flex' }} title="Seleziona colore">
-                        <span style={{ width: 20, height: 20, borderRadius: 4, display: 'inline-block',
-                                       background: ed.colore || '#e2e8f0', border: '1px solid #cbd5e1' }} />
-                        <input type="color" value={ed.colore || '#6366f1'}
-                               onChange={e => aggiornaEdit(r.codice, 'colore', e.target.value)}
-                               style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <label style={{ cursor: 'pointer', display: 'inline-flex', position: 'relative' }} title="Seleziona colore">
+                        <span style={{ width: 22, height: 22, borderRadius: 4, display: 'inline-block', background: ed.colore || colors.border, border: `1px solid ${colors.borderStrong}` }} />
+                        <input type="color" value={ed.colore || colors.primary} onChange={e => aggiornaEdit(r.codice, 'colore', e.target.value)}
+                          style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
                       </label>
-                      <input
-                        type="text"
-                        value={ed.colore}
-                        onChange={e => aggiornaEdit(r.codice, 'colore', e.target.value)}
-                        placeholder="#rrggbb"
-                        maxLength={7}
-                        spellCheck={false}
-                        style={{ width: 72, padding: '4px 6px', borderRadius: 5, fontSize: 12,
-                                 fontFamily: 'monospace', border: '1px solid #cbd5e1' }}
-                      />
+                      <Input type="text" value={ed.colore} onChange={e => aggiornaEdit(r.codice, 'colore', e.target.value)}
+                        placeholder="#rrggbb" maxLength={7} spellCheck={false} style={{ width: 84, fontFamily: 'monospace', padding: '3px 6px' }} />
                     </span>
                   ) : (
                     r.colore
                       ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ width: 14, height: 14, borderRadius: 3, background: r.colore,
-                                         border: '1px solid #cbd5e1', display: 'inline-block' }} />
-                          <code style={{ fontSize: 12 }}>{r.colore}</code>
+                          <span style={{ width: 14, height: 14, borderRadius: 3, background: r.colore, border: `1px solid ${colors.borderStrong}`, display: 'inline-block' }} />
+                          <code style={{ fontSize: 'var(--fs-sm)' }}>{r.colore}</code>
                         </span>
-                      : <span style={{ color: '#94a3b8', fontSize: 12 }}>auto</span>
+                      : <span className="ui-text-muted">auto</span>
                   )}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                </Td>
+                <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {ed ? (
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      <button onClick={() => salva(r.codice)} disabled={saving === r.codice}
-                              style={{ padding: '4px 12px', background: '#1e293b', color: '#fff',
-                                       border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>
-                        {saving === r.codice ? '...' : 'Salva'}
-                      </button>
-                      <button onClick={() => cancellaEdit(r.codice)}
-                              style={{ padding: '4px 10px', background: '#e2e8f0', border: 'none',
-                                       borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>
-                        ✕
-                      </button>
+                      <Button size="sm" onClick={() => salva(r.codice)} disabled={saving === r.codice}>{saving === r.codice ? '…' : 'Salva'}</Button>
+                      <Button variant="secondary" size="sm" onClick={() => cancellaEdit(r.codice)} aria-label="Annulla">✕</Button>
                     </div>
                   ) : (
-                    <button onClick={() => avviaEdit(r)}
-                            style={{ padding: '4px 12px', background: 'transparent',
-                                     border: '1px solid #cbd5e1', borderRadius: 5,
-                                     cursor: 'pointer', fontSize: 12, color: '#475569' }}>
-                      Modifica
-                    </button>
+                    <Button variant="secondary" size="sm" onClick={() => avviaEdit(r)}>Modifica</Button>
                   )}
-                </td>
+                </Td>
               </tr>
             )
           })}
         </tbody>
-      </table>
+      </Table>
     </div>
   )
 }
@@ -1738,7 +1631,8 @@ function CorrStampantiRT() {
   const [loading, setLoading] = useState(true)
   const [nuovoNome, setNuovoNome] = useState('')
   const [nuovoIp, setNuovoIp] = useState('')
-  const [msg, fb] = useFeedback()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -1751,90 +1645,84 @@ function CorrStampantiRT() {
   useEffect(() => { carica() }, [carica])
 
   async function aggiungi() {
-    if (!nuovoNome || !nuovoIp) { fb('Nome e IP obbligatori'); return }
+    if (!nuovoNome || !nuovoIp) { avvisi.attenzione('Nome e IP obbligatori'); return }
     try {
       await api.post('/rt-printers/', { nome: nuovoNome, ip: nuovoIp })
       setNuovoNome(''); setNuovoIp('')
-      fb('Stampante aggiunta'); carica()
-    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
+      avvisi.successo('Stampante aggiunta'); carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   async function elimina(id) {
-    if (!confirm('Eliminare questa stampante? Gli hotel associati resteranno senza RT configurato.')) return
-    try { await api.delete(`/rt-printers/${id}`); fb('Eliminata'); carica() }
-    catch (e) { fb('Errore: ' + mostraErrore(e)) }
+    if (!(await conferma({
+      titolo: 'Eliminare questa stampante?',
+      messaggio: 'Gli hotel associati resteranno senza RT configurato.',
+      pericolo: true,
+    }))) return
+    try { await api.delete(`/rt-printers/${id}`); avvisi.successo('Stampante eliminata'); carica() }
+    catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   async function associa(hotelCode, printerId) {
     try {
       await api.put(`/rt-printers/hotels/${hotelCode}`, { printer_id: printerId ? Number(printerId) : null })
-      fb('Associazione aggiornata'); carica()
-    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
+      avvisi.successo('Associazione aggiornata'); carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   return (
-    <div>
-      <h2 style={{ marginTop: 0, marginBottom: 4 }}>Stampanti RT — Corrispettivi</h2>
-      <p style={{ marginTop: 0, marginBottom: 20, fontSize: 13, color: '#6b7280' }}>
+    <div style={{ maxWidth: 860 }}>
+      <PageHeader title="Stampanti RT — Corrispettivi" />
+      <p className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: -8 }}>
         Registratori telematici Epson FP-81 II. Più hotel possono condividere la stessa stampante
         (es. Du Parc + Club Hotel): basta associarli allo stesso IP.
       </p>
-      {msg && <div style={{ marginBottom: 12, padding: '6px 12px', background: '#d1fae5', borderRadius: 6, color: '#065f46', fontSize: 13, fontWeight: 600 }}>{msg}</div>}
-      {loading ? <p style={{ color: '#9ca3af' }}>Caricamento…</p> : (
+      {loading ? <Loading /> : (
         <>
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse', marginBottom: 20 }}>
-            <thead>
-              <tr style={{ background: '#fee2e2' }}>
-                {['Nome', 'IP', 'Hotel associati', ''].map(h => (
-                  <th key={h} style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 600 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
+          <Table compact style={{ marginBottom: 16 }}>
+            <thead><tr><Th>Nome</Th><Th>IP</Th><Th>Hotel associati</Th><Th /></tr></thead>
             <tbody>
-              {stampanti.map(s => (
-                <tr key={s.id} style={{ borderTop: '1px solid #fecaca' }}>
-                  <td style={{ padding: '6px 10px', fontWeight: 600 }}>{s.nome}</td>
-                  <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{s.ip}</td>
-                  <td style={{ padding: '6px 10px', color: '#6b7280' }}>{s.hotels.join(', ') || '—'}</td>
-                  <td style={{ padding: '6px 10px' }}>
-                    <button onClick={() => elimina(s.id)} style={{ ...btnSm, background: '#fca5a5', color: '#7f1d1d' }}>Elimina</button>
-                  </td>
+              {stampanti.map(st => (
+                <tr key={st.id}>
+                  <Td style={{ fontWeight: 600 }}>{st.nome}</Td>
+                  <Td><code>{st.ip}</code></Td>
+                  <Td style={{ color: colors.textMuted }}>{st.hotels.join(', ') || '—'}</Td>
+                  <Td center><Button variant="danger-soft" size="sm" onClick={() => elimina(st.id)}>Elimina</Button></Td>
                 </tr>
               ))}
+              {stampanti.length === 0 && <tr><Td colSpan={4} center muted>Nessuna stampante configurata</Td></tr>}
             </tbody>
-          </table>
-          <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 24 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Aggiungi:</span>
-            <input value={nuovoNome} onChange={e => setNuovoNome(e.target.value)}
-              placeholder="Nome (es. Du Parc / Club Hotel)" style={{ ...inputSm, width: 220 }} />
-            <input value={nuovoIp} onChange={e => setNuovoIp(e.target.value)}
-              placeholder="IP (es. 192.168.100.134)" style={{ ...inputSm, width: 160 }} />
-            <button onClick={aggiungi} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
-          </div>
+          </Table>
 
-          <h3 style={{ fontSize: 14, marginBottom: 10 }}>Associazione hotel → stampante</h3>
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f3f4f6' }}>
-                {['Hotel', 'Stampante RT'].map(h => (
-                  <th key={h} style={{ textAlign: 'left', padding: '6px 10px', fontWeight: 600 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
+          <Card title="Aggiungi stampante" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <Field label="Nome">
+                <Input value={nuovoNome} onChange={e => setNuovoNome(e.target.value)} placeholder="es. Du Parc / Club Hotel" style={{ width: 230 }} />
+              </Field>
+              <Field label="IP">
+                <Input value={nuovoIp} onChange={e => setNuovoIp(e.target.value)} placeholder="es. 192.168.100.134" style={{ width: 170, fontFamily: 'monospace' }} />
+              </Field>
+              <Button onClick={aggiungi}>+ Aggiungi</Button>
+            </div>
+          </Card>
+
+          <h3 className="ui-section-title">Associazione hotel → stampante</h3>
+          <Table compact>
+            <thead><tr><Th>Hotel</Th><Th>Stampante RT</Th></tr></thead>
             <tbody>
               {hotels.map(h => (
-                <tr key={h.code} style={{ borderTop: '1px solid #e5e7eb' }}>
-                  <td style={{ padding: '6px 10px', fontWeight: 600 }}>{h.code} — {h.name}</td>
-                  <td style={{ padding: '6px 10px' }}>
-                    <select value={h.rt_printer?.id || ''} onChange={e => associa(h.code, e.target.value)} style={inputSm}>
+                <tr key={h.code}>
+                  <Td style={{ fontWeight: 600 }}>{h.code} — {h.name}</Td>
+                  <Td>
+                    <Select value={h.rt_printer?.id || ''} onChange={e => associa(h.code, e.target.value)} aria-label={`Stampante di ${h.name}`}>
                       <option value="">— Nessuna —</option>
-                      {stampanti.map(s => <option key={s.id} value={s.id}>{s.nome} ({s.ip})</option>)}
-                    </select>
-                  </td>
+                      {stampanti.map(st => <option key={st.id} value={st.id}>{st.nome} ({st.ip})</option>)}
+                    </Select>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         </>
       )}
     </div>
@@ -1844,15 +1732,7 @@ function CorrStampantiRT() {
 function Placeholder({ sezione }) {
   const tutti = SEZIONI.flatMap(g => g.voci)
   const voce = tutti.find(v => v.id === sezione)
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      height: 200, border: '2px dashed #e2e8f0', borderRadius: 12,
-      color: '#94a3b8', fontSize: 15,
-    }}>
-      [{voce?.label ?? sezione}] — sezione da implementare
-    </div>
-  )
+  return <StatoVuoto>[{voce?.label ?? sezione}] — sezione da implementare</StatoVuoto>
 }
 
 // ---------------------------------------------------------------------------
@@ -2399,49 +2279,34 @@ function SistemaDebug() {
 
   return (
     <div>
-      <h2 style={{ margin: '0 0 24px', fontSize: 20, fontWeight: 700, color: '#1e3a5f' }}>
-        Debug & diagnostica
-      </h2>
-
-      <div style={{
-        background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10,
-        padding: '20px 24px', maxWidth: 520,
-      }}>
+      <PageHeader title="Debug & diagnostica" />
+      <Card style={{ maxWidth: 560 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {/* Toggle */}
+          {/* Interruttore on/off */}
           <button
+            type="button"
+            role="switch"
+            aria-checked={debugOn}
             onClick={toggleDebug}
-            style={{
-              width: 52, height: 28, borderRadius: 14, border: 'none',
-              cursor: 'pointer', padding: 0,
-              background: debugOn ? '#16a34a' : '#cbd5e1',
-              position: 'relative', transition: 'background 0.2s',
-              flexShrink: 0,
-            }}
             title={debugOn ? 'Disattiva modalità debug' : 'Attiva modalità debug'}
+            style={{
+              width: 52, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer', padding: 0,
+              background: debugOn ? colors.success : colors.borderStrong,
+              position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+            }}
           >
             <span style={{
-              display: 'block', width: 22, height: 22, borderRadius: '50%',
-              background: '#fff', position: 'absolute',
-              top: 3, left: debugOn ? 27 : 3,
-              transition: 'left 0.2s',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+              display: 'block', width: 22, height: 22, borderRadius: '50%', background: '#fff',
+              position: 'absolute', top: 3, left: debugOn ? 27 : 3, transition: 'left 0.2s',
+              boxShadow: '0 1px 3px rgba(15,23,42,0.2)',
             }} />
           </button>
           <div>
-            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 15 }}>
+            <div style={{ fontWeight: 600, color: colors.text, fontSize: 'var(--fs-md)' }}>
               Modalità debug errori
-              {debugOn && (
-                <span style={{
-                  marginLeft: 10, fontSize: 11, fontWeight: 700,
-                  background: '#dcfce7', color: '#15803d',
-                  padding: '2px 8px', borderRadius: 99,
-                }}>
-                  ATTIVA
-                </span>
-              )}
+              {debugOn && <Badge tono="ok" style={{ marginLeft: 10 }}>ATTIVA</Badge>}
             </div>
-            <div style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>
+            <div className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: 2 }}>
               {debugOn
                 ? 'I messaggi di errore mostrano il dettaglio completo del backend (stack trace, SQL).'
                 : 'I messaggi di errore mostrano solo il testo breve senza dettagli tecnici.'}
@@ -2449,17 +2314,14 @@ function SistemaDebug() {
           </div>
         </div>
 
-        <div style={{
-          marginTop: 16, padding: '10px 14px',
-          background: debugOn ? '#fef9c3' : '#f8fafc',
-          border: `1px solid ${debugOn ? '#fde047' : '#e2e8f0'}`,
-          borderRadius: 8, fontSize: 12, color: '#64748b',
-        }}>
-          <strong>Nota:</strong> questa impostazione è salvata nel browser (localStorage).
-          È attiva solo su questo dispositivo e viene mantenuta tra le sessioni.
-          Disattivare prima di condividere lo schermo con utenti finali.
+        <div style={{ marginTop: 16, marginBottom: -16 }}>
+          <Messaggio tipo={debugOn ? 'warn' : 'info'}>
+            <strong>Nota:</strong> questa impostazione è salvata nel browser (localStorage).
+            È attiva solo su questo dispositivo e viene mantenuta tra le sessioni.
+            Disattivare prima di condividere lo schermo con utenti finali.
+          </Messaggio>
         </div>
-      </div>
+      </Card>
     </div>
   )
 }
