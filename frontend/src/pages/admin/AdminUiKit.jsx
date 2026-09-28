@@ -5,6 +5,7 @@ import {
   Button, PageHeader, SectionTitle, Card, Badge, Dot, HotelTag, Loading, StatoVuoto, Messaggio,
   Tabs, SegmentedControl, ToggleIva, Input, Select, Field, NavMese,
   Table, Th, Td, Modal, useConferma, useAvvisi, KpiTile, FileButton,
+  ThOrdinabile, Paginazione, Textarea, Checkbox,
 } from '../../components/ui'
 import { colors, COLORI_STRUTTURA, fontSize } from '../../styles/tokens.js'
 import { formatEuro } from '../../utils/format.js'
@@ -34,6 +35,12 @@ export default function AdminUiKit() {
   const [lordo, setLordo] = useState(true)
   const [periodo, setPeriodo] = useState({ anno: 2026, mese: 8 })
   const [modale, setModale] = useState(false)
+  const [ord, setOrd] = useState({ ordinaPer: 'nome', direzione: 'asc' })
+  const [pag, setPag] = useState(1)
+  const [spunta, setSpunta] = useState(true)
+  const ordina = (campo) => setOrd(o => o.ordinaPer === campo
+    ? { ...o, direzione: o.direzione === 'asc' ? 'desc' : 'asc' }
+    : { ordinaPer: campo, direzione: 'asc' })
   const conferma = useConferma()
   const avvisi = useAvvisi()
 
@@ -72,6 +79,7 @@ export default function AdminUiKit() {
         <Swatch nome="warning" valore={colors.warning} />
         <Swatch nome="info" valore={colors.info} />
         <Swatch nome="iva (solo toggle IVA)" valore={colors.iva} />
+        <Swatch nome="accent (dato manuale che sostituisce l'automatico)" valore={colors.accent} />
       </Blocco>
 
       <Blocco titolo="Colori strutture" nota="Uguali in tutta l'app: coloreStruttura(code) / COLORI_STRUTTURA.">
@@ -114,6 +122,8 @@ export default function AdminUiKit() {
         <Field label="Modificato non salvato"><Input defaultValue="1.250,00" modificato /></Field>
         <Field label="Data"><Input type="date" defaultValue="2026-08-01" /></Field>
         <Field label="Scelta"><Select defaultValue="b"><option value="a">Opzione A</option><option value="b">Opzione B</option></Select></Field>
+        <Field label="Note"><Textarea rows={2} placeholder="Testo lungo…" /></Field>
+        <Checkbox label="Casella di spunta" checked={spunta} onChange={setSpunta} />
       </Blocco>
 
       <Card title="Riquadri KPI" style={{ marginBottom: 20 }}>
@@ -172,6 +182,23 @@ export default function AdminUiKit() {
             <tr className="ui-riga-totale"><Td>TOTALE (ui-riga-totale)</Td><Td num>{formatEuro(165640.5)}</Td><Td num>{formatEuro(130432.4)}</Td><Td num tot>{formatEuro(296072.9)}</Td></tr>
           </tbody>
         </Table>
+      </Card>
+
+      <Card title="Tabella ordinabile e paginazione" style={{ marginBottom: 20 }}>
+        <Table compact>
+          <thead>
+            <tr>
+              <ThOrdinabile campo="nome" {...ord} onOrdina={ordina}>Cliente</ThOrdinabile>
+              <ThOrdinabile campo="data" center {...ord} onOrdina={ordina}>Arrivo</ThOrdinabile>
+              <ThOrdinabile campo="importo" num {...ord} onOrdina={ordina}>Importo</ThOrdinabile>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><Td>Rossi</Td><Td center>12/07/2026</Td><Td num>{formatEuro(540)}</Td></tr>
+            <tr><Td>Bianchi</Td><Td center>03/08/2026</Td><Td num>{formatEuro(1280)}</Td></tr>
+          </tbody>
+        </Table>
+        <Paginazione pagina={pag} perPagina={20} totale={87} onChange={setPag} />
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>

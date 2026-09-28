@@ -243,7 +243,10 @@ contrasto con l'app reale) è stato eliminato.
   `ToggleIva`, `NavMese`, `Input`/`Select`/`Field`, `Table`/`Th`/`Td` (`num` = destra + cifre
   allineate, `tot` = colonna totale), `Badge`, `Dot`, `HotelTag`, `Messaggio`, `Loading`,
   `StatoVuoto`, `Modal`, `KpiTile` (etichetta + valore + sub, in fila dentro `<div
-  className="ui-kpi-row">`), `FileButton` (pulsante che apre la scelta file). Catalogo visivo: Admin → Sistema → Libreria UI (`?s=ui-kit`,
+  className="ui-kpi-row">`), `FileButton` (pulsante che apre la scelta file), `ThOrdinabile`
+  (intestazione cliccabile ▲▼), `Paginazione`, `Textarea`, `Checkbox`.
+- **`colors.accent`** (viola `#7c3aed`): unico colore extra ammesso oltre ai colori di significato,
+  **solo** per "valore manuale che sostituisce il dato automatico" (oggi: Maturato in Forecast). Catalogo visivo: Admin → Sistema → Libreria UI (`?s=ui-kit`,
   `pages/admin/AdminUiKit.jsx`) — aggiornarlo quando si aggiunge un componente.
 - **Conferme e avvisi**: `useConferma()` al posto di `window.confirm()` (`await conferma({titolo,
   messaggio, pericolo, ritardoMs})` → boolean; `ritardoMs` per azioni irreversibili tipo Chiusura Z),
@@ -257,7 +260,8 @@ contrasto con l'app reale) è stato eliminato.
 - **Migrazione a fasi, un modulo alla volta** (verifica visiva dell'utente dopo ciascuno):
   ✅ USALI (pilota, v3.15.0), ✅ Budget (v3.15.1 — ora ha un titolo pagina con hotel come
   `SegmentedControl`, anno/versione in `PageHeader`; colori grafici Budget/Actual = `textSubtle`/`info`).
-  Da fare: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  ✅ Forecast (v3.15.2 — tolto il viola "di marca" e l'azzurro di Cancellazioni, tenuto
+  `colors.accent` per il Maturato; titolo senza emoji). Da fare: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati
@@ -1208,8 +1212,8 @@ reimport li sovrascrivesse silenziosamente.
   appena chiusa. `per_mese`/`per_mese_arrivo` in `GET /report` restano dict chiave=mese-numero
   (1-12, invariato per l'accumulo), solo l'ORDINE della lista in output cambia — il frontend non ha
   bisogno di modifiche, mappa l'array così com'è sull'asse X del grafico.
-- **Toggle Mensile/Giornaliero sui due grafici** (pillola arancione, stesso stile IVA
-  inclusa/esclusa del resto dell'app, `localStorage('cancellazioni_vista_periodo')`): a mensile
+- **Toggle Mensile/Giornaliero sui due grafici** (`SegmentedControl`,
+  `localStorage('cancellazioni_vista_periodo')`): a mensile
   restano i `BarChart` di sempre; a giornaliero diventano `LineChart` (barre illeggibili su fino a
   365 punti, una linea rende sia i picchi isolati sia i periodi piatti). `GET /report` calcola
   `per_giorno`/`per_giorno_arrivo` nello stesso giro sui dati già usato per `per_mese`/
@@ -1226,35 +1230,25 @@ reimport li sovrascrivesse silenziosamente.
   cancellate) o `importo` — dato già presente in ogni punto di `per_mese`/`per_giorno` e affini,
   quindi puro cambio di `dataKey`/formatter lato frontend, nessuna modifica al backend. I due gruppi
   di pulsanti stanno in una colonna (`flexDirection:'column', justifyContent:'space-between'`)
-  affiancata alle due `CardKpi`, non sotto di esse: l'`alignItems:'stretch'` di default del
+  affiancata alle card KPI (`KpiTile`), non sotto di esse: l'`alignItems:'stretch'` di default del
   container flex padre allunga la colonna alla stessa altezza delle card, così il pulsante in alto
   e quello in basso restano allineati ai bordi superiore/inferiore delle card — messo inizialmente
   come due righe separate ("accanto" poi "sotto" il primo toggle), corretto su richiesta esplicita
   perché spezzava il layout.
-- **Tema colore della tab: azzurro `#0ea5e9` (colore Club Hotel in Corrispettivi), non il viola
-  del resto di `Forecast.jsx`** — due iterazioni: prima uniformata al viola `#8B5CF6` usato nel
-  resto della pagina (tab bar, Pace Chart), poi l'utente ha chiesto esplicitamente un colore
-  diverso ("non mi piace il viola"), indicando lo stesso azzurro/`#0ea5e9` già usato per
-  identificare CLB in `TabGiornalieri.jsx`/`TabFatturati.jsx` (Corrispettivi) — nessun legame col
-  Club Hotel come struttura, solo il colore in sé come preferenza estetica per questa tab. Applicato
-  a: tab "Cancellazioni" nella barra (bordo/testo attivo, `stileTab()` reso parametrico con un
-  secondo argomento `coloreAttivo`, default `#8B5CF6` per tutte le altre tab), le due card KPI, le
-  serie di entrambi i grafici (stesso azzurro per entrambi, nessuna distinzione di tonalità tra
-  "prenotazione"/"arrivo" richiesta), l'importo nella tabella dettaglio, e le pillole dei due toggle
-  Mensile/Giornaliero e Prenotazioni/Fatturato (`stileToggleBtn()`, contenitore `#f0f9ff`/`#7dd3fc`,
-  bottone attivo `#0ea5e9`) — **deviazione consapevole** dalla pillola arancione condivisa
-  documentata in "Uniformità grafica tra pagine": `stileToggleBtn()` e i due contenitori pillola
-  sono usati solo in questa tab (verificato, nessun altro punto del file li richiama), quindi il
-  cambio non tocca il pattern arancione altrove nell'app.
+- **Colori della tab (dal settembre 2026, migrazione alla Libreria UI)**: la tab usava un tema
+  azzurro `#0ea5e9` proprio, chiesto dall'utente solo per togliere il viola `#8B5CF6` del resto di
+  Forecast. Con il colore unico dell'app il viola è sparito ovunque, quindi anche l'eccezione azzurra
+  è stata tolta (decisione delegata dall'utente): tab blu notte come le altre, toggle
+  Mensile/Giornaliero e Prenotazioni/Fatturato come `SegmentedControl` standard, serie dei grafici,
+  card KPI e colonna "% Disdette" in `colors.info` (blu). Resta invece un viola con significato,
+  `colors.accent`, solo per i valori derivati dal **Maturato manuale** (colonna Maturato, Forecast
+  calcolato su maturato, linea Maturato nel Pace Chart).
   ⚠️ **Testo della legenda dei grafici sempre nero, mai del colore della serie**: Recharts colora
   di default `.recharts-legend-item-text` come la serie (`fill`/`stroke`), non solo il quadratino —
   comportamento non voluto qui. Fix: prop `formatter` su `<Legend>` che avvolge il testo in uno
-  `<span style={{color:'#111827'}}>`; funziona perché lo stile inline sul figlio vince comunque
-  sull'ereditarietà del colore dal genitore colorato, non serve sovrascrivere lo span esterno di
-  Recharts. Nessun file di costanti colore condiviso esiste nel progetto — le convenzioni
-  cross-pagina (pillola IVA, colori hotel) sono documentate qui in CLAUDE.md, non centralizzate in
-  codice: ogni pagina che introduce un proprio tema locale (come questa) va tenuta a mente come
-  eccezione esplicita, non generalizzata altrove senza una richiesta analoga.
+  `<span style={{color: colors.text}}>` (`legendaNeutra` in `Forecast.jsx`); funziona perché lo stile
+  inline sul figlio vince comunque sull'ereditarietà del colore dal genitore colorato, non serve
+  sovrascrivere lo span esterno di Recharts.
 - **Filtro canale — select singola** (`canale`/`Tutti`, invariata nell'aspetto): provata una
   variante a checkbox multi-selezione (una per canale, su una riga sotto i filtri data) per
   poter filtrare su più canali insieme — **scartata subito dopo, giudicata dall'utente troppo
@@ -1333,12 +1327,9 @@ denominatore (il totale prenotato quel mese, cancellato o no).
 - Frontend: terzo grafico "Tasso di cancellazione per mese/giorno di prenotazione" in
   `TabCancellazioni`, tooltip custom (`TooltipTasso`) che mostra anche `cancellate su totale`
   (formattato in € quando la metrica è Fatturato), non solo la percentuale. `TabImportaCancellazioni`:
-  pillola arancione (stile a parte, `stileToggleBtnArancio` — il tema blu di `stileToggleBtn` è
-  specifico alla tab "Cancellazioni", non a questa) per scegliere `tipo=disdetta|non_disdetta` prima
-  di caricare; storico import mostra una nuova colonna "Tipo" (badge rosso/verde). Terza `CardKpi`
-  "% Cancellazioni" accanto alle due esistenti (tutte e tre ristrette a 130px — `CardKpi` ha un nuovo
-  prop `larghezza`, default 160px invariato per gli altri usi nel file, es. Pace Chart) per fare
-  spazio senza spezzare la riga con la colonna dei toggle.
+  `SegmentedControl` per scegliere `tipo=disdetta|non_disdetta` prima di caricare; storico import
+  mostra una colonna "Tipo" (badge rosso/verde). Terza card KPI "% Cancellazioni" accanto alle due
+  esistenti.
 - ⚠️ **Il terzo grafico segue gli stessi due toggle degli altri due** (Mensile/Giornaliero,
   Prenotazioni/Fatturato) — non è rimasto "sempre mensile" come nella primissima versione, corretto
   su richiesta esplicita subito dopo. `GET /tasso-cancellazione` calcola quindi, nello stesso giro

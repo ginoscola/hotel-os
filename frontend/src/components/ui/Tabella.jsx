@@ -26,3 +26,34 @@ export function Th({ num, center, tot, className, ...rest }) {
 export function Td({ num, center, muted, tot, className, ...rest }) {
   return <td className={cx(num && 'num', center && 'center', muted && 'muted', tot && 'tot', className)} {...rest} />
 }
+
+/**
+ * Intestazione cliccabile per ordinare (lato server o client).
+ * campo: chiave di ordinamento di questa colonna; ordinaPer/direzione: stato corrente; onOrdina(campo).
+ */
+export function ThOrdinabile({ campo, ordinaPer, direzione, onOrdina, num, center, children, ...rest }) {
+  const attiva = ordinaPer === campo
+  return (
+    <th
+      className={cx('ordinabile', num && 'num', center && 'center')}
+      onClick={() => onOrdina(campo)}
+      title="Clicca per ordinare"
+      aria-sort={attiva ? (direzione === 'asc' ? 'ascending' : 'descending') : undefined}
+      {...rest}
+    >
+      {children}{attiva && (direzione === 'asc' ? ' ▲' : ' ▼')}
+    </th>
+  )
+}
+
+/** ◀ Pagina N — X risultati ▶ */
+export function Paginazione({ pagina, perPagina, totale, onChange }) {
+  const ultima = pagina * perPagina >= totale
+  return (
+    <div className="ui-paginazione">
+      <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={pagina <= 1} onClick={() => onChange(pagina - 1)} aria-label="Pagina precedente">◀</button>
+      <span className="ui-num">Pagina {pagina} — {totale} risultati</span>
+      <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={ultima} onClick={() => onChange(pagina + 1)} aria-label="Pagina successiva">▶</button>
+    </div>
+  )
+}

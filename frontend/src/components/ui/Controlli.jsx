@@ -73,6 +73,20 @@ export function Select({ className, children, ...rest }) {
   return <select className={cx('ui-input', className)} {...rest}>{children}</select>
 }
 
+export function Textarea({ className, style, ...rest }) {
+  return <textarea className={cx('ui-input', className)} style={{ resize: 'vertical', ...style }} {...rest} />
+}
+
+/** Casella di spunta con testo accanto. */
+export function Checkbox({ label, checked, onChange, style }) {
+  return (
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-base)', color: 'var(--color-text-second)', cursor: 'pointer', ...style }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} />
+      {label}
+    </label>
+  )
+}
+
 /** Campo con etichetta sopra. */
 export function Field({ label, children, style }) {
   return (

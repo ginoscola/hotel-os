@@ -30,6 +30,7 @@
   --color-info: #2563eb;    --color-info-bg: #dbeafe;    --color-info-text: #1e40af;
   --color-info-soft: #eff6ff; /* celle con dato automatico */
 
+  --color-accent: #7c3aed; --color-accent-soft: #ede9fe;
   --color-iva: #ea580c; --color-iva-bg: #fff7ed; --color-iva-border: #fdba74; --color-iva-text: #9a3412;
 
   --color-dph: #10b981; --color-clb: #3b82f6; --color-int: #f59e0b;
@@ -231,6 +232,9 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: var(--fs-bas
 .ui-table > tbody > tr > td.muted { color: var(--color-text-subtle); }
 .ui-table > tbody > tr > td.tot { border-left: 2px solid var(--color-border); font-weight: 600; }
 
+.ui-table > thead > tr > th.ordinabile { cursor: pointer; user-select: none; }
+.ui-table > thead > tr > th.ordinabile:hover { background: var(--color-primary-hover); }
+
 /* zebra + hover (battono tr:nth-child(even) td / tr:hover td di index.css) */
 .ui-table > tbody > tr:nth-child(even) > td { background: var(--color-surface-soft); }
 .ui-table > tbody > tr:hover > td { background: #eef3fa; }
@@ -245,6 +249,9 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: var(--fs-bas
 .ui-table > tbody > tr.ui-riga-totale > td { background: var(--color-primary); color: #fff; font-weight: 700; }
 .ui-table.ui-table-compact > tbody > tr > td { padding: 4px 8px; }
 .ui-table.ui-table-compact > thead > tr > th { padding: 6px 8px; }
+
+/* ── Paginazione ───────────────────────────────────────────────────────────── */
+.ui-paginazione { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: var(--fs-base); color: var(--color-text-second); }
 
 /* ── Modale ────────────────────────────────────────────────────────────────── */
 .ui-modal-overlay {

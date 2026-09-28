@@ -1,12 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api/client.js'
-import { formatEuro, formatPerc, formatDataIt, mostraErrore } from '../utils/format.js'
+import { formatEuro, formatDataIt, mostraErrore } from '../utils/format.js'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import { isAdmin } from '../utils/auth.js'
+import {
+  Badge, Button, Card, Checkbox, Field, HotelTag, Input, KpiTile, Loading, Messaggio, Modal,
+  PageHeader, Paginazione, SectionTitle, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td,
+  Textarea, Th, ThOrdinabile, useAvvisi, useConferma,
+} from '../components/ui'
+import { colors } from '../styles/tokens.js'
 
 // ---------------------------------------------------------------------------
 // Costanti
@@ -15,6 +21,27 @@ import { isAdmin } from '../utils/auth.js'
 const MESI_LABEL = [
   'Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre',
+]
+
+const ANNI = [2024, 2025, 2026, 2027]
+
+// Colori con significato in questa pagina:
+//   accent (viola)  = valore derivato dal Maturato inserito a mano (override dell'OTB)
+//   primary         = Forecast
+//   info (blu)      = serie dati principali nei grafici (OTB, cancellazioni)
+const COLORE_SERIE = colors.info
+const COLORE_MATURATO = colors.accent
+
+// Recharts colora di default il testo della legenda come la serie — qui si vuole solo il
+// quadratino colorato, il testo resta del colore normale.
+const legendaNeutra = v => <span style={{ color: colors.text }}>{v}</span>
+
+const TABS = [
+  { id: 'riepilogo', label: 'Riepilogo Stagione' },
+  { id: 'pace', label: 'Pace Chart' },
+  { id: 'maturato', label: 'Maturato' },
+  { id: 'cancellazioni', label: 'Cancellazioni' },
+  { id: 'importa-cancellazioni', label: 'Importa Welcome' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -53,43 +80,19 @@ export default function Forecast() {
     }
   }
 
-  const stileTab = (t, coloreAttivo = '#8B5CF6') => ({
-    padding: '0.55rem 1.2rem',
-    border: 'none',
-    borderBottom: tabAttiva === t ? `3px solid ${coloreAttivo}` : '3px solid transparent',
-    background: 'none',
-    cursor: 'pointer',
-    fontWeight: tabAttiva === t ? 700 : 400,
-    color: tabAttiva === t ? coloreAttivo : '#555',
-    fontSize: '0.95rem',
-    transition: 'all 0.15s',
-  })
-
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.2rem', flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#1a1a2e' }}>📈 Forecast & OTB</h1>
+      <PageHeader title="Forecast & OTB">
+        <Select value={anno} onChange={e => setAnno(Number(e.target.value))} aria-label="Anno">
+          {ANNI.map(a => <option key={a} value={a}>{a}</option>)}
+        </Select>
+        <Select value={hotelSelezionato} onChange={e => setHotelSelezionato(e.target.value)} aria-label="Hotel">
+          <option value="all">Tutti gli hotel</option>
+          {hotels.map(h => <option key={h.code} value={h.code}>{h.name}</option>)}
+        </Select>
+      </PageHeader>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <select value={anno} onChange={e => setAnno(Number(e.target.value))} style={stileSelect}>
-            {[2024, 2025, 2026, 2027].map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={hotelSelezionato} onChange={e => setHotelSelezionato(e.target.value)} style={stileSelect}>
-            <option value="all">Tutti gli hotel</option>
-            {hotels.map(h => <option key={h.code} value={h.code}>{h.name}</option>)}
-          </select>
-        </div>
-      </div>
-
-      {/* Tab bar */}
-      <div style={{ borderBottom: '1px solid #e5e7eb', marginBottom: '1.4rem', display: 'flex' }}>
-        <button style={stileTab('riepilogo')} onClick={() => setTabAttiva('riepilogo')}>Riepilogo Stagione</button>
-        <button style={stileTab('pace')} onClick={() => setTabAttiva('pace')}>Pace Chart</button>
-        <button style={stileTab('maturato')} onClick={() => setTabAttiva('maturato')}>Maturato</button>
-        <button style={stileTab('cancellazioni', '#0ea5e9')} onClick={() => setTabAttiva('cancellazioni')}>Cancellazioni</button>
-        <button style={stileTab('importa-cancellazioni')} onClick={() => setTabAttiva('importa-cancellazioni')}>Importa Welcome</button>
-      </div>
+      <Tabs tabs={TABS} value={tabAttiva} onChange={setTabAttiva} />
 
       {tabAttiva === 'riepilogo' && (
         <TabRiepilogo
@@ -128,6 +131,12 @@ export default function Forecast() {
 // ---------------------------------------------------------------------------
 // Tab 1 — Riepilogo Stagione
 // ---------------------------------------------------------------------------
+
+function BadgeDelta({ pct }) {
+  if (pct == null) return null
+  const pos = pct >= 0
+  return <Badge tono={pos ? 'ok' : 'err'}>{pos ? '+' : ''}{pct.toFixed(1)}%</Badge>
+}
 
 function TabRiepilogo({ dati, caricando, errore, anno, hotelCode, hotels, onAggiornato }) {
   const [editCell, setEditCell] = useState(null)   // { mese, campo: 'budget'|'pickup' }
@@ -172,185 +181,168 @@ function TabRiepilogo({ dati, caricando, errore, anno, hotelCode, hotels, onAggi
     if (e.key === 'Escape') setEditCell(null)
   }
 
-  function badgeDelta(pct) {
-    if (pct == null) return null
-    const pos = pct >= 0
-    return (
-      <span style={{
-        fontSize: '0.75rem', fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-        background: pos ? '#dcfce7' : '#fee2e2', color: pos ? '#166534' : '#991b1b',
-      }}>
-        {pos ? '+' : ''}{pct.toFixed(1)}%
-      </span>
-    )
-  }
-
-  if (caricando) return <Caricamento />
-  if (errore) return <Errore msg={errore} />
+  if (caricando) return <Loading />
+  if (errore) return <Messaggio tipo="err">{errore}</Messaggio>
   if (!dati) return null
+
+  const vuoto = <span style={{ color: colors.borderStrong }}>—</span>
 
   return (
     <div>
       {!isSingle && (
-        <p style={{ color: '#6b7280', fontSize: '0.85rem', marginBottom: '0.8rem' }}>
+        <p className="ui-text-muted" style={{ marginTop: 0, marginBottom: 12 }}>
           Vista consolidata — seleziona un hotel per modificare Budget e Pickup%
         </p>
       )}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.87rem' }}>
-          <thead>
-            <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-              <Th>Mese</Th>
-              <Th align="right">OTB Rev.</Th>
-              <Th align="center" title="Data dell'ultimo upload Revenue">Snapshot</Th>
-              <Th align="right" title="Maturato manuale inserito (override OTB)">Maturato</Th>
-              <Th align="center" title="Clicca per modificare (solo singolo hotel)">{isSingle ? 'Pickup % ✏' : 'Pickup %'}</Th>
-              <Th align="right">Forecast</Th>
-              <Th align="center">{isSingle ? 'Budget ✏' : 'Budget'}</Th>
-              <Th align="right">Consuntivo</Th>
-              <Th align="center">Delta</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {dati.mesi.map(r => {
-              const bg = r.is_past ? '#f8fafc' : '#fff'
-              const stato = salvataggio[r.mese]
-              const hasMaturato = r.maturato_revenue != null
+      <Table>
+        <thead>
+          <tr>
+            <Th>Mese</Th>
+            <Th num>OTB Rev.</Th>
+            <Th center title="Data dell'ultimo upload Revenue">Snapshot</Th>
+            <Th num title="Maturato manuale inserito (override OTB)">Maturato</Th>
+            <Th center title="Clicca per modificare (solo singolo hotel)">{isSingle ? 'Pickup % ✏' : 'Pickup %'}</Th>
+            <Th num>Forecast</Th>
+            <Th center>{isSingle ? 'Budget ✏' : 'Budget'}</Th>
+            <Th num>Consuntivo</Th>
+            <Th center>Delta</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {dati.mesi.map(r => {
+            const stato = salvataggio[r.mese]
+            const hasMaturato = r.maturato_revenue != null
 
-              return (
-                <tr key={r.mese} style={{ background: bg, borderBottom: '1px solid #e5e7eb' }}>
-                  {/* Mese */}
-                  <td style={{ ...stCella, fontWeight: 600, color: r.is_past ? '#9ca3af' : '#1a1a2e' }}>
-                    {r.mese_label}
-                    {r.is_past && <span style={{ marginLeft: 4, fontSize: '0.68rem', color: '#d1d5db' }}>●</span>}
-                  </td>
+            return (
+              <tr key={r.mese}>
+                {/* Mese */}
+                <Td muted={r.is_past} style={{ fontWeight: 600 }}>
+                  {r.mese_label}
+                  {r.is_past && <span style={{ marginLeft: 4, fontSize: 'var(--fs-xs)', color: colors.borderStrong }}>●</span>}
+                </Td>
 
-                  {/* OTB */}
-                  <td style={{ ...stCella, textAlign: 'right', color: r.is_past ? '#9ca3af' : '#374151' }}>
-                    {r.otb_revenue != null ? formatEuro(r.otb_revenue) : '—'}
-                  </td>
+                {/* OTB */}
+                <Td num muted={r.is_past}>{r.otb_revenue != null ? formatEuro(r.otb_revenue) : '—'}</Td>
 
-                  {/* Snapshot date */}
-                  <td style={{ ...stCella, textAlign: 'center', fontSize: '0.78rem', color: '#9ca3af' }}>
-                    {r.otb_snapshot_date ? formatDataIt(r.otb_snapshot_date) : '—'}
-                  </td>
+                {/* Snapshot date */}
+                <Td center muted style={{ fontSize: 'var(--fs-sm)' }}>
+                  {r.otb_snapshot_date ? formatDataIt(r.otb_snapshot_date) : '—'}
+                </Td>
 
-                  {/* Maturato */}
-                  <td style={{ ...stCella, textAlign: 'right' }}>
-                    {hasMaturato ? (
-                      <span style={{ color: '#7c3aed', fontWeight: 600 }} title={r.maturato_al ? `al ${formatDataIt(r.maturato_al)}` : ''}>
-                        {formatEuro(r.maturato_revenue)}
-                        {r.maturato_al && (
-                          <span style={{ fontSize: '0.72rem', color: '#a78bfa', marginLeft: 4 }}>
-                            al {formatDataIt(r.maturato_al)}
-                          </span>
-                        )}
-                      </span>
-                    ) : <span style={{ color: '#d1d5db' }}>—</span>}
-                  </td>
+                {/* Maturato */}
+                <Td num>
+                  {hasMaturato ? (
+                    <span style={{ color: COLORE_MATURATO, fontWeight: 600 }} title={r.maturato_al ? `al ${formatDataIt(r.maturato_al)}` : ''}>
+                      {formatEuro(r.maturato_revenue)}
+                      {r.maturato_al && (
+                        <span style={{ fontSize: 'var(--fs-xs)', opacity: 0.7, marginLeft: 4 }}>
+                          al {formatDataIt(r.maturato_al)}
+                        </span>
+                      )}
+                    </span>
+                  ) : vuoto}
+                </Td>
 
-                  {/* Pickup % */}
-                  <td style={{ ...stCella, textAlign: 'center' }}>
-                    {editCell?.mese === r.mese && editCell.campo === 'pickup' ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
-                        <input
-                          ref={inputRef}
-                          value={editVal}
-                          onChange={e => setEditVal(e.target.value)}
-                          onBlur={() => salva(r.mese, 'pickup')}
-                          onKeyDown={e => handleKeyDown(e, r.mese, 'pickup')}
-                          style={{ width: 58, padding: '2px 4px', border: '1px solid #8B5CF6', borderRadius: 4, fontSize: '0.85rem' }}
-                        />
-                        <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>%</span>
-                      </span>
-                    ) : (
-                      <span
-                        onClick={() => apriEdit(r.mese, 'pickup', r.pickup_rate != null ? r.pickup_rate * 100 : null)}
-                        style={{ cursor: isSingle ? 'pointer' : 'default', color: r.pickup_rate != null ? '#7c3aed' : '#d1d5db' }}
-                        title={isSingle ? 'Clicca per modificare' : ''}
-                      >
-                        {r.pickup_rate != null ? `+${(r.pickup_rate * 100).toFixed(1)}%` : '—'}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Forecast */}
-                  <td style={{ ...stCella, textAlign: 'right', fontWeight: r.forecast_revenue != null ? 600 : 400 }}>
-                    {r.forecast_revenue != null ? (
-                      <span style={{ color: hasMaturato ? '#7c3aed' : '#1e3a5f' }}>
-                        {formatEuro(r.forecast_revenue)}
-                      </span>
-                    ) : '—'}
-                  </td>
-
-                  {/* Budget */}
-                  <td style={{ ...stCella, textAlign: 'center' }}>
-                    {editCell?.mese === r.mese && editCell.campo === 'budget' ? (
+                {/* Pickup % */}
+                <Td center>
+                  {editCell?.mese === r.mese && editCell.campo === 'pickup' ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
                       <input
                         ref={inputRef}
+                        className="ui-input ui-num"
                         value={editVal}
                         onChange={e => setEditVal(e.target.value)}
-                        onBlur={() => salva(r.mese, 'budget')}
-                        onKeyDown={e => handleKeyDown(e, r.mese, 'budget')}
-                        style={{ width: 100, padding: '2px 4px', border: '1px solid #8B5CF6', borderRadius: 4, fontSize: '0.85rem' }}
+                        onBlur={() => salva(r.mese, 'pickup')}
+                        onKeyDown={e => handleKeyDown(e, r.mese, 'pickup')}
+                        style={{ width: 64, padding: '2px 6px', textAlign: 'right' }}
                       />
-                    ) : (
-                      <span
-                        onClick={() => apriEdit(r.mese, 'budget', r.budget_revenue)}
-                        style={{ cursor: isSingle ? 'pointer' : 'default', color: r.budget_revenue != null ? '#374151' : '#d1d5db' }}
-                        title={isSingle ? 'Clicca per modificare' : ''}
-                      >
-                        {r.budget_revenue != null ? formatEuro(r.budget_revenue) : '—'}
-                      </span>
-                    )}
-                    {stato === 'saving' && <span style={{ marginLeft: 4, color: '#9ca3af', fontSize: '0.7rem' }}>⟳</span>}
-                    {stato === 'ok' && <span style={{ marginLeft: 4, color: '#16a34a', fontSize: '0.7rem' }}>✓</span>}
-                    {stato === 'err' && <span style={{ marginLeft: 4, color: '#dc2626', fontSize: '0.7rem' }}>✗</span>}
-                  </td>
-
-                  {/* Consuntivo */}
-                  <td style={{ ...stCella, textAlign: 'right' }}>
-                    {r.consuntivo_revenue != null
-                      ? <strong style={{ color: '#065f46' }}>{formatEuro(r.consuntivo_revenue)}</strong>
-                      : <span style={{ color: '#d1d5db' }}>—</span>}
-                  </td>
-
-                  {/* Delta */}
-                  <td style={{ ...stCella, textAlign: 'center' }}>{badgeDelta(r.delta_pct)}</td>
-                </tr>
-              )
-            })}
-
-            {/* Riga totale */}
-            <tr className="riga-totale" style={{ background: '#1e3a5f', color: '#fff', fontWeight: 700 }}>
-              <td style={stCellaHeader}>Totale stagione</td>
-              <td style={{ ...stCellaHeader, textAlign: 'right' }}>{dati.totale_otb != null ? formatEuro(dati.totale_otb) : '—'}</td>
-              <td style={stCellaHeader}></td>
-              <td style={stCellaHeader}></td>
-              <td style={stCellaHeader}></td>
-              <td style={{ ...stCellaHeader, textAlign: 'right' }}>{dati.totale_forecast != null ? formatEuro(dati.totale_forecast) : '—'}</td>
-              <td style={{ ...stCellaHeader, textAlign: 'center' }}>{dati.totale_budget != null ? formatEuro(dati.totale_budget) : '—'}</td>
-              <td style={{ ...stCellaHeader, textAlign: 'right' }}>{dati.totale_consuntivo != null ? formatEuro(dati.totale_consuntivo) : '—'}</td>
-              <td style={stCellaHeader}>
-                {dati.totale_budget > 0 && (dati.totale_consuntivo || dati.totale_forecast) && (() => {
-                  const v = dati.totale_consuntivo || dati.totale_forecast
-                  const pct = ((v - dati.totale_budget) / dati.totale_budget) * 100
-                  return (
-                    <span style={{ color: pct >= 0 ? '#86efac' : '#fca5a5', fontSize: '0.82rem' }}>
-                      {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
+                      <span className="ui-text-muted">%</span>
                     </span>
-                  )
-                })()}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                  ) : (
+                    <span
+                      onClick={() => apriEdit(r.mese, 'pickup', r.pickup_rate != null ? r.pickup_rate * 100 : null)}
+                      className="ui-num"
+                      style={{ cursor: isSingle ? 'pointer' : 'default', color: r.pickup_rate != null ? colors.text : colors.borderStrong }}
+                      title={isSingle ? 'Clicca per modificare' : ''}
+                    >
+                      {r.pickup_rate != null ? `+${(r.pickup_rate * 100).toFixed(1)}%` : '—'}
+                    </span>
+                  )}
+                </Td>
 
-      <div style={{ marginTop: '0.6rem', fontSize: '0.78rem', color: '#9ca3af', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                {/* Forecast */}
+                <Td num style={{ fontWeight: r.forecast_revenue != null ? 600 : 400 }}>
+                  {r.forecast_revenue != null ? (
+                    <span style={{ color: hasMaturato ? COLORE_MATURATO : colors.primary }}>
+                      {formatEuro(r.forecast_revenue)}
+                    </span>
+                  ) : '—'}
+                </Td>
+
+                {/* Budget */}
+                <Td center>
+                  {editCell?.mese === r.mese && editCell.campo === 'budget' ? (
+                    <input
+                      ref={inputRef}
+                      className="ui-input ui-num"
+                      value={editVal}
+                      onChange={e => setEditVal(e.target.value)}
+                      onBlur={() => salva(r.mese, 'budget')}
+                      onKeyDown={e => handleKeyDown(e, r.mese, 'budget')}
+                      style={{ width: 110, padding: '2px 6px', textAlign: 'right' }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => apriEdit(r.mese, 'budget', r.budget_revenue)}
+                      className="ui-num"
+                      style={{ cursor: isSingle ? 'pointer' : 'default', color: r.budget_revenue != null ? colors.text : colors.borderStrong }}
+                      title={isSingle ? 'Clicca per modificare' : ''}
+                    >
+                      {r.budget_revenue != null ? formatEuro(r.budget_revenue) : '—'}
+                    </span>
+                  )}
+                  {stato === 'saving' && <span style={{ marginLeft: 4, color: colors.textSubtle }} title="Salvataggio…">⟳</span>}
+                  {stato === 'ok' && <span style={{ marginLeft: 4, color: colors.success }} title="Salvato">✓</span>}
+                  {stato === 'err' && <span style={{ marginLeft: 4, color: colors.danger }} title="Errore nel salvataggio">✗</span>}
+                </Td>
+
+                {/* Consuntivo */}
+                <Td num>
+                  {r.consuntivo_revenue != null
+                    ? <strong style={{ color: colors.successText }}>{formatEuro(r.consuntivo_revenue)}</strong>
+                    : vuoto}
+                </Td>
+
+                {/* Delta */}
+                <Td center><BadgeDelta pct={r.delta_pct} /></Td>
+              </tr>
+            )
+          })}
+
+          {/* Riga totale */}
+          <tr className="ui-riga-totale">
+            <Td>Totale stagione</Td>
+            <Td num>{dati.totale_otb != null ? formatEuro(dati.totale_otb) : '—'}</Td>
+            <Td></Td>
+            <Td></Td>
+            <Td></Td>
+            <Td num>{dati.totale_forecast != null ? formatEuro(dati.totale_forecast) : '—'}</Td>
+            <Td center className="ui-num">{dati.totale_budget != null ? formatEuro(dati.totale_budget) : '—'}</Td>
+            <Td num>{dati.totale_consuntivo != null ? formatEuro(dati.totale_consuntivo) : '—'}</Td>
+            <Td center>
+              {dati.totale_budget > 0 && (dati.totale_consuntivo || dati.totale_forecast) && (() => {
+                const v = dati.totale_consuntivo || dati.totale_forecast
+                return <BadgeDelta pct={((v - dati.totale_budget) / dati.totale_budget) * 100} />
+              })()}
+            </Td>
+          </tr>
+        </tbody>
+      </Table>
+
+      <div className="ui-text-muted" style={{ marginTop: 8, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
         <span>● Mesi passati — Consuntivo reale da modulo Revenue</span>
-        <span style={{ color: '#7c3aed' }}>■ Forecast in viola = calcolato su Maturato manuale</span>
+        <span style={{ color: COLORE_MATURATO }}>■ Forecast in viola = calcolato su Maturato manuale</span>
         {isSingle && <span>✏ Clicca su Budget o Pickup% per modificare — Invio per salvare</span>}
       </div>
     </div>
@@ -392,81 +384,76 @@ function TabPace({ anno, hotels, hotelIniziale }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <label style={stileLabel}>Hotel</label>
-        <select value={hotelPace} onChange={e => setHotelPace(e.target.value)} style={stileSelect}>
-          <option value="">— seleziona —</option>
-          {hotels.map(h => <option key={h.code} value={h.code}>{h.name}</option>)}
-        </select>
-        <label style={stileLabel}>Mese target</label>
-        <select value={mesePace} onChange={e => setMesePace(Number(e.target.value))} style={stileSelect}>
-          {MESI_LABEL.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
-        </select>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <Field label="Hotel">
+          <Select value={hotelPace} onChange={e => setHotelPace(e.target.value)}>
+            <option value="">— seleziona —</option>
+            {hotels.map(h => <option key={h.code} value={h.code}>{h.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Mese target">
+          <Select value={mesePace} onChange={e => setMesePace(Number(e.target.value))}>
+            {MESI_LABEL.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
+          </Select>
+        </Field>
       </div>
 
-      {!hotelPace && (
-        <div style={{ color: '#6b7280', textAlign: 'center', padding: '3rem' }}>
-          Seleziona un hotel per visualizzare il Pace Chart
-        </div>
-      )}
+      {!hotelPace && <StatoVuoto>Seleziona un hotel per visualizzare il Pace Chart</StatoVuoto>}
 
-      {caricando && <Caricamento />}
-      {errore && <Errore msg={errore} />}
+      {caricando && <Loading />}
+      <Messaggio tipo="err">{errore}</Messaggio>
 
       {datiPace && !caricando && (
         <>
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-            <CardKpi titolo="OTB attuale" valore={punti.length ? formatEuro(punti[punti.length - 1].otb_revenue) : '—'} colore="#8B5CF6" />
-            <CardKpi
-              titolo={datiPace.maturato_revenue != null ? `Maturato al ${formatDataIt(datiPace.maturato_al)}` : 'Maturato manuale'}
-              valore={datiPace.maturato_revenue != null ? formatEuro(datiPace.maturato_revenue) : 'non inserito'}
-              colore="#7c3aed"
+          <div className="ui-kpi-row">
+            <KpiTile label="OTB attuale" value={punti.length ? formatEuro(punti[punti.length - 1].otb_revenue) : '—'} colore={COLORE_SERIE} minWidth={180} />
+            <KpiTile
+              label={datiPace.maturato_revenue != null ? `Maturato al ${formatDataIt(datiPace.maturato_al)}` : 'Maturato manuale'}
+              value={datiPace.maturato_revenue != null ? formatEuro(datiPace.maturato_revenue) : 'non inserito'}
+              colore={COLORE_MATURATO}
+              minWidth={180}
             />
-            <CardKpi
-              titolo={`Forecast${datiPace.pickup_rate != null ? ` (pickup +${(datiPace.pickup_rate * 100).toFixed(0)}%)` : ''}`}
-              valore={datiPace.forecast_revenue != null ? formatEuro(datiPace.forecast_revenue) : '—'}
-              colore="#1e3a5f"
+            <KpiTile
+              label={`Forecast${datiPace.pickup_rate != null ? ` (pickup +${(datiPace.pickup_rate * 100).toFixed(0)}%)` : ''}`}
+              value={datiPace.forecast_revenue != null ? formatEuro(datiPace.forecast_revenue) : '—'}
+              colore={colors.primary}
+              minWidth={180}
             />
-            <CardKpi titolo="Budget" valore={datiPace.budget_revenue != null ? formatEuro(datiPace.budget_revenue) : 'non impostato'} colore="#374151" />
+            <KpiTile label="Budget" value={datiPace.budget_revenue != null ? formatEuro(datiPace.budget_revenue) : 'non impostato'} minWidth={180} />
           </div>
 
           {punti.length === 0 ? (
-            <div style={{ textAlign: 'center', color: '#6b7280', padding: '3rem', background: '#f9fafb', borderRadius: 10 }}>
+            <StatoVuoto>
               Nessun dato OTB per {MESI_LABEL[mesePace - 1]} {anno}.<br />
-              <span style={{ fontSize: '0.85rem' }}>I dati provengono dagli upload settimanali del modulo Revenue.</span>
-            </div>
+              I dati provengono dagli upload settimanali del modulo Revenue.
+            </StatoVuoto>
           ) : (
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem' }}>
-              <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#374151' }}>
-                Crescita OTB — {datiPace.mese_label} {anno} · {datiPace.hotel_code}
-              </h3>
-              <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', color: '#9ca3af' }}>
-                Ogni punto = un upload settimanale del modulo Revenue
-              </p>
+            <Card title={`Crescita OTB — ${datiPace.mese_label} ${anno} · ${datiPace.hotel_code}`}>
+              <p className="ui-text-muted" style={{ marginTop: 0 }}>Ogni punto = un upload settimanale del modulo Revenue</p>
               <ResponsiveContainer width="100%" height={320}>
                 <LineChart data={datiGrafico} margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={colors.surfaceAlt} />
                   <XAxis dataKey="data" tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}K`} tick={{ fontSize: 11 }} width={55} />
                   <Tooltip formatter={v => formatEuro(v)} labelFormatter={l => `Upload del ${l}`} />
                   <Legend />
                   {pastReferenceArea(datiGrafico, 'data')}
-                  <Line type="monotone" dataKey="otb" name="OTB Revenue" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 5 }} activeDot={{ r: 7 }} />
+                  <Line type="monotone" dataKey="otb" name="OTB Revenue" stroke={COLORE_SERIE} strokeWidth={2.5} dot={{ r: 5 }} activeDot={{ r: 7 }} />
                   {datiPace.budget_revenue != null && (
-                    <ReferenceLine y={datiPace.budget_revenue} stroke="#374151" strokeDasharray="6 3"
-                      label={{ value: `Budget ${formatEuro(datiPace.budget_revenue)}`, position: 'insideTopRight', fontSize: 11, fill: '#374151' }} />
+                    <ReferenceLine y={datiPace.budget_revenue} stroke={colors.textSecond} strokeDasharray="6 3"
+                      label={{ value: `Budget ${formatEuro(datiPace.budget_revenue)}`, position: 'insideTopRight', fontSize: 11, fill: colors.textSecond }} />
                   )}
                   {datiPace.maturato_revenue != null && (
-                    <ReferenceLine y={datiPace.maturato_revenue} stroke="#7c3aed" strokeDasharray="4 4"
-                      label={{ value: `Maturato ${formatEuro(datiPace.maturato_revenue)}`, position: 'insideBottomRight', fontSize: 11, fill: '#7c3aed' }} />
+                    <ReferenceLine y={datiPace.maturato_revenue} stroke={COLORE_MATURATO} strokeDasharray="4 4"
+                      label={{ value: `Maturato ${formatEuro(datiPace.maturato_revenue)}`, position: 'insideBottomRight', fontSize: 11, fill: COLORE_MATURATO }} />
                   )}
                   {datiPace.forecast_revenue != null && datiPace.pickup_rate != null && (
-                    <ReferenceLine y={datiPace.forecast_revenue} stroke="#1e3a5f" strokeDasharray="4 4"
-                      label={{ value: `Forecast ${formatEuro(datiPace.forecast_revenue)}`, position: 'insideTopLeft', fontSize: 11, fill: '#1e3a5f' }} />
+                    <ReferenceLine y={datiPace.forecast_revenue} stroke={colors.primary} strokeDasharray="4 4"
+                      label={{ value: `Forecast ${formatEuro(datiPace.forecast_revenue)}`, position: 'insideTopLeft', fontSize: 11, fill: colors.primary }} />
                   )}
                 </LineChart>
               </ResponsiveContainer>
-            </div>
+            </Card>
           )}
         </>
       )}
@@ -487,7 +474,8 @@ function TabMaturato({ anno, hotels, hotelSelezionato, onAggiornato }) {
   const [formRoomNights, setFormRoomNights] = useState('')
   const [formNote, setFormNote] = useState('')
   const [salvando, setSalvando] = useState(false)
-  const [esito, setEsito] = useState(null)   // { ok, msg }
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   // Lista maturati inseriti
   const [lista, setLista] = useState([])
@@ -509,7 +497,6 @@ function TabMaturato({ anno, hotels, hotelSelezionato, onAggiornato }) {
     const revenue = parseFloat(String(formRevenue).replace(',', '.'))
     if (!formHotel || isNaN(revenue) || !formData) return
     setSalvando(true)
-    setEsito(null)
     try {
       const r = await api.put('/forecast/maturato', {
         hotel_code: formHotel,
@@ -520,198 +507,127 @@ function TabMaturato({ anno, hotels, hotelSelezionato, onAggiornato }) {
         maturato_room_nights: formRoomNights ? parseInt(formRoomNights) : null,
         note: formNote || null,
       })
-      setEsito({ ok: true, msg: `Salvato: ${r.data.mese_label} ${anno} · ${formatEuro(r.data.maturato_revenue)} al ${formatDataIt(r.data.data_riferimento)}` })
+      avvisi.successo(`Salvato: ${r.data.mese_label} ${anno} · ${formatEuro(r.data.maturato_revenue)} al ${formatDataIt(r.data.data_riferimento)}`)
       setFormRevenue('')
       setFormRoomNights('')
       setFormNote('')
       caricaLista()
       onAggiornato()
     } catch (err) {
-      setEsito({ ok: false, msg: err.response?.data?.detail || 'Errore durante il salvataggio' })
+      avvisi.errore(mostraErrore(err, 'Errore durante il salvataggio'))
     } finally {
       setSalvando(false)
     }
   }
 
   async function handleElimina(id) {
-    if (!window.confirm('Eliminare questo record maturato?')) return
+    if (!(await conferma({ titolo: 'Eliminare questo record maturato?', pericolo: true }))) return
     setEliminando(id)
     try {
       await api.delete(`/forecast/maturato/${id}`)
       caricaLista()
       onAggiornato()
     } catch (err) {
-      alert(err.response?.data?.detail || 'Errore durante l\'eliminazione')
+      avvisi.errore(mostraErrore(err, 'Errore durante l\'eliminazione'))
     } finally {
       setEliminando(null)
     }
   }
 
+  const pieno = { width: '100%' }
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '2.5rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 40 }}>
 
       {/* Form inserimento */}
       <div>
-        <h3 style={{ margin: '0 0 1.2rem', fontSize: '1.05rem', color: '#374151' }}>Inserisci maturato</h3>
-        <p style={{ margin: '0 0 1.2rem', fontSize: '0.83rem', color: '#6b7280', lineHeight: 1.5 }}>
+        <SectionTitle as="h3">Inserisci maturato</SectionTitle>
+        <p className="ui-text-muted" style={{ marginTop: 0, marginBottom: 16, lineHeight: 1.5 }}>
           Il maturato è la revenue confermata su un mese fino alla data indicata.
           Sostituisce l'OTB calcolato automaticamente nel calcolo del forecast.
         </p>
 
-        <form onSubmit={handleSalva} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-          {/* Hotel */}
-          <div>
-            <label style={stileLabel}>Hotel *</label>
-            <select value={formHotel} onChange={e => setFormHotel(e.target.value)} style={{ ...stileSelect, width: '100%' }} required>
+        <form onSubmit={handleSalva} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label="Hotel *" style={pieno}>
+            <Select value={formHotel} onChange={e => setFormHotel(e.target.value)} style={pieno} required>
               <option value="">— seleziona —</option>
               {hotels.map(h => <option key={h.code} value={h.code}>{h.name}</option>)}
-            </select>
-          </div>
+            </Select>
+          </Field>
 
-          {/* Mese */}
-          <div>
-            <label style={stileLabel}>Mese *</label>
-            <select value={formMese} onChange={e => setFormMese(Number(e.target.value))} style={{ ...stileSelect, width: '100%' }}>
+          <Field label="Mese *" style={pieno}>
+            <Select value={formMese} onChange={e => setFormMese(Number(e.target.value))} style={pieno}>
               {MESI_LABEL.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
-            </select>
-          </div>
+            </Select>
+          </Field>
 
-          {/* Data riferimento */}
-          <div>
-            <label style={stileLabel}>Al giorno *</label>
-            <input
-              type="date"
-              value={formData}
-              onChange={e => setFormData(e.target.value)}
-              required
-              style={{ ...stileSelect, width: '100%', boxSizing: 'border-box' }}
-            />
-          </div>
+          <Field label="Al giorno *" style={pieno}>
+            <Input type="date" value={formData} onChange={e => setFormData(e.target.value)} required style={pieno} />
+          </Field>
 
-          {/* Revenue */}
-          <div>
-            <label style={stileLabel}>Revenue maturata (€) *</label>
-            <input
-              type="text"
-              inputMode="decimal"
-              placeholder="es. 45000.00"
-              value={formRevenue}
-              onChange={e => setFormRevenue(e.target.value)}
-              required
-              style={{ ...stileSelect, width: '100%', boxSizing: 'border-box' }}
-            />
-          </div>
+          <Field label="Revenue maturata (€) *" style={pieno}>
+            <Input type="text" inputMode="decimal" placeholder="es. 45000.00" value={formRevenue}
+              onChange={e => setFormRevenue(e.target.value)} required style={pieno} />
+          </Field>
 
-          {/* Room nights (opzionale) */}
-          <div>
-            <label style={stileLabel}>Room nights (opzionale)</label>
-            <input
-              type="number"
-              min="0"
-              placeholder="es. 312"
-              value={formRoomNights}
-              onChange={e => setFormRoomNights(e.target.value)}
-              style={{ ...stileSelect, width: '100%', boxSizing: 'border-box' }}
-            />
-          </div>
+          <Field label="Room nights (opzionale)" style={pieno}>
+            <Input type="number" min="0" placeholder="es. 312" value={formRoomNights}
+              onChange={e => setFormRoomNights(e.target.value)} style={pieno} />
+          </Field>
 
-          {/* Note */}
-          <div>
-            <label style={stileLabel}>Note (opzionale)</label>
-            <textarea
-              rows={2}
-              value={formNote}
-              onChange={e => setFormNote(e.target.value)}
-              placeholder="es. Dato estratto dal PMS il 10/06"
-              style={{ ...stileSelect, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
-            />
-          </div>
+          <Field label="Note (opzionale)" style={pieno}>
+            <Textarea rows={2} value={formNote} onChange={e => setFormNote(e.target.value)}
+              placeholder="es. Dato estratto dal PMS il 10/06" style={pieno} />
+          </Field>
 
-          <button
-            type="submit"
-            disabled={salvando || !formHotel || !formRevenue}
-            style={{
-              padding: '0.65rem',
-              background: salvando || !formHotel || !formRevenue ? '#d1d5db' : '#8B5CF6',
-              color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer',
-              fontWeight: 700, fontSize: '0.95rem',
-            }}
-          >
+          <Button type="submit" disabled={salvando || !formHotel || !formRevenue}>
             {salvando ? 'Salvataggio…' : 'Salva maturato'}
-          </button>
+          </Button>
         </form>
-
-        {esito && (
-          <div style={{
-            marginTop: '0.8rem', padding: '0.7rem 1rem', borderRadius: 8, fontSize: '0.87rem',
-            background: esito.ok ? '#dcfce7' : '#fee2e2',
-            color: esito.ok ? '#166534' : '#991b1b',
-          }}>
-            {esito.ok ? '✓ ' : '✗ '}{esito.msg}
-          </div>
-        )}
       </div>
 
       {/* Lista maturati */}
       <div>
-        <h3 style={{ margin: '0 0 1.2rem', fontSize: '1.05rem', color: '#374151' }}>
-          Maturati inseriti — {anno}
-        </h3>
+        <SectionTitle as="h3">Maturati inseriti — {anno}</SectionTitle>
 
         {lista.length === 0 ? (
-          <p style={{ color: '#9ca3af', fontSize: '0.88rem' }}>
-            Nessun maturato inserito per {anno}.
-          </p>
+          <StatoVuoto>Nessun maturato inserito per {anno}.</StatoVuoto>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.87rem' }}>
+          <Table>
             <thead>
-              <tr style={{ background: '#f3f4f6', color: '#374151' }}>
+              <tr>
                 <Th>Hotel</Th>
                 <Th>Mese</Th>
-                <Th align="center">Al giorno</Th>
-                <Th align="right">Revenue</Th>
-                <Th align="right">RN</Th>
+                <Th center>Al giorno</Th>
+                <Th num>Revenue</Th>
+                <Th num>RN</Th>
                 <Th>Note</Th>
-                <Th align="center">Azioni</Th>
+                <Th center>Azioni</Th>
               </tr>
             </thead>
             <tbody>
               {lista.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={{ ...stCella, fontWeight: 600 }}>
-                    <span style={{ background: '#ede9fe', color: '#7c3aed', padding: '2px 7px', borderRadius: 4, fontSize: '0.8rem' }}>
-                      {r.hotel_code}
-                    </span>
-                  </td>
-                  <td style={stCella}>{r.mese_label}</td>
-                  <td style={{ ...stCella, textAlign: 'center', fontSize: '0.82rem', color: '#6b7280' }}>
-                    {formatDataIt(r.data_riferimento)}
-                  </td>
-                  <td style={{ ...stCella, textAlign: 'right', fontWeight: 700, color: '#7c3aed' }}>
-                    {formatEuro(r.maturato_revenue)}
-                  </td>
-                  <td style={{ ...stCella, textAlign: 'right', color: '#6b7280' }}>
-                    {r.maturato_room_nights ?? '—'}
-                  </td>
-                  <td style={{ ...stCella, fontSize: '0.8rem', color: '#9ca3af', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <tr key={r.id}>
+                  <Td><HotelTag code={r.hotel_code} /></Td>
+                  <Td>{r.mese_label}</Td>
+                  <Td center style={{ color: colors.textMuted }}>{formatDataIt(r.data_riferimento)}</Td>
+                  <Td num style={{ fontWeight: 700, color: COLORE_MATURATO }}>{formatEuro(r.maturato_revenue)}</Td>
+                  <Td num style={{ color: colors.textMuted }}>{r.maturato_room_nights ?? '—'}</Td>
+                  <Td muted style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.note || ''}>
                     {r.note || '—'}
-                  </td>
-                  <td style={{ ...stCella, textAlign: 'center' }}>
-                    <button
-                      onClick={() => handleElimina(r.id)}
-                      disabled={eliminando === r.id}
-                      style={{ border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: '0.8rem' }}
-                    >
+                  </Td>
+                  <Td center>
+                    <Button variant="danger-soft" size="sm" onClick={() => handleElimina(r.id)} disabled={eliminando === r.id} title="Elimina">
                       {eliminando === r.id ? '…' : '🗑'}
-                    </button>
-                  </td>
+                    </Button>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
 
-        <p style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#9ca3af' }}>
+        <p className="ui-text-muted" style={{ marginTop: 16 }}>
           Il maturato sovrascrive l'OTB calcolato da daily_revenue nel tab Riepilogo.
           Inserendo un nuovo valore per lo stesso hotel/mese si aggiorna il precedente.
         </p>
@@ -719,7 +635,6 @@ function TabMaturato({ anno, hotels, hotelSelezionato, onAggiornato }) {
     </div>
   )
 }
-
 // ---------------------------------------------------------------------------
 // Tab 4 — Cancellazioni (import Welcome)
 // ---------------------------------------------------------------------------
@@ -747,6 +662,8 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   const [direzione, setDirezione] = useState('desc')
   const [vistaPeriodo, setVistaPeriodo] = useState(() => localStorage.getItem('cancellazioni_vista_periodo') || 'mensile')
   const [vistaMetrica, setVistaMetrica] = useState(() => localStorage.getItem('cancellazioni_vista_metrica') || 'prenotazioni')
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   useEffect(() => {
     localStorage.setItem('cancellazioni_vista_periodo', vistaPeriodo)
@@ -827,13 +744,17 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   useEffect(() => { setPagina(1) }, [canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, anno, hotelFiltro, ricerca, ordinaPer, direzione])
 
   async function handleElimina(riga) {
-    if (!window.confirm(`Eliminare definitivamente la prenotazione ${riga.numero_prenotazione || riga.id} (${riga.cliente || 'senza nome'}, ${riga.hotel_code})?`)) return
+    if (!(await conferma({
+      titolo: 'Eliminare la prenotazione?',
+      messaggio: `Prenotazione ${riga.numero_prenotazione || riga.id} (${riga.cliente || 'senza nome'}, ${riga.hotel_code}). L'operazione non è reversibile.`,
+      pericolo: true,
+    }))) return
     setEliminandoId(riga.id)
     try {
       await api.delete(`/prenotazioni-cancellate/${riga.id}?conferma=true`)
       caricaRighe()
     } catch (e) {
-      alert(mostraErrore(e))
+      avvisi.errore(mostraErrore(e))
     } finally {
       setEliminandoId(null)
     }
@@ -858,303 +779,239 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
       }))
     : []
   const tassoPerCanale = Object.fromEntries((datiTasso?.per_canale || []).map(c => [c.canale, c.tasso_pct]))
-  // Recharts colora di default il testo della legenda come la serie — qui si vuole solo il
-  // quadratino colorato, il testo resta nero come il resto dei titoli.
-  const legendaNera = v => <span style={{ color: '#111827' }}>{v}</span>
+
+  // Un grafico della tab: stesso schema per prenotazione/arrivo, a barre (mensile) o linea (giornaliero)
+  const grafico = (datiMese, datiGiorno) => (
+    <ResponsiveContainer width="100%" height={280}>
+      {giornaliero ? (
+        <LineChart data={datiGiorno} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={colors.surfaceAlt} />
+          <XAxis dataKey="giorno" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
+          <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
+          <Tooltip formatter={metricaFormatter} />
+          <Legend formatter={legendaNeutra} />
+          <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke={COLORE_SERIE} strokeWidth={2} dot={false} />
+        </LineChart>
+      ) : (
+        <BarChart data={datiMese} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={colors.surfaceAlt} />
+          <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
+          <Tooltip formatter={metricaFormatter} />
+          <Legend formatter={legendaNeutra} />
+          <Bar dataKey={metricaKey} name={metricaNome} fill={COLORE_SERIE} radius={[4, 4, 0, 0]} />
+        </BarChart>
+      )}
+    </ResponsiveContainer>
+  )
+
+  const tassoPeriodo = fatturato ? datiTasso?.tasso_importo_pct : datiTasso?.tasso_pct
+  const sp = { ordinaPer, direzione, onOrdina: ordinaColonna }
 
   return (
     <div>
-
-      <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.2rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div>
-          <label style={stileLabel}>Struttura</label>
-          <select value={hotelFiltro} onChange={e => setHotelFiltro(e.target.value)} style={stileSelect}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <Field label="Struttura">
+          <Select value={hotelFiltro} onChange={e => setHotelFiltro(e.target.value)}>
             <option value="all">Tutti gli hotel</option>
             {hotels.map(h => <option key={h.code} value={h.code}>{h.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={stileLabel}>Canale</label>
-          <select
+          </Select>
+        </Field>
+        <Field label="Canale">
+          <Select
             value={canaliSelezionati[0] || ''}
             onChange={e => setCanaliSelezionati(e.target.value ? [e.target.value] : [])}
-            style={stileSelect}
           >
             <option value="">Tutti</option>
             {canaliDisponibili.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={stileLabel}>Arrivo da</label>
-          <input type="date" value={arrivoDa} onChange={e => setArrivoDa(e.target.value)} style={stileSelect} />
-        </div>
-        <div>
-          <label style={stileLabel}>Arrivo a</label>
-          <input type="date" value={arrivoA} onChange={e => setArrivoA(e.target.value)} style={stileSelect} />
-        </div>
-        <div>
-          <label style={stileLabel}>Prenotazione da</label>
-          <input type="date" value={prenotazioneDa} onChange={e => setPrenotazioneDa(e.target.value)} style={stileSelect} />
-        </div>
-        <div>
-          <label style={stileLabel}>Prenotazione a</label>
-          <input type="date" value={prenotazioneA} onChange={e => setPrenotazioneA(e.target.value)} style={stileSelect} />
-        </div>
-        <div>
-          <label style={{ ...stileLabel, visibility: 'hidden' }}>Anno</label>
-          <button
-            onClick={() => {
-              // Anno commerciale: 1 ottobre dell'anno precedente - 30 settembre di "anno"
-              // (coerente con l'ordine ott→set già usato nei grafici mensili di questa tab).
-              setArrivoDa(`${anno - 1}-10-01`)
-              setArrivoA(`${anno}-09-30`)
-              setPrenotazioneDa(`${anno - 1}-10-01`)
-              setPrenotazioneA(`${anno}-09-30`)
-            }}
-            style={{ ...stileSelect, cursor: 'pointer', background: '#f0f9ff', borderColor: '#7dd3fc', color: '#075985', fontWeight: 600, whiteSpace: 'nowrap' }}
-          >
-            Anno com. {anno}
-          </button>
-        </div>
+          </Select>
+        </Field>
+        <Field label="Arrivo da"><Input type="date" value={arrivoDa} onChange={e => setArrivoDa(e.target.value)} /></Field>
+        <Field label="Arrivo a"><Input type="date" value={arrivoA} onChange={e => setArrivoA(e.target.value)} /></Field>
+        <Field label="Prenotazione da"><Input type="date" value={prenotazioneDa} onChange={e => setPrenotazioneDa(e.target.value)} /></Field>
+        <Field label="Prenotazione a"><Input type="date" value={prenotazioneA} onChange={e => setPrenotazioneA(e.target.value)} /></Field>
+        <Button
+          variant="secondary"
+          title={`Imposta le quattro date su 1/10/${anno - 1} – 30/9/${anno}`}
+          onClick={() => {
+            // Anno commerciale: 1 ottobre dell'anno precedente - 30 settembre di "anno"
+            // (coerente con l'ordine ott→set già usato nei grafici mensili di questa tab).
+            setArrivoDa(`${anno - 1}-10-01`)
+            setArrivoA(`${anno}-09-30`)
+            setPrenotazioneDa(`${anno - 1}-10-01`)
+            setPrenotazioneA(`${anno}-09-30`)
+          }}
+        >
+          Anno com. {anno}
+        </Button>
       </div>
 
-      {caricandoDati && <Caricamento />}
-      {errore && <Errore msg={errore} />}
+      {caricandoDati && <Loading />}
+      <Messaggio tipo="err">{errore}</Messaggio>
 
       {dati && !caricandoDati && (
         <>
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-            <CardKpi titolo="Camere cancellate" valore={dati.totale_n} colore="#0ea5e9" larghezza="130px" />
-            <CardKpi titolo="Importo cancellato" valore={formatEuro(dati.totale_importo)} colore="#0ea5e9" larghezza="130px" />
-            <CardKpi
-              titolo="% Cancellazioni"
-              valore={datiTasso?.tasso_pct != null ? `${datiTasso.tasso_pct}%` : '—'}
-              colore="#0ea5e9"
-              larghezza="130px"
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', marginLeft: 'auto' }}>
-              <div style={{ display: 'inline-flex', background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: 8, padding: 3 }}>
-                <button onClick={() => setVistaPeriodo('mensile')} style={stileToggleBtn(vistaPeriodo === 'mensile')}>Mensile</button>
-                <button onClick={() => setVistaPeriodo('giornaliero')} style={stileToggleBtn(vistaPeriodo === 'giornaliero')}>Giornaliero</button>
-              </div>
-              <div style={{ display: 'inline-flex', background: '#f0f9ff', border: '1px solid #7dd3fc', borderRadius: 8, padding: 3 }}>
-                <button onClick={() => setVistaMetrica('prenotazioni')} style={stileToggleBtn(vistaMetrica === 'prenotazioni')}>Prenotazioni</button>
-                <button onClick={() => setVistaMetrica('fatturato')} style={stileToggleBtn(vistaMetrica === 'fatturato')}>Fatturato</button>
-              </div>
+          <div className="ui-kpi-row" style={{ alignItems: 'stretch' }}>
+            <KpiTile label="Camere cancellate" value={dati.totale_n} colore={COLORE_SERIE} minWidth={150} />
+            <KpiTile label="Importo cancellato" value={formatEuro(dati.totale_importo)} colore={COLORE_SERIE} minWidth={150} />
+            <KpiTile label="% Cancellazioni" value={datiTasso?.tasso_pct != null ? `${datiTasso.tasso_pct}%` : '—'} colore={COLORE_SERIE} minWidth={150} />
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignItems: 'flex-end', gap: 8, marginLeft: 'auto' }}>
+              <SegmentedControl value={vistaPeriodo} onChange={setVistaPeriodo}
+                options={[{ value: 'mensile', label: 'Mensile' }, { value: 'giornaliero', label: 'Giornaliero' }]} />
+              <SegmentedControl value={vistaMetrica} onChange={setVistaMetrica}
+                options={[{ value: 'prenotazioni', label: 'Prenotazioni' }, { value: 'fatturato', label: 'Fatturato' }]} />
             </div>
           </div>
 
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem', marginBottom: '1.5rem' }}>
-            <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#374151' }}>
-              Per {giornaliero ? 'giorno' : 'mese'} di prenotazione — {anno} · {dati.hotel_code}
-            </h3>
-            <ResponsiveContainer width="100%" height={280}>
-              {giornaliero ? (
-                <LineChart data={datiGraficoGiorno} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                  <XAxis dataKey="giorno" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
-                  <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
-                  <Tooltip formatter={metricaFormatter} />
-                  <Legend formatter={legendaNera} />
-                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#0ea5e9" strokeWidth={2} dot={false} />
-                </LineChart>
-              ) : (
-                <BarChart data={datiGrafico} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                  <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
-                  <Tooltip formatter={metricaFormatter} />
-                  <Legend formatter={legendaNera} />
-                  <Bar dataKey={metricaKey} name={metricaNome} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </div>
+          <Card title={`Per ${giornaliero ? 'giorno' : 'mese'} di prenotazione — ${anno} · ${dati.hotel_code}`} style={{ marginBottom: 20 }}>
+            {grafico(datiGrafico, datiGraficoGiorno)}
+          </Card>
 
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem', marginBottom: '1.5rem' }}>
-            <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#374151' }}>
-              Per {giornaliero ? 'giorno' : 'mese'} di arrivo — {anno} · {dati.hotel_code}
-            </h3>
-            <ResponsiveContainer width="100%" height={280}>
-              {giornaliero ? (
-                <LineChart data={datiGraficoGiornoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                  <XAxis dataKey="giorno" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
-                  <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
-                  <Tooltip formatter={metricaFormatter} />
-                  <Legend formatter={legendaNera} />
-                  <Line type="monotone" dataKey={metricaKey} name={metricaNome} stroke="#0ea5e9" strokeWidth={2} dot={false} />
-                </LineChart>
-              ) : (
-                <BarChart data={datiGraficoArrivo} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                  <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} width={fatturato ? 60 : 40} allowDecimals={false} />
-                  <Tooltip formatter={metricaFormatter} />
-                  <Legend formatter={legendaNera} />
-                  <Bar dataKey={metricaKey} name={metricaNome} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </div>
+          <Card title={`Per ${giornaliero ? 'giorno' : 'mese'} di arrivo — ${anno} · ${dati.hotel_code}`} style={{ marginBottom: 20 }}>
+            {grafico(datiGraficoArrivo, datiGraficoGiornoArrivo)}
+          </Card>
 
           {datiTasso && (
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '1.2rem', marginBottom: '1.5rem' }}>
-              <h3 style={{ margin: '0 0 0.3rem', fontSize: '1rem', color: '#374151' }}>
-                Tasso di cancellazione per {giornaliero ? 'giorno' : 'mese'} di prenotazione
-                {fatturato ? ' (su fatturato)' : ' (su numero prenotazioni)'} — {anno} · {datiTasso.hotel_code}
-              </h3>
-              <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', color: '#9ca3af' }}>
+            <Card
+              title={`Tasso di cancellazione per ${giornaliero ? 'giorno' : 'mese'} di prenotazione${fatturato ? ' (su fatturato)' : ' (su numero prenotazioni)'} — ${anno} · ${datiTasso.hotel_code}`}
+              style={{ marginBottom: 20 }}
+            >
+              <p className="ui-text-muted" style={{ margin: '0 0 6px' }}>
                 Richiede sia l'import "Disdette" sia "Prenotazioni non disdette" per questo periodo —
                 senza il secondo il totale prenotato è incompleto e il tasso risulta gonfiato.
               </p>
-              <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: '#0ea5e9', fontWeight: 700 }}>
-                Tasso di cancellazione (media periodo {
-                  (fatturato ? datiTasso.tasso_importo_pct : datiTasso.tasso_pct) != null
-                    ? `${fatturato ? datiTasso.tasso_importo_pct : datiTasso.tasso_pct}%`
-                    : 'n/d'
-                })
+              <p style={{ margin: '0 0 16px', fontSize: 'var(--fs-md)', color: COLORE_SERIE, fontWeight: 700 }}>
+                Tasso di cancellazione (media periodo {tassoPeriodo != null ? `${tassoPeriodo}%` : 'n/d'})
               </p>
               <ResponsiveContainer width="100%" height={280}>
                 {giornaliero ? (
                   <LineChart data={datiGraficoTasso} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={colors.surfaceAlt} />
                     <XAxis dataKey="periodo" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={20} />
                     <YAxis tick={{ fontSize: 11 }} width={45} unit="%" />
                     <Tooltip content={<TooltipTasso fatturato={fatturato} />} />
-                    <Legend formatter={legendaNera} />
-                    <Line type="monotone" dataKey="tasso" name="Tasso cancellazione" stroke="#0ea5e9" strokeWidth={2} dot={false} />
+                    <Legend formatter={legendaNeutra} />
+                    <Line type="monotone" dataKey="tasso" name="Tasso cancellazione" stroke={COLORE_SERIE} strokeWidth={2} dot={false} />
                   </LineChart>
                 ) : (
                   <BarChart data={datiGraficoTasso} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={colors.surfaceAlt} />
                     <XAxis dataKey="periodo" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} width={45} unit="%" />
                     <Tooltip content={<TooltipTasso fatturato={fatturato} />} />
-                    <Legend formatter={legendaNera} />
-                    <Bar dataKey="tasso" name="Tasso cancellazione" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                    <Legend formatter={legendaNeutra} />
+                    <Bar dataKey="tasso" name="Tasso cancellazione" fill={COLORE_SERIE} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 )}
               </ResponsiveContainer>
-            </div>
+            </Card>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
             <div>
-              <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9rem', color: '#374151' }}>Per struttura</h4>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead><tr style={{ background: '#f3f4f6' }}><Th>Hotel</Th><Th align="right">N.</Th><Th align="right">Importo</Th></tr></thead>
+              <SectionTitle as="h3">Per struttura</SectionTitle>
+              <Table compact>
+                <thead><tr><Th>Hotel</Th><Th num>N.</Th><Th num>Importo</Th></tr></thead>
                 <tbody>
                   {dati.per_hotel.map(h => (
-                    <tr key={h.hotel_code} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                      <td style={stCella}>{h.hotel_code}</td>
-                      <td style={{ ...stCella, textAlign: 'right' }}>{h.n}</td>
-                      <td style={{ ...stCella, textAlign: 'right' }}>{formatEuro(h.importo)}</td>
+                    <tr key={h.hotel_code}>
+                      <Td><HotelTag code={h.hotel_code} /></Td>
+                      <Td num>{h.n}</Td>
+                      <Td num>{formatEuro(h.importo)}</Td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </div>
             <div>
-              <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.9rem', color: '#374151' }}>Per canale</h4>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead><tr style={{ background: '#f3f4f6' }}><Th>Canale</Th><Th align="right">N.</Th><Th align="right">% Disdette</Th><Th align="right">Importo</Th></tr></thead>
+              <SectionTitle as="h3">Per canale</SectionTitle>
+              <Table compact>
+                <thead><tr><Th>Canale</Th><Th num>N.</Th><Th num>% Disdette</Th><Th num>Importo</Th></tr></thead>
                 <tbody>
                   {dati.per_canale.map(c => (
-                    <tr key={c.canale} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                      <td style={stCella}>{c.canale}</td>
-                      <td style={{ ...stCella, textAlign: 'right' }}>{c.n}</td>
-                      <td style={{ ...stCella, textAlign: 'right', color: '#0ea5e9' }}>
+                    <tr key={c.canale}>
+                      <Td>{c.canale}</Td>
+                      <Td num>{c.n}</Td>
+                      <Td num style={{ color: COLORE_SERIE }}>
                         {tassoPerCanale[c.canale] != null ? `${tassoPerCanale[c.canale]}%` : '—'}
-                      </td>
-                      <td style={{ ...stCella, textAlign: 'right' }}>{formatEuro(c.importo)}</td>
+                      </Td>
+                      <Td num>{formatEuro(c.importo)}</Td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.6rem' }}>
-            <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#374151' }}>Dettaglio prenotazioni cancellate</h4>
-            <input
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 10 }}>
+            <SectionTitle as="h3" style={{ margin: 0 }}>Dettaglio prenotazioni cancellate</SectionTitle>
+            <Input
               type="text"
               placeholder="Cerca su tutti i campi (cliente, camera, codice, importo, data...)"
               value={ricercaInput}
               onChange={e => setRicercaInput(e.target.value)}
-              style={{ ...stileSelect, minWidth: 320 }}
+              style={{ minWidth: 340 }}
             />
           </div>
           {righe && (
             <>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              <Table compact>
                 <thead>
-                  <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                    <ThOrd campo="hotel_code" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Hotel</ThOrd>
-                    <ThOrd campo="canale" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Canale</ThOrd>
-                    <ThOrd campo="numero_prenotazione" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Codice Prenotazione</ThOrd>
-                    <ThOrd campo="data_prenotazione" align="center" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Data prenotazione</ThOrd>
-                    <ThOrd campo="data_cancellazione" align="center" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Data cancellazione</ThOrd>
-                    <ThOrd campo="arrivo" align="center" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Arrivo</ThOrd>
-                    <ThOrd campo="partenza" align="center" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Partenza</ThOrd>
-                    <ThOrd campo="cliente" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Cliente</ThOrd>
-                    <ThOrd campo="tipo_camera" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Camera</ThOrd>
-                    <ThOrd campo="importo" align="right" ordinaPer={ordinaPer} direzione={direzione} onClick={ordinaColonna}>Importo</ThOrd>
-                    <Th align="center">Azioni</Th>
+                  <tr>
+                    <ThOrdinabile campo="hotel_code" {...sp}>Hotel</ThOrdinabile>
+                    <ThOrdinabile campo="canale" {...sp}>Canale</ThOrdinabile>
+                    <ThOrdinabile campo="numero_prenotazione" {...sp}>Codice Prenotazione</ThOrdinabile>
+                    <ThOrdinabile campo="data_prenotazione" center {...sp}>Data prenotazione</ThOrdinabile>
+                    <ThOrdinabile campo="data_cancellazione" center {...sp}>Data cancellazione</ThOrdinabile>
+                    <ThOrdinabile campo="arrivo" center {...sp}>Arrivo</ThOrdinabile>
+                    <ThOrdinabile campo="partenza" center {...sp}>Partenza</ThOrdinabile>
+                    <ThOrdinabile campo="cliente" {...sp}>Cliente</ThOrdinabile>
+                    <ThOrdinabile campo="tipo_camera" {...sp}>Camera</ThOrdinabile>
+                    <ThOrdinabile campo="importo" num {...sp}>Importo</ThOrdinabile>
+                    <Th center>Azioni</Th>
                   </tr>
                 </thead>
                 <tbody>
                   {righe.righe.map(r => (
-                    <tr key={r.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                      <td style={stCella}>{r.hotel_code}</td>
-                      <td style={stCella}>{r.canale}</td>
-                      <td style={stCella}>
-                        {r.numero_prenotazione || <span style={{ color: '#d1d5db' }}>—</span>}
+                    <tr key={r.id}>
+                      <Td><HotelTag code={r.hotel_code} /></Td>
+                      <Td>{r.canale}</Td>
+                      <Td>
+                        {r.numero_prenotazione || <span style={{ color: colors.borderStrong }}>—</span>}
                         {r.modificato_manualmente && (
-                          <span title="Corretta manualmente — non verrà mai sovrascritta da un reimport" style={{ marginLeft: 5, fontSize: '0.75rem' }}>✏️</span>
+                          <span title="Corretta manualmente — non verrà mai sovrascritta da un reimport" style={{ marginLeft: 5 }}>✏️</span>
                         )}
-                      </td>
-                      <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.data_prenotazione)}</td>
-                      <td style={{ ...stCella, textAlign: 'center' }}>
+                      </Td>
+                      <Td center>{formatDataIt(r.data_prenotazione)}</Td>
+                      <Td center>
                         {r.data_cancellazione
                           ? formatDataIt(r.data_cancellazione)
-                          : <span style={{ color: '#9ca3af' }} title="Data cancellazione non disponibile — mostrata la data in cui questa riga è stata rilevata per la prima volta da un import">
+                          : <span style={{ color: colors.textSubtle }} title="Data cancellazione non disponibile — mostrata la data in cui questa riga è stata rilevata per la prima volta da un import">
                               ~{formatDataIt(r.data_rilevata)}
                             </span>}
-                      </td>
-                      <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.arrivo)}</td>
-                      <td style={{ ...stCella, textAlign: 'center' }}>{formatDataIt(r.partenza)}</td>
-                      <td style={stCella}>{r.cliente}</td>
-                      <td style={stCella}>{r.tipo_camera}</td>
-                      <td style={{ ...stCella, textAlign: 'right', color: '#0ea5e9', fontWeight: 600 }}>{formatEuro(r.importo)}</td>
-                      <td style={{ ...stCella, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      </Td>
+                      <Td center>{formatDataIt(r.arrivo)}</Td>
+                      <Td center>{formatDataIt(r.partenza)}</Td>
+                      <Td>{r.cliente}</Td>
+                      <Td>{r.tipo_camera}</Td>
+                      <Td num style={{ fontWeight: 600 }}>{formatEuro(r.importo)}</Td>
+                      <Td center style={{ whiteSpace: 'nowrap' }}>
                         {isAdmin() && (
                           <>
-                            <button
-                              onClick={() => setRigaInModifica(r)}
-                              style={{ border: '1px solid #d1d5db', background: '#fff', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', fontSize: '0.8rem', marginRight: 4 }}
-                            >
+                            <Button variant="secondary" size="sm" onClick={() => setRigaInModifica(r)} title="Modifica" style={{ marginRight: 4 }}>
                               ✏️
-                            </button>
-                            <button
-                              onClick={() => handleElimina(r)}
-                              disabled={eliminandoId === r.id}
-                              style={{ border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', fontSize: '0.8rem' }}
-                            >
+                            </Button>
+                            <Button variant="danger-soft" size="sm" onClick={() => handleElimina(r)} disabled={eliminandoId === r.id} title="Elimina">
                               {eliminandoId === r.id ? '…' : '🗑'}
-                            </button>
+                            </Button>
                           </>
                         )}
-                      </td>
+                      </Td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
-              <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginTop: '0.8rem', fontSize: '0.85rem' }}>
-                <button disabled={pagina <= 1} onClick={() => setPagina(p => p - 1)} style={{ cursor: pagina <= 1 ? 'default' : 'pointer' }}>◀</button>
-                <span>Pagina {righe.pagina} — {righe.totale} risultati</span>
-                <button disabled={pagina * righe.per_pagina >= righe.totale} onClick={() => setPagina(p => p + 1)} style={{ cursor: 'pointer' }}>▶</button>
-              </div>
+              </Table>
+              <Paginazione pagina={righe.pagina} perPagina={righe.per_pagina} totale={righe.totale} onChange={setPagina} />
             </>
           )}
         </>
@@ -1224,32 +1081,36 @@ function ModaleModificaCancellazione({ riga, hotels, onClose, onSalvato }) {
   }
 
   const campo = (label, key, tipo = 'text') => (
-    <div>
-      <label style={stileLabel}>{label}</label>
-      <input type={tipo} value={form[key]} onChange={e => set(key, e.target.value)} style={{ ...stileSelect, width: '100%' }} />
-    </div>
+    <Field label={label} style={{ width: '100%' }}>
+      <Input type={tipo} value={form[key]} onChange={e => set(key, e.target.value)} style={{ width: '100%' }} />
+    </Field>
   )
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
-      alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-    }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: '1.5rem', width: 640, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto' }}>
-        <h3 style={{ margin: '0 0 1rem', fontSize: '1.05rem', color: '#1a1a2e' }}>Modifica prenotazione cancellata</h3>
+    <Modal
+      titolo="Modifica prenotazione cancellata"
+      onChiudi={salvando ? undefined : onClose}
+      larghezza={660}
+      chiudiSuSfondo={false}
+      footer={<>
+        <Button variant="secondary" onClick={onClose} disabled={salvando}>Annulla</Button>
+        <Button onClick={salva} disabled={salvando}>{salvando ? 'Salvataggio…' : 'Salva'}</Button>
+      </>}
+    >
+      <div style={{ whiteSpace: 'normal' }}>
+        <Checkbox
+          checked={form.cancellata}
+          onChange={v => set('cancellata', v)}
+          label="Prenotazione cancellata (se disattivato, conta come prenotazione ancora valida nel tasso di cancellazione)"
+          style={{ marginBottom: 16 }}
+        />
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem', fontSize: '0.85rem', color: '#374151', cursor: 'pointer' }}>
-          <input type="checkbox" checked={form.cancellata} onChange={e => set('cancellata', e.target.checked)} />
-          Prenotazione cancellata (se disattivato, conta come prenotazione ancora valida nel tasso di cancellazione)
-        </label>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '1rem' }}>
-          <div>
-            <label style={stileLabel}>Hotel</label>
-            <select value={form.hotel_code} onChange={e => set('hotel_code', e.target.value)} style={{ ...stileSelect, width: '100%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <Field label="Hotel" style={{ width: '100%' }}>
+            <Select value={form.hotel_code} onChange={e => set('hotel_code', e.target.value)} style={{ width: '100%' }}>
               {hotels.map(h => <option key={h.code} value={h.code}>{h.name}</option>)}
-            </select>
-          </div>
+            </Select>
+          </Field>
           {campo('Codice Prenotazione', 'numero_prenotazione')}
           {campo('Canale', 'canale')}
           {campo('Canale vendita', 'canale_vendita')}
@@ -1268,35 +1129,26 @@ function ModaleModificaCancellazione({ riga, hotels, onClose, onSalvato }) {
         </div>
 
         {riga.dati_grezzi && Object.keys(riga.dati_grezzi).length > 0 && (
-          <details style={{ marginBottom: '1rem' }}>
-            <summary style={{ cursor: 'pointer', fontSize: '0.85rem', color: '#6b7280', fontWeight: 600 }}>
+          <details style={{ marginBottom: 16 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 'var(--fs-base)', color: colors.textMuted, fontWeight: 600 }}>
               Dati grezzi dal file (sola lettura, {Object.keys(riga.dati_grezzi).length} campi)
             </summary>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', marginTop: '0.6rem' }}>
+            <Table compact style={{ marginTop: 10 }}>
               <tbody>
                 {Object.entries(riga.dati_grezzi).map(([k, v]) => (
-                  <tr key={k} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '0.3rem 0.6rem', color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>{k}</td>
-                    <td style={{ padding: '0.3rem 0.6rem', color: '#374151' }}>{v === null || v === '' ? '—' : String(v)}</td>
+                  <tr key={k}>
+                    <Td style={{ color: colors.textMuted, fontWeight: 600, whiteSpace: 'nowrap' }}>{k}</Td>
+                    <Td>{v === null || v === '' ? '—' : String(v)}</Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           </details>
         )}
 
-        {errore && <div style={{ marginBottom: '1rem' }}><Errore msg={errore} /></div>}
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
-          <button onClick={onClose} disabled={salvando} style={{ padding: '0.5rem 1.1rem', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
-            Annulla
-          </button>
-          <button onClick={salva} disabled={salvando} style={{ padding: '0.5rem 1.1rem', borderRadius: 6, border: 'none', background: '#8B5CF6', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>
-            {salvando ? 'Salvataggio…' : 'Salva'}
-          </button>
-        </div>
+        <Messaggio tipo="err">{errore}</Messaggio>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -1312,6 +1164,8 @@ function TabImportaCancellazioni() {
   const [caricando, setCaricando] = useState(false)
   const [esitoImport, setEsitoImport] = useState(null)
   const inputRef = useRef(null)
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const [storico, setStorico] = useState(null)
   const [eliminando, setEliminando] = useState(null)
@@ -1360,29 +1214,25 @@ function TabImportaCancellazioni() {
   }
 
   async function handleElimina(id) {
-    if (!window.confirm('Eliminare questo import e tutte le righe collegate?')) return
+    if (!(await conferma({ titolo: 'Eliminare questo import?', messaggio: 'Verranno eliminate anche tutte le righe collegate.', pericolo: true }))) return
     setEliminando(id)
     try {
       await api.delete(`/prenotazioni-cancellate/import/${id}?conferma=true`)
       caricaStorico()
     } catch (err) {
-      alert(mostraErrore(err))
+      avvisi.errore(mostraErrore(err))
     } finally {
       setEliminando(null)
     }
   }
 
   if (!isAdmin()) {
-    return (
-      <div style={{ textAlign: 'center', color: '#6b7280', padding: '3rem' }}>
-        Sezione riservata agli amministratori.
-      </div>
-    )
+    return <StatoVuoto>Sezione riservata agli amministratori.</StatoVuoto>
   }
 
   return (
     <div>
-      <p style={{ margin: '0 0 1.2rem', fontSize: '0.85rem', color: '#6b7280', lineHeight: 1.5 }}>
+      <p className="ui-text-muted" style={{ marginTop: 0, marginBottom: 16, lineHeight: 1.5, fontSize: 'var(--fs-base)' }}>
         Carica qui l'export Welcome "Elenco Prenotazioni" (o, in formato legacy, "PrenotazioniWeb"
         foglio DISDETTE). Welcome non permette di esportare in un solo file sia le prenotazioni
         cancellate sia quelle ancora valide: per calcolare il tasso di cancellazione servono
@@ -1391,91 +1241,81 @@ function TabImportaCancellazioni() {
         lascialo su "Intera stagione" per un file che copre più mesi o tutti gli hotel insieme.
       </p>
 
-      <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: '1rem', marginBottom: '2rem' }}>
-        <h3 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', color: '#9a3412' }}>Importa export Welcome</h3>
-        <div style={{ display: 'inline-flex', background: '#fff', border: '1px solid #fdba74', borderRadius: 8, padding: 3, marginBottom: '0.8rem' }}>
-          <button onClick={() => setTipoImport('disdetta')} style={stileToggleBtnArancio(tipoImport === 'disdetta')}>Disdette</button>
-          <button onClick={() => setTipoImport('non_disdetta')} style={stileToggleBtnArancio(tipoImport === 'non_disdetta')}>Prenotazioni non disdette</button>
+      <Card title="Importa export Welcome" style={{ marginBottom: 32 }}>
+        <div style={{ marginBottom: 12 }}>
+          <SegmentedControl value={tipoImport} onChange={setTipoImport}
+            options={[{ value: 'disdetta', label: 'Disdette' }, { value: 'non_disdetta', label: 'Prenotazioni non disdette' }]} />
         </div>
-        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={stileLabel}>Mese (etichetta, opzionale)</label>
-          <select value={meseUpload} onChange={e => setMeseUpload(e.target.value ? Number(e.target.value) : '')} style={stileSelect}>
-            <option value="">Intera stagione</option>
-            {MESI_LABEL.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
-          </select>
-          <label style={stileLabel}>Anno</label>
-          <select value={annoUpload} onChange={e => setAnnoUpload(Number(e.target.value))} style={stileSelect}>
-            {[2024, 2025, 2026, 2027].map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <input ref={inputRef} type="file" accept=".csv,.xlsx" onChange={e => handleUpload(e.target.files[0])} disabled={caricando} />
-          {caricando && <span style={{ color: '#9a3412', fontSize: '0.85rem' }}>Caricamento…</span>}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <Field label="Mese (etichetta, opzionale)">
+            <Select value={meseUpload} onChange={e => setMeseUpload(e.target.value ? Number(e.target.value) : '')}>
+              <option value="">Intera stagione</option>
+              {MESI_LABEL.map((nome, i) => <option key={i + 1} value={i + 1}>{nome}</option>)}
+            </Select>
+          </Field>
+          <Field label="Anno">
+            <Select value={annoUpload} onChange={e => setAnnoUpload(Number(e.target.value))}>
+              {ANNI.map(a => <option key={a} value={a}>{a}</option>)}
+            </Select>
+          </Field>
+          <label className="ui-btn ui-btn-primary" style={caricando ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}>
+            {caricando ? 'Caricamento…' : 'Scegli file CSV / XLSX…'}
+            <input ref={inputRef} type="file" accept=".csv,.xlsx" onChange={e => handleUpload(e.target.files[0])} disabled={caricando} style={{ display: 'none' }} />
+          </label>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.7rem', fontSize: '0.85rem', color: '#9a3412', cursor: 'pointer' }}>
-          <input type="checkbox" checked={sovrascrivi} onChange={e => setSovrascrivi(e.target.checked)} />
-          Sovrascrivi prenotazioni già presenti (solo quelle mai modificate a mano — le modificate non vengono mai toccate)
-        </label>
+        <Checkbox
+          checked={sovrascrivi}
+          onChange={setSovrascrivi}
+          label="Sovrascrivi prenotazioni già presenti (solo quelle mai modificate a mano — le modificate non vengono mai toccate)"
+          style={{ marginTop: 12 }}
+        />
         {esitoImport && (
-          <div style={{
-            marginTop: '0.7rem', padding: '0.6rem 0.9rem', borderRadius: 8, fontSize: '0.85rem',
-            background: esitoImport.ok ? '#dcfce7' : '#fee2e2', color: esitoImport.ok ? '#166534' : '#991b1b',
-          }}>
-            {esitoImport.ok ? '✓ ' : '✗ '}{esitoImport.msg}
+          <div style={{ marginTop: 12 }}>
+            <Messaggio tipo={esitoImport.ok ? 'ok' : 'err'} onChiudi={() => setEsitoImport(null)}>{esitoImport.msg}</Messaggio>
           </div>
         )}
         {esitoImport?.bloccate?.length > 0 && (
-          <div style={{ marginTop: '0.6rem', padding: '0.6rem 0.9rem', borderRadius: 8, fontSize: '0.82rem', background: '#fef3c7', color: '#92400e' }}>
+          <Messaggio tipo="warn">
             <strong>{esitoImport.bloccate.length} prenotazioni non importate perché già modificate a mano:</strong>
-            <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem' }}>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 20 }}>
               {esitoImport.bloccate.map((m, i) => <li key={i}>{m}</li>)}
             </ul>
-          </div>
+          </Messaggio>
         )}
-      </div>
+      </Card>
 
-      <h3 style={{ margin: '0 0 0.8rem', fontSize: '0.95rem', color: '#374151' }}>Import effettuati</h3>
+      <SectionTitle as="h3">Import effettuati</SectionTitle>
       {storico && (
         storico.length === 0 ? (
-          <p style={{ color: '#9ca3af', fontSize: '0.88rem' }}>Nessun import ancora effettuato.</p>
+          <StatoVuoto>Nessun import ancora effettuato.</StatoVuoto>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.87rem' }}>
+          <Table>
             <thead>
-              <tr style={{ background: '#f3f4f6' }}>
-                <Th>File</Th><Th>Tipo</Th><Th>Mese prenotazione</Th><Th align="right">Righe valide</Th>
-                <Th align="right">Fuori mese</Th><Th align="center">Caricato il</Th><Th align="center">Azioni</Th>
+              <tr>
+                <Th>File</Th><Th>Tipo</Th><Th>Mese prenotazione</Th><Th num>Righe valide</Th>
+                <Th num>Fuori mese</Th><Th center>Caricato il</Th><Th center>Azioni</Th>
               </tr>
             </thead>
             <tbody>
               {storico.map(imp => (
-                <tr key={imp.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                  <td style={stCella}>{imp.nome_file}</td>
-                  <td style={stCella}>
-                    <span style={{
-                      fontSize: '0.75rem', fontWeight: 600, padding: '2px 7px', borderRadius: 4,
-                      background: imp.tipo === 'disdetta' ? '#fee2e2' : '#dcfce7',
-                      color: imp.tipo === 'disdetta' ? '#991b1b' : '#166534',
-                    }}>
-                      {imp.tipo_label}
-                    </span>
-                  </td>
-                  <td style={stCella}>{imp.mese_label} {imp.anno}</td>
-                  <td style={{ ...stCella, textAlign: 'right' }}>{imp.n_righe_valide}</td>
-                  <td style={{ ...stCella, textAlign: 'right', color: imp.n_righe_fuori_mese ? '#d97706' : '#d1d5db' }}>
+                <tr key={imp.id}>
+                  <Td>{imp.nome_file}</Td>
+                  <Td><Badge tono={imp.tipo === 'disdetta' ? 'err' : 'ok'}>{imp.tipo_label}</Badge></Td>
+                  <Td>{imp.mese_label} {imp.anno}</Td>
+                  <Td num>{imp.n_righe_valide}</Td>
+                  <Td num style={{ color: imp.n_righe_fuori_mese ? colors.warning : colors.borderStrong }}>
                     {imp.n_righe_fuori_mese || '—'}
-                  </td>
-                  <td style={{ ...stCella, textAlign: 'center', color: '#6b7280' }}>{formatDataIt(imp.created_at)}</td>
-                  <td style={{ ...stCella, textAlign: 'center' }}>
-                    <button
-                      onClick={() => handleElimina(imp.id)}
-                      disabled={eliminando === imp.id}
-                      style={{ border: '1px solid #fca5a5', background: '#fff', color: '#dc2626', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: '0.8rem' }}
-                    >
+                  </Td>
+                  <Td center style={{ color: colors.textMuted }}>{formatDataIt(imp.created_at)}</Td>
+                  <Td center>
+                    <Button variant="danger-soft" size="sm" onClick={() => handleElimina(imp.id)} disabled={eliminando === imp.id} title="Elimina import">
                       {eliminando === imp.id ? '…' : '🗑'}
-                    </button>
-                  </td>
+                    </Button>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )
       )}
     </div>
@@ -1491,110 +1331,13 @@ function TooltipTasso({ active, payload, label, fatturato }) {
   const p = payload[0].payload
   const fmt = v => fatturato ? formatEuro(v) : v
   return (
-    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '0.5rem 0.7rem', fontSize: '0.8rem', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}>
+    <div style={{
+      background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 6,
+      padding: '6px 10px', fontSize: 'var(--fs-sm)', boxShadow: '0 2px 6px rgba(15,23,42,0.1)',
+    }}>
       <div style={{ fontWeight: 700, marginBottom: 2 }}>{label}</div>
       <div>Tasso: {p.tasso != null ? `${p.tasso}%` : 'n/d'}</div>
-      <div style={{ color: '#6b7280' }}>{fmt(p.cancellate)} cancellat{fatturato ? 'o' : 'e'} su {fmt(p.totale)} prenotat{fatturato ? 'o' : 'e'}</div>
+      <div style={{ color: colors.textMuted }}>{fmt(p.cancellate)} cancellat{fatturato ? 'o' : 'e'} su {fmt(p.totale)} prenotat{fatturato ? 'o' : 'e'}</div>
     </div>
   )
-}
-
-function CardKpi({ titolo, valore, colore, larghezza = '160px' }) {
-  return (
-    <div style={{
-      flex: `1 1 ${larghezza}`, background: '#fff', border: '1px solid #e5e7eb',
-      borderRadius: 10, padding: '0.9rem 1.1rem', borderTop: `3px solid ${colore}`,
-    }}>
-      <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: '0.3rem' }}>{titolo}</div>
-      <div style={{ fontSize: '1.2rem', fontWeight: 700, color: colore }}>{valore}</div>
-    </div>
-  )
-}
-
-function Th({ children, align = 'left', title }) {
-  return (
-    <th title={title} style={{ padding: '0.6rem 0.75rem', textAlign: align, fontSize: '0.8rem', fontWeight: 700 }}>
-      {children}
-    </th>
-  )
-}
-
-// Intestazione cliccabile per ordinare una tabella lato server (vedi TabCancellazioni).
-function ThOrd({ children, campo, ordinaPer, direzione, onClick, align = 'left' }) {
-  const attiva = ordinaPer === campo
-  return (
-    <th
-      onClick={() => onClick(campo)}
-      title="Clicca per ordinare"
-      style={{
-        padding: '0.6rem 0.75rem', textAlign: align, fontSize: '0.8rem', fontWeight: 700,
-        cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
-      }}
-    >
-      {children}{attiva && (direzione === 'asc' ? ' ▲' : ' ▼')}
-    </th>
-  )
-}
-
-function Caricamento() {
-  return <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Caricamento…</div>
-}
-
-function Errore({ msg }) {
-  return <div style={{ padding: '1rem', color: '#b91c1c', background: '#fee2e2', borderRadius: 8 }}>{msg}</div>
-}
-
-// ---------------------------------------------------------------------------
-// Stili condivisi
-// ---------------------------------------------------------------------------
-
-const stCella = { padding: '0.52rem 0.75rem' }
-
-const stCellaHeader = { padding: '0.52rem 0.75rem', color: '#fff' }
-
-const stileSelect = {
-  padding: '0.4rem 0.7rem',
-  border: '1px solid #d1d5db',
-  borderRadius: 6,
-  fontSize: '0.9rem',
-  background: '#fff',
-  cursor: 'pointer',
-}
-
-const stileLabel = {
-  display: 'block',
-  fontSize: '0.8rem',
-  color: '#6b7280',
-  marginBottom: '0.3rem',
-  fontWeight: 500,
-}
-
-// Usata solo nella tab Cancellazioni: blu invece dell'arancione condiviso IVA inclusa/esclusa,
-// per allinearsi al tema blu (colore Club Hotel in Corrispettivi) scelto per questa tab.
-function stileToggleBtn(attivo) {
-  return {
-    padding: '0.4rem 0.9rem',
-    border: 'none',
-    borderRadius: 6,
-    cursor: 'pointer',
-    fontSize: '0.83rem',
-    fontWeight: attivo ? 700 : 500,
-    background: attivo ? '#0ea5e9' : 'transparent',
-    color: attivo ? '#fff' : '#075985',
-  }
-}
-
-// Pillola arancione condivisa (IVA inclusa/esclusa) — usata in TabImportaCancellazioni, non
-// nella tab Cancellazioni (che ha il suo tema blu, vedi sopra).
-function stileToggleBtnArancio(attivo) {
-  return {
-    padding: '0.4rem 0.9rem',
-    border: 'none',
-    borderRadius: 6,
-    cursor: 'pointer',
-    fontSize: '0.83rem',
-    fontWeight: attivo ? 700 : 500,
-    background: attivo ? '#ea580c' : 'transparent',
-    color: attivo ? '#fff' : '#9a3412',
-  }
 }

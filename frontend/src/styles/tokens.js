@@ -30,6 +30,10 @@ export const colors = {
   info:    '#2563eb', infoBg:    '#dbeafe', infoText:    '#1e40af',
   infoSoft: '#eff6ff', // celle con dato automatico (Usali)
 
+  // Accento secondario con significato: valori derivati da un inserimento manuale che
+  // sostituisce il dato automatico (es. Maturato in Forecast). Non usarlo come colore decorativo.
+  accent: '#7c3aed', accentSoft: '#ede9fe',
+
   // Toggle IVA inclusa/esclusa — eccezione voluta al colore unico: segnala che si sta
   // cambiando la natura dei numeri mostrati, non un'azione qualunque.
   iva: '#ea580c', ivaBg: '#fff7ed', ivaBorder: '#fdba74', ivaText: '#9a3412',
