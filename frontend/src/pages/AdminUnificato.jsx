@@ -6,6 +6,9 @@ import AdminBackup from './admin/AdminBackup.jsx'
 import AdminCruscottoSoglie from './admin/AdminCruscottoSoglie.jsx'
 import AdminUiKit from './admin/AdminUiKit.jsx'
 import api from '../api/client.js'
+import {
+  Badge, Button, Card, Field, Input, Loading, Messaggio, PageHeader, Table, Td, Th, useAvvisi,
+} from '../components/ui'
 import { mostraErrore } from '../utils/format.js'
 import { APP_VERSION, APP_VERSION_DATE } from '../version.js'
 
@@ -969,45 +972,51 @@ function useFeedback() {
 }
 
 // ---------------------------------------------------------------------------
-// Corrispettivi — Tipi documento
+// Corrispettivi — Tipi documento (sola consultazione)
 // ---------------------------------------------------------------------------
+// Non esiste una tabella configurabile: la classificazione è una regola fissa dell'import
+// (TIPI_SCONTRINO / TIPI_FATTURA / PREFISSO_A_STRUTTURA in corrispettivi_excel_parser.py),
+// legata alle regole fiscali. Renderla modificabile da qui rischierebbe di cambiare cosa entra
+// nei totali trasmessi ad AdE — per questo il pannello la mostra soltanto. Se cambia la regola
+// nel parser, aggiornare anche questa tabella.
+
+const REGOLE_TIPO_DOCUMENTO = [
+  { suffisso: 'SC', tipo: 'Scontrino', tono: 'ok', trattamento: 'Registro corrispettivi (cassa RT → Agenzia delle Entrate). Entra nei totali.' },
+  { suffisso: 'SCA', tipo: 'Scontrino', tono: 'ok', trattamento: 'Come SC. Entra nei totali.' },
+  { suffisso: 'F', tipo: 'Fattura', tono: 'info', trattamento: 'Registro fatture (SDI). Entra nei totali, separata dagli scontrini.' },
+  { suffisso: 'CP', tipo: 'Escluso', tono: 'neutral', trattamento: "Caparra: salvata solo per controllo, esclusa dai totali per non contare due volte l'IVA." },
+  { suffisso: 'FD', tipo: 'Escluso', tono: 'neutral', trattamento: 'Come CP: salvata per controllo, esclusa dai totali.' },
+  { suffisso: 'altri', tipo: 'Escluso', tono: 'neutral', trattamento: 'Qualunque altro suffisso: salvato per controllo, escluso dai totali.' },
+]
 
 function CorrTipiDocumento() {
-  const [tipiDoc, setTipiDoc] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [msg, fb] = useFeedback()
-
-  const carica = useCallback(async () => {
-    setLoading(true)
-    api.get('/corrispettivi/config/tipi-documento').then(r => setTipiDoc(r.data)).catch(() => {}).finally(() => setLoading(false))
-  }, [])
-  useEffect(() => { carica() }, [carica])
-
-  async function toggleDoc(t) {
-    try {
-      await api.put(`/corrispettivi/config/tipi-documento/${t.id}`, { attivo: !t.attivo })
-      fb(t.attivo ? 'Tipo disattivato' : 'Tipo attivato')
-      carica()
-    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
-  }
-
   return (
     <div>
-      <h2 style={{ marginTop: 0, marginBottom: 20 }}>Tipi documento — Corrispettivi</h2>
-      {msg && <div style={{ marginBottom: 12, padding: '6px 12px', background: '#d1fae5', borderRadius: 6, color: '#065f46', fontSize: 13, fontWeight: 600 }}>{msg}</div>}
-      {loading ? <p style={{ color: '#9ca3af' }}>Caricamento…</p> : (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {tipiDoc.map(t => (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: t.attivo ? '#fee2e2' : '#f3f4f6', borderRadius: 8, padding: '6px 12px' }}>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>{t.code}</span>
-              <span style={{ fontSize: 12, color: '#6b7280' }}>{t.name}</span>
-              <button onClick={() => toggleDoc(t)} style={{ ...btnSm, background: t.attivo ? '#fca5a5' : '#d1fae5', color: t.attivo ? '#7f1d1d' : '#065f46' }}>
-                {t.attivo ? 'Disattiva' : 'Attiva'}
-              </button>
-            </div>
+      <PageHeader title="Tipi documento — Corrispettivi" />
+      <Messaggio tipo="info">
+        La classificazione dei documenti importati da Welcome è una <strong>regola fissa</strong> legata
+        alle norme fiscali: qui è mostrata in sola consultazione. Il suffisso del documento ha la forma
+        <code> prefisso-tipo</code>: il prefisso indica la struttura (<strong>D</strong> = Du Parc,
+        {' '}<strong>C</strong> = Club Hotel, <strong>I</strong> = International), il tipo decide come viene trattato.
+      </Messaggio>
+      <Table compact style={{ maxWidth: 820 }}>
+        <thead>
+          <tr><Th>Tipo nel suffisso</Th><Th>Classificato come</Th><Th>Trattamento</Th></tr>
+        </thead>
+        <tbody>
+          {REGOLE_TIPO_DOCUMENTO.map(r => (
+            <tr key={r.suffisso}>
+              <Td><code style={{ fontWeight: 700 }}>{r.suffisso}</code></Td>
+              <Td><Badge tono={r.tono}>{r.tipo}</Badge></Td>
+              <Td>{r.trattamento}</Td>
+            </tr>
           ))}
-        </div>
-      )}
+        </tbody>
+      </Table>
+      <p className="ui-text-muted" style={{ marginTop: 10 }}>
+        Esempio: <code>D-SC</code> = scontrino del Du Parc, <code>I-F</code> = fattura dell'International,
+        {' '}<code>C-CP</code> = caparra del Club Hotel (esclusa).
+      </p>
     </div>
   )
 }
@@ -1015,53 +1024,107 @@ function CorrTipiDocumento() {
 // ---------------------------------------------------------------------------
 // Corrispettivi — Tipi pagamento
 // ---------------------------------------------------------------------------
+// Tabella tipi_pagamento (endpoint /lookup/tipi-pagamento): alimenta SOLO la tendina "Forma di
+// pagamento" nella modifica documento di Scontrini/Fatture. I report (Forme di pagamento, Cassa,
+// % contante in Home) usano una mappatura fissa nel codice (METODO_A_CATEGORIA_INCASSO), quindi
+// modificare questa tabella non cambia nessun totale. Nessuna cancellazione: solo attiva/disattiva.
 
 function CorrTipiPagamento() {
   const [tipiPag, setTipiPag] = useState([])
   const [loading, setLoading] = useState(true)
-  const [nuovoCode, setNuovoCode] = useState('')
-  const [nuovoName, setNuovoName] = useState('')
-  const [msg, fb] = useFeedback()
+  const [nuovo, setNuovo] = useState({ codice: '', descrizione: '', categoria: '' })
+  const [salvando, setSalvando] = useState(false)
+  const avvisi = useAvvisi()
 
-  const carica = useCallback(async () => {
+  const carica = useCallback(() => {
     setLoading(true)
-    api.get('/corrispettivi/config/tipi-pagamento').then(r => setTipiPag(r.data)).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+    api.get('/lookup/tipi-pagamento', { params: { solo_attivi: false } })
+      .then(r => setTipiPag(r.data))
+      .catch(e => avvisi.errore(mostraErrore(e)))
+      .finally(() => setLoading(false))
+  }, [avvisi])
   useEffect(() => { carica() }, [carica])
 
-  async function aggiungi() {
-    if (!nuovoCode || !nuovoName) { fb('Codice e nome obbligatori'); return }
+  const categorie = [...new Set(tipiPag.map(t => t.categoria).filter(Boolean))]
+
+  async function toggleAttivo(t) {
     try {
-      await api.post('/corrispettivi/config/tipi-pagamento', { code: nuovoCode, name: nuovoName })
-      setNuovoCode(''); setNuovoName('')
-      fb('Tipo pagamento aggiunto')
+      await api.put(`/lookup/tipi-pagamento/${t.id}`, { attivo: !t.attivo })
+      avvisi.successo(t.attivo ? `${t.descrizione} disattivato` : `${t.descrizione} attivato`)
       carica()
-    } catch (e) { fb('Errore: ' + mostraErrore(e)) }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  async function aggiungi() {
+    if (!nuovo.codice.trim()) { avvisi.attenzione('Il codice è obbligatorio'); return }
+    setSalvando(true)
+    try {
+      const ordine = tipiPag.reduce((m, t) => Math.max(m, t.ordine || 0), 0) + 1
+      await api.post('/lookup/tipi-pagamento', {
+        codice: nuovo.codice.trim(),
+        descrizione: nuovo.descrizione.trim() || nuovo.codice.trim(),
+        categoria: nuovo.categoria.trim(),
+        ordine,
+      })
+      setNuovo({ codice: '', descrizione: '', categoria: '' })
+      avvisi.successo('Tipo pagamento aggiunto')
+      carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+    finally { setSalvando(false) }
   }
 
   return (
     <div>
-      <h2 style={{ marginTop: 0, marginBottom: 20 }}>Tipi pagamento — Corrispettivi</h2>
-      {msg && <div style={{ marginBottom: 12, padding: '6px 12px', background: '#d1fae5', borderRadius: 6, color: '#065f46', fontSize: 13, fontWeight: 600 }}>{msg}</div>}
-      {loading ? <p style={{ color: '#9ca3af' }}>Caricamento…</p> : (
-        <>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+      <PageHeader title="Tipi pagamento — Corrispettivi" />
+      <Messaggio tipo="info">
+        Elenco delle forme di pagamento proposte nella tendina <strong>Modifica documento</strong> di
+        Scontrini e Fatture. Non influisce sui totali dei report (Forme di pagamento, Cassa), che usano
+        una regola fissa. Le voci non si cancellano: si disattivano, e spariscono dalla tendina.
+      </Messaggio>
+
+      {loading ? <Loading /> : (
+        <Table compact style={{ maxWidth: 760, marginBottom: 20 }}>
+          <thead>
+            <tr><Th>Codice</Th><Th>Descrizione</Th><Th>Categoria</Th><Th center>Stato</Th><Th></Th></tr>
+          </thead>
+          <tbody>
             {tipiPag.map(t => (
-              <span key={t.id} style={{ background: t.attivo ? '#fee2e2' : '#f3f4f6', color: t.attivo ? '#7f1d1d' : '#6b7280', borderRadius: 12, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>
-                {t.name} ({t.code})
-              </span>
+              <tr key={t.id} className={t.attivo ? undefined : 'ui-riga-attenuata'}>
+                <Td><code>{t.codice}</code></Td>
+                <Td>{t.descrizione}</Td>
+                <Td>{t.categoria || '—'}</Td>
+                <Td center><Badge tono={t.attivo ? 'ok' : 'neutral'}>{t.attivo ? 'Attivo' : 'Disattivato'}</Badge></Td>
+                <Td center>
+                  <Button size="sm" variant="secondary" onClick={() => toggleAttivo(t)}>
+                    {t.attivo ? 'Disattiva' : 'Attiva'}
+                  </Button>
+                </Td>
+              </tr>
             ))}
-          </div>
-          <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Aggiungi:</span>
-            <input value={nuovoCode} onChange={e => setNuovoCode(e.target.value.toUpperCase())}
-              placeholder="Codice (es. SATISPAY)" style={{ ...inputSm, width: 160 }} />
-            <input value={nuovoName} onChange={e => setNuovoName(e.target.value)}
-              placeholder="Nome (es. Satispay)" style={{ ...inputSm, width: 180 }} />
-            <button onClick={aggiungi} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
-          </div>
-        </>
+          </tbody>
+        </Table>
       )}
+
+      <Card title="Aggiungi forma di pagamento" style={{ maxWidth: 760 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <Field label="Codice *">
+            <Input value={nuovo.codice} onChange={e => setNuovo(n => ({ ...n, codice: e.target.value }))}
+              placeholder="es. PayPal" style={{ width: 150 }} />
+          </Field>
+          <Field label="Descrizione">
+            <Input value={nuovo.descrizione} onChange={e => setNuovo(n => ({ ...n, descrizione: e.target.value }))}
+              placeholder="uguale al codice se vuota" style={{ width: 200 }} />
+          </Field>
+          <Field label="Categoria">
+            <Input value={nuovo.categoria} onChange={e => setNuovo(n => ({ ...n, categoria: e.target.value }))}
+              list="categorie-pagamento" placeholder="es. Carta di credito" style={{ width: 180 }} />
+            <datalist id="categorie-pagamento">
+              {categorie.map(c => <option key={c} value={c} />)}
+            </datalist>
+          </Field>
+          <Button onClick={aggiungi} disabled={salvando}>{salvando ? 'Salvataggio…' : '+ Aggiungi'}</Button>
+        </div>
+      </Card>
     </div>
   )
 }

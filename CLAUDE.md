@@ -125,6 +125,25 @@ richiesto): mostrano ancora "in sviluppo" finché non verrà chiesto esplicitame
 **Revenue**: `revenue-import` (bulk import), `revenue-test` (cancella is_test)
 **Dipendenti**: `dip-cc` (AdminCentriDiCosto), `dip-colori` (colori CC), `dip-test`
 **Corrispettivi**: `corr-tipi-doc`, `corr-pagamenti`, `corr-classificazione` (CorrClassificazioneTrattamenti)
+⚠️ **`corr-tipi-doc` e `corr-pagamenti` sono stati vuoti fino a settembre 2026** (bug reale, corretto
+in v3.15.8): chiamavano `/corrispettivi/config/tipi-documento|tipi-pagamento`, indirizzi mai esistiti
+nel backend (404, verificato anche nello storico git). Correzione scelta per non toccare dati né totali:
+- `corr-pagamenti` ora usa la tabella vera `tipi_pagamento` via `/lookup/tipi-pagamento` (GET con
+  `solo_attivi=false`, POST `codice/descrizione/categoria/ordine`, PUT `attivo`). Quella tabella alimenta
+  **solo** la tendina "Forma di pagamento" di *Modifica documento* in Scontrini/Fatture: i report (Forme di
+  pagamento, Cassa, % contante in Home) usano la mappa fissa `METODO_A_CATEGORIA_INCASSO` in
+  `corrispettivi_report.py`, quindi modificarla non cambia nessun totale. Nessun endpoint di cancellazione:
+  solo attiva/disattiva. (In tabella ci sono sia "XPAY-Nexi" sia "xpay", probabile doppione: lasciato
+  all'utente da disattivare dal pannello.)
+- `corr-tipi-doc` è ora una **scheda di sola consultazione** (`REGOLE_TIPO_DOCUMENTO` in
+  `AdminUnificato.jsx`): non esiste nessuna tabella, la classificazione SC/SCA → scontrino, F → fattura,
+  CP/FD/altri → escluso è una regola fissa dell'import (`TIPI_SCONTRINO`/`TIPI_FATTURA` in
+  `corrispettivi_excel_parser.py`) legata alle regole fiscali. Renderla configurabile rischierebbe di
+  cambiare cosa entra nei totali trasmessi ad AdE — scelta esplicita di non farlo. Se cambia la regola
+  nel parser, aggiornare anche la scheda.
+Eliminata anche la vecchia `pages/Admin.jsx` (pre-v2.0, non più collegata a nessuna rotta): tutte le
+sue sezioni esistono in `AdminUnificato.jsx`, tranne "prefissi struttura", che chiamava un indirizzo
+inesistente e non aveva mai funzionato.
 **USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura)
 **Statistiche Produzione**: `prod-categorie` (ProdCategorie), `prod-mapping` (ProdMappingDettagli — mapping testo Welcome→categoria)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
