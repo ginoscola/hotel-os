@@ -7,8 +7,10 @@
  * (soglia = {direzione, unita, target, soglia_rossa, soglia_arancione} oppure null se non
  * configurata per questo kpi — in quel caso l'arco resta grigio, solo il numero è mostrato).
  */
-const COLORI = { rosso: '#ef4444', arancio: '#f59e0b', verde: '#10b981' }
-const GRIGIO = '#e5e7eb'
+import { colors } from '../../styles/tokens.js'
+
+const COLORI = { rosso: colors.danger, arancio: colors.warning, verde: colors.success }
+const GRIGIO = colors.border
 
 function calcolaBande(soglia) {
   if (!soglia) return null
@@ -88,10 +90,8 @@ export default function GaugeKpi({ label, dato, formatValue, sub }) {
   const fmt = formatValue || ((v) => defaultFormat(v, soglia?.unita))
 
   return (
-    <div className="card" style={{ textAlign: 'center', minWidth: 170 }}>
-      <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>
-        {label}
-      </div>
+    <div className="ui-kpi" style={{ textAlign: 'center', minWidth: 170 }}>
+      <div className="ui-kpi-label" style={{ marginBottom: 2 }}>{label}</div>
       <svg viewBox="0 0 200 108" style={{ width: '100%', maxWidth: 190, display: 'block', margin: '0 auto' }}>
         {dom ? (
           dom.bande.map((b, i) => (
@@ -108,16 +108,16 @@ export default function GaugeKpi({ label, dato, formatValue, sub }) {
           const [nx, ny] = punto(tValore, R - SPESSORE / 2 - 6)
           return (
             <g>
-              <line x1={CX} y1={CY} x2={nx} y2={ny} stroke="#1f2937" strokeWidth={3} strokeLinecap="round" />
-              <circle cx={CX} cy={CY} r={6} fill="#1f2937" />
+              <line x1={CX} y1={CY} x2={nx} y2={ny} stroke={colors.text} strokeWidth={3} strokeLinecap="round" />
+              <circle cx={CX} cy={CY} r={6} fill={colors.text} />
             </g>
           )
         })()}
       </svg>
-      <div style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginTop: -2 }}>
+      <div className="ui-kpi-valore ui-num" style={{ fontSize: 'var(--fs-xxl)', marginTop: -2 }}>
         {fmt(valore)}
       </div>
-      {sub && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{sub}</div>}
+      {sub && <div className="ui-kpi-sub">{sub}</div>}
     </div>
   )
 }

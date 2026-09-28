@@ -1,10 +1,12 @@
 import { formatPerc, formatDataIt } from '../../utils/format.js'
+import { colors, coloreStruttura } from '../../styles/tokens.js'
+import { Dot, Table, Td, Th } from '../../components/ui'
 
 const NOMI_HOTEL = { DPH: 'Hotel Du Parc', CLB: 'Club Hotel', INT: 'Hotel International' }
 
 function coloreOccupancy(v) {
-  if (v == null) return '#9ca3af'
-  return v >= 70 ? '#10b981' : v >= 55 ? '#f59e0b' : '#ef4444'
+  if (v == null) return colors.textSubtle
+  return v >= 70 ? colors.success : v >= 55 ? colors.warning : colors.danger
 }
 
 /** Tabella "a colpo d'occhio" per hotel: occupancy, scostamento vs budget, freschezza dato —
@@ -12,37 +14,30 @@ function coloreOccupancy(v) {
 export default function TabellaSemaforo({ righe }) {
   if (!righe?.length) return null
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+    <Table compact>
       <thead>
-        <tr style={{ textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>
-          <th style={{ padding: '4px 8px' }}>Hotel</th>
-          <th style={{ padding: '4px 8px' }}>Occupancy</th>
-          <th style={{ padding: '4px 8px' }}>Scost. budget</th>
-          <th style={{ padding: '4px 8px' }}>Ultimo dato</th>
-        </tr>
+        <tr><Th>Hotel</Th><Th num>Occupancy</Th><Th num>Scost. budget</Th><Th center>Ultimo dato</Th></tr>
       </thead>
       <tbody>
         {righe.map(r => (
-          <tr key={r.hotel_code} style={{ borderTop: '1px solid #f1f5f9' }}>
-            <td style={{ padding: '6px 8px', fontWeight: 600 }}>{NOMI_HOTEL[r.hotel_code] || r.hotel_code}</td>
-            <td style={{ padding: '6px 8px' }}>
-              <span style={{
-                display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
-                background: coloreOccupancy(r.occupancy), marginRight: 6,
-              }} />
-              {formatPerc(r.occupancy)}
-            </td>
-            <td style={{ padding: '6px 8px' }}>
+          <tr key={r.hotel_code}>
+            <Td style={{ fontWeight: 600 }}>
+              <Dot colore={coloreStruttura(r.hotel_code)} /> <span style={{ marginLeft: 4 }}>{NOMI_HOTEL[r.hotel_code] || r.hotel_code}</span>
+            </Td>
+            <Td num>
+              <Dot colore={coloreOccupancy(r.occupancy)} /> <span style={{ marginLeft: 4 }}>{formatPerc(r.occupancy)}</span>
+            </Td>
+            <Td num>
               {r.scostamento_budget_pct == null ? '—' : (
-                <span style={{ color: r.scostamento_budget_pct >= 0 ? '#065f46' : '#991b1b', fontWeight: 600 }}>
+                <span style={{ color: r.scostamento_budget_pct >= 0 ? colors.successText : colors.dangerText, fontWeight: 600 }}>
                   {r.scostamento_budget_pct >= 0 ? '+' : ''}{r.scostamento_budget_pct.toFixed(1)}%
                 </span>
               )}
-            </td>
-            <td style={{ padding: '6px 8px', color: '#6b7280' }}>{r.ultimo_snapshot ? formatDataIt(r.ultimo_snapshot) : '—'}</td>
+            </Td>
+            <Td center muted>{r.ultimo_snapshot ? formatDataIt(r.ultimo_snapshot) : '—'}</Td>
           </tr>
         ))}
       </tbody>
-    </table>
+    </Table>
   )
 }

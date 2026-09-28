@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import api from '../api/client.js'
 import { formatData, mostraErrore } from '../utils/format.js'
+import {
+  Badge, Button, Card, Checkbox, Field, HotelTag, Input, KpiTile, Messaggio, PageHeader, Table, Td, Th,
+} from '../components/ui'
+import { colors } from '../styles/tokens.js'
+
+// Esito di ogni coppia di file → tono del badge
+const TONO_STATO = { importato: 'ok', saltato: 'info', errore: 'err' }
 
 export default function ImportBulk() {
   const [cartella, setCartella] = useState('')
@@ -31,60 +38,35 @@ export default function ImportBulk() {
 
   return (
     <div>
-      <h2>Import Massivo da Cartella</h2>
+      <PageHeader title="Import massivo da cartella" />
 
-      <div className="card" style={{ maxWidth: 600, marginBottom: '1.5rem' }}>
-        <p style={{ marginTop: 0, color: '#6b7280', fontSize: 13 }}>
+      <Card style={{ maxWidth: 620, marginBottom: 24 }}>
+        <p className="ui-text-muted" style={{ marginTop: 0 }}>
           Scansiona una cartella sul server e importa automaticamente tutte le coppie
           di file CSV/Excel trovate. I file già importati vengono saltati.
         </p>
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
-              Percorso cartella (assoluto sul server)
-            </label>
-            <input
-              type="text"
-              value={cartella}
-              onChange={e => setCartella(e.target.value)}
-              placeholder="es. /Users/ginoscola/hotel-os/uploads"
-              style={{ width: '100%', padding: '6px 10px', border: '1px solid #ccc', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
-            />
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Field label="Percorso cartella (assoluto sul server)" style={{ width: '100%' }}>
+            <Input type="text" value={cartella} onChange={e => setCartella(e.target.value)}
+              placeholder="es. /srv/progetti/hotel-os/uploads" style={{ width: '100%' }} />
+          </Field>
+          <Field label="Anno stagionale">
+            <Input type="number" value={anno} onChange={e => setAnno(Number(e.target.value))}
+              min={2020} max={2099} style={{ width: 120 }} />
+          </Field>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Checkbox checked={isTest} onChange={setIsTest} label="Dati di test (cancellabili dall'area Admin)" />
+            {isTest && <Badge tono="warn">TEST</Badge>}
           </div>
-          <div style={{ marginBottom: '1.2rem' }}>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>Anno stagionale</label>
-            <input
-              type="number"
-              value={anno}
-              onChange={e => setAnno(Number(e.target.value))}
-              min={2020} max={2099}
-              style={{ width: 120, padding: '6px 10px', border: '1px solid #ccc', borderRadius: 6, fontSize: 14 }}
-            />
+          <div>
+            <Button type="submit" disabled={loading}>
+              {loading ? 'Importazione in corso…' : 'Avvia import massivo'}
+            </Button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.2rem' }}>
-            <input
-              type="checkbox"
-              id="isTest"
-              checked={isTest}
-              onChange={e => setIsTest(e.target.checked)}
-              style={{ width: 16, height: 16, cursor: 'pointer' }}
-            />
-            <label htmlFor="isTest" style={{ cursor: 'pointer', fontSize: 13, color: '#92400e', fontWeight: 600 }}>
-              Dati di test (cancellabili dall'area Admin)
-            </label>
-          </div>
-
-          <button type="submit" disabled={loading} style={{ background: '#3b82f6', color: '#fff' }}>
-            {loading ? 'Importazione in corso…' : 'Avvia import massivo'}
-          </button>
         </form>
-      </div>
+      </Card>
 
-      {errore && (
-        <div style={{ padding: '1rem', background: '#fee2e2', borderRadius: 8, color: '#991b1b', maxWidth: 600, marginBottom: '1rem' }}>
-          {errore}
-        </div>
-      )}
+      {errore && <div style={{ maxWidth: 620 }}><Messaggio tipo="err" onChiudi={() => setErrore(null)}>{errore}</Messaggio></div>}
 
       {risultato && <RisultatoBulk r={risultato} />}
     </div>
@@ -92,88 +74,45 @@ export default function ImportBulk() {
 }
 
 function RisultatoBulk({ r }) {
-  const coloreStato = {
-    importato: '#065f46',
-    saltato:   '#1d4ed8',
-    errore:    '#991b1b',
-  }
-  const bgStato = {
-    importato: '#d1fae5',
-    saltato:   '#dbeafe',
-    errore:    '#fee2e2',
-  }
-
   return (
-    <div style={{ maxWidth: 900 }}>
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <h3 style={{ marginBottom: '1rem' }}>Riepilogo — {r.cartella}</h3>
-        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-          <Stat label="File trovati"   value={r.file_trovati} />
-          <Stat label="Coppie trovate" value={r.coppie_trovate} />
-          <Stat label="Importate"      value={r.coppie_importate} color="#065f46" />
-          <Stat label="Saltate"        value={r.coppie_saltate}   color="#1d4ed8" />
-          <Stat label="Errori"         value={r.coppie_errore}    color="#991b1b" />
+    <div style={{ maxWidth: 960 }}>
+      <Card title={`Riepilogo — ${r.cartella}`} style={{ marginBottom: 20 }}>
+        <div className="ui-kpi-row" style={{ marginBottom: 0 }}>
+          <KpiTile label="File trovati" value={r.file_trovati} minWidth={120} />
+          <KpiTile label="Coppie trovate" value={r.coppie_trovate} minWidth={120} />
+          <KpiTile label="Importate" value={r.coppie_importate} colore={colors.successText} minWidth={120} />
+          <KpiTile label="Saltate" value={r.coppie_saltate} colore={colors.infoText} minWidth={120} />
+          <KpiTile label="Errori" value={r.coppie_errore} colore={colors.dangerText} minWidth={120} />
         </div>
-      </div>
+      </Card>
 
       {r.risultati.length > 0 && (
-        <div className="card">
-          <h3>Dettaglio per coppia</h3>
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left' }}>Hotel</th>
-                  <th style={{ textAlign: 'left' }}>Snapshot</th>
-                  <th style={{ textAlign: 'left' }}>File 1</th>
-                  <th style={{ textAlign: 'left' }}>File 2</th>
-                  <th>Stato</th>
-                  <th>Inserite</th>
-                  <th>Aggiornate</th>
-                  <th>Scartate</th>
-                  <th style={{ textAlign: 'left' }}>Note</th>
+        <Card title="Dettaglio per coppia">
+          <Table compact>
+            <thead>
+              <tr>
+                <Th>Hotel</Th><Th>Snapshot</Th><Th>File 1</Th><Th>File 2</Th><Th center>Stato</Th>
+                <Th num>Inserite</Th><Th num>Aggiornate</Th><Th num>Scartate</Th><Th>Note</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.risultati.map((res, i) => (
+                <tr key={i}>
+                  <Td><HotelTag code={res.hotel_code} /></Td>
+                  <Td style={{ whiteSpace: 'nowrap' }}>{formatData(res.snapshot_date)}</Td>
+                  <Td muted style={{ fontSize: 'var(--fs-sm)' }}>{res.file1_nome}</Td>
+                  <Td muted style={{ fontSize: 'var(--fs-sm)' }}>{res.file2_nome}</Td>
+                  <Td center><Badge tono={TONO_STATO[res.stato] || 'neutral'}>{res.stato}</Badge></Td>
+                  <Td num>{res.righe_inserite || '—'}</Td>
+                  <Td num>{res.righe_aggiornate || '—'}</Td>
+                  <Td num>{res.righe_scartate || '—'}</Td>
+                  <Td muted style={{ fontSize: 'var(--fs-sm)' }}>{res.motivo || ''}</Td>
                 </tr>
-              </thead>
-              <tbody>
-                {r.risultati.map((res, i) => (
-                  <tr key={i}>
-                    <td><strong>{res.hotel_code}</strong></td>
-                    <td>{formatData(res.snapshot_date)}</td>
-                    <td style={{ fontSize: 12, color: '#6b7280' }}>{res.file1_nome}</td>
-                    <td style={{ fontSize: 12, color: '#6b7280' }}>{res.file2_nome}</td>
-                    <td>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '2px 8px',
-                        borderRadius: 12,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        background: bgStato[res.stato] || '#f3f4f6',
-                        color: coloreStato[res.stato] || '#374151',
-                      }}>
-                        {res.stato}
-                      </span>
-                    </td>
-                    <td>{res.righe_inserite || '—'}</td>
-                    <td>{res.righe_aggiornate || '—'}</td>
-                    <td>{res.righe_scartate || '—'}</td>
-                    <td style={{ fontSize: 12, color: '#6b7280' }}>{res.motivo || ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
       )}
-    </div>
-  )
-}
-
-function Stat({ label, value, color }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: color || '#1a1a2e' }}>{value}</div>
     </div>
   )
 }

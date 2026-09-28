@@ -258,8 +258,8 @@ contrasto con l'app reale) è stato eliminato.
 - `SezioneApribile` (titolo ▸/▾ che apre/chiude), `NavMese selettore` (click sull'etichetta apre il
   selettore di mese del browser), `DropZone multiple`, `Badge colore="#…"` (colore libero da DB,
   sfondo tenue — usato anche da `HotelTag`), riga `ui-riga-errore` (differenza da verificare).
-- `KpiTile` accetta anche `confronto`/`confrontoLabel`/`delta` (sostituisce il vecchio `KPICard`, che
-  resta solo finché la Home non è migrata); `<div className="ui-kpi-grid">` = griglia regolare di KPI.
+- `KpiTile` accetta anche `confronto`/`confrontoLabel`/`delta` (ha sostituito il vecchio `KPICard`,
+  eliminato); `<div className="ui-kpi-grid">` = griglia regolare di KPI.
 - **Colori grafici revenue**: `COLORI_REVENUE` (camere/fnb/extra) in `tokens.js`, uguali ovunque.
   **Serie di confronto** (periodo/anno precedente) nei grafici a linee: stesso colore della serie
   principale + `{...STILE_CONFRONTO}` (tratteggiata, semitrasparente) — non un colore diverso.
@@ -294,7 +294,10 @@ contrasto con l'app reale) è stato eliminato.
   "dati già presenti" usa `useConferma` invece di un pannello inline, e Dettaglio/Macrocategorie è
   un `SegmentedControl` invece di una checkbox), ✅ Dashboard Hotel e Gruppo (v3.15.6 — hotel e
   modalità come `SegmentedControl` nel titolo pagina; nel Ritmo prenotazioni e nell'occupazione per
-  hotel i colori ufficiali delle strutture). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  hotel i colori ufficiali delle strutture), ✅ Home/Cruscotto + Import Revenue + Import massivo
+  (v3.15.7 — tachimetri, mappa di calore e semaforo sui colori di significato; il blocco admin in
+  fondo alla Home si intitola "Dati riservati" con badge "solo admin"; eliminato `BulletChart.jsx`,
+  importato ma mai usato). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati
