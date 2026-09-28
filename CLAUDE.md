@@ -317,7 +317,12 @@ contrasto con l'app reale) è stato eliminato.
   (v3.15.7 — tachimetri, mappa di calore e semaforo sui colori di significato; il blocco admin in
   fondo alla Home si intitola "Dati riservati" con badge "solo admin"; eliminato `BulletChart.jsx`,
   importato ma mai usato), ✅ Login (v3.15.9 — solo aspetto, logica di accesso invariata; pulsante
-  blu notte invece dell'azzurro). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  blu notte invece dell'azzurro), ✅ Dipendenti tranche A (v3.15.10: titolo, tab, Report mensile,
+  Anagrafica con editor ripartizione CC, Import PDF, Storico — tab da ambra a blu notte, esiti di
+  ricalcolo come avvisi temporanei, conferme dell'app; i colori dei badge CC restano quelli per reparto
+  configurabili in Admin → Colori CC, con la palette di ripiego `_CC_PALETTE` invariata apposta per non
+  cambiare i colori dei reparti non configurati. Tranche B da fare: Analisi CC, che usa ancora
+  `tableStyle`/`thStyle`/`tdStyle`/`inlineInputStyle`/`h2Style` in fondo al file). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati

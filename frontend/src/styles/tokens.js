@@ -28,7 +28,8 @@ export const colors = {
   danger:  '#dc2626', dangerBg:  '#fee2e2', dangerText:  '#991b1b',
   warning: '#d97706', warningBg: '#fef3c7', warningText: '#92400e',
   info:    '#2563eb', infoBg:    '#dbeafe', infoText:    '#1e40af',
-  infoSoft: '#eff6ff', // celle con dato automatico (Usali)
+  infoSoft: '#eff6ff', // celle con dato automatico (Usali), righe evidenziate
+  successSoft: '#f0fdf4', warningSoft: '#fffbeb', dangerSoft: '#fef2f2', // sfondi tenuissimi di stato
 
   // Accento secondario con significato: valori derivati da un inserimento manuale che
   // sostituisce il dato automatico (es. Maturato in Forecast). Non usarlo come colore decorativo.

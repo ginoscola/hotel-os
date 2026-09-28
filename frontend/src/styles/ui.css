@@ -30,6 +30,7 @@
   --color-warning: #d97706; --color-warning-bg: #fef3c7; --color-warning-text: #92400e;
   --color-info: #2563eb;    --color-info-bg: #dbeafe;    --color-info-text: #1e40af;
   --color-info-soft: #eff6ff; /* celle con dato automatico */
+  --color-success-soft: #f0fdf4; --color-warning-soft: #fffbeb; --color-danger-soft: #fef2f2;
 
   --color-accent: #7c3aed; --color-accent-soft: #ede9fe;
   --color-iva: #ea580c; --color-iva-bg: #fff7ed; --color-iva-border: #fdba74; --color-iva-text: #9a3412;

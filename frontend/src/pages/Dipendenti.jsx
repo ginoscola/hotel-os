@@ -2,6 +2,11 @@ import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import api from '../api/client'
 import { formatEuro, formatPerc, mostraErrore } from '../utils/format'
+import {
+  Badge, Button, Checkbox, DropZone, Input, KpiTile, Loading, Messaggio, PageHeader, SectionTitle, Select,
+  StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
+} from '../components/ui'
+import { colors } from '../styles/tokens.js'
 
 
 const MESI = [
@@ -39,7 +44,8 @@ export default function Dipendenti() {
   const [albero, setAlbero] = useState([])
   const [ricalcolandoTutto, setRicalcolandoTutto] = useState(false)
   const [esitoRicalcoloTutto, setEsitoRicalcoloTutto] = useState(null)
-  const fileRef = useRef()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const isAdmin = () => {
     try {
@@ -55,18 +61,19 @@ export default function Dipendenti() {
   }, [])
 
   const handleRicalcolaTutto = async () => {
-    if (!window.confirm(
-      `Ricalcola le ripartizioni CC di tutti i dipendenti per l'anno ${anno}?\n\n` +
-      'I mesi con eccezione manuale rimarranno invariati.'
-    )) return
+    if (!(await conferma({
+      titolo: `Ricalcolare le ripartizioni CC di tutti i dipendenti per il ${anno}?`,
+      messaggio: 'I mesi con eccezione manuale rimarranno invariati.',
+      confermaLabel: 'Ricalcola',
+    }))) return
     setRicalcolandoTutto(true)
     setEsitoRicalcoloTutto(null)
     try {
       const { data } = await api.post('/dipendenti/ricalcola-cc-anno', null, { params: { anno } })
-      setEsitoRicalcoloTutto({ ok: true, messaggio: data.messaggio })
+      avvisi.successo(data.messaggio)
       caricaReport()
     } catch (err) {
-      setEsitoRicalcoloTutto({ ok: false, messaggio: mostraErrore(err, 'Errore sconosciuto') })
+      avvisi.errore(mostraErrore(err, 'Errore sconosciuto'))
     } finally {
       setRicalcolandoTutto(false)
     }
@@ -147,33 +154,26 @@ export default function Dipendenti() {
     }
   }
 
-  const onDrop = (e) => {
-    e.preventDefault()
-    setDragOver(false)
-    const file = e.dataTransfer.files[0]
-    handleFile(file)
-  }
-
   const aggiornaCCMensile = async (monthlyId, ccId, ccName) => {
     try {
       await api.put(`/dipendenti/monthly/${monthlyId}/centro-di-costo`, { cost_center_id: ccId })
       caricaReport()
     } catch {
-      alert('Errore aggiornamento centro di costo')
+      avvisi.errore('Errore aggiornamento centro di costo')
     }
   }
 
   const eliminaTestData = async () => {
-    if (!window.confirm('Cancellare tutti gli import di test (payroll) e i dati collegati?')) return
+    if (!(await conferma({ titolo: 'Cancellare tutti gli import di test (payroll)?', messaggio: 'Verranno cancellati anche i dati collegati.', pericolo: true }))) return
     setCancellandoTest(true)
     try {
       const r = await api.delete('/dipendenti/admin/test-data')
-      alert(r.data.messaggio)
+      avvisi.successo(r.data.messaggio)
       caricaReport()
       api.get('/dipendenti/import/storico').then(r => setStorici(r.data)).catch(() => {})
       caricaTestStats()
     } catch (e) {
-      alert(mostraErrore(e, 'Errore cancellazione dati di test'))
+      avvisi.errore(mostraErrore(e, 'Errore cancellazione dati di test'))
     } finally {
       setCancellandoTest(false)
     }
@@ -195,201 +195,134 @@ export default function Dipendenti() {
   }
 
   const eliminaImport = async (id, label) => {
-    if (!window.confirm(`Eliminare definitivamente l'import "${label}"?`)) return
+    if (!(await conferma({ titolo: `Eliminare definitivamente l'import "${label}"?`, pericolo: true }))) return
     try {
       await api.delete(`/dipendenti/import/${id}`, { params: { conferma: true } })
       setStorici(s => s.filter(i => i.id !== id))
       caricaReport()
     } catch (e) {
-      alert(mostraErrore(e, 'Errore eliminazione'))
+      avvisi.errore(mostraErrore(e, 'Errore eliminazione'))
     }
   }
 
   // ─── RENDER ───────────────────────────────────────────────────────────────
 
-  return (
-    <div style={{ padding: '24px', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Titolo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <span style={{ fontSize: 28 }}>👥</span>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#1e293b' }}>Spese Dipendenti</h1>
-          <p style={{ margin: 0, color: '#64748b', fontSize: 13 }}>Gestione costi del personale</p>
-        </div>
-        {isAdmin() && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              onClick={handleRicalcolaTutto}
-              disabled={ricalcolandoTutto}
-              title={`Ricalcola le ripartizioni CC di tutti i dipendenti per il ${anno}`}
-              style={{
-                fontSize: 13, padding: '6px 14px', borderRadius: 6, cursor: ricalcolandoTutto ? 'wait' : 'pointer',
-                border: '1px solid #d97706', background: ricalcolandoTutto ? '#fef3c7' : '#fffbeb',
-                color: '#92400e', fontWeight: 600,
-              }}
-            >
-              {ricalcolandoTutto ? '⏳ Aggiornando…' : '🔄 Aggiorna le ripartizioni'}
-            </button>
-            {esitoRicalcoloTutto && (
-              <span style={{
-                fontSize: 12, padding: '4px 8px', borderRadius: 4,
-                background: esitoRicalcoloTutto.ok ? '#dcfce7' : '#fee2e2',
-                color: esitoRicalcoloTutto.ok ? '#166534' : '#991b1b',
-              }}>
-                {esitoRicalcoloTutto.messaggio}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
+  const vociAzienda = (d, codici) => codici.reduce((s, c) => s + (d.voci.find(v => v.code === c)?.importo || 0), 0)
+  const quota = (v) => report?.totale_costo_aziendale > 0 ? formatPerc(v / report.totale_costo_aziendale * 100) : '—'
+  const vuoto = { padding: 32, textAlign: 'center' }
 
-      {/* Tab navigazione */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '2px solid #e2e8f0' }}>
-        {[
-          { id: 'report', label: 'Report mensile' },
-          { id: 'analisi', label: 'Analisi CC' },
-          { id: 'anagrafica', label: 'Anagrafica' },
-          ...(isAdmin() ? [
-            { id: 'import', label: 'Import PDF' },
-            { id: 'storico', label: 'Storico import' },
-          ] : []),
-        ].map(t => (
-          <button key={t.id} onClick={() => setSezione(t.id)} style={{
-            padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: 14, fontWeight: sezione === t.id ? 700 : 400,
-            color: sezione === t.id ? '#d97706' : '#475569',
-            borderBottom: sezione === t.id ? '2px solid #d97706' : '2px solid transparent',
-            marginBottom: -2,
-          }}>{t.label}</button>
-        ))}
-      </div>
+  return (
+    <div>
+      <PageHeader title="Spese Dipendenti" subtitle="Gestione costi del personale">
+        {isAdmin() && (
+          <Button variant="secondary" onClick={handleRicalcolaTutto} disabled={ricalcolandoTutto}
+            title={`Ricalcola le ripartizioni CC di tutti i dipendenti per il ${anno}`}>
+            {ricalcolandoTutto ? '⏳ Aggiornando…' : '🔄 Aggiorna le ripartizioni'}
+          </Button>
+        )}
+      </PageHeader>
+
+      <Tabs value={sezione} onChange={setSezione} tabs={[
+        { id: 'report', label: 'Report mensile' },
+        { id: 'analisi', label: 'Analisi CC' },
+        { id: 'anagrafica', label: 'Anagrafica' },
+        ...(isAdmin() ? [
+          { id: 'import', label: 'Import PDF' },
+          { id: 'storico', label: 'Storico import' },
+        ] : []),
+      ]} />
 
       {/* ── SEZIONE REPORT ─────────────────────────────────────────────────── */}
       {sezione === 'report' && (
         <div>
-          {/* Selettore periodo */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20 }}>
+          {/* Selettore periodo: mese (o "Tutto l'anno") + anno */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
             {mese !== 0 && (
-              <button onClick={() => {
+              <Button variant="secondary" size="sm" title="Mese precedente" onClick={() => {
                 const d = new Date(anno, mese - 2, 1)
                 setMese(d.getMonth() + 1)
                 setAnno(d.getFullYear())
-              }} style={navBtnStyle} title="Mese precedente">‹</button>
+              }}>◀</Button>
             )}
-            <select value={mese} onChange={e => setMese(Number(e.target.value))} style={selectStyle}>
+            <Select value={mese} onChange={e => setMese(Number(e.target.value))} aria-label="Mese">
               <option value={0}>Tutto l'anno</option>
-              {MESI.slice(1).map((m, i) => (
-                <option key={i + 1} value={i + 1}>{m}</option>
-              ))}
-            </select>
-            <select value={anno} onChange={e => setAnno(Number(e.target.value))} style={selectStyle}>
-              {[2024, 2025, 2026, 2027].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+              {MESI.slice(1).map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+            </Select>
+            <Select value={anno} onChange={e => setAnno(Number(e.target.value))} aria-label="Anno">
+              {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </Select>
             {mese !== 0 && (
-              <button onClick={() => {
+              <Button variant="secondary" size="sm" title="Mese successivo" onClick={() => {
                 const d = new Date(anno, mese, 1)
                 setMese(d.getMonth() + 1)
                 setAnno(d.getFullYear())
-              }} style={navBtnStyle} title="Mese successivo">›</button>
+              }}>▶</Button>
             )}
-            <button onClick={caricaReport} style={btnStyle}>Aggiorna</button>
+            <Button variant="secondary" size="sm" onClick={caricaReport}>Aggiorna</Button>
           </div>
 
-          {caricando && <p style={{ color: '#64748b' }}>Caricamento…</p>}
-          {errore && <p style={{ color: '#dc2626' }}>{errore}</p>}
+          {caricando && <Loading />}
+          <Messaggio tipo="err">{errore}</Messaggio>
 
           {!caricando && !report && (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
-              <div style={{ fontSize: 40, marginBottom: 8 }}>📄</div>
-              <p>Nessun dato per {mese === 0 ? `l'anno ${anno}` : `${MESI[mese]} ${anno}`}.<br />Importa un PDF dalla sezione "Import PDF".</p>
-            </div>
+            <StatoVuoto>
+              <div style={{ fontSize: 36, marginBottom: 8 }}>📄</div>
+              Nessun dato per {mese === 0 ? `l'anno ${anno}` : `${MESI[mese]} ${anno}`}.<br />Importa un PDF dalla sezione "Import PDF".
+            </StatoVuoto>
           )}
 
           {report && (
             <>
               {/* Card KPI */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
-                {[
-                  { label: 'Dipendenti', value: report.n_dipendenti },
-                  { label: 'Retrib. Netta Tot.', value: formatEuro(report.totale_netto) },
-                  { label: 'Lordo Tot.', value: formatEuro(report.totale_lordo) },
-                  { label: 'Costo Az. Tot.', value: formatEuro(report.totale_costo_aziendale) },
-                ].map(k => (
-                  <div key={k.label} style={cardStyle}>
-                    <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{k.label}</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: '#1e293b' }}>{k.value}</div>
-                  </div>
-                ))}
+              <div className="ui-kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                <KpiTile label="Dipendenti" value={report.n_dipendenti} />
+                <KpiTile label="Retrib. Netta Tot." value={formatEuro(report.totale_netto)} />
+                <KpiTile label="Lordo Tot." value={formatEuro(report.totale_lordo)} />
+                <KpiTile label="Costo Az. Tot." value={formatEuro(report.totale_costo_aziendale)} />
               </div>
 
-              {/* Sub-tab: Per Dipendente / Per Struttura */}
-              <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid #e2e8f0' }}>
-                {[{ id: 'dipendenti', label: 'Per Dipendente' }, { id: 'struttura', label: 'Per Struttura/Reparto' }].map(t => (
-                  <button key={t.id} onClick={() => setReportTab(t.id)} style={{
-                    padding: '6px 14px', border: 'none', background: 'none', cursor: 'pointer',
-                    fontSize: 13, fontWeight: reportTab === t.id ? 700 : 400,
-                    color: reportTab === t.id ? '#1e40af' : '#64748b',
-                    borderBottom: reportTab === t.id ? '2px solid #1e40af' : '2px solid transparent',
-                    marginBottom: -1,
-                  }}>{t.label}</button>
-                ))}
-              </div>
+              <Tabs size="sm" value={reportTab} onChange={setReportTab}
+                tabs={[{ id: 'dipendenti', label: 'Per Dipendente' }, { id: 'struttura', label: 'Per Struttura/Reparto' }]} />
 
               {/* ── Vista Per Struttura ── */}
               {reportTab === 'struttura' && (
                 <div>
                   {(report.totali_per_struttura || []).length === 0 ? (
-                    <p style={{ color: '#94a3b8' }}>Nessun dato per struttura disponibile.</p>
+                    <StatoVuoto>Nessun dato per struttura disponibile.</StatoVuoto>
                   ) : (
                     <>
-                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+                      <div className="ui-kpi-row">
                         {(report.totali_per_struttura || []).map(s => (
-                          <div key={s.struttura_code} style={{ ...cardStyle, minWidth: 180 }}>
-                            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 2 }}>{s.struttura_code}</div>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 2 }}>{s.struttura_name}</div>
-                            <div style={{ fontSize: 18, fontWeight: 700, color: '#d97706' }}>{formatEuro(s.costo_aziendale)}</div>
-                            <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                              {report.totale_costo_aziendale > 0
-                                ? formatPerc(s.costo_aziendale / report.totale_costo_aziendale * 100)
-                                : '—'} · {s.n_dipendenti} dip.
-                            </div>
-                          </div>
+                          <KpiTile key={s.struttura_code} minWidth={180}
+                            label={`${s.struttura_code} · ${s.struttura_name}`}
+                            value={formatEuro(s.costo_aziendale)}
+                            sub={`${quota(s.costo_aziendale)} · ${s.n_dipendenti} dip.`} />
                         ))}
                       </div>
-                      <table style={tableStyle}>
+                      <Table>
                         <thead>
-                          <tr style={{ background: '#2d6a9f' }}>
-                            {['Struttura', 'Costo Az. Totale', '% sul totale', 'N° Dipendenti'].map(h => (
-                              <th key={h} style={thStyle}>{h}</th>
-                            ))}
-                          </tr>
+                          <tr><Th>Struttura</Th><Th num>Costo Az. Totale</Th><Th num>% sul totale</Th><Th num>N° Dipendenti</Th></tr>
                         </thead>
                         <tbody>
-                          {(report.totali_per_struttura || []).map((s, idx) => (
-                            <tr key={s.struttura_code} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                              <td style={{ ...tdStyle, fontWeight: 600 }}>
-                                <span style={{ fontSize: 12, color: '#94a3b8', fontFamily: 'monospace', marginRight: 8 }}>{s.struttura_code}</span>
+                          {(report.totali_per_struttura || []).map(s => (
+                            <tr key={s.struttura_code}>
+                              <Td style={{ fontWeight: 600 }}>
+                                <code style={{ color: colors.textSubtle, marginRight: 8 }}>{s.struttura_code}</code>
                                 {s.struttura_name}
-                              </td>
-                              <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }}>{formatEuro(s.costo_aziendale)}</td>
-                              <td style={{ ...tdStyle, textAlign: 'right' }}>
-                                {report.totale_costo_aziendale > 0
-                                  ? formatPerc(s.costo_aziendale / report.totale_costo_aziendale * 100)
-                                  : '—'}
-                              </td>
-                              <td style={{ ...tdStyle, textAlign: 'right' }}>{s.n_dipendenti}</td>
+                              </Td>
+                              <Td num style={{ fontWeight: 700 }}>{formatEuro(s.costo_aziendale)}</Td>
+                              <Td num>{quota(s.costo_aziendale)}</Td>
+                              <Td num>{s.n_dipendenti}</Td>
                             </tr>
                           ))}
-                          <tr>
-                            <td style={{ ...tdStyle, background: '#0f172a', color: '#fff', fontWeight: 700 }}>TOTALE</td>
-                            <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>{formatEuro(report.totale_costo_aziendale)}</td>
-                            <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>100%</td>
-                            <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>{report.n_dipendenti}</td>
+                          <tr className="ui-riga-totale">
+                            <Td>TOTALE</Td>
+                            <Td num>{formatEuro(report.totale_costo_aziendale)}</Td>
+                            <Td num>100%</Td>
+                            <Td num>{report.n_dipendenti}</Td>
                           </tr>
                         </tbody>
-                      </table>
+                      </Table>
                     </>
                   )}
                 </div>
@@ -397,122 +330,102 @@ export default function Dipendenti() {
 
               {/* ── Vista Per Dipendente ── */}
               {reportTab === 'dipendenti' && (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={tableStyle}>
+                <Table>
                   <thead>
-                    <tr style={{ background: '#2d6a9f' }}>
-                      {['Dipendente', 'Centri di costo', 'Ret. Netta', 'Tot. Lordo', 'Contrib. Az.', 'TFR', 'Costo Totale', 'Incidenza%', ''].map(h => (
-                        <th key={h} style={thStyle}>{h}</th>
-                      ))}
+                    <tr>
+                      <Th>Dipendente</Th><Th>Centri di costo</Th><Th num>Ret. Netta</Th><Th num>Tot. Lordo</Th>
+                      <Th num>Contrib. Az.</Th><Th num>TFR</Th><Th num tot>Costo Totale</Th><Th num>Incidenza%</Th>
                     </tr>
                   </thead>
                   <tbody>
-                    {report.dipendenti.map((d, idx) => (
+                    {report.dipendenti.map(d => (
                       <Fragment key={d.employee_id}>
-                        <tr style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                          <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                              <button onClick={() => setVoceExpanded(voceExpanded === d.employee_id ? null : d.employee_id)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#64748b', padding: 0, flexShrink: 0 }}>
+                        <tr>
+                          <Td style={{ whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                              <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm" style={{ padding: '0 4px', fontSize: 10 }}
+                                onClick={() => setVoceExpanded(voceExpanded === d.employee_id ? null : d.employee_id)}
+                                aria-label="Dettaglio voci">
                                 {voceExpanded === d.employee_id ? '▼' : '▶'}
                               </button>
                               <div>
-                                <span style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{d.cognome} {d.nome}</span>
-                                <div style={{ fontSize: 11, color: '#94a3b8' }}>{d.codice_fiscale}</div>
+                                <span style={{ fontWeight: 600 }}>{d.cognome} {d.nome}</span>
+                                <div style={{ fontSize: 'var(--fs-xs)', color: colors.textSubtle }}>{d.codice_fiscale}</div>
                               </div>
                             </div>
-                          </td>
-                          <td style={{ ...tdStyle, textAlign: 'left' }}>
+                          </Td>
+                          <Td>
                             <CCBadgeList centri={d.centri_di_costo} fallback={d.centro_di_costo} />
                             {d.override_manuale && <span title="CC modificato manualmente" style={{ marginLeft: 4, fontSize: 11 }}>✏️</span>}
-                          </td>
-                          <td style={{ ...tdStyle, textAlign: 'right' }}>{formatEuro(d.retribuzione_netta)}</td>
-                          <td style={{ ...tdStyle, textAlign: 'right' }}>{formatEuro(d.totale_lordo)}</td>
-                          <td style={{ ...tdStyle, textAlign: 'right' }}>
-                            {formatEuro((d.voci.find(v => v.code === 'contr_prev_az')?.importo || 0) +
-                              (d.voci.find(v => v.code === 'contr_san_az')?.importo || 0))}
-                          </td>
-                          <td style={{ ...tdStyle, textAlign: 'right' }}>
-                            {formatEuro(d.voci.find(v => v.code === 'tfr')?.importo)}
-                          </td>
-                          <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{formatEuro(d.costo_aziendale)}</td>
-                          <td style={{ ...tdStyle, textAlign: 'right' }}>
+                          </Td>
+                          <Td num>{formatEuro(d.retribuzione_netta)}</Td>
+                          <Td num>{formatEuro(d.totale_lordo)}</Td>
+                          <Td num>{formatEuro(vociAzienda(d, ['contr_prev_az', 'contr_san_az']))}</Td>
+                          <Td num>{formatEuro(d.voci.find(v => v.code === 'tfr')?.importo)}</Td>
+                          <Td num tot style={{ fontWeight: 600 }}>{formatEuro(d.costo_aziendale)}</Td>
+                          <Td num>
                             {d.retribuzione_netta > 0
                               ? <IncidenzaBadge valore={(d.costo_aziendale - d.retribuzione_netta) / d.retribuzione_netta * 100} />
                               : '—'}
-                          </td>
-                          <td style={tdStyle}></td>
+                          </Td>
                         </tr>
                         {/* Dettaglio voci */}
                         {voceExpanded === d.employee_id && (
-                          <tr key={`voci-${d.employee_id}`} style={{ background: '#fffbeb' }}>
-                            <td colSpan={9} style={{ padding: '10px 24px' }}>
+                          <tr className="ui-riga-dettaglio">
+                            <Td colSpan={8}>
                               <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
-                                {/* Anagrafica professionale */}
                                 <div style={{ minWidth: 180 }}>
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', marginBottom: 6 }}>
-                                    Inquadramento
-                                  </div>
+                                  <div style={titoletto}>Inquadramento</div>
                                   {[
                                     { label: 'Qualifica', value: d.qualifica },
                                     { label: 'Mansione', value: d.mansione },
                                     { label: 'Livello', value: d.livello },
                                   ].map(r => (
-                                    <div key={r.label} style={{ display: 'flex', gap: 8, fontSize: 12, color: '#374151', marginBottom: 3 }}>
-                                      <span style={{ color: '#94a3b8', minWidth: 64 }}>{r.label}</span>
+                                    <div key={r.label} style={{ display: 'flex', gap: 8, marginBottom: 3 }}>
+                                      <span style={{ color: colors.textSubtle, minWidth: 64 }}>{r.label}</span>
                                       <span style={{ fontWeight: 600 }}>{r.value || '—'}</span>
                                     </div>
                                   ))}
                                 </div>
-                                {/* Voci di costo */}
                                 {['dipendente', 'azienda'].map(cat => (
                                   <div key={cat}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', marginBottom: 6 }}>
-                                      {cat === 'dipendente' ? 'Voci dipendente' : 'Voci azienda'}
-                                    </div>
+                                    <div style={titoletto}>{cat === 'dipendente' ? 'Voci dipendente' : 'Voci azienda'}</div>
                                     {d.voci.filter(v => v.categoria === cat).map(v => (
-                                      <div key={v.code} style={{ display: 'flex', justifyContent: 'space-between', gap: 24, fontSize: 12, color: '#374151', marginBottom: 3 }}>
+                                      <div key={v.code} style={{ display: 'flex', justifyContent: 'space-between', gap: 24, marginBottom: 3 }}>
                                         <span>{v.name}</span>
-                                        <span style={{ fontWeight: 600 }}>{formatEuro(v.importo)}</span>
+                                        <span className="ui-num" style={{ fontWeight: 600 }}>{formatEuro(v.importo)}</span>
                                       </div>
                                     ))}
                                   </div>
                                 ))}
                               </div>
-                            </td>
+                            </Td>
                           </tr>
                         )}
                       </Fragment>
                     ))}
                     {/* Riga totale */}
                     {(() => {
-                      const totContribAz = report.dipendenti.reduce((s, d) =>
-                        s + (d.voci.find(v => v.code === 'contr_prev_az')?.importo || 0)
-                          + (d.voci.find(v => v.code === 'contr_san_az')?.importo || 0), 0)
-                      const totTfr = report.dipendenti.reduce((s, d) =>
-                        s + (d.voci.find(v => v.code === 'tfr')?.importo || 0), 0)
+                      const totContribAz = report.dipendenti.reduce((s, d) => s + vociAzienda(d, ['contr_prev_az', 'contr_san_az']), 0)
+                      const totTfr = report.dipendenti.reduce((s, d) => s + vociAzienda(d, ['tfr']), 0)
                       const incidenzaTot = report.totale_netto > 0
                         ? ((report.totale_costo_aziendale - report.totale_netto) / report.totale_netto * 100)
                         : null
                       return (
-                        <tr>
-                          <td style={{ ...tdStyle, background: '#0f172a', color: '#fff', fontWeight: 700 }}>TOTALE ({report.n_dipendenti} dip.)</td>
-                          <td style={{ ...tdStyle, background: '#0f172a' }}></td>
-                          <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>{formatEuro(report.totale_netto)}</td>
-                          <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>{formatEuro(report.totale_lordo)}</td>
-                          <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>{formatEuro(totContribAz)}</td>
-                          <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>{formatEuro(totTfr)}</td>
-                          <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>{formatEuro(report.totale_costo_aziendale)}</td>
-                          <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right' }}>
-                            {incidenzaTot != null ? <IncidenzaBadge valore={incidenzaTot} /> : '—'}
-                          </td>
-                          <td style={{ ...tdStyle, background: '#0f172a' }}></td>
+                        <tr className="ui-riga-totale">
+                          <Td>TOTALE ({report.n_dipendenti} dip.)</Td>
+                          <Td />
+                          <Td num>{formatEuro(report.totale_netto)}</Td>
+                          <Td num>{formatEuro(report.totale_lordo)}</Td>
+                          <Td num>{formatEuro(totContribAz)}</Td>
+                          <Td num>{formatEuro(totTfr)}</Td>
+                          <Td num tot>{formatEuro(report.totale_costo_aziendale)}</Td>
+                          <Td num>{incidenzaTot != null ? <IncidenzaBadge valore={incidenzaTot} suSfondoScuro /> : '—'}</Td>
                         </tr>
                       )
                     })()}
                   </tbody>
-                </table>
-              </div>
+                </Table>
               )}
             </>
           )}
@@ -527,44 +440,29 @@ export default function Dipendenti() {
       {/* ── SEZIONE ANAGRAFICA ──────────────────────────────────────────────── */}
       {sezione === 'anagrafica' && (
         <div>
-          {/* Header con titolo, ricerca e selettore anno */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-            <h2 style={{ ...h2Style, margin: 0 }}>
-              Anagrafica dipendenti
-              {' '}
-              <span style={{ fontSize: 14, fontWeight: 500, color: '#64748b' }}>
+            <SectionTitle style={{ margin: 0 }}>
+              Anagrafica dipendenti{' '}
+              <span className="ui-text-muted" style={{ fontWeight: 500, fontSize: 'var(--fs-md)' }}>
                 ({cercaDipendente ? `${dipendentiFiltrati.length} di ${dipendenti.length}` : dipendenti.length})
               </span>
-            </h2>
+            </SectionTitle>
             <div style={{ position: 'relative', flex: '1 1 200px', maxWidth: 320 }}>
-              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 15, pointerEvents: 'none' }}>🔍</span>
-              <input
-                type="text"
-                placeholder="Cerca per nome, cognome o CF…"
-                value={cercaDipendente}
-                onChange={e => setCercaDipendente(e.target.value)}
-                style={{ ...inlineInputStyle, width: '100%', paddingLeft: 32, boxSizing: 'border-box' }}
-              />
+              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: colors.textSubtle, pointerEvents: 'none' }}>🔍</span>
+              <Input type="text" placeholder="Cerca per nome, cognome o CF…" value={cercaDipendente}
+                onChange={e => setCercaDipendente(e.target.value)} style={{ width: '100%', paddingLeft: 32 }} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-              <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Anno:</label>
-              <select
-                value={annoAnagrafica}
-                onChange={e => setAnnoAnagrafica(Number(e.target.value))}
-                style={{ ...inlineInputStyle, width: 90, fontWeight: 700 }}>
+            <div style={{ marginLeft: 'auto' }}>
+              <Select value={annoAnagrafica} onChange={e => setAnnoAnagrafica(Number(e.target.value))} aria-label="Anno anagrafica">
                 {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
+              </Select>
             </div>
           </div>
 
           {dipendenti.length === 0 ? (
-            <div style={{ padding: '32px', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: 8 }}>
-              Nessun dipendente con import nel {annoAnagrafica} — importa un PDF per aggiungere l'anagrafica
-            </div>
+            <StatoVuoto>Nessun dipendente con import nel {annoAnagrafica} — importa un PDF per aggiungere l'anagrafica</StatoVuoto>
           ) : dipendentiFiltrati.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: 8 }}>
-              Nessun dipendente trovato per "<strong>{cercaDipendente}</strong>"
-            </div>
+            <StatoVuoto>Nessun dipendente trovato per "<strong>{cercaDipendente}</strong>"</StatoVuoto>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {dipendentiFiltrati.map((d, idx) => (
@@ -586,70 +484,34 @@ export default function Dipendenti() {
 
       {/* ── SEZIONE IMPORT PDF ─────────────────────────────────────────────── */}
       {sezione === 'import' && isAdmin() && (
-        <div style={{ maxWidth: 600 }}>
-          <h2 style={h2Style}>Importa PDF costi personale</h2>
-          <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>
+        <div style={{ maxWidth: 640 }}>
+          <SectionTitle>Importa PDF costi personale</SectionTitle>
+          <p className="ui-text-muted" style={{ marginTop: 0, marginBottom: 16 }}>
             Carica il PDF mensile dei costi aziendali. Il sistema estrae automaticamente
             i dati di tutti i dipendenti.
           </p>
 
-          {/* Checkbox dati di test */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20,
-            padding: '10px 14px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fcd34d' }}>
-            <input
-              type="checkbox"
-              id="isTestPdf"
-              checked={isTest}
-              onChange={e => setIsTest(e.target.checked)}
-              style={{ width: 16, height: 16, cursor: 'pointer' }}
-            />
-            <label htmlFor="isTestPdf" style={{ cursor: 'pointer', fontSize: 13, color: '#92400e', fontWeight: 600 }}>
-              Dati di test (cancellabili dalla sezione Admin)
-            </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <Checkbox checked={isTest} onChange={setIsTest} label="Dati di test (cancellabili dalla sezione Admin)" />
+            {isTest && <Badge tono="warn">TEST</Badge>}
           </div>
 
-          {/* Drop zone */}
-          <div
-            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            onClick={() => fileRef.current?.click()}
-            style={{
-              border: `2px dashed ${dragOver ? '#d97706' : '#cbd5e1'}`,
-              borderRadius: 12,
-              padding: '40px 24px',
-              textAlign: 'center',
-              cursor: 'pointer',
-              background: dragOver ? '#fffbeb' : '#f8fafc',
-              transition: 'all 0.2s',
-              marginBottom: 20,
-            }}>
-            <input ref={fileRef} type="file" accept=".pdf" style={{ display: 'none' }}
-              onChange={e => handleFile(e.target.files[0])} />
-            <div style={{ fontSize: 36, marginBottom: 8 }}>📤</div>
-            <div style={{ fontWeight: 600, color: '#374151', marginBottom: 4 }}>
-              Trascina il PDF qui o clicca per selezionare
-            </div>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Solo file .pdf</div>
-          </div>
+          <DropZone
+            accept=".pdf"
+            onFile={handleFile}
+            disabled={uploadState.stato === 'caricando'}
+            icona={uploadState.stato === 'caricando' ? null : '📤'}
+            titolo={uploadState.stato === 'caricando' ? 'Importazione in corso…' : 'Trascina il PDF qui o clicca per selezionare'}
+            sottotitolo={uploadState.stato === 'caricando' ? null : 'Solo file .pdf'}
+          />
 
-          {/* Stato upload */}
-          {uploadState.stato === 'caricando' && (
-            <div style={{ padding: '12px 16px', background: '#eff6ff', borderRadius: 8, color: '#1d4ed8' }}>
-              ⏳ {uploadState.messaggio}
-            </div>
-          )}
           {uploadState.stato === 'errore' && (
-            <div style={{ padding: '12px 16px', background: '#fef2f2', borderRadius: 8, color: '#dc2626' }}>
-              ❌ {uploadState.messaggio}
-            </div>
+            <Messaggio tipo="err" onChiudi={() => setUploadState({ stato: 'idle', messaggio: '', risultato: null })}>{uploadState.messaggio}</Messaggio>
           )}
           {uploadState.stato === 'ok' && uploadState.risultato && (
-            <div style={{ padding: '16px', background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
-              <div style={{ fontWeight: 700, color: '#15803d', marginBottom: 8 }}>
-                ✅ Importazione completata
-              </div>
-              <div style={{ fontSize: 13, color: '#166534' }}>
+            <Messaggio tipo="ok">
+              <strong>Importazione completata</strong>
+              <div style={{ marginTop: 6 }}>
                 <div>Periodo: {MESI[uploadState.risultato.mese]} {uploadState.risultato.anno}</div>
                 <div>Società: {uploadState.risultato.societa}</div>
                 <div>Dipendenti importati: <strong>{uploadState.risultato.n_dipendenti}</strong></div>
@@ -659,38 +521,32 @@ export default function Dipendenti() {
                   <div style={{ marginTop: 8 }}>
                     <strong>Nuovi dipendenti:</strong>
                     <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
-                      {uploadState.risultato.nuovi_dipendenti.map(n => (
-                        <li key={n} style={{ fontSize: 12 }}>{n}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {uploadState.risultato.warnings?.length > 0 && (
-                  <div style={{ marginTop: 8, background: '#fef9c3', borderRadius: 6, padding: '8px 12px' }}>
-                    <strong>⚠️ Warning:</strong>
-                    <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
-                      {uploadState.risultato.warnings.map((w, i) => (
-                        <li key={i} style={{ fontSize: 12 }}>{w}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {uploadState.risultato.pagine_non_parsate?.length > 0 && (
-                  <div style={{ marginTop: 8, background: '#fef2f2', borderRadius: 6, padding: '8px 12px' }}>
-                    <strong>❌ Pagine non parsate:</strong>
-                    <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
-                      {uploadState.risultato.pagine_non_parsate.map((p, i) => (
-                        <li key={i} style={{ fontSize: 12 }}>Pagina {p.pagina}: {p.errore}</li>
-                      ))}
+                      {uploadState.risultato.nuovi_dipendenti.map(n => <li key={n}>{n}</li>)}
                     </ul>
                   </div>
                 )}
               </div>
-              <button onClick={() => { setSezione('report'); setMese(uploadState.risultato.mese); setAnno(uploadState.risultato.anno) }}
-                style={{ ...btnStyle, marginTop: 12 }}>
+              <Button size="sm" style={{ marginTop: 10 }}
+                onClick={() => { setSezione('report'); setMese(uploadState.risultato.mese); setAnno(uploadState.risultato.anno) }}>
                 Vai al report {MESI[uploadState.risultato.mese]} {uploadState.risultato.anno}
-              </button>
-            </div>
+              </Button>
+            </Messaggio>
+          )}
+          {uploadState.stato === 'ok' && uploadState.risultato?.warnings?.length > 0 && (
+            <Messaggio tipo="warn">
+              <strong>Avvisi:</strong>
+              <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
+                {uploadState.risultato.warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            </Messaggio>
+          )}
+          {uploadState.stato === 'ok' && uploadState.risultato?.pagine_non_parsate?.length > 0 && (
+            <Messaggio tipo="err">
+              <strong>Pagine non lette:</strong>
+              <ul style={{ margin: '4px 0', paddingLeft: 20 }}>
+                {uploadState.risultato.pagine_non_parsate.map((p, i) => <li key={i}>Pagina {p.pagina}: {p.errore}</li>)}
+              </ul>
+            </Messaggio>
           )}
         </div>
       )}
@@ -698,51 +554,44 @@ export default function Dipendenti() {
       {/* ── SEZIONE STORICO IMPORT ─────────────────────────────────────────── */}
       {sezione === 'storico' && isAdmin() && (
         <div>
-          <h2 style={h2Style}>Storico import ({storici.length})</h2>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={tableStyle}>
-              <thead>
-                <tr style={{ background: '#2d6a9f' }}>
-                  {['ID', 'File', 'Periodo', 'Società', 'Dip.', 'Costo Az. Tot.', 'Stato', 'Azioni'].map(h => (
-                    <th key={h} style={thStyle}>{h}</th>
-                  ))}
+          <SectionTitle>Storico import ({storici.length})</SectionTitle>
+          <Table compact>
+            <thead>
+              <tr>
+                <Th num>ID</Th><Th>File</Th><Th>Periodo</Th><Th>Società</Th><Th num>Dip.</Th>
+                <Th num>Costo Az. Tot.</Th><Th center>Stato</Th><Th center>Azioni</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {storici.map(s => (
+                <tr key={s.id}>
+                  <Td num muted>{s.id}</Td>
+                  <Td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.nome_file}>{s.nome_file}</Td>
+                  <Td>{MESI[s.mese]} {s.anno}</Td>
+                  <Td>{s.societa || '—'}</Td>
+                  <Td num>{s.n_dipendenti ?? '—'}</Td>
+                  <Td num>{formatEuro(s.totale_costo_aziendale)}</Td>
+                  <Td center><Badge tono="ok">{s.stato}</Badge></Td>
+                  <Td center>
+                    <Button variant="danger-soft" size="sm" onClick={() => eliminaImport(s.id, `${MESI[s.mese]} ${s.anno}`)}>Elimina</Button>
+                  </Td>
                 </tr>
-              </thead>
-              <tbody>
-                {storici.map((s, idx) => (
-                  <tr key={s.id} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                    <td style={{ ...tdStyle, color: '#94a3b8', fontSize: 12 }}>{s.id}</td>
-                    <td style={{ ...tdStyle, fontSize: 12, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nome_file}</td>
-                    <td style={tdStyle}>{MESI[s.mese]} {s.anno}</td>
-                    <td style={tdStyle}>{s.societa || '—'}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{s.n_dipendenti ?? '—'}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>{formatEuro(s.totale_costo_aziendale)}</td>
-                    <td style={tdStyle}>
-                      <span style={{ background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: 12, fontSize: 11 }}>
-                        {s.stato}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>
-                      <button
-                        onClick={() => eliminaImport(s.id, `${MESI[s.mese]} ${s.anno}`)}
-                        style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: 12 }}>
-                        Elimina
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {storici.length === 0 && (
-                  <tr><td colSpan={8} style={{ ...tdStyle, textAlign: 'center', color: '#94a3b8' }}>
-                    Nessun import effettuato
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              ))}
+              {storici.length === 0 && (
+                <tr><Td colSpan={8} center muted>Nessun import effettuato</Td></tr>
+              )}
+            </tbody>
+          </Table>
         </div>
       )}
     </div>
   )
+}
+
+// Titoletto maiuscolo delle sezioni di dettaglio (voci, inquadramento, ripartizioni)
+const titoletto = {
+  fontSize: 'var(--fs-xs)', fontWeight: 700, color: 'var(--color-text-muted)',
+  textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6,
 }
 
 // ─── CARD ANAGRAFICA CON PANNELLO CC ─────────────────────────────────────────
@@ -754,7 +603,8 @@ function AnagraficaCard({ d, idx, anno, albero }) {
   const [ccDefaults, setCcDefaults] = useState(d.centri_di_costo?.length ? d.centri_di_costo : null)
   const [editandoDefault, setEditandoDefault] = useState(false)
   const [ricalcolando, setRicalcolando] = useState(false)
-  const [esitoRicalcolo, setEsitoRicalcolo] = useState(null)
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const isAdmin = () => {
     try { return JSON.parse(localStorage.getItem('auth_user') || '{}').ruolo === 'admin' } catch { return false }
@@ -775,20 +625,19 @@ function AnagraficaCard({ d, idx, anno, albero }) {
   }
 
   const handleRicalcola = async () => {
-    if (!window.confirm(
-      'Ricalcola le ripartizioni CC su tutti i mesi già importati?\n\n' +
-      'I mesi con eccezione manuale rimarranno invariati.'
-    )) return
+    if (!(await conferma({
+      titolo: 'Ricalcolare le ripartizioni CC su tutti i mesi già importati?',
+      messaggio: 'I mesi con eccezione manuale rimarranno invariati.',
+      confermaLabel: 'Ricalcola',
+    }))) return
     setRicalcolando(true)
-    setEsitoRicalcolo(null)
     try {
       const { data } = await api.post(`/dipendenti/${d.id}/ricalcola-cc`)
-      setEsitoRicalcolo({ ok: true, messaggio: data.messaggio })
+      avvisi.successo(data.messaggio)
     } catch (err) {
-      setEsitoRicalcolo({ ok: false, messaggio: mostraErrore(err, 'Errore ricalcolo') })
+      avvisi.errore(mostraErrore(err, 'Errore ricalcolo'))
     } finally {
       setRicalcolando(false)
-      setTimeout(() => setEsitoRicalcolo(null), 4000)
     }
   }
 
@@ -798,57 +647,40 @@ function AnagraficaCard({ d, idx, anno, albero }) {
     : (d.centro_di_costo ? [{ cost_center_id: d.centro_di_costo_id, cost_center_code: d.centro_di_costo, percentuale: 100 }] : [])
 
   return (
-    <div style={{
-      border: '1px solid #e2e8f0', borderRadius: 10,
-      background: idx % 2 === 0 ? '#fff' : '#f8fafc',
-      overflow: 'hidden',
-    }}>
+    <div className="ui-card" style={{ padding: 0, overflow: 'hidden', background: idx % 2 === 0 ? colors.surface : colors.surfaceSoft }}>
       {/* Riga riassuntiva — clic per espandere */}
       <div
         onClick={() => setEspanso(v => !v)}
+        role="button"
+        aria-expanded={espanso}
         style={{
-          display: 'grid',
-          gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1.5fr auto',
-          alignItems: 'center',
-          gap: 12,
-          padding: '10px 16px',
-          cursor: 'pointer',
-          userSelect: 'none',
+          display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1.5fr auto',
+          alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', userSelect: 'none',
         }}>
         <div>
-          <span style={{ fontWeight: 700, color: '#1e293b' }}>{d.cognome} {d.nome}</span>
-          <span style={{ marginLeft: 8, color: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }}>{d.codice_fiscale}</span>
+          <span style={{ fontWeight: 700 }}>{d.cognome} {d.nome}</span>
+          <code style={{ marginLeft: 8, color: colors.textSubtle, fontSize: 'var(--fs-xs)' }}>{d.codice_fiscale}</code>
         </div>
-        <span style={{ color: '#64748b', fontSize: 13 }}>{d.qualifica || '—'}</span>
-        <span style={{ color: '#64748b', fontSize: 13 }}>{d.mansione || '—'}</span>
-        <span style={{ color: '#64748b', fontSize: 13 }}>{d.livello || '—'}</span>
+        <span className="ui-text-muted" style={{ fontSize: 'var(--fs-base)' }}>{d.qualifica || '—'}</span>
+        <span className="ui-text-muted" style={{ fontSize: 'var(--fs-base)' }}>{d.mansione || '—'}</span>
+        <span className="ui-text-muted" style={{ fontSize: 'var(--fs-base)' }}>{d.livello || '—'}</span>
         <div>
           {badgeCC.length > 0
             ? <CCInlineBadges centri={badgeCC} />
-            : <span style={{ color: '#94a3b8', fontSize: 12 }}>N/A</span>
-          }
+            : <span style={{ color: colors.textSubtle, fontSize: 'var(--fs-sm)' }}>N/A</span>}
         </div>
-        <span style={{ color: '#94a3b8', fontSize: 12 }}>
-          {d.email || d.cellulare || '—'}
-        </span>
-        <span style={{ color: '#94a3b8', fontSize: 16 }}>{espanso ? '▲' : '▼'}</span>
+        <span style={{ color: colors.textSubtle, fontSize: 'var(--fs-sm)' }}>{d.email || d.cellulare || '—'}</span>
+        <span style={{ color: colors.textSubtle, fontSize: 11, transform: espanso ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▶</span>
       </div>
 
       {/* Pannello espanso */}
       {espanso && (
-        <div style={{
-          borderTop: '1px solid #e2e8f0',
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 0,
-        }}>
+        <div style={{ borderTop: `1px solid ${colors.border}`, display: 'grid', gridTemplateColumns: '1fr 1fr', background: colors.surface }}>
           {/* Colonna sinistra — CC default */}
-          <div style={{ padding: '16px 20px', borderRight: '1px solid #e2e8f0' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
-              Ripartizione default
-            </div>
+          <div style={{ padding: '16px 20px', borderRight: `1px solid ${colors.border}` }}>
+            <div style={titoletto}>Ripartizione default</div>
             {ccDefaults === null ? (
-              <span style={{ color: '#94a3b8', fontSize: 13 }}>Caricamento…</span>
+              <Loading />
             ) : editandoDefault ? (
               <CCSplitEditor
                 dipendente={d}
@@ -864,36 +696,17 @@ function AnagraficaCard({ d, idx, anno, albero }) {
 
             {/* Ricalcola ripartizioni sui mesi passati */}
             {isAdmin() && !editandoDefault && (
-              <div style={{ marginTop: 12, borderTop: '1px solid #f1f5f9', paddingTop: 10 }}>
-                <button
-                  onClick={handleRicalcola}
-                  disabled={ricalcolando}
-                  style={{
-                    fontSize: 12, padding: '4px 10px', borderRadius: 5, cursor: ricalcolando ? 'wait' : 'pointer',
-                    border: '1px solid #cbd5e1', background: ricalcolando ? '#f1f5f9' : '#fff',
-                    color: '#475569', display: 'flex', alignItems: 'center', gap: 5,
-                  }}
-                >
+              <div style={{ marginTop: 12, borderTop: `1px solid ${colors.surfaceAlt}`, paddingTop: 10 }}>
+                <Button variant="secondary" size="sm" onClick={handleRicalcola} disabled={ricalcolando}>
                   {ricalcolando ? '⏳' : '🔄'} Ricalcola mesi passati
-                </button>
-                {esitoRicalcolo && (
-                  <div style={{
-                    marginTop: 6, fontSize: 11, padding: '4px 8px', borderRadius: 4,
-                    background: esitoRicalcolo.ok ? '#dcfce7' : '#fee2e2',
-                    color: esitoRicalcolo.ok ? '#166534' : '#991b1b',
-                  }}>
-                    {esitoRicalcolo.messaggio}
-                  </div>
-                )}
+                </Button>
               </div>
             )}
           </div>
 
           {/* Colonna destra — mesi dell'anno */}
           <div style={{ padding: '16px 20px' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
-              Mesi {anno} — eccezioni per mese
-            </div>
+            <div style={titoletto}>Mesi {anno} — eccezioni per mese</div>
             <MesiAnnoPanel dipendente={d} anno={anno} albero={albero} />
           </div>
         </div>
@@ -907,14 +720,10 @@ function CCDefaultView({ defaults, onEdit }) {
   if (defaults.length === 0) {
     return (
       <div>
-        <div style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>
+        <div className="ui-text-muted" style={{ marginBottom: 10 }}>
           Nessun default impostato — verranno usati KMDIMARE come fallback.
         </div>
-        {onEdit && (
-          <button onClick={onEdit} style={{ ...microBtnStyle, background: '#e0e7ff', color: '#3730a3', padding: '5px 14px', fontSize: 13 }}>
-            + Imposta default
-          </button>
-        )}
+        {onEdit && <Button size="sm" onClick={onEdit}>+ Imposta default</Button>}
       </div>
     )
   }
@@ -924,31 +733,20 @@ function CCDefaultView({ defaults, onEdit }) {
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>
+      <div className="ui-text-muted" style={{ fontSize: 'var(--fs-xs)', marginBottom: 8 }}>
         In vigore da {label}
         {decorrenza.anno_fine && ` · scade ${MESI[decorrenza.mese_fine]} ${decorrenza.anno_fine}`}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
         {defaults.map(cc => (
           <div key={cc.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              background: '#e0e7ff', color: '#3730a3',
-              padding: '2px 10px', borderRadius: 10, fontSize: 13, fontWeight: 600, minWidth: 60, textAlign: 'center',
-            }}>
-              {cc.cost_center_code}
-            </span>
-            <span style={{ color: '#475569', fontSize: 13 }}>{cc.cost_center_name}</span>
-            <span style={{ marginLeft: 'auto', fontWeight: 700, color: '#1e293b', fontSize: 13 }}>
-              {cc.percentuale}%
-            </span>
+            <Badge tono="info" style={{ minWidth: 60, textAlign: 'center', fontSize: 'var(--fs-sm)' }}>{cc.cost_center_code}</Badge>
+            <span style={{ color: colors.textSecond, fontSize: 'var(--fs-base)' }}>{cc.cost_center_name}</span>
+            <span className="ui-num" style={{ marginLeft: 'auto', fontWeight: 700, fontSize: 'var(--fs-base)' }}>{cc.percentuale}%</span>
           </div>
         ))}
       </div>
-      {onEdit && (
-        <button onClick={onEdit} style={{ ...microBtnStyle, background: '#f1f5f9', color: '#475569', padding: '5px 14px', fontSize: 13 }}>
-          ✏ Modifica
-        </button>
-      )}
+      {onEdit && <Button variant="secondary" size="sm" onClick={onEdit}>✏ Modifica</Button>}
     </div>
   )
 }
@@ -965,7 +763,7 @@ function MesiAnnoPanel({ dipendente, anno, albero }) {
       .catch(() => setMesi([]))
   }, [dipendente.id, anno])
 
-  if (mesi === null) return <div style={{ color: '#94a3b8', fontSize: 13 }}>Caricamento…</div>
+  if (mesi === null) return <Loading />
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -992,37 +790,35 @@ function MeseRiga({ mese: m, dipendente, albero, aperto, onToggle, onSaved }) {
   const haOverride = m.override_manuale
 
   return (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
+    <div style={{ border: `1px solid ${colors.border}`, borderRadius: 6, overflow: 'hidden' }}>
       <div
         onClick={haImport ? onToggle : undefined}
         style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '6px 10px',
-          background: haOverride ? '#fef3c7' : haImport ? '#f0fdf4' : '#f8fafc',
-          cursor: haImport ? 'pointer' : 'default',
-          userSelect: 'none',
+          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+          background: haOverride ? colors.warningSoft : haImport ? colors.successSoft : colors.surfaceSoft,
+          cursor: haImport ? 'pointer' : 'default', userSelect: 'none',
         }}>
-        <span style={{ fontWeight: 700, color: '#475569', width: 28, flexShrink: 0 }}>{MESI_LABEL[m.mese]}</span>
+        <span style={{ fontWeight: 700, color: colors.textSecond, width: 28, flexShrink: 0 }}>{MESI_LABEL[m.mese]}</span>
         {!haImport ? (
-          <span style={{ fontSize: 12, color: '#cbd5e1' }}>nessun dato</span>
+          <span style={{ fontSize: 'var(--fs-sm)', color: colors.borderStrong }}>nessun dato</span>
         ) : haOverride ? (
           <>
-            <span style={{ fontSize: 11, background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 8, marginRight: 4 }}>override</span>
+            <Badge tono="warn" style={{ marginRight: 4 }}>override</Badge>
             <CCInlineBadges centri={m.centri_di_costo} />
           </>
         ) : (
           <>
-            <span style={{ fontSize: 11, color: '#64748b' }}>come default</span>
+            <span className="ui-text-muted" style={{ fontSize: 'var(--fs-xs)' }}>come default</span>
             <CCInlineBadges centri={m.centri_di_costo} />
           </>
         )}
         {haImport && (
-          <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: 13 }}>{aperto ? '▲' : '✏'}</span>
+          <span style={{ marginLeft: 'auto', color: colors.textSubtle }}>{aperto ? '▲' : '✏'}</span>
         )}
       </div>
 
       {aperto && haImport && (
-        <div style={{ padding: '12px 14px', background: '#fff', borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ padding: '12px 14px', background: colors.surface, borderTop: `1px solid ${colors.border}` }}>
           <CCSplitEditor
             dipendente={dipendente}
             albero={albero}
@@ -1039,6 +835,7 @@ function MeseRiga({ mese: m, dipendente, albero, aperto, onToggle, onSaved }) {
   )
 }
 
+// Badge CC: colore dal reparto (configurabile in Admin → Colori CC), gradazione per struttura
 function CCInlineBadges({ centri }) {
   if (!centri || centri.length === 0) return null
   return (
@@ -1046,7 +843,7 @@ function CCInlineBadges({ centri }) {
       {centri.map(c => {
         const colori = getCCBadgeStyle(c.struttura_code, c.cost_center_name || c.cost_center_code)
         return (
-          <span key={c.cost_center_id} style={{ ...colori, fontSize: 11, padding: '1px 6px', borderRadius: 8 }}>
+          <span key={c.cost_center_id} className="ui-badge" style={{ ...colori, fontWeight: 500 }}>
             {c.struttura_code && <span style={{ fontWeight: 700, marginRight: 3 }}>{c.struttura_code}</span>}
             {c.cost_center_name || c.cost_center_code}
             {centri.length > 1 ? ` ${c.percentuale}%` : ''}
@@ -1057,17 +854,16 @@ function CCInlineBadges({ centri }) {
   )
 }
 
-
 function CCBadgeList({ centri, fallback }) {
   if (!centri || centri.length === 0) {
-    return <div style={{ textAlign: 'left', color: '#94a3b8', fontSize: 13 }}>{fallback || '—'}</div>
+    return <span style={{ color: colors.textSubtle }}>{fallback || '—'}</span>
   }
   return (
-    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
       {centri.map(c => {
         const colori = getCCBadgeStyle(c.struttura_code, c.cost_center_name)
         return (
-          <span key={c.cost_center_id} style={{ ...colori, padding: '2px 8px', borderRadius: 12, fontSize: 12 }}>
+          <span key={c.cost_center_id} className="ui-badge" style={{ ...colori, fontWeight: 500, fontSize: 'var(--fs-sm)' }}>
             {c.struttura_code && <span style={{ fontWeight: 700, marginRight: 4 }}>{c.struttura_code}</span>}
             {c.cost_center_name}{centri.length > 1 ? ` ${c.percentuale}%` : ''}
           </span>
@@ -1171,105 +967,68 @@ function CCSplitEditor({ dipendente, albero, onClose, onSaved, inline = false, m
   }
 
   return (
-    <div style={{ maxWidth: 520 }}>
+    <div style={{ maxWidth: 540 }}>
       {!mensile && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
-          padding: '8px 10px', background: '#f0f9ff', borderRadius: 6, border: '1px solid #bae6fd' }}>
-          <span style={{ fontSize: 12, color: '#0369a1', fontWeight: 600 }}>Decorrenza:</span>
-          <select value={decMese} onChange={e => setDecMese(Number(e.target.value))}
-            style={{ ...inlineInputStyle, fontSize: 12 }}>
+          padding: '8px 10px', background: colors.infoSoft, borderRadius: 6, border: `1px solid ${colors.infoBg}` }}>
+          <span style={{ fontSize: 'var(--fs-sm)', color: colors.infoText, fontWeight: 600 }}>Decorrenza:</span>
+          <Select value={decMese} onChange={e => setDecMese(Number(e.target.value))} aria-label="Mese decorrenza">
             {MESI.slice(1).map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-          </select>
-          <select value={decAnno} onChange={e => setDecAnno(Number(e.target.value))}
-            style={{ ...inlineInputStyle, width: 80, fontSize: 12 }}>
+          </Select>
+          <Select value={decAnno} onChange={e => setDecAnno(Number(e.target.value))} aria-label="Anno decorrenza">
             {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
+          </Select>
         </div>
       )}
       {righe.map((r, idx) => (
         <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-          <select
-            value={r.cost_center_id}
-            onChange={e => aggiornaRiga(idx, 'cost_center_id', e.target.value)}
-            style={{ flex: 1, ...inlineInputStyle, fontSize: 13 }}>
+          <Select value={r.cost_center_id} onChange={e => aggiornaRiga(idx, 'cost_center_id', e.target.value)} style={{ flex: 1 }}>
             <option value="">— Seleziona CC —</option>
             {albero.map(str =>
               (str.categorie || []).map(cat => (
                 <optgroup key={cat.id} label={`${str.code} — ${cat.name}`}>
-                  {cat.reparti.map(rep => (
-                    <option key={rep.id} value={rep.id}>{rep.name}</option>
-                  ))}
+                  {cat.reparti.map(rep => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
                 </optgroup>
               ))
             )}
-          </select>
-          <input
-            type="number" min="0" max="100" step="0.01"
-            value={r.percentuale}
-            onChange={e => aggiornaRiga(idx, 'percentuale', e.target.value)}
-            style={{ ...inlineInputStyle, width: 70, textAlign: 'right' }}
-          />
-          <span style={{ fontSize: 12, color: '#64748b' }}>%</span>
+          </Select>
+          <Input type="number" min="0" max="100" step="0.01" value={r.percentuale} className="ui-num"
+            onChange={e => aggiornaRiga(idx, 'percentuale', e.target.value)} style={{ width: 76, textAlign: 'right' }} />
+          <span className="ui-text-muted">%</span>
           {righe.length > 1 && (
-            <button onClick={() => setRighe(prev => prev.filter((_, i) => i !== idx))}
-              style={{ ...microBtnStyle, background: '#fee2e2', color: '#dc2626' }}>✕</button>
+            <Button variant="danger-soft" size="sm" onClick={() => setRighe(prev => prev.filter((_, i) => i !== idx))} aria-label="Rimuovi riga">✕</Button>
           )}
         </div>
       ))}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-        <button onClick={() => {
-            setSalvato(false)
-            setRighe(prev => distribuisciEquo([...prev, { cost_center_id: '', percentuale: 0 }]))
-          }}
-          style={{ ...microBtnStyle, background: '#e0e7ff', color: '#3730a3', fontSize: 13, padding: '4px 12px' }}>
-          + Aggiungi CC
-        </button>
-        <button
-          onClick={() => { setSalvato(false); setRighe(prev => distribuisciEquo(prev)) }}
-          title="Ripartisci equamente tra i CC selezionati"
-          style={{ ...microBtnStyle, background: '#dcfce7', color: '#15803d', fontSize: 13, padding: '4px 12px' }}>
-          ⚖ Equo
-        </button>
-        {hasDuplicati && (
-          <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 600 }}>
-            ⚠ CC duplicato
-          </span>
-        )}
-        <span style={{ fontSize: 12, fontWeight: 700, color: valida ? '#15803d' : '#dc2626' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        <Button variant="secondary" size="sm" onClick={() => {
+          setSalvato(false)
+          setRighe(prev => distribuisciEquo([...prev, { cost_center_id: '', percentuale: 0 }]))
+        }}>+ Aggiungi CC</Button>
+        <Button variant="secondary" size="sm" title="Ripartisci equamente tra i CC selezionati"
+          onClick={() => { setSalvato(false); setRighe(prev => distribuisciEquo(prev)) }}>⚖ Equo</Button>
+        {hasDuplicati && <Badge tono="err">⚠ CC duplicato</Badge>}
+        <span className="ui-num" style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: valida ? colors.success : colors.danger }}>
           Totale: {somma.toFixed(1)}%
         </span>
       </div>
 
-      {errore && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 6 }}>{errore}</div>}
+      {errore && <div style={{ color: colors.danger, fontSize: 'var(--fs-sm)', marginTop: 6 }}>{errore}</div>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-        <button onClick={salva} disabled={salvando || !valida}
-          style={{ padding: '6px 16px', background: valida ? '#4338ca' : '#cbd5e1', color: '#fff', border: 'none', borderRadius: 6, cursor: valida ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: 13 }}>
-          {salvando ? 'Salvataggio…' : 'Salva'}
-        </button>
-        {!inline && (
-          <button onClick={onClose}
-            style={{ padding: '6px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
-            Annulla
-          </button>
-        )}
-        {inline && mensile && (
-          <button onClick={onClose}
-            style={{ padding: '6px 14px', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
-            Chiudi
-          </button>
-        )}
-        {salvato && (
-          <span style={{ color: '#15803d', fontWeight: 700, fontSize: 13 }}>✓ Salvato</span>
-        )}
+        <Button size="sm" onClick={salva} disabled={salvando || !valida}>{salvando ? 'Salvataggio…' : 'Salva'}</Button>
+        {!inline && <Button variant="secondary" size="sm" onClick={onClose}>Annulla</Button>}
+        {inline && mensile && <Button variant="secondary" size="sm" onClick={onClose}>Chiudi</Button>}
+        {salvato && <span style={{ color: colors.success, fontWeight: 700, fontSize: 'var(--fs-base)' }}>✓ Salvato</span>}
       </div>
     </div>
   )
 }
 
-function IncidenzaBadge({ valore }) {
-  const colore = valore < 40 ? '#15803d' : valore <= 50 ? '#d97706' : '#dc2626'
+// Incidenza costo aziendale su netto: verde < 40%, ambra 40–50%, rosso oltre
+function IncidenzaBadge({ valore, suSfondoScuro = false }) {
+  const colore = suSfondoScuro ? '#fff' : valore < 40 ? colors.success : valore <= 50 ? colors.warning : colors.danger
   return (
     <span style={{ color: colore, fontWeight: 700 }}>
       {valore > 60 && <span title="Attenzione: incidenza oltre il budget" style={{ marginRight: 4 }}>⚠️</span>}
@@ -2164,13 +1923,6 @@ function getCCFillColor(parentCode, ccName) {
 
 // ─── Stili condivisi ─────────────────────────────────────────────────────────
 
-const cardStyle = {
-  background: '#fff',
-  border: '1px solid #e2e8f0',
-  borderRadius: 8,
-  padding: '14px 18px',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-}
 
 const tableStyle = {
   width: '100%',
@@ -2198,25 +1950,7 @@ const tdStyle = {
   verticalAlign: 'middle',
 }
 
-const selectStyle = {
-  padding: '7px 10px',
-  border: '1px solid #e2e8f0',
-  borderRadius: 6,
-  fontSize: 13,
-  background: '#fff',
-  color: '#1e293b',
-}
 
-const btnStyle = {
-  padding: '7px 16px',
-  background: '#d97706',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 6,
-  cursor: 'pointer',
-  fontSize: 13,
-  fontWeight: 600,
-}
 
 const h2Style = {
   fontSize: 16,
@@ -2226,17 +1960,6 @@ const h2Style = {
   marginTop: 0,
 }
 
-const navBtnStyle = {
-  padding: '5px 12px',
-  background: '#f1f5f9',
-  color: '#1e293b',
-  border: '1px solid #e2e8f0',
-  borderRadius: 6,
-  cursor: 'pointer',
-  fontSize: 18,
-  fontWeight: 700,
-  lineHeight: 1,
-}
 
 const inlineInputStyle = {
   padding: '4px 8px',
@@ -2246,11 +1969,3 @@ const inlineInputStyle = {
   outline: 'none',
 }
 
-const microBtnStyle = {
-  padding: '2px 7px',
-  border: 'none',
-  borderRadius: 4,
-  cursor: 'pointer',
-  fontSize: 12,
-  fontWeight: 700,
-}
