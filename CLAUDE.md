@@ -321,8 +321,11 @@ contrasto con l'app reale) è stato eliminato.
   Anagrafica con editor ripartizione CC, Import PDF, Storico — tab da ambra a blu notte, esiti di
   ricalcolo come avvisi temporanei, conferme dell'app; i colori dei badge CC restano quelli per reparto
   configurabili in Admin → Colori CC, con la palette di ripiego `_CC_PALETTE` invariata apposta per non
-  cambiare i colori dei reparti non configurati. Tranche B da fare: Analisi CC, che usa ancora
-  `tableStyle`/`thStyle`/`tdStyle`/`inlineInputStyle`/`h2Style` in fondo al file). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  cambiare i colori dei reparti non configurati), ✅ Dipendenti tranche B (v3.15.11: Analisi CC —
+  controlli su due righe, confronto anno come casella "Confronta con {anno-1}", tabella con colonna
+  fissa a sinistra e intestazione a due livelli, torta "Per struttura" nei colori ufficiali degli hotel
+  invece dei vecchi DPH blu/CLB verde; eliminati tutti gli stili locali in fondo a `Dipendenti.jsx`).
+  Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati

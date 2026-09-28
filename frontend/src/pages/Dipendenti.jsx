@@ -3,10 +3,10 @@ import { PieChart, Pie, Cell, Tooltip as ReTooltip, Legend, BarChart, Bar, XAxis
 import api from '../api/client'
 import { formatEuro, formatPerc, mostraErrore } from '../utils/format'
 import {
-  Badge, Button, Checkbox, DropZone, Input, KpiTile, Loading, Messaggio, PageHeader, SectionTitle, Select,
-  StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
+  Badge, Button, Card, Checkbox, Dot, DropZone, HotelTag, Input, KpiTile, Loading, Messaggio, PageHeader,
+  SectionTitle, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
 } from '../components/ui'
-import { colors } from '../styles/tokens.js'
+import { colors, coloreStruttura } from '../styles/tokens.js'
 
 
 const MESI = [
@@ -1234,290 +1234,203 @@ function AnalisiCC() {
     if (curr == null || prec == null) return null
     const d = deltaPerc(curr, prec)
     if (d == null) return null
-    const colore = d > 5 ? '#dc2626' : d < -5 ? '#16a34a' : '#92400e'
+    // Costi: un aumento è negativo (rosso), una riduzione positiva (verde)
+    const colore = d > 5 ? colors.danger : d < -5 ? colors.success : colors.warningText
     const segno = d > 0 ? '+' : ''
     return <span style={{ fontSize: 10, color: colore, display: 'block', fontWeight: 600 }}>{segno}{d.toFixed(0)}%</span>
   }
 
+  const MESI_SELECT = MESI_BREVI.slice(1)
+  const vuoto = <span style={{ color: colors.borderStrong }}>—</span>
+  // Colonne dell'anno precedente (in confronto): testo tenue
+  const tdPrec = { color: colors.textSubtle, fontSize: 'var(--fs-sm)' }
+  // Riga TOTALE, colonne dell'anno precedente: tono più chiaro del blu notte
+  const tdTotPrec = { background: 'var(--color-primary-light)', color: colors.borderStrong, fontSize: 'var(--fs-sm)', fontWeight: 600 }
+  const stickyTh = { position: 'sticky', left: 0, zIndex: 3 }
+  const stickyTd = { position: 'sticky', left: 0, zIndex: 1, borderRight: `2px solid ${colors.borderStrong}` }
+
   return (
     <div>
       {/* Header con controlli */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        {/* Filtro struttura */}
-        <select
-          value={vista}
-          onChange={e => setVista(e.target.value)}
-          style={{ ...inlineInputStyle, fontWeight: 600, minWidth: 160 }}
-        >
-          <option value="tutto">Tutte le strutture</option>
-          <option value="kmdimare">KM Di Mare (gruppo)</option>
-          {strutture.map(s => (
-            <option key={s.code} value={s.code}>{s.name}</option>
-          ))}
-        </select>
-        {/* Toggle granularità */}
-        <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
-          {[{ v: 'reparto', label: 'Reparti' }, { v: 'categoria', label: 'Macrocategorie' }].map(({ v, label }) => (
-            <button key={v} onClick={() => { setGranularita(v); setBarDettaglio(null) }} style={{
-              padding: '5px 14px', border: 'none', cursor: 'pointer', fontSize: 13,
-              fontWeight: granularita === v ? 700 : 400,
-              background: granularita === v ? '#1e3a5f' : '#f8fafc',
-              color: granularita === v ? '#fff' : '#64748b',
-            }}>{label}</button>
-          ))}
-        </div>
-        {/* Filtro categorie */}
-        {categorieDisponibili.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 10px' }}>
-            <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Categorie:</span>
-            {categorieDisponibili.map(cat => (
-              <label key={cat} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' }}>
-                <input
-                  type="checkbox"
-                  checked={categorieSel.has(cat)}
-                  onChange={() => {
-                    const next = new Set(categorieSel)
-                    if (next.has(cat)) next.delete(cat); else next.add(cat)
-                    setCategorieSel(next)
-                    setBarDettaglio(null)
-                  }}
-                  style={{ width: 13, height: 13 }}
-                />
-                <span style={{ fontSize: 12, color: '#1e293b' }}>{cat}</span>
-              </label>
-            ))}
-          </div>
-        )}
-        <h2 style={{ ...h2Style, margin: 0 }}>Analisi costi per centro di costo</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <SectionTitle style={{ margin: 0 }}>Analisi costi per centro di costo</SectionTitle>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Anno:</label>
-          <select value={anno} onChange={e => setAnno(Number(e.target.value))}
-            style={{ ...inlineInputStyle, width: 90, fontWeight: 700 }}>
+          <Select value={anno} onChange={e => setAnno(Number(e.target.value))} aria-label="Anno">
             {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          {/* Selettore periodo */}
-          <div style={{ display: 'flex', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
-            {[{ v: 'anno', label: 'Anno' }, { v: 'mese', label: 'Mese' }, { v: 'range', label: 'Range' }].map(({ v, label }) => (
-              <button key={v} type="button" onClick={() => { setPeriodoTipo(v); setBarDettaglio(null) }} style={{
-                padding: '5px 10px', border: 'none', cursor: 'pointer', fontSize: 12,
-                fontWeight: periodoTipo === v ? 700 : 400,
-                background: periodoTipo === v ? '#0f172a' : '#f8fafc',
-                color: periodoTipo === v ? '#fff' : '#64748b',
-              }}>{label}</button>
-            ))}
-          </div>
-          {periodoTipo === 'mese' && (
-            <select value={periodoMeseDa} onChange={e => { setPeriodoMeseDa(Number(e.target.value)); setBarDettaglio(null) }}
-              style={{ ...inlineInputStyle, width: 110 }}>
-              {['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'].map((m, i) => (
-                <option key={i+1} value={i+1}>{m}</option>
-              ))}
-            </select>
+          </Select>
+          <SegmentedControl value={periodoTipo} onChange={v => { setPeriodoTipo(v); setBarDettaglio(null) }}
+            options={[{ value: 'anno', label: 'Anno' }, { value: 'mese', label: 'Mese' }, { value: 'range', label: 'Range' }]} />
+          {periodoTipo !== 'anno' && (
+            <Select value={periodoMeseDa} onChange={e => { setPeriodoMeseDa(Number(e.target.value)); setBarDettaglio(null) }} aria-label="Mese da">
+              {MESI_SELECT.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+            </Select>
           )}
           {periodoTipo === 'range' && (
             <>
-              <select value={periodoMeseDa} onChange={e => { setPeriodoMeseDa(Number(e.target.value)); setBarDettaglio(null) }}
-                style={{ ...inlineInputStyle, width: 110 }}>
-                {['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'].map((m, i) => (
-                  <option key={i+1} value={i+1}>{m}</option>
-                ))}
-              </select>
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>→</span>
-              <select value={periodoMeseA} onChange={e => { setPeriodoMeseA(Number(e.target.value)); setBarDettaglio(null) }}
-                style={{ ...inlineInputStyle, width: 110 }}>
-                {['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'].map((m, i) => (
-                  <option key={i+1} value={i+1} disabled={i+1 < periodoMeseDa}>{m}</option>
-                ))}
-              </select>
+              <span style={{ color: colors.textSubtle }}>→</span>
+              <Select value={periodoMeseA} onChange={e => { setPeriodoMeseA(Number(e.target.value)); setBarDettaglio(null) }} aria-label="Mese a">
+                {MESI_SELECT.map((m, i) => <option key={i + 1} value={i + 1} disabled={i + 1 < periodoMeseDa}>{m}</option>)}
+              </Select>
             </>
           )}
-          <button
-            onClick={() => setConfronta(v => !v)}
-            style={{
-              padding: '5px 14px', border: '1px solid #e2e8f0', borderRadius: 6,
-              background: confronta ? '#fef3c7' : '#f8fafc',
-              color: confronta ? '#92400e' : '#64748b',
-              cursor: 'pointer', fontSize: 13, fontWeight: confronta ? 700 : 400,
-            }}>
-            {confronta ? `vs ${anno - 1} ✓` : `vs ${anno - 1}`}
-          </button>
+          <Checkbox checked={confronta} onChange={setConfronta} label={`Confronta con ${anno - 1}`} />
         </div>
       </div>
 
-      {caricando && <div style={{ color: '#94a3b8', fontSize: 13 }}>Caricamento…</div>}
-      {errore && <div style={{ color: '#dc2626', fontSize: 13 }}>{errore}</div>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <Select value={vista} onChange={e => setVista(e.target.value)} style={{ minWidth: 170, fontWeight: 600 }} aria-label="Struttura">
+          <option value="tutto">Tutte le strutture</option>
+          <option value="kmdimare">KM Di Mare (gruppo)</option>
+          {strutture.map(st => <option key={st.code} value={st.code}>{st.name}</option>)}
+        </Select>
+        <SegmentedControl value={granularita} onChange={v => { setGranularita(v); setBarDettaglio(null) }}
+          options={[{ value: 'reparto', label: 'Reparti' }, { value: 'categoria', label: 'Macrocategorie' }]} />
+        {categorieDisponibili.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', border: `1px solid ${colors.border}`, borderRadius: 8, padding: '5px 12px', background: colors.surface }}>
+            <span style={{ fontSize: 'var(--fs-sm)', color: colors.textMuted, fontWeight: 600 }}>Categorie:</span>
+            {categorieDisponibili.map(cat => (
+              <Checkbox key={cat} label={cat} checked={categorieSel.has(cat)} onChange={() => {
+                const next = new Set(categorieSel)
+                if (next.has(cat)) next.delete(cat); else next.add(cat)
+                setCategorieSel(next)
+                setBarDettaglio(null)
+              }} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {caricando && <Loading />}
+      <Messaggio tipo="err">{errore}</Messaggio>
 
       {dati && !caricando && (
         dati.mesi_disponibili.length === 0 && (!confronta || datiPrec?.mesi_disponibili.length === 0) ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: 8 }}>
-            Nessun dato disponibile per il {anno}
-          </div>
+          <StatoVuoto>Nessun dato disponibile per il {anno}</StatoVuoto>
         ) : (
           <>
           <div style={{ display: 'flex', gap: 28, alignItems: 'stretch' }}>
           {/* ── Tabella ── */}
-          <div style={{ overflowX: 'auto', flex: 1, minWidth: 0 }}>
-            {/* overflow:visible obbligatorio: l'overflow:hidden di tableStyle (per il borderRadius)
-                rompe position:sticky delle celle, che si ancorerebbero alla tabella anziché al div che scrolla */}
-            <table style={{ ...tableStyle, fontSize: 12, overflow: 'visible', borderRadius: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Table compact>
               <thead>
-                {/* Riga anno se confronta attivo */}
+                {/* Riga mesi se confronto attivo */}
                 {confronta && (
                   <tr>
-                    <th style={{ ...thStyle, background: '#1e293b', position: 'sticky', left: 0, zIndex: 3 }}></th>
-                    {mesiUnione.map(m => (
-                      <th key={m} colSpan={2} style={{ ...thStyle, background: '#1e293b', textAlign: 'center', borderLeft: '1px solid #334155' }}>
-                        {MESI_BREVI[m]}
-                      </th>
-                    ))}
-                    <th colSpan={2} style={{ ...thStyle, background: '#1e293b', textAlign: 'center', borderLeft: '1px solid #334155' }}>Totale</th>
+                    <Th style={stickyTh}></Th>
+                    {mesiUnione.map(m => <Th key={m} center gruppo colSpan={2}>{MESI_BREVI[m]}</Th>)}
+                    <Th center gruppo tot colSpan={2}>Totale</Th>
                   </tr>
                 )}
-                <tr style={{ background: '#2d6a9f' }}>
-                  <th style={{ ...thStyle, minWidth: 160, background: '#2d6a9f', position: 'sticky', left: 0, zIndex: 3 }}>Centro di costo</th>
+                <tr className={confronta ? 'sub' : undefined}>
+                  <Th style={{ ...stickyTh, minWidth: 170 }}>Centro di costo</Th>
                   {mesiUnione.map(m => (
                     confronta ? (
                       <Fragment key={m}>
-                        <th style={{ ...thStyle, textAlign: 'right', borderLeft: '1px solid #3b82f6', minWidth: 90, background: '#2d6a9f' }}>
-                          {anno}
-                        </th>
-                        <th style={{ ...thStyle, textAlign: 'right', minWidth: 80, background: '#374f6b', fontSize: 11 }}>
-                          {anno - 1}
-                        </th>
+                        <Th num gruppo style={{ minWidth: 90 }}>{anno}</Th>
+                        <Th num style={{ minWidth: 80 }}>{anno - 1}</Th>
                       </Fragment>
                     ) : (
-                      <th key={m} style={{ ...thStyle, textAlign: 'right', minWidth: 100 }}>
-                        {MESI_BREVI[m]}
-                      </th>
+                      <Th key={m} num style={{ minWidth: 96 }}>{MESI_BREVI[m]}</Th>
                     )
                   ))}
                   {confronta ? (
                     <>
-                      <th style={{ ...thStyle, textAlign: 'right', borderLeft: '1px solid #3b82f6', minWidth: 100 }}>Totale {anno}</th>
-                      <th style={{ ...thStyle, textAlign: 'right', minWidth: 90, background: '#374f6b', fontSize: 11 }}>Tot. {anno - 1}</th>
+                      <Th num gruppo style={{ minWidth: 100 }}>Totale {anno}</Th>
+                      <Th num style={{ minWidth: 90 }}>Tot. {anno - 1}</Th>
                     </>
                   ) : (
-                    <th style={{ ...thStyle, textAlign: 'right', minWidth: 100 }}>Totale</th>
+                    <Th num tot style={{ minWidth: 100 }}>Totale</Th>
                   )}
                 </tr>
               </thead>
               <tbody>
-                {allCCCodes.map((code, idx) => {
+                {allCCCodes.map(code => {
                   const cc = ccByCode[code]
                   const totAnno = totaleCCAnno(code)
                   const totPrec = centriPrecVis.find(c => c.code === code)?.totale ?? null
                   return (
-                    <tr key={code} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                      <td style={{ ...tdStyle, position: 'sticky', left: 0, zIndex: 1, background: idx % 2 === 0 ? '#fff' : '#edf1f7', borderRight: '2px solid #cbd5e1' }}>
+                    <tr key={code}>
+                      <Td style={stickyTd}>
                         {(cc.struttura_code || cc.parent_name) && (
-                          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            {cc.struttura_code && (
-                              <span style={{ fontWeight: 700, fontFamily: 'monospace',
-                                background: '#e0e7ff', color: '#3730a3',
-                                padding: '0px 4px', borderRadius: 3, fontSize: 10 }}>
-                                {cc.struttura_code}
-                              </span>
-                            )}
-                            {cc.parent_name && (
-                              <span style={{ fontWeight: 500 }}>{cc.parent_name}</span>
-                            )}
+                          <div style={{ fontSize: 'var(--fs-xs)', color: colors.textMuted, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {cc.struttura_code && <HotelTag code={cc.struttura_code} />}
+                            {cc.parent_name && <span style={{ fontWeight: 500 }}>{cc.parent_name}</span>}
                           </div>
                         )}
                         <span style={{ fontWeight: 600 }}>{cc.name}</span>
-                      </td>
+                      </Td>
                       {mesiUnione.map(m => {
                         const curr = getCosto(centriVis, code, m)
                         const prec = datiPrec ? getCosto(centriPrecVis, code, m) : null
                         return confronta ? (
                           <Fragment key={m}>
-                            <td style={{ ...tdStyle, textAlign: 'right', borderLeft: '1px solid #e2e8f0' }}>
-                              {curr != null ? (
-                                <>
-                                  <span>{formatEuro(curr)}</span>
-                                  {cellaDelta(curr, prec)}
-                                </>
-                              ) : <span style={{ color: '#e2e8f0' }}>—</span>}
-                            </td>
-                            <td style={{ ...tdStyle, textAlign: 'right', color: '#94a3b8', fontSize: 12 }}>
-                              {prec != null ? formatEuro(prec) : <span style={{ color: '#e2e8f0' }}>—</span>}
-                            </td>
+                            <Td num gruppo>
+                              {curr != null ? <><span>{formatEuro(curr)}</span>{cellaDelta(curr, prec)}</> : vuoto}
+                            </Td>
+                            <Td num style={tdPrec}>{prec != null ? formatEuro(prec) : vuoto}</Td>
                           </Fragment>
                         ) : (
-                          <td key={m} style={{ ...tdStyle, textAlign: 'right' }}>
-                            {curr != null ? formatEuro(curr) : <span style={{ color: '#e2e8f0' }}>—</span>}
-                          </td>
+                          <Td key={m} num>{curr != null ? formatEuro(curr) : vuoto}</Td>
                         )
                       })}
                       {confronta ? (
                         <>
-                          <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, borderLeft: '1px solid #e2e8f0' }}>
-                            {totAnno > 0 ? formatEuro(totAnno) : <span style={{ color: '#e2e8f0' }}>—</span>}
+                          <Td num gruppo style={{ fontWeight: 700 }}>
+                            {totAnno > 0 ? formatEuro(totAnno) : vuoto}
                             {totPrec != null && cellaDelta(totAnno, totPrec)}
-                          </td>
-                          <td style={{ ...tdStyle, textAlign: 'right', color: '#94a3b8', fontSize: 12 }}>
-                            {totPrec != null ? formatEuro(totPrec) : <span style={{ color: '#e2e8f0' }}>—</span>}
-                          </td>
+                          </Td>
+                          <Td num style={tdPrec}>{totPrec != null ? formatEuro(totPrec) : vuoto}</Td>
                         </>
                       ) : (
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }}>
-                          {totAnno > 0 ? formatEuro(totAnno) : <span style={{ color: '#e2e8f0' }}>—</span>}
-                        </td>
+                        <Td num tot style={{ fontWeight: 700 }}>{totAnno > 0 ? formatEuro(totAnno) : vuoto}</Td>
                       )}
                     </tr>
                   )
                 })}
 
                 {/* Riga totali */}
-                <tr>
-                  <td style={{ ...tdStyle, background: '#0f172a', color: '#fff', fontWeight: 700, position: 'sticky', left: 0, zIndex: 2, borderRight: '2px solid #334155' }}>TOTALE</td>
+                <tr className="ui-riga-totale">
+                  <Td style={{ ...stickyTd, zIndex: 2 }}>TOTALE</Td>
                   {mesiUnione.map(m => {
                     const curr = totaliMeseVis[String(m)] ?? null
                     const prec = totaliMesePrecVis[String(m)] ?? null
                     return confronta ? (
                       <Fragment key={m}>
-                        <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700, borderLeft: '1px solid #334155' }}>
+                        <Td num gruppo>
                           {curr != null ? formatEuro(curr) : '—'}
                           {curr != null && prec != null && cellaDelta(curr, prec)}
-                        </td>
-                        <td style={{ ...tdStyle, background: '#1e293b', textAlign: 'right', color: '#cbd5e1', fontSize: 12, fontWeight: 600 }}>
-                          {prec != null ? formatEuro(prec) : '—'}
-                        </td>
+                        </Td>
+                        <Td num style={tdTotPrec}>{prec != null ? formatEuro(prec) : '—'}</Td>
                       </Fragment>
                     ) : (
-                      <td key={m} style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>
-                        {curr != null ? formatEuro(curr) : '—'}
-                      </td>
+                      <Td key={m} num>{curr != null ? formatEuro(curr) : '—'}</Td>
                     )
                   })}
                   {confronta ? (
                     <>
-                      <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700, borderLeft: '1px solid #334155' }}>
+                      <Td num gruppo>
                         {formatEuro(totaleAnnoVis)}
                         {datiPrec && cellaDelta(totaleAnnoVis, totaleAnnoPrecVis)}
-                      </td>
-                      <td style={{ ...tdStyle, background: '#1e293b', textAlign: 'right', color: '#cbd5e1', fontSize: 12, fontWeight: 600 }}>
-                        {datiPrec ? formatEuro(totaleAnnoPrecVis) : '—'}
-                      </td>
+                      </Td>
+                      <Td num style={tdTotPrec}>{datiPrec ? formatEuro(totaleAnnoPrecVis) : '—'}</Td>
                     </>
                   ) : (
-                    <td style={{ ...tdStyle, background: '#0f172a', textAlign: 'right', color: '#fff', fontWeight: 700 }}>
-                      {formatEuro(totaleAnnoVis)}
-                    </td>
+                    <Td num tot>{formatEuro(totaleAnnoVis)}</Td>
                   )}
                 </tr>
               </tbody>
-            </table>
+            </Table>
 
             {/* Legenda */}
-            <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', display: 'flex', gap: 16 }}>
+            <div className="ui-text-muted" style={{ marginTop: 8, fontSize: 'var(--fs-xs)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               <span>Dati {anno}: {dati.mesi_disponibili.length} {dati.mesi_disponibili.length === 1 ? 'mese' : 'mesi'} importati</span>
               {confronta && datiPrec && (
                 <span>Dati {anno - 1}: {datiPrec.mesi_disponibili.length} {datiPrec.mesi_disponibili.length === 1 ? 'mese' : 'mesi'} importati</span>
               )}
               {confronta && (
                 <span>
-                  <span style={{ color: '#dc2626', fontWeight: 700 }}>+%</span> = aumento &nbsp;
-                  <span style={{ color: '#16a34a', fontWeight: 700 }}>-%</span> = riduzione
+                  <span style={{ color: colors.danger, fontWeight: 700 }}>+%</span> = aumento ·{' '}
+                  <span style={{ color: colors.success, fontWeight: 700 }}>-%</span> = riduzione
                 </span>
               )}
             </div>
@@ -1525,11 +1438,6 @@ function AnalisiCC() {
 
           {/* ── Grafico a torta ── */}
           {(() => {
-            const STRUTTURA_COLORI = {
-              DPH: '#3b82f6', CLB: '#10b981', INT: '#f59e0b',
-              MMS: '#8b5cf6', BON: '#ef4444',
-            }
-
             const dataTortaReparto = allCCCodes
               .map(code => ({
                 name: ccByCode[code]?.name ?? code,
@@ -1552,18 +1460,11 @@ function AnalisiCC() {
             const dataTortaStruttura = Object.values(perStruttura)
               .filter(d => d.value > 0)
               .sort((a, b) => b.value - a.value)
-              .map(d => ({ ...d, colore: STRUTTURA_COLORI[d.struttura_code] ?? '#94a3b8' }))
+              .map(d => ({ ...d, colore: coloreStruttura(d.struttura_code) }))
 
             const dataTorta = tortaVista === 'struttura' ? dataTortaStruttura : dataTortaReparto
-            const totale = dataTorta.reduce((s, d) => s + d.value, 0)
+            const totale = dataTorta.reduce((acc, d) => acc + d.value, 0)
             if (dataTorta.length === 0) return null
-
-            const btnToggle = (attivo) => ({
-              padding: '3px 10px', fontSize: 11, border: 'none', borderRadius: 4,
-              cursor: 'pointer', fontWeight: attivo ? 700 : 400,
-              background: attivo ? '#1e293b' : '#f1f5f9',
-              color: attivo ? '#fff' : '#64748b',
-            })
 
             const labelPeriodo = periodoTipo === 'anno'
               ? `${anno}`
@@ -1572,50 +1473,35 @@ function AnalisiCC() {
                 : `${MESI_BREVI[periodoMeseDa]}-${MESI_BREVI[periodoMeseA]} ${anno}`
 
             return (
-              <div style={{ flexShrink: 0, width: 320, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b', marginBottom: 6, textAlign: 'center' }}>
-                  Ripartizione {labelPeriodo}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 4, marginBottom: 6 }}>
-                  <button style={btnToggle(tortaVista === 'reparto')} onClick={() => setTortaVista('reparto')}>Per reparto</button>
-                  <button style={btnToggle(tortaVista === 'struttura')} onClick={() => setTortaVista('struttura')}>Per struttura</button>
+              <Card style={{ flexShrink: 0, width: 340, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, marginBottom: 8, textAlign: 'center' }}>Ripartizione {labelPeriodo}</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+                  <SegmentedControl value={tortaVista} onChange={setTortaVista}
+                    options={[{ value: 'reparto', label: 'Per reparto' }, { value: 'struttura', label: 'Per struttura' }]} />
                 </div>
                 <PieChart width={300} height={240}>
-                  <Pie
-                    data={dataTorta}
-                    cx={148}
-                    cy={116}
-                    innerRadius={66}
-                    outerRadius={110}
-                    dataKey="value"
-                    paddingAngle={2}
-                  >
-                    {dataTorta.map((d, i) => (
-                      <Cell key={i} fill={d.colore} />
-                    ))}
+                  <Pie data={dataTorta} cx={148} cy={116} innerRadius={66} outerRadius={110} dataKey="value" paddingAngle={2}>
+                    {dataTorta.map((d, i) => <Cell key={i} fill={d.colore} />)}
                   </Pie>
-                  <ReTooltip
-                    formatter={(value, name) => [formatEuro(value), name]}
-                    contentStyle={{ fontSize: 12, borderRadius: 6 }}
-                  />
+                  <ReTooltip formatter={(value, name) => [formatEuro(value), name]} contentStyle={{ fontSize: 12, borderRadius: 6 }} />
                 </PieChart>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 4, flex: 1, overflowY: 'auto' }}>
-                  {[...dataTorta].sort((a, b) => b.value - a.value).map((d, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
+                  {[...dataTorta].sort((x, y) => y.value - x.value).map((d, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 'var(--fs-sm)' }}>
                       <span style={{ width: 10, height: 10, borderRadius: 2, background: d.colore, flexShrink: 0 }} />
-                      <span style={{ flex: 1, color: '#475569', lineHeight: 1.2 }}>
+                      <span style={{ flex: 1, color: colors.textSecond, lineHeight: 1.2 }}>
                         {tortaVista === 'reparto' && d.struttura && (
-                          <span style={{ fontSize: 10, color: '#94a3b8', display: 'block' }}>{d.struttura}</span>
+                          <span style={{ fontSize: 10, color: colors.textSubtle, display: 'block' }}>{d.struttura}</span>
                         )}
                         {d.name}
                       </span>
-                      <span style={{ fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                      <span className="ui-num" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {totale > 0 ? (d.value / totale * 100).toFixed(1) : '0'}%
                       </span>
                     </div>
                   ))}
                 </div>
-              </div>
+              </Card>
             )
           })()}
 
@@ -1706,56 +1592,38 @@ function AnalisiCC() {
               }))
             }
             dataBar = dataBar
-              .sort((a, b) => b.totale - a.totale)
+              .sort((x, y) => y.totale - x.totale)
               .map(d => ({ ...d, colore: getCCFillColor(d.struttura_code, d.ccName ?? d.name) }))
 
             if (dataBar.length === 0) return (
-              <div style={{ marginTop: 28, padding: '24px', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                Nessuna struttura selezionata
-              </div>
+              <div style={{ marginTop: 28 }}><StatoVuoto>Nessuna struttura selezionata</StatoVuoto></div>
             )
 
             return (
-              <div style={{ marginTop: 28, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '16px 20px' }}>
-                {/* Header + checkboxes */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
-                    Costo totale per centro di costo — {anno}
-                  </span>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto', flexWrap: 'wrap' }}>
-                    {mostraCheckbox && struttureDispo.map(s => (
-                      <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', userSelect: 'none' }}>
-                        <input
-                          type="checkbox"
-                          checked={barStruttureSel.has(s)}
-                          onChange={() => {
-                            const next = new Set(barStruttureSel)
-                            if (next.has(s)) next.delete(s); else next.add(s)
-                            setBarStruttureSel(next)
-                            setBarDettaglio(null)
-                          }}
-                          style={{ accentColor: getCCFillColor(s, 'a'), width: 14, height: 14 }}
-                        />
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>{s}</span>
-                      </label>
+              <Card style={{ marginTop: 28 }}
+                title={`Costo totale per centro di costo — ${anno}`}
+                actions={
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {mostraCheckbox && struttureDispo.map(sc => (
+                      <Checkbox key={sc} checked={barStruttureSel.has(sc)}
+                        label={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600 }}><Dot colore={coloreStruttura(sc)} />{sc}</span>}
+                        onChange={() => {
+                          const next = new Set(barStruttureSel)
+                          if (next.has(sc)) next.delete(sc); else next.add(sc)
+                          setBarStruttureSel(next)
+                          setBarDettaglio(null)
+                        }} />
                     ))}
-                    {mostraCheckbox && <div style={{ width: 1, height: 18, background: '#e2e8f0', margin: '0 4px' }} />}
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', userSelect: 'none' }}>
-                      <input
-                        type="checkbox"
-                        checked={barRaggruppa}
-                        onChange={() => { setBarRaggruppa(v => !v); setBarDettaglio(null) }}
-                        style={{ width: 14, height: 14 }}
-                      />
-                      <span style={{ fontSize: 12, color: '#475569' }}>Somma gruppo</span>
-                    </label>
+                    {mostraCheckbox && <div style={{ width: 1, height: 18, background: colors.border }} />}
+                    <Checkbox checked={barRaggruppa} onChange={() => { setBarRaggruppa(v => !v); setBarDettaglio(null) }} label="Somma gruppo" />
                   </div>
-                </div>
-
+                }
+              >
+                <p className="ui-text-muted" style={{ marginTop: -6 }}>Clicca su una barra per vedere i dipendenti di quel centro di costo.</p>
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={dataBar} margin={{ top: 4, right: 16, left: 16, bottom: 60 }} onClick={handleBarClick} style={{ cursor: 'pointer' }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#475569' }} angle={-35} textAnchor="end" interval={0} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={colors.surfaceAlt} vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: colors.textSecond }} angle={-35} textAnchor="end" interval={0} />
                     <YAxis tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k €` : `${v} €`} tick={{ fontSize: 11 }} width={64} />
                     <Tooltip
                       formatter={(value, _n, props) => [formatEuro(value), props.payload.struttura ? `${props.payload.struttura} › ${props.payload.ccName ?? props.payload.name}` : props.payload.name]}
@@ -1763,11 +1631,7 @@ function AnalisiCC() {
                     />
                     <Bar dataKey="totale" radius={[4, 4, 0, 0]}>
                       {dataBar.map((d, i) => (
-                        <Cell
-                          key={i}
-                          fill={d.colore}
-                          opacity={barDettaglio && barDettaglio.name !== d.name ? 0.4 : 1}
-                        />
+                        <Cell key={i} fill={d.colore} opacity={barDettaglio && barDettaglio.name !== d.name ? 0.4 : 1} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -1775,69 +1639,56 @@ function AnalisiCC() {
 
                 {/* Tabella dettaglio dipendenti */}
                 {barDettaglio && (
-                  <div style={{ marginTop: 20, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+                  <div style={{ marginTop: 20, borderTop: `1px solid ${colors.border}`, paddingTop: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+                      <span style={{ fontWeight: 700 }}>
                         Dipendenti — {barDettaglio.struttura ? `${barDettaglio.struttura} › ` : ''}{barDettaglio.ccName ?? barDettaglio.name}
                       </span>
-                      <button
-                        onClick={() => { setBarDettaglio(null); setDettaglioDip(null) }}
-                        style={{ border: '1px solid #e2e8f0', background: '#f8fafc', borderRadius: 6, padding: '3px 10px', fontSize: 12, cursor: 'pointer', color: '#475569' }}
-                      >
-                        ✕ Chiudi
-                      </button>
+                      <Button variant="secondary" size="sm" onClick={() => { setBarDettaglio(null); setDettaglioDip(null) }}>✕ Chiudi</Button>
                     </div>
-                    {dettaglioCaricando && <div style={{ color: '#94a3b8', fontSize: 13 }}>Caricamento…</div>}
-                    {dettaglioDip && dettaglioDip.length === 0 && (
-                      <div style={{ color: '#94a3b8', fontSize: 13 }}>Nessun dipendente trovato.</div>
-                    )}
+                    {dettaglioCaricando && <Loading />}
+                    {dettaglioDip && dettaglioDip.length === 0 && <StatoVuoto>Nessun dipendente trovato.</StatoVuoto>}
                     {dettaglioDip && dettaglioDip.length > 0 && (() => {
-                      const totale = dettaglioDip.reduce((s, d) => s + d.costo_anno, 0)
+                      const totale = dettaglioDip.reduce((acc, d) => acc + d.costo_anno, 0)
                       return (
-                        <table style={{ ...tableStyle, fontSize: 12 }}>
+                        <Table compact>
                           <thead>
-                            <tr style={{ background: '#2d6a9f' }}>
-                              <th style={thStyle}>#</th>
-                              <th style={thStyle}>Dipendente</th>
-                              {barRaggruppa && <th style={thStyle}>Strutture</th>}
-                              <th style={{ ...thStyle, textAlign: 'right' }}>Costo anno</th>
-                              <th style={{ ...thStyle, textAlign: 'right' }}>% sul totale</th>
+                            <tr>
+                              <Th num>#</Th>
+                              <Th>Dipendente</Th>
+                              {barRaggruppa && <Th>Strutture</Th>}
+                              <Th num>Costo anno</Th>
+                              <Th num>% sul totale</Th>
                             </tr>
                           </thead>
                           <tbody>
                             {dettaglioDip.map((d, i) => (
-                              <tr key={d.employee_id} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                                <td style={{ ...tdStyle, color: '#94a3b8', width: 32 }}>{i + 1}</td>
-                                <td style={{ ...tdStyle, fontWeight: 600 }}>{d.cognome} {d.nome}</td>
+                              <tr key={d.employee_id}>
+                                <Td num muted style={{ width: 32 }}>{i + 1}</Td>
+                                <Td style={{ fontWeight: 600 }}>{d.cognome} {d.nome}</Td>
                                 {barRaggruppa && (
-                                  <td style={tdStyle}>
+                                  <Td>
                                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                      {d.strutture.map(s => (
-                                        <span key={s} style={{ fontSize: 10, fontWeight: 700, color: getCCFillColor(s, 'a'), background: '#f1f5f9', padding: '1px 5px', borderRadius: 4 }}>{s}</span>
-                                      ))}
+                                      {d.strutture.map(sc => <HotelTag key={sc} code={sc} />)}
                                     </div>
-                                  </td>
+                                  </Td>
                                 )}
-                                <td style={{ ...tdStyle, textAlign: 'right' }}>{formatEuro(d.costo_anno)}</td>
-                                <td style={{ ...tdStyle, textAlign: 'right', color: '#64748b' }}>
-                                  {totale > 0 ? (d.costo_anno / totale * 100).toFixed(1) : '0'}%
-                                </td>
+                                <Td num>{formatEuro(d.costo_anno)}</Td>
+                                <Td num style={{ color: colors.textMuted }}>{totale > 0 ? (d.costo_anno / totale * 100).toFixed(1) : '0'}%</Td>
                               </tr>
                             ))}
-                          </tbody>
-                          <tfoot>
-                            <tr style={{ background: '#0f172a' }}>
-                              <td colSpan={barRaggruppa ? 3 : 2} style={{ ...tdStyle, color: '#fff', fontWeight: 700 }}>TOTALE</td>
-                              <td style={{ ...tdStyle, textAlign: 'right', color: '#fff', fontWeight: 700 }}>{formatEuro(totale)}</td>
-                              <td style={{ ...tdStyle, textAlign: 'right', color: '#fff' }}>100%</td>
+                            <tr className="ui-riga-totale">
+                              <Td colSpan={barRaggruppa ? 3 : 2}>TOTALE</Td>
+                              <Td num>{formatEuro(totale)}</Td>
+                              <Td num>100%</Td>
                             </tr>
-                          </tfoot>
-                        </table>
+                          </tbody>
+                        </Table>
                       )
                     })()}
                   </div>
                 )}
-              </div>
+              </Card>
             )
           })()}
 
@@ -1921,51 +1772,13 @@ function getCCFillColor(parentCode, ccName) {
   return hex + alpha
 }
 
-// ─── Stili condivisi ─────────────────────────────────────────────────────────
-
-
-const tableStyle = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: 13,
-  borderRadius: 8,
-  overflow: 'hidden',
-  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-}
-
-const thStyle = {
-  padding: '10px 12px',
-  color: '#fff',
-  fontWeight: 700,
-  textAlign: 'left',
-  fontSize: 12,
-  textTransform: 'uppercase',
-  letterSpacing: '0.03em',
-}
-
-const tdStyle = {
-  padding: '9px 12px',
-  borderBottom: '1px solid #f1f5f9',
-  color: '#1e293b',
-  verticalAlign: 'middle',
-}
 
 
 
-const h2Style = {
-  fontSize: 16,
-  fontWeight: 700,
-  color: '#1e293b',
-  marginBottom: 16,
-  marginTop: 0,
-}
 
 
-const inlineInputStyle = {
-  padding: '4px 8px',
-  border: '1px solid #93c5fd',
-  borderRadius: 4,
-  fontSize: 12,
-  outline: 'none',
-}
+
+
+
+
 
