@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import axios from 'axios'
+import { Button, Field, Input, Messaggio } from '../components/ui'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -67,128 +68,41 @@ export default function Login() {
     }
   }
 
+  const pieno = { width: '100%' }
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#f1f5f9',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    }}>
-      <div style={{
-        background: '#fff',
-        borderRadius: 12,
-        boxShadow: '0 4px 24px rgba(0,0,0,0.10)',
-        padding: '2.5rem 2rem',
-        width: '100%',
-        maxWidth: 380,
-      }}>
+    <div style={{ minHeight: '100vh', background: 'var(--color-page-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div className="ui-card" style={{ width: '100%', maxWidth: 380, padding: '40px 32px', boxShadow: 'var(--shadow-pop)' }}>
         {/* Logo / titolo */}
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <img
-            src="/hotelos-icon.svg"
-            alt="HotelOS"
-            style={{ width: 200, height: 200, borderRadius: 36, marginBottom: 18 }}
-          />
-          <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>
-            Accedi per continuare
-          </p>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <img src="/hotelos-icon.svg" alt="HotelOS" style={{ width: 200, height: 200, borderRadius: 36, marginBottom: 18 }} />
+          <p className="ui-text-muted" style={{ margin: 0, fontSize: 'var(--fs-base)' }}>Accedi per continuare</p>
         </div>
 
         {/* Avviso sessione scaduta */}
-        {sessioneScaduta && (
-          <div style={{
-            background: '#fef3c7',
-            border: '1px solid #fcd34d',
-            borderRadius: 6,
-            padding: '10px 14px',
-            marginBottom: '1.25rem',
-            fontSize: 13,
-            color: '#92400e',
-          }}>
-            Sessione scaduta, effettua nuovamente il login.
-          </div>
-        )}
+        {sessioneScaduta && <Messaggio tipo="warn">Sessione scaduta, effettua nuovamente il login.</Messaggio>}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
-              Username
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              autoFocus
-              autoComplete="username"
-              required
-              style={{
-                width: '100%',
-                padding: '9px 12px',
-                fontSize: 14,
-                border: '1px solid #d1d5db',
-                borderRadius: 6,
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Field label="Username" style={pieno}>
+            <Input type="text" value={username} onChange={e => setUsername(e.target.value)}
+              autoFocus autoComplete="username" required
+              style={{ ...pieno, padding: '9px 12px', fontSize: 'var(--fs-md)' }} />
+          </Field>
 
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-              style={{
-                width: '100%',
-                padding: '9px 12px',
-                fontSize: 14,
-                border: '1px solid #d1d5db',
-                borderRadius: 6,
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
+          <Field label="Password" style={pieno}>
+            <Input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password" required
+              style={{ ...pieno, padding: '9px 12px', fontSize: 'var(--fs-md)' }} />
+          </Field>
 
           {/* Messaggio errore */}
-          {errore && (
-            <div style={{
-              background: '#fee2e2',
-              border: '1px solid #fca5a5',
-              borderRadius: 6,
-              padding: '10px 14px',
-              fontSize: 13,
-              color: '#991b1b',
-            }}>
-              {errore}
-            </div>
-          )}
+          {errore && <div style={{ marginBottom: -16 }}><Messaggio tipo="err">{errore}</Messaggio></div>}
 
-          <button
-            type="submit"
-            disabled={caricamento || !username || !password}
-            style={{
-              marginTop: 4,
-              padding: '10px',
-              background: caricamento || !username || !password ? '#93c5fd' : '#3b82f6',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              fontSize: 15,
-              fontWeight: 700,
-              cursor: caricamento || !username || !password ? 'not-allowed' : 'pointer',
-              transition: 'background 0.15s',
-            }}
-          >
+          <Button type="submit" disabled={caricamento || !username || !password}
+            style={{ ...pieno, marginTop: 4, padding: 10, fontSize: 'var(--fs-lg)', fontWeight: 700 }}>
             {caricamento ? 'Accesso in corso…' : 'Accedi'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

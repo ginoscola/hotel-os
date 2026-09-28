@@ -316,7 +316,8 @@ contrasto con l'app reale) è stato eliminato.
   hotel i colori ufficiali delle strutture), ✅ Home/Cruscotto + Import Revenue + Import massivo
   (v3.15.7 — tachimetri, mappa di calore e semaforo sui colori di significato; il blocco admin in
   fondo alla Home si intitola "Dati riservati" con badge "solo admin"; eliminato `BulletChart.jsx`,
-  importato ma mai usato). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  importato ma mai usato), ✅ Login (v3.15.9 — solo aspetto, logica di accesso invariata; pulsante
+  blu notte invece dell'azzurro). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati
