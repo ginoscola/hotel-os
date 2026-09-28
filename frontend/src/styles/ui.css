@@ -295,6 +295,24 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: var(--fs-bas
 .ui-modal-body { padding: 12px 20px 4px; font-size: var(--fs-md); color: var(--color-text-second); line-height: 1.5; white-space: pre-line; }
 .ui-modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px; }
 
+/* ── Sidebar dell'area Admin ───────────────────────────────────────────────── */
+.ui-admin-sidebar {
+  width: 220px; flex-shrink: 0; padding-top: 8px; display: flex; flex-direction: column;
+  background: var(--color-surface-soft); border-right: 1px solid var(--color-border);
+}
+.ui-admin-gruppo {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  padding: 10px 18px 4px; border: none; border-radius: 0; background: none; cursor: pointer; font-family: inherit;
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-subtle);
+}
+.ui-admin-voce {
+  display: block; width: 100%; text-align: left; padding: 8px 18px; border: none; border-radius: 0;
+  border-right: 3px solid transparent; background: transparent; cursor: pointer; font-family: inherit;
+  font-size: var(--fs-md); font-weight: 400; color: var(--color-text-second); transition: background .1s;
+}
+.ui-admin-voce:hover { background: var(--color-surface-alt); color: var(--color-text); }
+.ui-admin-voce.attiva { background: var(--color-primary-soft); color: var(--color-primary); font-weight: 600; border-right-color: var(--color-primary); }
+
 /* ── Log in stile console ──────────────────────────────────────────────────── */
 .ui-console {
   background: var(--color-text-strong); border-radius: var(--radius-lg); padding: 12px 14px;

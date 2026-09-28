@@ -7,8 +7,10 @@ import AdminCruscottoSoglie from './admin/AdminCruscottoSoglie.jsx'
 import AdminUiKit from './admin/AdminUiKit.jsx'
 import api from '../api/client.js'
 import {
-  Badge, Button, Card, Field, Input, Loading, Messaggio, PageHeader, Table, Td, Th, useAvvisi,
+  Badge, Button, Card, Field, Input, KpiTile, Loading, Messaggio, PageHeader, Select, StatoVuoto, Table, Td, Th,
+  useAvvisi, useConferma,
 } from '../components/ui'
+import { colors } from '../styles/tokens.js'
 import { mostraErrore } from '../utils/format.js'
 import { APP_VERSION, APP_VERSION_DATE } from '../version.js'
 
@@ -131,76 +133,23 @@ export default function AdminUnificato() {
     <div style={{ display: 'flex', gap: 0, minHeight: 'calc(100vh - 120px)' }}>
 
       {/* ── Sidebar ── */}
-      <aside style={{
-        width: 220,
-        flexShrink: 0,
-        borderRight: '1px solid #e2e8f0',
-        paddingTop: 8,
-        background: '#f8fafc',
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
-        <div style={{ display: 'flex', gap: 6, padding: '0 18px 10px' }}>
-          <button type="button" onClick={espandiTutto} style={{
-            flex: 1, padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1',
-            background: '#fff', color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-          }}>Espandi</button>
-          <button type="button" onClick={comprimiTutto} style={{
-            flex: 1, padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1',
-            background: '#fff', color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-          }}>Comprimi</button>
+      <aside className="ui-admin-sidebar">
+        <div style={{ display: 'flex', gap: 6, padding: '0 14px 10px' }}>
+          <Button variant="secondary" size="sm" onClick={espandiTutto} style={{ flex: 1 }}>Espandi</Button>
+          <Button variant="secondary" size="sm" onClick={comprimiTutto} style={{ flex: 1 }}>Comprimi</Button>
         </div>
 
         {SEZIONI.map(({ gruppo, voci }) => {
           const aperto = !collassate.has(gruppo)
           return (
             <div key={gruppo} style={{ marginBottom: 4 }}>
-              <button
-                type="button"
-                onClick={() => toggleGruppo(gruppo)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  padding: '10px 18px 4px',
-                  border: 'none',
-                  background: 'none',
-                  cursor: 'pointer',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  color: '#94a3b8',
-                }}
-              >
+              <button type="button" className="ui-admin-gruppo" onClick={() => toggleGruppo(gruppo)} aria-expanded={aperto}>
                 <span>{gruppo}</span>
-                <span style={{
-                  fontSize: 9,
-                  transform: aperto ? 'rotate(90deg)' : 'none',
-                  transition: 'transform 0.15s',
-                }}>▶</span>
+                <span style={{ fontSize: 9, transform: aperto ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
               </button>
               {aperto && voci.map(({ id, label }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => vai(id)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '8px 18px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: 14,
-                    background: sezione === id ? '#e0f2fe' : 'transparent',
-                    color: sezione === id ? '#0369a1' : '#374151',
-                    fontWeight: sezione === id ? 600 : 400,
-                    borderRight: sezione === id ? '3px solid #0369a1' : '3px solid transparent',
-                    transition: 'background 0.1s',
-                  }}
-                >
+                <button key={id} type="button" onClick={() => vai(id)}
+                  className={`ui-admin-voce${sezione === id ? ' attiva' : ''}`}>
                   {label}
                 </button>
               ))}
@@ -209,23 +158,16 @@ export default function AdminUnificato() {
         })}
 
         {/* ── Versione ── */}
-        <div style={{
-          marginTop: 'auto',
-          padding: '16px 18px 12px',
-          borderTop: '1px solid #e2e8f0',
-          fontSize: 11,
-          color: '#94a3b8',
-          lineHeight: 1.6,
-        }}>
+        <div className="ui-text-muted" style={{ marginTop: 'auto', padding: '16px 18px 12px', borderTop: `1px solid ${colors.border}`, fontSize: 'var(--fs-xs)', lineHeight: 1.6 }}>
           <div style={{ fontWeight: 600 }}>HotelOS v{APP_VERSION}</div>
           <div>{APP_VERSION_DATE}</div>
         </div>
       </aside>
 
       {/* ── Contenuto ── */}
-      <main style={{ flex: 1, padding: '24px 32px' }}>
+      <div style={{ flex: 1, minWidth: 0, padding: '4px 0 24px 32px' }}>
         <Contenuto sezione={sezione} />
-      </main>
+      </div>
     </div>
   )
 }
@@ -325,69 +267,53 @@ function GestioneStagioni() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0, marginBottom: 20 }}>Stagioni operative</h2>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1rem' }}>
-        <label style={{ fontWeight: 600, fontSize: 13 }}>Anno:</label>
-        <select value={anno} onChange={e => setAnno(Number(e.target.value))}
-          style={{ padding: '4px 10px', fontSize: 13, border: '1px solid #d1d5db', borderRadius: 4 }}>
+      <PageHeader title="Stagioni operative">
+        <Select value={anno} onChange={e => setAnno(Number(e.target.value))} aria-label="Anno">
           {[2024, 2025, 2026, 2027].map(y => <option key={y}>{y}</option>)}
-        </select>
-        {loadingAnno && <span style={{ color: '#9ca3af', fontSize: 12 }}>Caricamento…</span>}
-      </div>
+        </Select>
+      </PageHeader>
+      {loadingAnno && <Loading />}
       {hotels.length > 0 && (
-        <div className="card" style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc' }}>
-                {['Hotel', 'Apertura', 'Chiusura', 'Camere', 'Note', ''].map(h => (
-                  <th key={h} style={{ textAlign: 'left', padding: '8px 10px', fontWeight: 600 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {hotels.map(h => {
-                const f = form[h.code] || {}
-                const esito = esiti[h.code]
-                const nonConfigurata = stagioni[h.code] == null
-                return (
-                  <tr key={h.code} style={{ borderTop: '1px solid #e2e8f0' }}>
-                    <td style={{ padding: '8px 10px', fontWeight: 600 }}>
-                      {h.name}
-                      {nonConfigurata && <span style={{ marginLeft: 6, fontSize: 10, color: '#f59e0b' }}>non configurata</span>}
-                    </td>
-                    <td style={{ padding: '6px 10px' }}>
-                      <input type="date" value={f.open_date || ''} onChange={e => aggiornaForm(h.code, 'open_date', e.target.value)}
-                        style={{ fontSize: 12, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4 }} />
-                    </td>
-                    <td style={{ padding: '6px 10px' }}>
-                      <input type="date" value={f.close_date || ''} onChange={e => aggiornaForm(h.code, 'close_date', e.target.value)}
-                        style={{ fontSize: 12, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4 }} />
-                    </td>
-                    <td style={{ padding: '6px 10px' }}>
-                      <input type="number" value={f.total_rooms || ''} onChange={e => aggiornaForm(h.code, 'total_rooms', e.target.value)}
-                        min="1" max="999" style={{ fontSize: 12, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4, width: 64 }} />
-                    </td>
-                    <td style={{ padding: '6px 10px' }}>
-                      <input type="text" value={f.notes || ''} onChange={e => aggiornaForm(h.code, 'notes', e.target.value)}
-                        placeholder="facoltativo" style={{ fontSize: 12, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4, width: '100%', minWidth: 100 }} />
-                    </td>
-                    <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => salva(h.code)} disabled={salvando[h.code] || !f.open_date || !f.close_date}
-                        style={{ fontSize: 12, padding: '4px 14px', background: (!f.open_date || !f.close_date) ? '#9ca3af' : '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-                        {salvando[h.code] ? '…' : 'Salva'}
-                      </button>
-                      {esito && (
-                        <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: esito.ok ? '#059669' : '#dc2626' }}>
-                          {esito.msg}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Table compact>
+          <thead>
+            <tr><Th>Hotel</Th><Th>Apertura</Th><Th>Chiusura</Th><Th num>Camere</Th><Th>Note</Th><Th /></tr>
+          </thead>
+          <tbody>
+            {hotels.map(h => {
+              const f = form[h.code] || {}
+              const esito = esiti[h.code]
+              const nonConfigurata = stagioni[h.code] == null
+              return (
+                <tr key={h.code}>
+                  <Td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {h.name}
+                    {nonConfigurata && <Badge tono="warn" style={{ marginLeft: 6 }}>non configurata</Badge>}
+                  </Td>
+                  <Td><Input type="date" value={f.open_date || ''} onChange={e => aggiornaForm(h.code, 'open_date', e.target.value)} /></Td>
+                  <Td><Input type="date" value={f.close_date || ''} onChange={e => aggiornaForm(h.code, 'close_date', e.target.value)} /></Td>
+                  <Td num>
+                    <Input type="number" value={f.total_rooms || ''} onChange={e => aggiornaForm(h.code, 'total_rooms', e.target.value)}
+                      min="1" max="999" className="ui-num" style={{ width: 72, textAlign: 'right' }} />
+                  </Td>
+                  <Td>
+                    <Input type="text" value={f.notes || ''} onChange={e => aggiornaForm(h.code, 'notes', e.target.value)}
+                      placeholder="facoltativo" style={{ width: '100%', minWidth: 110 }} />
+                  </Td>
+                  <Td style={{ whiteSpace: 'nowrap' }}>
+                    <Button size="sm" onClick={() => salva(h.code)} disabled={salvando[h.code] || !f.open_date || !f.close_date}>
+                      {salvando[h.code] ? '…' : 'Salva'}
+                    </Button>
+                    {esito && (
+                      <span style={{ marginLeft: 8, fontSize: 'var(--fs-xs)', fontWeight: 600, color: esito.ok ? colors.success : colors.danger }}>
+                        {esito.msg}
+                      </span>
+                    )}
+                  </Td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </Table>
       )}
     </div>
   )
@@ -402,7 +328,7 @@ function GestioneModuli() {
   const [permessi, setPermessi] = useState({})
   const [nomi, setNomi] = useState({})
   const [loading, setLoading] = useState(true)
-  const [feedback, setFeedback] = useState({})
+  const avvisi = useAvvisi()
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -427,19 +353,22 @@ function GestioneModuli() {
   useEffect(() => { carica() }, [carica])
 
   async function toggleAttivo(modulo) {
-    await api.put(`/modules/admin/${modulo.code}`, { attivo: !modulo.attivo })
-    setFeedback(f => ({ ...f, [modulo.code]: modulo.attivo ? 'Disattivato' : 'Attivato' }))
-    carica()
+    try {
+      await api.put(`/modules/admin/${modulo.code}`, { attivo: !modulo.attivo })
+      avvisi.successo(`${modulo.name}: ${modulo.attivo ? 'disattivato' : 'attivato'}`)
+      carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   async function salvaPermesso(code, ruolo) {
     const p = permessi[code]?.[ruolo]
     if (!p) return
-    await api.put(`/modules/admin/${code}/permissions/${ruolo}`, {
-      puo_vedere: p.puo_vedere, puo_modificare: p.puo_modificare, puo_importare: p.puo_importare,
-    })
-    setFeedback(f => ({ ...f, [`${code}_${ruolo}`]: 'Salvato ✓' }))
-    setTimeout(() => setFeedback(f => { const n = { ...f }; delete n[`${code}_${ruolo}`]; return n }), 2000)
+    try {
+      await api.put(`/modules/admin/${code}/permissions/${ruolo}`, {
+        puo_vedere: p.puo_vedere, puo_modificare: p.puo_modificare, puo_importare: p.puo_importare,
+      })
+      avvisi.successo(`Permessi ${ruolo} salvati`)
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   function setPermesso(code, ruolo, campo, val) {
@@ -452,10 +381,11 @@ function GestioneModuli() {
   async function rinominaModulo(code) {
     const nuovoNome = (nomi[code] || '').trim()
     if (!nuovoNome) return
-    await api.put(`/modules/admin/${code}`, { name: nuovoNome })
-    setFeedback(f => ({ ...f, [`nome_${code}`]: 'Nome salvato ✓' }))
-    setTimeout(() => setFeedback(f => { const n = { ...f }; delete n[`nome_${code}`]; return n }), 2000)
-    carica()
+    try {
+      await api.put(`/modules/admin/${code}`, { name: nuovoNome })
+      avvisi.successo('Nome salvato')
+      carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   async function sposta(idx, dir) {
@@ -476,85 +406,60 @@ function GestioneModuli() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0, marginBottom: 20 }}>Gestione Moduli</h2>
-      {loading ? <p style={{ color: '#9ca3af' }}>Caricamento…</p> : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <PageHeader title="Gestione moduli" />
+      {loading ? <Loading /> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {moduli.map((m, idx) => (
-            <div key={m.code} className="card" style={{
-              borderLeft: `4px solid ${m.colore || '#9ca3af'}`,
-              background: m.attivo ? '#fff' : '#f9fafb',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            // Bordo sinistro nel colore del modulo (lo stesso della NavBar)
+            <Card key={m.code} style={{ boxShadow: `inset 4px 0 0 ${m.colore || colors.textSubtle}`, background: m.attivo ? colors.surface : colors.surfaceSoft }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 22 }}>{m.icon}</span>
-                <input
+                <Input
                   value={nomi[m.code] ?? m.name}
                   onChange={e => setNomi(n => ({ ...n, [m.code]: e.target.value }))}
                   onKeyDown={e => e.key === 'Enter' && rinominaModulo(m.code)}
-                  style={{ fontWeight: 700, fontSize: 15, border: '1px solid #d1d5db', borderRadius: 5, padding: '2px 8px', width: 220 }}
+                  style={{ fontWeight: 700, fontSize: 'var(--fs-md)', width: 230 }}
+                  aria-label="Nome modulo"
                 />
                 {(nomi[m.code] ?? m.name) !== m.name && (
-                  <button onClick={() => rinominaModulo(m.code)}
-                    style={{ padding: '2px 10px', fontSize: 12, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                    Salva nome
-                  </button>
+                  <Button size="sm" onClick={() => rinominaModulo(m.code)}>Salva nome</Button>
                 )}
-                {feedback[`nome_${m.code}`] && <span style={{ fontSize: 12, color: '#059669' }}>{feedback[`nome_${m.code}`]}</span>}
-                <span style={{
-                  fontSize: 11, padding: '2px 8px', borderRadius: 10,
-                  background: m.attivo ? '#d1fae5' : '#f3f4f6',
-                  color: m.attivo ? '#065f46' : '#6b7280', fontWeight: 600,
-                }}>
-                  {m.attivo ? 'Attivo' : 'Disattivato'}
-                </span>
-                {feedback[m.code] && <span style={{ fontSize: 12, color: '#059669' }}>{feedback[m.code]}</span>}
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem' }}>
-                  <button onClick={() => sposta(idx, -1)} disabled={idx === 0} style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}>↑</button>
-                  <button onClick={() => sposta(idx, 1)} disabled={idx === moduli.length - 1} style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}>↓</button>
-                  <button onClick={() => toggleAttivo(m)} style={{
-                    padding: '3px 12px', fontSize: 12, cursor: 'pointer',
-                    background: m.attivo ? '#fee2e2' : '#d1fae5',
-                    color: m.attivo ? '#991b1b' : '#065f46',
-                    border: 'none', borderRadius: 5,
-                  }}>
+                <Badge tono={m.attivo ? 'ok' : 'neutral'}>{m.attivo ? 'Attivo' : 'Disattivato'}</Badge>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                  <Button variant="secondary" size="sm" onClick={() => sposta(idx, -1)} disabled={idx === 0} aria-label="Sposta su">↑</Button>
+                  <Button variant="secondary" size="sm" onClick={() => sposta(idx, 1)} disabled={idx === moduli.length - 1} aria-label="Sposta giù">↓</Button>
+                  <Button variant={m.attivo ? 'danger-soft' : 'secondary'} size="sm" onClick={() => toggleAttivo(m)}>
                     {m.attivo ? 'Disattiva' : 'Attiva'}
-                  </button>
+                  </Button>
                 </div>
               </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <Table compact>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '4px 8px', color: '#6b7280', fontWeight: 600 }}>Ruolo</th>
-                    {campi.map(c => <th key={c.key} style={{ textAlign: 'center', padding: '4px 8px', color: '#6b7280', fontWeight: 600 }}>{c.label}</th>)}
-                    <th style={{ padding: '4px 8px' }} />
+                    <Th>Ruolo</Th>
+                    {campi.map(c => <Th key={c.key} center>{c.label}</Th>)}
+                    <Th />
                   </tr>
                 </thead>
                 <tbody>
                   {ruoli.map(ruolo => {
                     const p = permessi[m.code]?.[ruolo] || { puo_vedere: false, puo_modificare: false, puo_importare: false }
                     return (
-                      <tr key={ruolo} style={{ borderTop: '1px solid #f3f4f6' }}>
-                        <td style={{ padding: '5px 8px', fontWeight: 600, textTransform: 'capitalize' }}>{ruolo}</td>
+                      <tr key={ruolo}>
+                        <Td style={{ fontWeight: 600, textTransform: 'capitalize' }}>{ruolo}</Td>
                         {campi.map(c => (
-                          <td key={c.key} style={{ textAlign: 'center', padding: '5px 8px' }}>
-                            <input type="checkbox" checked={!!p[c.key]}
+                          <Td key={c.key} center>
+                            <input type="checkbox" checked={!!p[c.key]} aria-label={`${ruolo} ${c.label}`}
                               onChange={e => setPermesso(m.code, ruolo, c.key, e.target.checked)} />
-                          </td>
+                          </Td>
                         ))}
-                        <td style={{ padding: '5px 8px' }}>
-                          <button onClick={() => salvaPermesso(m.code, ruolo)}
-                            style={{ padding: '2px 10px', fontSize: 11, background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                            Salva
-                          </button>
-                          {feedback[`${m.code}_${ruolo}`] && (
-                            <span style={{ marginLeft: 6, color: '#059669', fontSize: 11 }}>{feedback[`${m.code}_${ruolo}`]}</span>
-                          )}
-                        </td>
+                        <Td center><Button variant="secondary" size="sm" onClick={() => salvaPermesso(m.code, ruolo)}>Salva</Button></Td>
                       </tr>
                     )
                   })}
                 </tbody>
-              </table>
-            </div>
+              </Table>
+            </Card>
           ))}
         </div>
       )}
@@ -569,22 +474,13 @@ function GestioneModuli() {
 function RevenueImportMassivo() {
   return (
     <div>
-      <h2 style={{ marginTop: 0, marginBottom: 20 }}>Import Massivo</h2>
-      <div className="card">
-        <p style={{ color: '#6b7280', fontSize: 14, marginTop: 0, marginBottom: '1.5rem' }}>
+      <PageHeader title="Import massivo" />
+      <Card style={{ maxWidth: 640 }}>
+        <p className="ui-text-muted" style={{ marginTop: 0, marginBottom: 16, fontSize: 'var(--fs-md)' }}>
           Importa in blocco tutte le coppie di file CSV/Excel da una cartella del server.
         </p>
-        <a
-          href="/import/bulk"
-          style={{
-            display: 'inline-block', padding: '9px 20px',
-            background: '#3b82f6', color: '#fff', borderRadius: 6,
-            textDecoration: 'none', fontWeight: 600, fontSize: 14,
-          }}
-        >
-          Vai all'Import Massivo →
-        </a>
-      </div>
+        <a href="/import/bulk" className="ui-btn ui-btn-primary" style={{ textDecoration: 'none' }}>Vai all'Import massivo →</a>
+      </Card>
     </div>
   )
 }
@@ -596,9 +492,8 @@ function RevenueImportMassivo() {
 function RevenueDatiTest() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [errore, setErrore] = useState(null)
-  const [conferma, setConferma] = useState(false)
-  const [esitoCancellazione, setEsitoCancellazione] = useState(null)
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const caricaStats = useCallback(async () => {
     try {
@@ -610,67 +505,40 @@ function RevenueDatiTest() {
   useEffect(() => { caricaStats() }, [caricaStats])
 
   async function handleCancella() {
-    if (!conferma) { setConferma(true); return }
-    setLoading(true); setErrore(null); setEsitoCancellazione(null); setConferma(false)
+    if (!(await conferma({
+      titolo: 'Cancellare tutti i dati di test Revenue?',
+      messaggio: `Verranno eliminati ${stats.righe_revenue} righe revenue e ${stats.sessioni_import} sessioni import di test. L'operazione non è reversibile.`,
+      confermaLabel: 'Sì, cancella',
+      pericolo: true,
+    }))) return
+    setLoading(true)
     try {
       const { data } = await api.delete('/admin/test-data')
-      setEsitoCancellazione(data)
+      avvisi.successo(data.messaggio)
       await caricaStats()
     } catch (err) {
-      setErrore(mostraErrore(err))
+      avvisi.errore(mostraErrore(err))
     } finally { setLoading(false) }
   }
 
   return (
     <div>
-      <h2 style={{ marginTop: 0, marginBottom: 20 }}>Dati di test — Revenue</h2>
-      <div className="card" style={{ border: '1px solid #fcd34d', background: '#fffbeb' }}>
+      <PageHeader title="Dati di test — Revenue" />
+      <Card style={{ maxWidth: 720 }}>
         {stats && (
-          <div style={{ display: 'flex', gap: '2rem', marginBottom: '1.5rem' }}>
+          <div className="ui-kpi-row">
             <StatBox label="Righe revenue di test" value={stats.righe_revenue} />
             <StatBox label="Sessioni import di test" value={stats.sessioni_import} />
             <StatBox label="Totale record di test" value={stats.totale} highlight />
           </div>
         )}
-        {stats?.totale === 0 && (
-          <p style={{ color: '#6b7280', fontSize: 13 }}>Nessun dato di test presente nel database.</p>
-        )}
+        {stats?.totale === 0 && <p className="ui-text-muted" style={{ margin: 0 }}>Nessun dato di test presente nel database.</p>}
         {stats?.totale > 0 && (
-          conferma ? (
-            <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '1rem', marginBottom: '1rem' }}>
-              <p style={{ color: '#991b1b', fontWeight: 600, marginTop: 0 }}>
-                Sei sicuro? Verranno eliminati {stats.righe_revenue} righe revenue e {stats.sessioni_import} sessioni import di test.
-                L'operazione non è reversibile.
-              </p>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <button onClick={handleCancella} disabled={loading}
-                  style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>
-                  Sì, cancella tutti i dati di test
-                </button>
-                <button onClick={() => setConferma(false)}
-                  style={{ background: '#e5e7eb', color: '#374151', border: 'none', padding: '8px 18px', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>
-                  Annulla
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={handleCancella} disabled={loading}
-              style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-              {loading ? 'Cancellazione in corso…' : 'Cancella dati di test'}
-            </button>
-          )
+          <Button variant="danger" onClick={handleCancella} disabled={loading}>
+            {loading ? 'Cancellazione in corso…' : 'Cancella dati di test'}
+          </Button>
         )}
-        {errore && (
-          <div style={{ marginTop: '1rem', padding: '0.8rem', background: '#fee2e2', borderRadius: 6, color: '#991b1b', fontSize: 13 }}>
-            Errore: {errore}
-          </div>
-        )}
-        {esitoCancellazione && (
-          <div style={{ marginTop: '1rem', padding: '0.8rem', background: '#d1fae5', borderRadius: 6, color: '#065f46', fontSize: 13, fontWeight: 600 }}>
-            {esitoCancellazione.messaggio}
-          </div>
-        )}
-      </div>
+      </Card>
     </div>
   )
 }
@@ -945,17 +813,9 @@ function DipDatiTest() {
   )
 }
 
+// Riquadro numerico dei pannelli "Dati di test" (highlight = totale, in ambra)
 function StatBox({ label, value, highlight }) {
-  return (
-    <div style={{
-      background: highlight ? '#fef3c7' : '#fff',
-      border: `1px solid ${highlight ? '#fcd34d' : '#e2e8f0'}`,
-      borderRadius: 8, padding: '10px 18px', minWidth: 140, textAlign: 'center',
-    }}>
-      <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: highlight ? '#92400e' : '#1a1a2e' }}>{value}</div>
-    </div>
-  )
+  return <KpiTile label={label} value={value} colore={highlight ? colors.warningText : undefined} minWidth={150} />
 }
 
 // ---------------------------------------------------------------------------

@@ -324,8 +324,13 @@ contrasto con l'app reale) è stato eliminato.
   cambiare i colori dei reparti non configurati), ✅ Dipendenti tranche B (v3.15.11: Analisi CC —
   controlli su due righe, confronto anno come casella "Confronta con {anno-1}", tabella con colonna
   fissa a sinistra e intestazione a due livelli, torta "Per struttura" nei colori ufficiali degli hotel
-  invece dei vecchi DPH blu/CLB verde; eliminati tutti gli stili locali in fondo a `Dipendenti.jsx`).
-  Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  invece dei vecchi DPH blu/CLB verde; eliminati tutti gli stili locali in fondo a `Dipendenti.jsx`),
+  ✅ Admin tranche A (v3.15.12: sidebar — classi `ui-admin-sidebar`/`ui-admin-gruppo`/`ui-admin-voce`,
+  voce attiva blu notte invece dell'azzurro —, Utenti con modali della libreria, Stagioni, Moduli (bordo
+  sinistro nel colore del modulo, come in NavBar), Soglie tachimetri (riga modificata e non salvata
+  evidenziata in ambra), Revenue Import massivo e Dati di test. Tranche B: Dipendenti (CC, Colori CC,
+  Dati di test), Corrispettivi (Classificazione, Stampanti RT), Sistema (Debug, Backup). Tranche C: USALI
+  e Statistiche Produzione). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati
