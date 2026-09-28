@@ -174,6 +174,16 @@ indipendenti. Bug reale (23/09/2026): dopo un fix al pannello Backup, il backend
 correttamente ma il browser continuava a mostrare il vecchio testo perché `dist/` risaliva a prima
 della modifica. Verifica rapida che il bundle sia aggiornato: confrontare la data di
 `dist/assets/index-*.js` con quella dell'ultima modifica ai file `.jsx` toccati.
+⚠️ **Il browser teneva in cache `index.html` e mostrava la versione vecchia anche con `dist/` aggiornato**
+(bug reale, 28/09/2026: voce Admin "Libreria UI" e pannello Backup nuovi invisibili all'utente, mentre
+il server — verificato con `curl` sull'indirizzo pubblico, Cloudflare `cf-cache-status: DYNAMIC` —
+serviva già il bundle nuovo). nginx non mandava `Cache-Control`, quindi il browser applicava una cache
+euristica a `index.html`, che punta al bundle con hash. Fix in `deploy/hotelos.nginx.conf`:
+`Cache-Control: no-cache` su `location /` (index.html sempre ricontrollato) e
+`public, max-age=31536000, immutable` su `/assets/` (file con hash, cambiano nome a ogni build).
+Se un utente vede ancora "la versione di prima" dopo un build: prima verificare con
+`curl -s https://hotelos.kmdimare-hub.com/ | grep -o 'assets/index-[^"]*'` che il server dia il bundle
+nuovo, poi ricarica forzata nel browser.
 
 ## Comandi sviluppo
 ⚠️ **Dal 23 settembre 2026 lo sviluppo avviene sul server Linux**, non più sul Mac Mini (migrazione
