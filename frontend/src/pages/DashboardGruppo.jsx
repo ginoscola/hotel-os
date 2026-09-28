@@ -4,25 +4,22 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import api from '../api/client.js'
-import KPICard from '../components/KPICard.jsx'
-import { ExportMenu, SezioneHeader } from '../components/ExportMenu.jsx'
+import { ExportMenu } from '../components/ExportMenu.jsx'
+import NavigazioneSnapshot from '../components/NavigazioneSnapshot.jsx'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import { formatEuro, formatEuroK, formatPerc, formatN, formatData, addDays, calcolaDelta, mostraErrore } from '../utils/format.js'
+import {
+  Card, Dot, KpiTile, Loading, Messaggio, NavMese, PageHeader, SegmentedControl, StatoVuoto, Table, Td, Th,
+} from '../components/ui'
+import { colors, coloreStruttura, coloreSerie, COLORI_REVENUE, STILE_CONFRONTO } from '../styles/tokens.js'
 
-const COLORI_HOTEL = { CLB: '#3b82f6', DPH: '#10b981', INT: '#f59e0b' }
 const MODALITA_KEY = 'gruppo_modalita'
 
-const styleToggle = (attivo) => ({
-  padding: '7px 20px',
-  background: attivo ? '#3b82f6' : '#e5e7eb',
-  color: attivo ? '#fff' : '#374151',
-  border: 'none',
-  borderRadius: 6,
-  cursor: 'pointer',
-  fontWeight: 600,
-  fontSize: 13,
-  transition: 'background 0.15s',
-})
+// Colori delle serie nei trend settimanali di gruppo
+const COLORE_TREVPAR = coloreSerie(0)
+const COLORE_REVPAR = coloreSerie(1)
+const COLORE_REVENUE = coloreSerie(2)
+const COLORE_OCCUPAZIONE = colors.info
 
 export default function DashboardGruppo() {
   const [modalita, setModalita] = useState(
@@ -182,96 +179,32 @@ export default function DashboardGruppo() {
 
   return (
     <div>
-      <h2 style={{ marginBottom: '1rem' }}>Dashboard Gruppo</h2>
-
-      {/* Toggle modalità */}
-      <div className="card" style={{
-        marginBottom: '1rem',
-        display: 'flex', alignItems: 'center', gap: '0.5rem',
-      }}>
-        <span style={{ fontSize: 13, color: '#6b7280', marginRight: 4, fontWeight: 600 }}>
-          Visualizzazione:
-        </span>
-        <button style={styleToggle(modalita === 'settimana')} onClick={() => setModalita('settimana')}>
-          Settimana per settimana
-        </button>
-        <button style={styleToggle(modalita === 'stagione')} onClick={() => setModalita('stagione')}>
-          Stagione intera
-        </button>
-        <button style={styleToggle(modalita === 'pace')} onClick={() => setModalita('pace')}>
-          Ritmo prenotazioni
-        </button>
-      </div>
+      <PageHeader title="Dashboard Gruppo">
+        <SegmentedControl value={modalita} onChange={setModalita} options={[
+          { value: 'settimana', label: 'Settimana per settimana' },
+          { value: 'stagione', label: 'Stagione intera' },
+          { value: 'pace', label: 'Ritmo prenotazioni' },
+        ]} />
+      </PageHeader>
 
       {modalita === 'pace' && <SezionePace />}
 
       {/* Navigazione + confronti */}
       {modalita !== 'pace' && navItems.length > 0 && (
-        <div className="card" style={{ marginBottom: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            <button
-              onClick={() => setNavIdx(i => i + 1)}
-              disabled={navIdx >= navItems.length - 1}
-              style={{ padding: '4px 12px', fontSize: 13 }}
-            >← Prec.</button>
-
-            <div style={{ flex: 1, textAlign: 'center' }}>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>{titoloNav}</span>
-              {subtitleNav && (
-                <span style={{ color: '#6b7280', fontSize: 12, marginLeft: 8 }}>
-                  | {subtitleNav}
-                </span>
-              )}
-              <span style={{ color: '#6b7280', fontSize: 12, marginLeft: 8 }}>
-                ({navItems.length} {modalita === 'settimana' ? 'settimane' : 'snapshot'})
-              </span>
-            </div>
-
-            <button
-              onClick={() => setNavIdx(i => i - 1)}
-              disabled={navIdx <= 0}
-              style={{ padding: '4px 12px', fontSize: 13 }}
-            >Succ. →</button>
-          </div>
-
-          <div style={{ display: 'flex', gap: '1.5rem', fontSize: 13, flexWrap: 'wrap', alignItems: 'center' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={confrontaPrevSett}
-                onChange={e => {
-                  setConfrontaPrevSett(e.target.checked)
-                  if (e.target.checked) setConfrontaPrevAnno(false)
-                }} />
-              {modalita === 'stagione' ? 'Confronta snapshot precedente' : 'Confronta settimana precedente'}
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={confrontaPrevAnno}
-                onChange={e => {
-                  setConfrontaPrevAnno(e.target.checked)
-                  if (e.target.checked) setConfrontaPrevSett(false)
-                }} />
-              Confronta anno precedente
-            </label>
-            {(confrontaPrevSett || confrontaPrevAnno) && !compDisponibile && (
-              <span style={{
-                background: '#e5e7eb', color: '#6b7280',
-                padding: '2px 10px', borderRadius: 12, fontSize: 12,
-              }}>
-                Dati confronto non disponibili
-              </span>
-            )}
-          </div>
-        </div>
+        <NavigazioneSnapshot
+          titolo={titoloNav}
+          sottotitolo={`${subtitleNav ? `| ${subtitleNav} ` : ''}(${navItems.length} ${modalita === 'settimana' ? 'settimane' : 'snapshot'})`}
+          onPrec={() => setNavIdx(i => i + 1)} disPrec={navIdx >= navItems.length - 1}
+          onSucc={() => setNavIdx(i => i - 1)} disSucc={navIdx <= 0}
+          etichettaPrec={modalita === 'stagione' ? 'Confronta snapshot precedente' : 'Confronta settimana precedente'}
+          confrontaPrec={confrontaPrevSett} onConfrontaPrec={setConfrontaPrevSett}
+          confrontaAnno={confrontaPrevAnno} onConfrontaAnno={setConfrontaPrevAnno}
+          confrontoNonDisponibile={(confrontaPrevSett || confrontaPrevAnno) && !compDisponibile}
+        />
       )}
 
-      {modalita !== 'pace' && loading && <p>Caricamento…</p>}
-      {modalita !== 'pace' && errore && (
-        <div style={{
-          padding: '1rem', background: '#fee2e2',
-          borderRadius: 8, color: '#991b1b', marginBottom: '1rem',
-        }}>
-          {errore}
-        </div>
-      )}
+      {modalita !== 'pace' && loading && <Loading />}
+      {modalita !== 'pace' && <Messaggio tipo="err">{errore}</Messaggio>}
 
       {modalita !== 'pace' && dati && (
         <ContenutoDashboardGruppo
@@ -293,8 +226,6 @@ export default function DashboardGruppo() {
 // attraverso tutti gli snapshot, una linea per hotel
 // ---------------------------------------------------------------------------
 
-const MESI_PACE = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-                    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
 const PACE_VISTA_KEY = 'pace_vista'
 
 function SezionePace() {
@@ -317,8 +248,6 @@ function SezionePace() {
       .finally(() => setLoading(false))
   }, [anno, mese])
 
-  const mesePrec = () => { if (mese === 1) { setMese(12); setAnno(a => a - 1) } else setMese(m => m - 1) }
-  const meseSucc = () => { if (mese === 12) { setMese(1); setAnno(a => a + 1) } else setMese(m => m + 1) }
 
   // Unisce i punti di ogni struttura in righe per snapshot_date: { snapshot_date, DPH, CLB, INT }
   const chartData = useMemo(() => {
@@ -358,42 +287,25 @@ function SezionePace() {
   const datiGrafico = vista === 'indicizzato' ? chartDataIndicizzato : chartData
 
   return (
-    <div className="card sezione" style={{ marginBottom: '1rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <button onClick={mesePrec} style={{ padding: '4px 12px', fontSize: 13 }}>← Prec.</button>
-        <div style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 15 }}>
-          {MESI_PACE[mese]} {anno}
-        </div>
-        <button onClick={meseSucc} style={{ padding: '4px 12px', fontSize: 13 }}>Succ. →</button>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[['assoluto', 'Valore assoluto'], ['indicizzato', 'Crescita indicizzata']].map(([v, l]) => (
-            <button key={v} onClick={() => cambiaVista(v)} style={{
-              padding: '4px 12px', borderRadius: 6, border: '1px solid', fontSize: 13,
-              cursor: 'pointer', fontWeight: vista === v ? 700 : 400,
-              background: vista === v ? '#1e3a5f' : '#f8fafc',
-              color: vista === v ? '#fff' : '#64748b',
-              borderColor: vista === v ? '#1e3a5f' : '#e2e8f0',
-            }}>{l}</button>
-          ))}
+    <Card style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <NavMese anno={anno} mese={mese} onChange={({ anno: a, mese: m }) => { setAnno(a); setMese(m) }} />
+        <div style={{ marginLeft: 'auto' }}>
+          <SegmentedControl value={vista} onChange={cambiaVista}
+            options={[{ value: 'assoluto', label: 'Valore assoluto' }, { value: 'indicizzato', label: 'Crescita indicizzata' }]} />
         </div>
       </div>
 
       {vista === 'indicizzato' && (
-        <p style={{ color: '#6b7280', fontSize: 12.5, margin: '-0.5rem 0 0.75rem' }}>
+        <p className="ui-text-muted" style={{ margin: '-6px 0 12px' }}>
           Ogni linea parte da 100 alla prima snapshot disponibile: mostra la velocità di crescita del
           pickup a prescindere dal volume assoluto di ciascun hotel.
         </p>
       )}
 
-      {loading && <p>Caricamento…</p>}
-      {errore && (
-        <div style={{ padding: '1rem', background: '#fee2e2', borderRadius: 8, color: '#991b1b', marginBottom: '1rem' }}>
-          {errore}
-        </div>
-      )}
-      {nessunDato && !loading && !errore && (
-        <p style={{ color: '#6b7280', fontSize: 13 }}>Nessuno snapshot disponibile per questo mese.</p>
-      )}
+      {loading && <Loading />}
+      <Messaggio tipo="err">{errore}</Messaggio>
+      {nessunDato && !loading && !errore && <StatoVuoto>Nessuno snapshot disponibile per questo mese.</StatoVuoto>}
 
       {chartData.length > 0 && (
         <ResponsiveContainer width="100%" height={320}>
@@ -406,25 +318,15 @@ function SezionePace() {
               formatter={vista === 'indicizzato' ? (v => v != null ? v.toFixed(1) : '—') : (v => formatEuro(v))}
             />
             <Legend />
-            {vista === 'indicizzato' && (
-              <ReferenceLine y={100} stroke="#94a3b8" strokeDasharray="4 4" />
-            )}
+            {vista === 'indicizzato' && <ReferenceLine y={100} stroke={colors.textSubtle} strokeDasharray="4 4" />}
             {codiciHotel.map(code => (
-              <Line
-                key={code}
-                type="monotone"
-                dataKey={code}
-                stroke={COLORI_HOTEL[code] || '#999'}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                connectNulls
-                name={code}
-              />
+              <Line key={code} type="monotone" dataKey={code} stroke={coloreStruttura(code)}
+                strokeWidth={2} dot={{ r: 3 }} connectNulls name={code} />
             ))}
           </LineChart>
         </ResponsiveContainer>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -491,45 +393,43 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
     revenue_extra: c.revenue_extra,
   }))
 
+  const exportGruppo = <ExportMenu url={`/export/gruppo${exportParams}`} nome="gruppo_settimanale" snapshot={snapshotDate} />
+  const grafico = (titolo, contenuto, conExport = true) => (
+    <Card title={titolo} style={{ marginBottom: 24 }} actions={conExport ? exportGruppo : undefined}>
+      <ResponsiveContainer width="100%" height={240}>{contenuto}</ResponsiveContainer>
+    </Card>
+  )
+
   return (
     <>
-      <div style={{ marginBottom: '0.5rem', color: '#6b7280', fontSize: 13 }}>
+      <div className="ui-text-muted" style={{ marginBottom: 8, fontSize: 'var(--fs-base)' }}>
         Hotel attivi: {dati.hotel_attivi.join(', ')} — periodo: {formatData(dati.periodo_da)} – {formatData(dati.periodo_a)}
-        {compLabel && datiComp && (
-          <span style={{ marginLeft: 8, color: '#9ca3af' }}>vs. {compLabel}</span>
-        )}
+        {compLabel && datiComp && <span style={{ marginLeft: 8 }}>vs. {compLabel}</span>}
       </div>
 
       {/* KPI gruppo */}
-      <div className="grid-kpi sezione">
-        <KPICard label="Camere vendute" value={formatN(kpi.rooms_sold)}
-          compValue={kpiCompV('rooms_sold', formatN)} compLabel={compLabel} delta={kpiDelta('rooms_sold')} />
-        <KPICard label="Occupazione" value={kpi.occupancy != null ? formatPerc(kpi.occupancy) : '—'}
-          compValue={kpiCompV('occupancy', formatPerc)} compLabel={compLabel} delta={kpiDelta('occupancy')} />
-        <KPICard label="ADR Gruppo" value={kpi.adr != null ? formatEuro(kpi.adr) : '—'}
-          compValue={kpiCompV('adr', formatEuro)} compLabel={compLabel} delta={kpiDelta('adr')} />
-        <KPICard label="RevPAR" value={kpi.revpar != null ? formatEuro(kpi.revpar) : '—'}
-          compValue={kpiCompV('revpar', formatEuro)} compLabel={compLabel} delta={kpiDelta('revpar')} />
-        <KPICard label="TRevPAR" value={kpi.trevpar != null ? formatEuro(kpi.trevpar) : '—'}
-          compValue={kpiCompV('trevpar', formatEuro)} compLabel={compLabel} delta={kpiDelta('trevpar')} />
-        <KPICard label="RMC" value={kpi.rmc != null ? formatEuro(kpi.rmc) : '—'}
-          compValue={kpiCompV('rmc', formatEuro)} compLabel={compLabel} delta={kpiDelta('rmc')} />
-        <KPICard label="Inc. Rooms" value={kpi.inc_rooms != null ? formatPerc(kpi.inc_rooms) : '—'}
-          compValue={kpiCompV('inc_rooms', formatPerc)} compLabel={compLabel} delta={kpiDelta('inc_rooms')} />
-        <KPICard label="Inc. F&B" value={kpi.inc_fnb != null ? formatPerc(kpi.inc_fnb) : '—'}
-          compValue={kpiCompV('inc_fnb', formatPerc)} compLabel={compLabel} delta={kpiDelta('inc_fnb')} />
-        <KPICard label="Inc. Extra" value={kpi.inc_extra != null ? formatPerc(kpi.inc_extra) : '—'}
-          compValue={kpiCompV('inc_extra', formatPerc)} compLabel={compLabel} delta={kpiDelta('inc_extra')} />
-        <KPICard label="Tot. Revenue" value={kpi.revenue_total != null ? formatEuroK(kpi.revenue_total) : '—'}
-          compValue={kpiCompV('revenue_total', formatEuroK)} compLabel={compLabel} delta={kpiDelta('revenue_total')} />
+      <div className="ui-kpi-grid" style={{ marginBottom: 24 }}>
+        {[
+          ['Camere vendute', 'rooms_sold', formatN],
+          ['Occupazione', 'occupancy', formatPerc],
+          ['ADR Gruppo', 'adr', formatEuro],
+          ['RevPAR', 'revpar', formatEuro],
+          ['TRevPAR', 'trevpar', formatEuro],
+          ['RMC', 'rmc', formatEuro],
+          ['Inc. Rooms', 'inc_rooms', formatPerc],
+          ['Inc. F&B', 'inc_fnb', formatPerc],
+          ['Inc. Extra', 'inc_extra', formatPerc],
+          ['Tot. Revenue', 'revenue_total', formatEuroK],
+        ].map(([label, key, fmt]) => (
+          <KpiTile key={key} label={label}
+            value={kpi[key] != null ? fmt(kpi[key]) : '—'}
+            confronto={kpiCompV(key, fmt)} confrontoLabel={compLabel} delta={kpiDelta(key)} />
+        ))}
       </div>
 
       {/* Contributo revenue per hotel */}
       {contributi.length > 0 && (
-        <div className="card sezione">
-          <SezioneHeader titolo="Contributo revenue per hotel"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
-            exportSnapshot={snapshotDate} />
+        <Card title="Contributo revenue per hotel" style={{ marginBottom: 24 }} actions={exportGruppo}>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={datiContributoBar} layout="vertical" margin={{ left: 30, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -537,203 +437,147 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
               <YAxis type="category" dataKey="name" tick={{ fontSize: 13 }} />
               <Tooltip formatter={v => formatEuro(v)} />
               <Legend />
-              <ReferenceLine x={0} stroke="#9ca3af" strokeWidth={1} />
-              <Bar dataKey="revenue_rooms" name="Camere" stackId="r" fill="#3b82f6" />
-              <Bar dataKey="revenue_fnb"   name="F&B"    stackId="r" fill="#10b981" />
-              <Bar dataKey="revenue_extra" name="Extra"  stackId="r" fill="#f59e0b" />
+              <ReferenceLine x={0} stroke={colors.textSubtle} strokeWidth={1} />
+              <Bar dataKey="revenue_rooms" name="Camere" stackId="r" fill={COLORI_REVENUE.camere} />
+              <Bar dataKey="revenue_fnb"   name="F&B"    stackId="r" fill={COLORI_REVENUE.fnb} />
+              <Bar dataKey="revenue_extra" name="Extra"  stackId="r" fill={COLORI_REVENUE.extra} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </Card>
       )}
 
       {/* Tabella dettaglio per hotel */}
       {contributi.length > 0 && (
-        <div className="card sezione">
-          <SezioneHeader titolo="Dettaglio per hotel"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
-            exportSnapshot={snapshotDate} />
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left' }}>Hotel</th>
-                  <th>Cam. vend.</th><th>Cam. disp.</th><th>Occup.</th>
-                  <th>ADR</th><th>RevPAR</th>
-                  <th>Rev. Camere</th><th>Rev. F&B</th><th>Rev. Extra</th>
-                  <th>Rev. Totale</th><th>% Gruppo</th>
+        <Card title="Dettaglio per hotel" style={{ marginBottom: 24 }} actions={exportGruppo}>
+          <Table compact>
+            <thead>
+              <tr>
+                <Th>Hotel</Th>
+                <Th num>Cam. vend.</Th><Th num>Cam. disp.</Th><Th num>Occup.</Th>
+                <Th num>ADR</Th><Th num>RevPAR</Th>
+                <Th num>Rev. Camere</Th><Th num>Rev. F&B</Th><Th num>Rev. Extra</Th>
+                <Th num tot>Rev. Totale</Th><Th num>% Gruppo</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {contributi.map(c => (
+                <tr key={c.hotel_code}>
+                  <Td><Dot colore={coloreStruttura(c.hotel_code)} /> <span style={{ marginLeft: 4 }}>{c.hotel_name}</span></Td>
+                  <Td num>{formatN(c.rooms_sold)}</Td>
+                  <Td num>{formatN(c.rooms_available)}</Td>
+                  <Td num>{c.occupancy != null ? formatPerc(c.occupancy) : '—'}</Td>
+                  <Td num>{c.adr != null ? formatEuro(c.adr) : '—'}</Td>
+                  <Td num>{c.revpar != null ? formatEuro(c.revpar) : '—'}</Td>
+                  <Td num>{formatEuro(c.revenue_rooms)}</Td>
+                  <Td num>{formatEuro(c.revenue_fnb)}</Td>
+                  <Td num>{formatEuro(c.revenue_extra)}</Td>
+                  <Td num tot>{formatEuro(c.revenue_total)}</Td>
+                  <Td num>{c.perc_revenue != null ? formatPerc(c.perc_revenue) : '—'}</Td>
                 </tr>
-              </thead>
-              <tbody>
-                {contributi.map(c => (
-                  <tr key={c.hotel_code}>
-                    <td>
-                      <span style={{
-                        display: 'inline-block', width: 10, height: 10,
-                        borderRadius: '50%',
-                        background: COLORI_HOTEL[c.hotel_code] || '#999', marginRight: 6,
-                      }} />
-                      {c.hotel_name}
-                    </td>
-                    <td>{formatN(c.rooms_sold)}</td>
-                    <td>{formatN(c.rooms_available)}</td>
-                    <td>{c.occupancy != null ? formatPerc(c.occupancy) : '—'}</td>
-                    <td>{c.adr != null ? formatEuro(c.adr) : '—'}</td>
-                    <td>{c.revpar != null ? formatEuro(c.revpar) : '—'}</td>
-                    <td>{formatEuro(c.revenue_rooms)}</td>
-                    <td>{formatEuro(c.revenue_fnb)}</td>
-                    <td>{formatEuro(c.revenue_extra)}</td>
-                    <td>{formatEuro(c.revenue_total)}</td>
-                    <td>{c.perc_revenue != null ? formatPerc(c.perc_revenue) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
       )}
 
       {/* Occupazione comparativa per hotel — solo stagione intera */}
-      {modalita === 'stagione' && occupazioneComparativa.length > 0 && (
-        <div className="card sezione">
-          <SezioneHeader titolo="Occupazione settimanale per hotel" />
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={occupazioneComparativa} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
-              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} width={42} />
-              <Tooltip formatter={(v, name) => [v != null ? `${v.toFixed(1)}%` : '—', name]} />
-              <Legend />
-              {pastReferenceArea(occupazioneComparativa, 'week_start', 'label', snapshotDate)}
-              {hotelesAttivi.map(code => (
-                <Line
-                  key={code}
-                  type="monotone"
-                  dataKey={code}
-                  stroke={COLORI_HOTEL[code] || '#999'}
-                  strokeWidth={2}
-                  dot={false}
-                  connectNulls
-                  name={code}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {modalita === 'stagione' && occupazioneComparativa.length > 0 && grafico('Occupazione settimanale per hotel', (
+        <LineChart data={occupazioneComparativa} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
+          <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} width={42} />
+          <Tooltip formatter={(v, name) => [v != null ? `${v.toFixed(1)}%` : '—', name]} />
+          <Legend />
+          {pastReferenceArea(occupazioneComparativa, 'week_start', 'label', snapshotDate)}
+          {hotelesAttivi.map(code => (
+            <Line key={code} type="monotone" dataKey={code} stroke={coloreStruttura(code)}
+              strokeWidth={2} dot={false} connectNulls name={code} />
+          ))}
+        </LineChart>
+      ), false)}
 
       {/* Trend settimanale RevPAR / TRevPAR — solo stagione intera */}
-      {modalita === 'stagione' && settimane.length > 0 && (
-        <div className="card sezione">
-          <SezioneHeader titolo="Trend settimanale gruppo RevPAR / TRevPAR"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
-            exportSnapshot={snapshotDate} />
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
-              <YAxis tickFormatter={v => formatEuro(v)} />
-              <Tooltip formatter={v => formatEuro(v)} />
-              <Legend />
-              {pastReferenceArea(settimaneConfronto, 'week_start', 'label', snapshotDate)}
-              <Line type="monotone" dataKey="trevpar" stroke="#3b82f6" dot={false} name="TRevPAR" strokeWidth={2} />
-              <Line type="monotone" dataKey="revpar"  stroke="#10b981" dot={false} name="RevPAR"  strokeWidth={2} />
-              {datiComp && <>
-                <Line type="monotone" dataKey="trevpar_comp" stroke="#93c5fd" dot={false} strokeDasharray="4 4" name={`TRevPAR ${compLabel}`} />
-                <Line type="monotone" dataKey="revpar_comp"  stroke="#6ee7b7" dot={false} strokeDasharray="4 4" name={`RevPAR ${compLabel}`} />
-              </>}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {modalita === 'stagione' && settimane.length > 0 && grafico('Trend settimanale gruppo RevPAR / TRevPAR', (
+        <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
+          <YAxis tickFormatter={v => formatEuro(v)} />
+          <Tooltip formatter={v => formatEuro(v)} />
+          <Legend />
+          {pastReferenceArea(settimaneConfronto, 'week_start', 'label', snapshotDate)}
+          <Line type="monotone" dataKey="trevpar" stroke={COLORE_TREVPAR} dot={false} name="TRevPAR" strokeWidth={2} />
+          <Line type="monotone" dataKey="revpar"  stroke={COLORE_REVPAR} dot={false} name="RevPAR"  strokeWidth={2} />
+          {datiComp && <>
+            <Line type="monotone" dataKey="trevpar_comp" stroke={COLORE_TREVPAR} dot={false} name={`TRevPAR ${compLabel}`} {...STILE_CONFRONTO} />
+            <Line type="monotone" dataKey="revpar_comp"  stroke={COLORE_REVPAR} dot={false} name={`RevPAR ${compLabel}`} {...STILE_CONFRONTO} />
+          </>}
+        </LineChart>
+      ))}
 
       {/* Trend settimanale Revenue — solo stagione intera */}
-      {modalita === 'stagione' && settimane.length > 0 && (
-        <div className="card sezione">
-          <SezioneHeader titolo="Trend settimanale Revenue"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
-            exportSnapshot={snapshotDate} />
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
-              <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={v => formatEuro(v)} />
-              <Legend />
-              {pastReferenceArea(settimaneConfronto, 'week_start', 'label', snapshotDate)}
-              <Line type="monotone" dataKey="revenue_total" stroke="#f59e0b" dot={false} name="Tot. Revenue" strokeWidth={2} />
-              {datiComp && (
-                <Line type="monotone" dataKey="revenue_total_comp" stroke="#fcd34d" dot={false} strokeDasharray="4 4" name={`Tot. Revenue ${compLabel}`} />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {modalita === 'stagione' && settimane.length > 0 && grafico('Trend settimanale Revenue', (
+        <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
+          <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
+          <Tooltip formatter={v => formatEuro(v)} />
+          <Legend />
+          {pastReferenceArea(settimaneConfronto, 'week_start', 'label', snapshotDate)}
+          <Line type="monotone" dataKey="revenue_total" stroke={COLORE_REVENUE} dot={false} name="Tot. Revenue" strokeWidth={2} />
+          {datiComp && (
+            <Line type="monotone" dataKey="revenue_total_comp" stroke={COLORE_REVENUE} dot={false} name={`Tot. Revenue ${compLabel}`} {...STILE_CONFRONTO} />
+          )}
+        </LineChart>
+      ))}
 
       {/* Trend settimanale Occupazione — solo stagione intera */}
-      {modalita === 'stagione' && settimane.length > 0 && (
-        <div className="card sezione">
-          <SezioneHeader titolo="Trend settimanale Occupazione"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
-            exportSnapshot={snapshotDate} />
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
-              <YAxis tickFormatter={v => `${v.toFixed(1)}%`} domain={[0, 100]} />
-              <Tooltip formatter={(v, n) => [v != null ? `${Number(v).toFixed(1)}%` : '—', n]} />
-              <Legend />
-              {pastReferenceArea(settimaneConfronto, 'week_start', 'label', snapshotDate)}
-              <Line type="monotone" dataKey="occupancy" stroke="#8b5cf6" dot={false} name="Occupazione %" strokeWidth={2} />
-              {datiComp && (
-                <Line type="monotone" dataKey="occupancy_comp" stroke="#c4b5fd" dot={false} strokeDasharray="4 4" name={`Occup. ${compLabel}`} />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {modalita === 'stagione' && settimane.length > 0 && grafico('Trend settimanale Occupazione', (
+        <LineChart data={settimaneConfronto} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
+          <YAxis tickFormatter={v => `${v.toFixed(1)}%`} domain={[0, 100]} />
+          <Tooltip formatter={(v, n) => [v != null ? `${Number(v).toFixed(1)}%` : '—', n]} />
+          <Legend />
+          {pastReferenceArea(settimaneConfronto, 'week_start', 'label', snapshotDate)}
+          <Line type="monotone" dataKey="occupancy" stroke={COLORE_OCCUPAZIONE} dot={false} name="Occupazione %" strokeWidth={2} />
+          {datiComp && (
+            <Line type="monotone" dataKey="occupancy_comp" stroke={COLORE_OCCUPAZIONE} dot={false} name={`Occup. ${compLabel}`} {...STILE_CONFRONTO} />
+          )}
+        </LineChart>
+      ))}
 
       {/* Aggregati settimanali gruppo — solo stagione intera */}
       {modalita === 'stagione' && settimane.length > 0 && (
-        <div className="card sezione">
-          <SezioneHeader titolo="Aggregati settimanali gruppo"
-            exportUrl={`/export/gruppo${exportParams}`} exportNome="gruppo_settimanale"
-            exportSnapshot={snapshotDate} />
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left' }}>Settimana</th>
-                  <th>Hotel</th><th>Cam. vend.</th><th>Occup.</th>
-                  <th>ADR</th><th>RevPAR</th><th>TRevPAR</th>
-                  <th>Rev. Camere</th><th>Rev. F&B</th><th>Rev. Extra</th><th>Rev. Totale</th>
+        <Card title="Aggregati settimanali gruppo" style={{ marginBottom: 24 }} actions={exportGruppo}>
+          <Table compact>
+            <thead>
+              <tr>
+                <Th>Settimana</Th>
+                <Th>Hotel</Th><Th num>Cam. vend.</Th><Th num>Occup.</Th>
+                <Th num>ADR</Th><Th num>RevPAR</Th><Th num>TRevPAR</Th>
+                <Th num>Rev. Camere</Th><Th num>Rev. F&B</Th><Th num>Rev. Extra</Th><Th num tot>Rev. Totale</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {settimane.map((s, i) => (
+                <tr key={i}>
+                  <Td>{s.label}</Td>
+                  <Td muted>{s.hotel_attivi?.join(', ')}</Td>
+                  <Td num>{formatN(s.rooms_sold)}</Td>
+                  <Td num>{s.occupancy != null ? formatPerc(s.occupancy) : '—'}</Td>
+                  <Td num>{s.adr     != null ? formatEuro(s.adr)     : '—'}</Td>
+                  <Td num>{s.revpar  != null ? formatEuro(s.revpar)  : '—'}</Td>
+                  <Td num>{s.trevpar != null ? formatEuro(s.trevpar) : '—'}</Td>
+                  <Td num>{formatEuro(s.revenue_rooms)}</Td>
+                  <Td num>{formatEuro(s.revenue_fnb)}</Td>
+                  <Td num>{formatEuro(s.revenue_extra)}</Td>
+                  <Td num tot>{formatEuro(s.revenue_total)}</Td>
                 </tr>
-              </thead>
-              <tbody>
-                {settimane.map((s, i) => (
-                  <tr key={i}>
-                    <td>{s.label}</td>
-                    <td>{s.hotel_attivi?.join(', ')}</td>
-                    <td>{formatN(s.rooms_sold)}</td>
-                    <td>{s.occupancy != null ? formatPerc(s.occupancy) : '—'}</td>
-                    <td>{s.adr     != null ? formatEuro(s.adr)     : '—'}</td>
-                    <td>{s.revpar  != null ? formatEuro(s.revpar)  : '—'}</td>
-                    <td>{s.trevpar != null ? formatEuro(s.trevpar) : '—'}</td>
-                    <td>{formatEuro(s.revenue_rooms)}</td>
-                    <td>{formatEuro(s.revenue_fnb)}</td>
-                    <td>{formatEuro(s.revenue_extra)}</td>
-                    <td>{formatEuro(s.revenue_total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
       )}
     </>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Componenti di supporto
-// ---------------------------------------------------------------------------
-

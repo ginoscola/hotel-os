@@ -49,12 +49,3 @@ export function ExportMenu({ url, nome, onClick, snapshot }) {
     </div>
   )
 }
-
-export function SezioneHeader({ titolo, exportUrl, exportNome, exportSnapshot }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-      <h3 style={{ margin: 0 }}>{titolo}</h3>
-      <ExportMenu url={exportUrl} nome={exportNome} snapshot={exportSnapshot} />
-    </div>
-  )
-}

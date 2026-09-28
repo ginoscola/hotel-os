@@ -66,6 +66,18 @@ export function coloreSerie(idx) {
   return PALETTE_CATEGORICA[idx % PALETTE_CATEGORICA.length]
 }
 
+// Serie revenue (Camere / F&B / Extra) — uguali in tutti i grafici dell'app.
+export const COLORI_REVENUE = {
+  camere: PALETTE_CATEGORICA[0],
+  fnb: PALETTE_CATEGORICA[1],
+  extra: PALETTE_CATEGORICA[2],
+}
+
+// Convenzione per le serie di CONFRONTO (periodo/anno precedente) nei grafici a linee:
+// stesso colore della serie principale, tratteggiata e semitrasparente.
+// Uso: <Line ... stroke={c} {...STILE_CONFRONTO} />
+export const STILE_CONFRONTO = { strokeDasharray: '4 4', strokeOpacity: 0.55, strokeWidth: 1.5 }
+
 // Scala testi (px). Usare solo questi valori.
 export const fontSize = {
   xs: 11,   // badge, note minime

@@ -103,13 +103,25 @@ export function Messaggio({ tipo = 'err', children, onChiudi }) {
  * Riquadro KPI: etichetta piccola + valore grande (+ riga secondaria opzionale).
  * colore: colore del valore (es. colors.success per scostamento positivo).
  * size 'lg' per il KPI principale di una vista.
+ * Confronto (opzionale): confronto = valore di riferimento già formattato, confrontoLabel = periodo
+ * (es. "sett. prec."), delta = variazione % (numero; verde se > 0, rosso se < 0).
+ * Dentro <div className="ui-kpi-row"> (fila) o <div className="ui-kpi-grid"> (griglia regolare).
  */
-export function KpiTile({ label, value, sub, colore, size = 'md', minWidth = 150 }) {
+export function KpiTile({ label, value, sub, colore, size = 'md', minWidth = 150, confronto, confrontoLabel, delta }) {
+  const haDelta = delta != null
   return (
     <div className={cx('ui-kpi', size === 'lg' && 'ui-kpi-lg')} style={{ minWidth }}>
       <div className="ui-kpi-label">{label}</div>
       <div className="ui-kpi-valore ui-num" style={colore ? { color: colore } : undefined}>{value ?? '—'}</div>
       {sub != null && <div className="ui-kpi-sub ui-num">{sub}</div>}
+      {confronto != null && (
+        <div className="ui-kpi-sub ui-num">{confrontoLabel && <span>{confrontoLabel}: </span>}{confronto}</div>
+      )}
+      {haDelta && (
+        <div style={{ marginTop: 4 }}>
+          <Badge tono={delta > 0 ? 'ok' : delta < 0 ? 'err' : 'neutral'}>{delta > 0 ? '+' : ''}{delta.toFixed(1)}%</Badge>
+        </div>
+      )}
     </div>
   )
 }

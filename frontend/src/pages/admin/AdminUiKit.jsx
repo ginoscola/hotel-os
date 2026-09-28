@@ -140,6 +140,7 @@ export default function AdminUiKit() {
           <KpiTile label="Scostamento %" value="-3,2%" colore={colors.danger} />
           <KpiTile label="Cam. Vend. Budget" value="12.450" sub="→ 12.980" />
           <KpiTile label="Principale (size lg)" value={formatEuro(3400000)} size="lg" />
+          <KpiTile label="Con confronto" value={formatEuro(142.5)} confronto={formatEuro(131.2)} confrontoLabel="anno prec." delta={8.6} />
         </div>
       </Card>
 
