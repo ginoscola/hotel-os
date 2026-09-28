@@ -14,16 +14,27 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import { ExportMenu } from '../../components/ExportMenu'
 import { formatEuro, formatData, mostraErrore } from '../../utils/format'
+import {
+  Checkbox, Field, HotelTag, Input, Loading, Messaggio, SegmentedControl, StatoVuoto, Table, Td, Th,
+} from '../../components/ui'
+import { colors } from '../../styles/tokens.js'
 
 const LS_HOTEL = 'prod_ricavi_camere_hotel'
 const LS_VISTA = 'prod_ricavi_camere_vista'
 
-const HOTEL_BUTTONS = [
-  { code: 'DPH', label: 'DPH' },
-  { code: 'CLB', label: 'CLB' },
-  { code: 'INT', label: 'INT' },
-  { code: 'GRUPPO', label: 'Gruppo' },
+const OPZIONI_HOTEL = [
+  { value: 'DPH', label: 'DPH' },
+  { value: 'CLB', label: 'CLB' },
+  { value: 'INT', label: 'INT' },
+  { value: 'GRUPPO', label: 'Gruppo' },
 ]
+const OPZIONI_VISTA = [
+  { value: 'categoria', label: 'Per categoria' },
+  { value: 'trattamento', label: 'Per trattamento' },
+]
+
+// Separatore verticale tra gruppi di controlli nella barra
+const Sep = () => <div style={{ width: 1, height: 28, background: colors.border }} />
 
 const _oggi = new Date()
 const ANNO = _oggi.getFullYear()
@@ -34,34 +45,6 @@ const numCamera = (code) => {
   const m = String(code || '').match(/\d+/)
   return m ? parseInt(m[0], 10) : Number.POSITIVE_INFINITY
 }
-
-const btnHotel = (active) => ({
-  padding: '6px 14px', borderRadius: 6, border: '1px solid #cbd5e1',
-  cursor: 'pointer', fontWeight: active ? 700 : 400, fontSize: 13,
-  background: active ? '#1e293b' : '#f8fafc',
-  color: active ? '#fff' : '#374151', transition: 'all .15s',
-})
-const btnVista = (active) => ({
-  padding: '5px 12px', borderRadius: 6, border: '1px solid #cbd5e1',
-  cursor: 'pointer', fontWeight: active ? 700 : 400, fontSize: 13,
-  background: active ? '#0f766e' : '#f0fdfa',
-  color: active ? '#fff' : '#0f766e', transition: 'all .15s',
-})
-const inpSt = {
-  padding: '5px 8px', border: '1px solid #e2e8f0', borderRadius: 5,
-  fontSize: '0.85rem', color: '#1e293b',
-}
-const th = {
-  padding: '6px 8px', fontWeight: 600, fontSize: '0.72rem', whiteSpace: 'nowrap',
-  textAlign: 'right', color: '#fff', background: '#1e3a5f', position: 'sticky', top: 0,
-}
-const td = {
-  padding: '5px 8px', fontSize: '0.8rem', borderBottom: '1px solid #f1f5f9',
-  whiteSpace: 'nowrap', textAlign: 'right',
-}
-// Riga TOTALE: sfondo su OGNI <td> (la regola globale tr:nth-child(even) td
-// sovrascriverebbe uno sfondo messo solo sulla <tr>).
-const tdTot = { ...td, background: '#1e3a5f', color: '#fff', fontWeight: 700, borderBottom: 'none' }
 
 export default function TabRicaviCamere({ lordo }) {
   const [hotelSel, setHotelSel] = useState(() => localStorage.getItem(LS_HOTEL) || 'GRUPPO')
@@ -160,7 +143,7 @@ export default function TabRicaviCamere({ lordo }) {
     return { tot: Math.round(tot * 100) / 100, cols }
   }, [righeFiltrate, colFinali, F, vista])
 
-  const cell = (v) => (!v ? <span style={{ color: '#cbd5e1' }}>—</span> : formatEuro(Math.round(v * 100) / 100))
+  const cell = (v) => (!v ? <span style={{ color: colors.borderStrong }}>—</span> : formatEuro(Math.round(v * 100) / 100))
 
   const exportParams = new URLSearchParams({
     hotel_code: hotelSel, data_da: da, data_a: a, vista,
@@ -174,45 +157,22 @@ export default function TabRicaviCamere({ lordo }) {
   return (
     <div>
       {/* Barra controlli */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {HOTEL_BUTTONS.map(h => (
-            <button key={h.code} onClick={() => cambiaHotel(h.code)} style={btnHotel(hotelSel === h.code)}>
-              {h.label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ width: 1, height: 28, background: '#e2e8f0' }} />
-
-        <label style={{ fontSize: 13, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 3 }}>
-          Dal
-          <input type="date" value={da} onChange={e => setDa(e.target.value)} style={inpSt} />
-        </label>
-        <label style={{ fontSize: 13, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 3 }}>
-          Al
-          <input type="date" value={a} onChange={e => setA(e.target.value)} style={inpSt} />
-        </label>
-
-        <div style={{ width: 1, height: 28, background: '#e2e8f0' }} />
-
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => cambiaVista('categoria')} style={btnVista(vista === 'categoria')}>Per categoria</button>
-          <button onClick={() => cambiaVista('trattamento')} style={btnVista(vista === 'trattamento')}>Per trattamento</button>
-        </div>
-
-        <label style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}>
-          <input type="checkbox" checked={mostraZero} onChange={e => setMostraZero(e.target.checked)} />
-          Mostra camere a zero
-        </label>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 14, flexWrap: 'wrap' }}>
+        <SegmentedControl value={hotelSel} onChange={cambiaHotel} options={OPZIONI_HOTEL} />
+        <Sep />
+        <Field label="Dal"><Input type="date" value={da} onChange={e => setDa(e.target.value)} /></Field>
+        <Field label="Al"><Input type="date" value={a} onChange={e => setA(e.target.value)} /></Field>
+        <Sep />
+        <SegmentedControl value={vista} onChange={cambiaVista} options={OPZIONI_VISTA} />
+        <Checkbox checked={mostraZero} onChange={setMostraZero} label="Mostra camere a zero" style={{ alignSelf: 'center' }} />
 
         <div style={{ position: 'relative' }}>
-          <input
+          <Input
             type="text"
             value={filtro}
             onChange={e => setFiltro(e.target.value)}
             placeholder="Cerca camera o categoria…"
-            style={{ ...inpSt, width: 210, paddingRight: filtro ? 24 : 8 }}
+            style={{ width: 220, paddingRight: filtro ? 26 : 10 }}
           />
           {filtro && (
             <button
@@ -220,92 +180,83 @@ export default function TabRicaviCamere({ lordo }) {
               title="Pulisci"
               style={{
                 position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
-                border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8',
+                border: 'none', background: 'none', cursor: 'pointer', color: colors.textSubtle,
                 fontSize: 14, lineHeight: 1, padding: 2,
               }}
             >×</button>
           )}
         </div>
 
-        <span style={{ marginLeft: 'auto' }}>
+        <span style={{ marginLeft: 'auto', alignSelf: 'center' }}>
           <ExportMenu url={exportUrl} nome={exportNome} />
         </span>
       </div>
 
       {/* Banner fonte / range dati */}
-      <div style={{
-        background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6,
-        padding: '8px 12px', fontSize: '0.78rem', color: '#475569', marginBottom: 14,
-      }}>
-Valori a <strong>maturato</strong> (quota spalmata notte per notte), non a fatturato: sul singolo mese possono differire dai Corrispettivi per i soggiorni a cavallo di fine mese; riconciliano sulla stagione.
+      <Messaggio tipo="info">
+        Valori a <strong>maturato</strong> (quota spalmata notte per notte), non a fatturato: sul singolo mese possono differire dai Corrispettivi per i soggiorni a cavallo di fine mese; riconciliano sulla stagione.
         {rng?.min
           ? <> Dati disponibili dal <strong>{formatData(rng.min)}</strong> al <strong>{formatData(rng.max)}</strong>.</>
           : <> Nessun dato di produzione importato.</>}
-      </div>
+      </Messaggio>
 
-      {errore && <p style={{ color: '#ef4444', fontSize: '0.85rem' }}>{errore}</p>}
-      {loading && <p style={{ color: '#64748b', fontSize: '0.85rem' }}>Caricamento…</p>}
+      <Messaggio tipo="err">{errore}</Messaggio>
+      {loading && <Loading />}
 
       {!loading && data && righe.length === 0 && !errore && (
-        <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Nessun ricavo per il periodo selezionato.</p>
+        <StatoVuoto>Nessun ricavo per il periodo selezionato.</StatoVuoto>
       )}
 
       {!loading && data && righe.length > 0 && righeFiltrate.length === 0 && (
-        <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Nessun risultato per “{filtro.trim()}”.</p>
+        <StatoVuoto>Nessun risultato per “{filtro.trim()}”.</StatoVuoto>
       )}
 
       {!loading && data && righeFiltrate.length > 0 && (
-        <div style={{ overflowX: 'auto', maxHeight: '70vh', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-            <thead>
-              <tr>
-                {isGruppo && <th style={{ ...th, textAlign: 'left' }}>Struttura</th>}
-                <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortKey('camera')}>
-                  Camera {sortKey === 'camera' ? '▲' : ''}
-                </th>
-                <th style={{ ...th, textAlign: 'left' }}>Tipo</th>
-                {colFinali.map(c => (
-                  <th key={c.key} style={th}>
-                    {c.colore && (
-                      <span style={{
-                        display: 'inline-block', width: 8, height: 8, borderRadius: 2,
-                        background: c.colore, marginRight: 4, verticalAlign: 'middle',
-                      }} />
-                    )}
-                    {c.label}
-                  </th>
-                ))}
-                <th style={{ ...th, cursor: 'pointer' }} onClick={() => setSortKey('totale')}>
-                  TOTALE {sortKey === 'totale' ? '▼' : ''}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {righeFiltrate.map(r => (
-                <tr key={`${r.struttura_code}_${r.camera}`}>
-                  {isGruppo && <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{r.struttura_code}</td>}
-                  <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: '#1e293b' }}>{r.camera}</td>
-                  <td style={{ ...td, textAlign: 'left', color: '#64748b' }}>{r.tipo_camera || '—'}</td>
-                  {colFinali.map(c => (
-                    <td key={c.key} style={td}>{cell(valore(r, c.key))}</td>
-                  ))}
-                  <td style={{ ...td, fontWeight: 700, color: '#1e293b' }}>{cell(r.totale[F] || 0)}</td>
-                </tr>
+        <Table compact maxHeight="70vh">
+          <thead>
+            <tr>
+              {isGruppo && <Th>Struttura</Th>}
+              <Th className="ordinabile" onClick={() => setSortKey('camera')} title="Ordina per numero camera">
+                Camera {sortKey === 'camera' ? '▲' : ''}
+              </Th>
+              <Th>Tipo</Th>
+              {colFinali.map(c => (
+                <Th key={c.key} num>
+                  {c.colore && (
+                    <span style={{
+                      display: 'inline-block', width: 8, height: 8, borderRadius: 2,
+                      background: c.colore, marginRight: 4, verticalAlign: 'middle',
+                    }} />
+                  )}
+                  {c.label}
+                </Th>
               ))}
-              {/* Riga TOTALE (sfondo su ogni td) — calcolata sulle righe/colonne visibili */}
-              <tr>
-                {isGruppo && <td style={{ ...tdTot, textAlign: 'left' }}>TOTALE</td>}
-                <td style={{ ...tdTot, textAlign: 'left' }} colSpan={2}>
-                  {isGruppo ? `${righeFiltrate.length} camere` : `TOTALE — ${righeFiltrate.length} camere`}
-                </td>
-                {colFinali.map(c => (
-                  <td key={c.key} style={tdTot}>{cell(totVisibile.cols[c.key] || 0)}</td>
-                ))}
-                <td style={tdTot}>{cell(totVisibile.tot || 0)}</td>
+              <Th num tot className="ordinabile" onClick={() => setSortKey('totale')} title="Ordina per ricavo decrescente">
+                TOTALE {sortKey === 'totale' ? '▼' : ''}
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {righeFiltrate.map(r => (
+              <tr key={`${r.struttura_code}_${r.camera}`}>
+                {isGruppo && <Td><HotelTag code={r.struttura_code} /></Td>}
+                <Td style={{ fontWeight: 600 }}>{r.camera}</Td>
+                <Td style={{ color: colors.textMuted }}>{r.tipo_camera || '—'}</Td>
+                {colFinali.map(c => <Td key={c.key} num>{cell(valore(r, c.key))}</Td>)}
+                <Td num tot style={{ fontWeight: 700 }}>{cell(r.totale[F] || 0)}</Td>
               </tr>
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {/* Riga TOTALE — calcolata sulle righe/colonne visibili */}
+            <tr className="ui-riga-totale">
+              {isGruppo && <Td>TOTALE</Td>}
+              <Td colSpan={2}>
+                {isGruppo ? `${righeFiltrate.length} camere` : `TOTALE — ${righeFiltrate.length} camere`}
+              </Td>
+              {colFinali.map(c => <Td key={c.key} num>{cell(totVisibile.cols[c.key] || 0)}</Td>)}
+              <Td num tot>{cell(totVisibile.tot || 0)}</Td>
+            </tr>
+          </tbody>
+        </Table>
       )}
     </div>
   )

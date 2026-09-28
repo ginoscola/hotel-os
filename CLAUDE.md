@@ -244,7 +244,14 @@ contrasto con l'app reale) è stato eliminato.
   allineate, `tot` = colonna totale), `Badge`, `Dot`, `HotelTag`, `Messaggio`, `Loading`,
   `StatoVuoto`, `Modal`, `KpiTile` (etichetta + valore + sub, in fila dentro `<div
   className="ui-kpi-row">`), `FileButton` (pulsante che apre la scelta file), `ThOrdinabile`
-  (intestazione cliccabile ▲▼), `Paginazione`, `Textarea`, `Checkbox`.
+  (intestazione cliccabile ▲▼), `Paginazione`, `Textarea`, `Checkbox`, `NavAnno`, `DropZone`
+  (area trascina-file), `Drawer` (pannello laterale di dettaglio). `Table maxHeight="70vh"` =
+  scroll verticale con intestazione fissa. Intestazioni a due livelli: seconda riga
+  `<tr className="sub">`, `Th`/`Td` con `gruppo` per il bordo di inizio gruppo colonne.
+- **`PALETTE_CATEGORICA`/`coloreSerie(idx)`** (in `tokens.js`, prima in `produzioneHelpers.js` che
+  ora la riesporta): palette validata per serie/categorie nei grafici — usare questa, non colori a caso.
+- **`ExportMenu`** (componente condiviso) ha lo stile della libreria in tutta l'app; un errore di
+  export compare come avviso temporaneo invece che come testo rosso accanto al pulsante.
 - **`colors.accent`** (viola `#7c3aed`): unico colore extra ammesso oltre ai colori di significato,
   **solo** per "valore manuale che sostituisce il dato automatico" (oggi: Maturato in Forecast). Catalogo visivo: Admin → Sistema → Libreria UI (`?s=ui-kit`,
   `pages/admin/AdminUiKit.jsx`) — aggiornarlo quando si aggiunge un componente.
@@ -261,7 +268,9 @@ contrasto con l'app reale) è stato eliminato.
   ✅ USALI (pilota, v3.15.0), ✅ Budget (v3.15.1 — ora ha un titolo pagina con hotel come
   `SegmentedControl`, anno/versione in `PageHeader`; colori grafici Budget/Actual = `textSubtle`/`info`).
   ✅ Forecast (v3.15.2 — tolto il viola "di marca" e l'azzurro di Cancellazioni, tenuto
-  `colors.accent` per il Maturato; titolo senza emoji). Da fare: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  `colors.accent` per il Maturato; titolo senza emoji), ✅ Statistiche Produzione (v3.15.3 —
+  filtro struttura come `SegmentedControl` "Tutte/hotel" via `OPZIONI_STRUTTURA` in
+  `produzioneHelpers.js`; tolto il titolo interno duplicato delle tab Analisi). Da fare: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati

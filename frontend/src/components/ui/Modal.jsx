@@ -27,3 +27,31 @@ export function Modal({ titolo, onChiudi, children, footer, larghezza = 480, chi
     </div>
   )
 }
+
+/**
+ * Pannello laterale da destra (dettaglio di una cella/riga). Chiude con Esc o click fuori.
+ * titolo: testo in grassetto; sottotitolo: riga sotto (es. data).
+ */
+export function Drawer({ titolo, sottotitolo, onChiudi, larghezza = 480, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onChiudi() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onChiudi])
+
+  return (
+    <>
+      <div className="ui-drawer-overlay" onClick={onChiudi} />
+      <aside className="ui-drawer" style={{ width: larghezza }} role="dialog" aria-modal="true">
+        <div className="ui-drawer-header">
+          <div>
+            <strong>{titolo}</strong>
+            {sottotitolo && <div className="ui-text-muted" style={{ marginTop: 2 }}>{sottotitolo}</div>}
+          </div>
+          <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={onChiudi} aria-label="Chiudi">×</button>
+        </div>
+        <div className="ui-drawer-body">{children}</div>
+      </aside>
+    </>
+  )
+}

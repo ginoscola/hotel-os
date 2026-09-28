@@ -2,29 +2,37 @@
 //
 // Righe speciali: className sulla <tr>
 //   ui-riga-attenuata (dati assenti) · ui-riga-avviso (da compilare) · ui-riga-ok (completata)
+//   ui-riga-evidenza (es. sabato) · ui-riga-dettaglio (riga espansa sotto una riga, con colSpan)
 //   ui-riga-subtotale · ui-riga-sezione · ui-riga-risultato · ui-riga-totale
 // Lo sfondo è applicato alle <td> dal CSS (non alla <tr>): niente più bug riga pari/dispari.
 import { cx } from './classi.js'
 
-/** Contenitore con bordo arrotondato e scroll orizzontale + <table>. */
-export function Table({ children, compact, minWidth, className, style }) {
+/**
+ * Contenitore con bordo arrotondato e scroll orizzontale + <table>.
+ * maxHeight: altezza massima con scroll verticale e intestazione fissa in alto.
+ */
+export function Table({ children, compact, minWidth, maxHeight, className, style }) {
   return (
-    <div className="ui-table-wrap" style={style}>
-      <table className={cx('ui-table', compact && 'ui-table-compact', className)} style={minWidth ? { minWidth } : undefined}>
+    <div className="ui-table-wrap" style={maxHeight ? { maxHeight, overflowY: 'auto', ...style } : style}>
+      <table className={cx('ui-table', compact && 'ui-table-compact', maxHeight && 'ui-table-sticky', className)} style={minWidth ? { minWidth } : undefined}>
         {children}
       </table>
     </div>
   )
 }
 
-/** Cella intestazione. num = allineata a destra; tot = colonna totale (più scura, bordo a sinistra). */
-export function Th({ num, center, tot, className, ...rest }) {
-  return <th className={cx(num && 'num', center && 'center', tot && 'tot', className)} {...rest} />
+/**
+ * Cella intestazione. num = allineata a destra; tot = colonna totale (più scura, bordo a sinistra);
+ * gruppo = inizio di un gruppo di colonne (bordo a sinistra). Per la seconda riga di un'intestazione
+ * a due livelli: <tr className="sub">.
+ */
+export function Th({ num, center, tot, gruppo, className, ...rest }) {
+  return <th className={cx(num && 'num', center && 'center', tot && 'tot', gruppo && 'gruppo', className)} {...rest} />
 }
 
-/** Cella. num = importo/numero (destra, cifre allineate); muted = testo tenue; tot = colonna totale. */
-export function Td({ num, center, muted, tot, className, ...rest }) {
-  return <td className={cx(num && 'num', center && 'center', muted && 'muted', tot && 'tot', className)} {...rest} />
+/** Cella. num = importo/numero (destra, cifre allineate); muted = testo tenue; tot = colonna totale; gruppo = bordo di gruppo. */
+export function Td({ num, center, muted, tot, gruppo, className, ...rest }) {
+  return <td className={cx(num && 'num', center && 'center', muted && 'muted', tot && 'tot', gruppo && 'gruppo', className)} {...rest} />
 }
 
 /**

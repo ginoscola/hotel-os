@@ -1,6 +1,8 @@
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
-import { STRUTTURE_HOTEL, NOMI, meseNome, thSt, tdSt, inpSt } from '../../utils/produzioneHelpers'
+import { STRUTTURE_HOTEL, NOMI, meseNome, OPZIONI_STRUTTURA } from '../../utils/produzioneHelpers'
+import { Loading, NavAnno, SegmentedControl, Table, Td, Th } from '../../components/ui'
+import { colors } from '../../styles/tokens.js'
 
 const SOTTOCOLONNE = ['colazione', 'pranzo', 'cena']
 const LABEL_SOTTOCOLONNA = { colazione: 'Colazione', pranzo: 'Pranzo', cena: 'Cena' }
@@ -38,116 +40,95 @@ export default function TabConteggioPasti() {
 
   useEffect(() => { carica() }, [carica])
 
-  const selSt = { ...inpSt, fontSize: '0.82rem' }
-  const bordoGruppo = '3px solid #4a6fa5'
-  const bordoSotto = '1px solid #3d6a9a'
-
   const totaleAnnoSotto = (sc, code) => dati.mesi.reduce((s, mo) => s + valoreSotto(mo.per_struttura[sc], code), 0)
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-        <button onClick={() => setAnno(a => a - 1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9' }}>←</button>
-        <span style={{ fontWeight: 700, minWidth: 60, textAlign: 'center' }}>{anno}</span>
-        <button onClick={() => setAnno(a => a + 1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9' }}>→</button>
-        <select value={struttura} onChange={e => setStruttura(e.target.value)} style={selSt}>
-          <option value="">Tutte le strutture</option>
-          {STRUTTURE_HOTEL.map(sc => <option key={sc} value={sc}>{NOMI[sc]}</option>)}
-        </select>
-        <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Clicca su Colazione per il dettaglio trattamento/extra</span>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
+        <NavAnno anno={anno} onChange={setAnno} />
+        <SegmentedControl value={struttura} onChange={setStruttura} options={OPZIONI_STRUTTURA} />
+        <span className="ui-text-muted">Clicca su Colazione per il dettaglio trattamento/extra</span>
       </div>
 
-      {loading && <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>}
+      {loading && <Loading />}
 
       {dati && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.85rem' }}>
-            <thead>
-              {/* Riga 1: strutture */}
-              <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                <th style={{ ...thSt, textAlign: 'left' }} rowSpan={2}>Mese</th>
-                {strutture.map(sc => (
-                  <th key={sc} style={{ ...thSt, borderLeft: bordoGruppo }} colSpan={SOTTOCOLONNE.length}>{NOMI[sc]}</th>
-                ))}
-                <th style={{ ...thSt, borderLeft: bordoGruppo }} rowSpan={2}>Totale pasti</th>
-              </tr>
-              {/* Riga 2: colazione/pranzo/cena */}
-              <tr style={{ background: '#2d4f7c', color: '#cbd5e1' }}>
-                {strutture.map(sc => (
-                  SOTTOCOLONNE.map((code, i) => (
-                    <th key={`${sc}_${code}`} style={{
-                      ...thSt, color: '#cbd5e1', fontSize: '0.75rem', fontWeight: 400,
-                      borderLeft: i === 0 ? bordoGruppo : bordoSotto,
-                    }}>{LABEL_SOTTOCOLONNA[code]}</th>
-                  ))
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {dati.mesi.map((mo, idx) => (
-                <Fragment key={mo.mese}>
-                  <tr style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                    <td style={{ ...tdSt, textAlign: 'left', fontWeight: 600 }}>{meseNome(mo.mese)}</td>
-                    {strutture.map(sc => {
-                      const agg = mo.per_struttura[sc]
-                      const chiave = `${mo.mese}_${sc}`
-                      return SOTTOCOLONNE.map((code, i) => {
-                        const v = valoreSotto(agg, code)
-                        const cliccabile = code === 'colazione' && v > 0
-                        return (
-                          <td key={`${sc}_${code}`} style={{
-                            ...tdSt, borderLeft: i === 0 ? bordoGruppo : bordoSotto,
+        <Table>
+          <thead>
+            {/* Riga 1: strutture */}
+            <tr>
+              <Th rowSpan={2} style={{ verticalAlign: 'bottom' }}>Mese</Th>
+              {strutture.map(sc => (
+                <Th key={sc} center gruppo colSpan={SOTTOCOLONNE.length}>{NOMI[sc]}</Th>
+              ))}
+              <Th num gruppo rowSpan={2} style={{ verticalAlign: 'bottom' }}>Totale pasti</Th>
+            </tr>
+            {/* Riga 2: colazione/pranzo/cena */}
+            <tr className="sub">
+              {strutture.map(sc => (
+                SOTTOCOLONNE.map((code, i) => (
+                  <Th key={`${sc}_${code}`} num gruppo={i === 0}>{LABEL_SOTTOCOLONNA[code]}</Th>
+                ))
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {dati.mesi.map(mo => (
+              <Fragment key={mo.mese}>
+                <tr>
+                  <Td style={{ fontWeight: 600 }}>{meseNome(mo.mese)}</Td>
+                  {strutture.map(sc => {
+                    const agg = mo.per_struttura[sc]
+                    const chiave = `${mo.mese}_${sc}`
+                    return SOTTOCOLONNE.map((code, i) => {
+                      const v = valoreSotto(agg, code)
+                      const cliccabile = code === 'colazione' && v > 0
+                      return (
+                        <Td key={`${sc}_${code}`} num gruppo={i === 0}
+                          style={{
                             cursor: cliccabile ? 'pointer' : 'default',
-                            color: v ? '#1e293b' : '#e2e8f0',
+                            color: v ? undefined : colors.borderStrong,
                             textDecoration: cliccabile ? 'underline dotted' : 'none',
                           }}
-                            onClick={() => cliccabile && setEspanso(espanso === chiave ? null : chiave)}
-                            title={cliccabile ? 'Clicca per il dettaglio trattamento/extra' : undefined}
-                          >
-                            {v || '—'}
-                          </td>
-                        )
-                      })
-                    })}
-                    <td style={{ ...tdSt, fontWeight: 700, borderLeft: bordoGruppo }}>{mo.totale.totale || 0}</td>
-                  </tr>
-                  {strutture.map(sc => {
-                    const chiave = `${mo.mese}_${sc}`
-                    if (espanso !== chiave) return null
-                    const agg = mo.per_struttura[sc] || {}
-                    return (
-                      <tr key={chiave}>
-                        <td colSpan={totColonne} style={{ padding: '0.5rem 1rem 0.75rem 2rem', background: '#eff6ff' }}>
-                          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.8rem' }}>
-                            <span style={{ color: '#64748b' }}>{NOMI[sc]} — {meseNome(mo.mese)}:</span>
-                            <div><span style={{ color: '#64748b' }}>Colazione trattamento: </span><strong>{agg.colazione || 0}</strong></div>
-                            <div><span style={{ color: '#64748b' }}>Colazione extra: </span><strong>{agg.colazione_extra || 0}</strong></div>
-                          </div>
-                        </td>
-                      </tr>
-                    )
+                          onClick={() => cliccabile && setEspanso(espanso === chiave ? null : chiave)}
+                          title={cliccabile ? 'Clicca per il dettaglio trattamento/extra' : undefined}
+                        >
+                          {v || '—'}
+                        </Td>
+                      )
+                    })
                   })}
-                </Fragment>
+                  <Td num gruppo style={{ fontWeight: 700 }}>{mo.totale.totale || 0}</Td>
+                </tr>
+                {strutture.map(sc => {
+                  const chiave = `${mo.mese}_${sc}`
+                  if (espanso !== chiave) return null
+                  const agg = mo.per_struttura[sc] || {}
+                  return (
+                    <tr key={chiave} className="ui-riga-dettaglio">
+                      <Td colSpan={totColonne}>
+                        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                          <span className="ui-text-muted">{NOMI[sc]} — {meseNome(mo.mese)}:</span>
+                          <div><span style={{ color: colors.textMuted }}>Colazione trattamento: </span><strong>{agg.colazione || 0}</strong></div>
+                          <div><span style={{ color: colors.textMuted }}>Colazione extra: </span><strong>{agg.colazione_extra || 0}</strong></div>
+                        </div>
+                      </Td>
+                    </tr>
+                  )
+                })}
+              </Fragment>
+            ))}
+            <tr className="ui-riga-totale">
+              <Td>ANNO</Td>
+              {strutture.map(sc => (
+                SOTTOCOLONNE.map((code, i) => (
+                  <Td key={`tot_${sc}_${code}`} num gruppo={i === 0}>{totaleAnnoSotto(sc, code) || 0}</Td>
+                ))
               ))}
-              <tr style={{ background: '#1e3a5f', color: '#fff', fontWeight: 800 }}>
-                <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', textAlign: 'left', borderBottom: 'none' }}>ANNO</td>
-                {strutture.map(sc => (
-                  SOTTOCOLONNE.map((code, i) => (
-                    <td key={`tot_${sc}_${code}`} style={{
-                      ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none',
-                      borderLeft: i === 0 ? bordoGruppo : bordoSotto,
-                    }}>
-                      {totaleAnnoSotto(sc, code) || 0}
-                    </td>
-                  ))
-                ))}
-                <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none', borderLeft: bordoGruppo }}>
-                  {dati.totale_anno.totale || 0}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+              <Td num gruppo>{dati.totale_anno.totale || 0}</Td>
+            </tr>
+          </tbody>
+        </Table>
       )}
     </div>
   )

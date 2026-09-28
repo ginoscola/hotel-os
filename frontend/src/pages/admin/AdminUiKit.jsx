@@ -5,7 +5,7 @@ import {
   Button, PageHeader, SectionTitle, Card, Badge, Dot, HotelTag, Loading, StatoVuoto, Messaggio,
   Tabs, SegmentedControl, ToggleIva, Input, Select, Field, NavMese,
   Table, Th, Td, Modal, useConferma, useAvvisi, KpiTile, FileButton,
-  ThOrdinabile, Paginazione, Textarea, Checkbox,
+  ThOrdinabile, Paginazione, Textarea, Checkbox, DropZone, Drawer, NavAnno,
 } from '../../components/ui'
 import { colors, COLORI_STRUTTURA, fontSize } from '../../styles/tokens.js'
 import { formatEuro } from '../../utils/format.js'
@@ -38,6 +38,8 @@ export default function AdminUiKit() {
   const [ord, setOrd] = useState({ ordinaPer: 'nome', direzione: 'asc' })
   const [pag, setPag] = useState(1)
   const [spunta, setSpunta] = useState(true)
+  const [drawer, setDrawer] = useState(false)
+  const [annoDemo, setAnnoDemo] = useState(2026)
   const ordina = (campo) => setOrd(o => o.ordinaPer === campo
     ? { ...o, direzione: o.direzione === 'asc' ? 'desc' : 'asc' }
     : { ordinaPer: campo, direzione: 'asc' })
@@ -115,6 +117,7 @@ export default function AdminUiKit() {
           options={[{ value: 'DPH', label: 'Du Parc' }, { value: 'CLB', label: 'Club Hotel' }, { value: 'INT', label: 'International' }]} />
         <ToggleIva lordo={lordo} onChange={setLordo} />
         <NavMese anno={periodo.anno} mese={periodo.mese} onChange={setPeriodo} />
+        <NavAnno anno={annoDemo} onChange={setAnnoDemo} />
       </Blocco>
 
       <Blocco titolo="Campi">
@@ -136,9 +139,13 @@ export default function AdminUiKit() {
         </div>
       </Card>
 
-      <Blocco titolo="Caricamento file">
-        <FileButton accept=".xlsx" onFile={f => avvisi.info(`Scelto: ${f.name}`)}>Importa da Excel</FileButton>
-      </Blocco>
+      <Card title="Caricamento file" style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 12 }}>
+          <FileButton accept=".xlsx" onFile={f => avvisi.info(`Scelto: ${f.name}`)}>Importa da Excel</FileButton>
+        </div>
+        <DropZone accept=".xlsx" icona="📈" titolo="Trascina qui il file (DropZone)" sottotitolo="oppure clicca per selezionarlo"
+          onFile={f => avvisi.info(`Scelto: ${f.name}`)} />
+      </Card>
 
       <Blocco titolo="Badge e pallini">
         <Badge>NEUTRO</Badge><Badge tono="info">AUTO</Badge><Badge tono="ok">OK</Badge>
@@ -162,6 +169,7 @@ export default function AdminUiKit() {
         <Button variant="secondary" onClick={() => avvisi.successo('Valori salvati')}>Avviso successo</Button>
         <Button variant="secondary" onClick={() => avvisi.errore('Errore export: file non generato')}>Avviso errore</Button>
         <Button variant="secondary" onClick={() => setModale(true)}>Modale generica</Button>
+        <Button variant="secondary" onClick={() => setDrawer(true)}>Pannello laterale (Drawer)</Button>
       </Blocco>
 
       <Card title="Tabella" style={{ marginBottom: 20 }}>
@@ -176,10 +184,32 @@ export default function AdminUiKit() {
             <tr className="ui-riga-attenuata"><Td>Dati assenti (ui-riga-attenuata)</Td><Td num>—</Td><Td num>—</Td><Td num tot>—</Td></tr>
             <tr className="ui-riga-avviso"><Td>Da compilare (ui-riga-avviso)</Td><Td num>{formatEuro(0)}</Td><Td num>{formatEuro(0)}</Td><Td num tot>{formatEuro(0)}</Td></tr>
             <tr className="ui-riga-ok"><Td>Completata (ui-riga-ok)</Td><Td num>{formatEuro(1000)}</Td><Td num>{formatEuro(900)}</Td><Td num tot>{formatEuro(1900)}</Td></tr>
+            <tr className="ui-riga-evidenza"><Td>Evidenziata, es. sabato (ui-riga-evidenza)</Td><Td num>{formatEuro(500)}</Td><Td num>{formatEuro(400)}</Td><Td num tot>{formatEuro(900)}</Td></tr>
+            <tr className="ui-riga-dettaglio"><Td colSpan={4}>Riga di dettaglio espansa (ui-riga-dettaglio): alloggio {formatEuro(300)} · colazione {formatEuro(120)}</Td></tr>
             <tr className="ui-riga-subtotale"><Td>Subtotale (ui-riga-subtotale)</Td><Td num>{formatEuro(165640.5)}</Td><Td num>{formatEuro(130432.4)}</Td><Td num tot>{formatEuro(296072.9)}</Td></tr>
             <tr className="ui-riga-sezione"><Td>Totale sezione (ui-riga-sezione)</Td><Td num>{formatEuro(165640.5)}</Td><Td num>{formatEuro(130432.4)}</Td><Td num tot>{formatEuro(296072.9)}</Td></tr>
             <tr className="ui-riga-risultato"><Td>Risultato (ui-riga-risultato)</Td><Td num>{formatEuro(52000)}</Td><Td num>{formatEuro(41000)}</Td><Td num tot>{formatEuro(93000)}</Td></tr>
             <tr className="ui-riga-totale"><Td>TOTALE (ui-riga-totale)</Td><Td num>{formatEuro(165640.5)}</Td><Td num>{formatEuro(130432.4)}</Td><Td num tot>{formatEuro(296072.9)}</Td></tr>
+          </tbody>
+        </Table>
+      </Card>
+
+      <Card title="Intestazione a due livelli (gruppi di colonne)" style={{ marginBottom: 20 }}>
+        <Table compact>
+          <thead>
+            <tr>
+              <Th rowSpan={2} style={{ verticalAlign: 'bottom' }}>Mese</Th>
+              <Th center gruppo colSpan={2}>Du Parc</Th>
+              <Th center gruppo colSpan={2}>Club Hotel</Th>
+            </tr>
+            <tr className="sub">
+              <Th num gruppo>Pranzo</Th><Th num>Cena</Th>
+              <Th num gruppo>Pranzo</Th><Th num>Cena</Th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><Td>Luglio</Td><Td num gruppo>410</Td><Td num>520</Td><Td num gruppo>380</Td><Td num>470</Td></tr>
+            <tr><Td>Agosto</Td><Td num gruppo>460</Td><Td num>610</Td><Td num gruppo>402</Td><Td num>555</Td></tr>
           </tbody>
         </Table>
       </Card>
@@ -207,6 +237,13 @@ export default function AdminUiKit() {
       </div>
 
       <SectionTitle style={{ marginTop: 24 }}>SectionTitle (titolo di sezione)</SectionTitle>
+
+      {drawer && (
+        <Drawer titolo="Hotel Du Parc — Colazione" sottotitolo="12/08/2026" onChiudi={() => setDrawer(false)}>
+          <div className="ui-drawer-item">Quota Colazione · Cam. D101 · {formatEuro(15)}</div>
+          <div className="ui-drawer-item">Quota Colazione · Cam. D102 · {formatEuro(15)}</div>
+        </Drawer>
+      )}
 
       {modale && (
         <Modal titolo="Modale generica" onChiudi={() => setModale(false)}

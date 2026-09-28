@@ -3,9 +3,15 @@ import api from '../../api/client'
 import { formatEuro, mostraErrore } from '../../utils/format'
 import { ExportMenu } from '../../components/ExportMenu.jsx'
 import {
-  STRUTTURE_HOTEL, NOMI, fmtD, meseNome, primoGiorno, ultimoGiorno,
-  giornoSettimana, thSt, tdSt, inpSt, campoValore, meseAnnoPrecedente,
+  STRUTTURE_HOTEL, NOMI, fmtD, primoGiorno, ultimoGiorno,
+  giornoSettimana, campoValore, meseAnnoPrecedente, OPZIONI_STRUTTURA,
 } from '../../utils/produzioneHelpers'
+import {
+  Drawer, Loading, Messaggio, NavMese, SegmentedControl, Select, StatoVuoto, Table, Td, Th,
+} from '../../components/ui'
+import { colors } from '../../styles/tokens.js'
+
+const VUOTO = colors.borderStrong
 
 function DrawerRighe({ info, onClose, lordo }) {
   const [righe, setRighe] = useState([])
@@ -27,43 +33,40 @@ function DrawerRighe({ info, onClose, lordo }) {
   if (!info) return null
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, right: 0, height: '100vh', width: 480,
-      background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
-      zIndex: 1000, display: 'flex', flexDirection: 'column',
-    }}>
-      <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <strong style={{ color: '#1e293b' }}>{NOMI[info.struttura_code]} — {info.categoria_name}</strong>
-          <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#64748b' }}>{fmtD(info.data)}</p>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1rem' }}>
-        {loading ? (
-          <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>
-        ) : errore ? (
-          <p style={{ color: '#dc2626', fontSize: '0.85rem' }}>{errore}</p>
-        ) : righe.length === 0 ? (
-          <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Nessuna riga per questa selezione.</p>
-        ) : righe.map(r => (
-          <div key={r.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.65rem 0.85rem', marginBottom: '0.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>{r.dettaglio_originale || '—'}</span>
-              <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{formatEuro(lordo ? r.lordo : r.imponibile)}</span>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 3 }}>
-              {r.camera && <span>Cam. {r.camera} · </span>}
-              {r.ospite && <span>{r.ospite}</span>}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>
-              {r.trattamento && <span>{r.trattamento} · </span>}
-              {r.canale && <span>{r.canale}</span>}
-            </div>
+    <Drawer titolo={`${NOMI[info.struttura_code]} — ${info.categoria_name}`} sottotitolo={fmtD(info.data)} onChiudi={onClose}>
+      {loading ? (
+        <Loading />
+      ) : errore ? (
+        <Messaggio tipo="err">{errore}</Messaggio>
+      ) : righe.length === 0 ? (
+        <StatoVuoto>Nessuna riga per questa selezione.</StatoVuoto>
+      ) : righe.map(r => (
+        <div key={r.id} className="ui-drawer-item">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 600, color: colors.text }}>{r.dettaglio_originale || '—'}</span>
+            <span className="ui-num" style={{ fontWeight: 700 }}>{formatEuro(lordo ? r.lordo : r.imponibile)}</span>
           </div>
-        ))}
-      </div>
-    </div>
+          <div className="ui-text-muted" style={{ marginTop: 3 }}>
+            {r.camera && <span>Cam. {r.camera} · </span>}
+            {r.ospite && <span>{r.ospite}</span>}
+          </div>
+          <div style={{ fontSize: 'var(--fs-xs)', color: colors.textSubtle, marginTop: 2 }}>
+            {r.trattamento && <span>{r.trattamento} · </span>}
+            {r.canale && <span>{r.canale}</span>}
+          </div>
+        </div>
+      ))}
+    </Drawer>
+  )
+}
+
+// Cella data con giorno della settimana; il sabato (inizio settimana commerciale) in grassetto
+function CellaData({ data }) {
+  const gg = giornoSettimana(data)
+  return (
+    <Td style={{ fontWeight: gg === 'sab' ? 700 : 400, color: colors.textSecond, whiteSpace: 'nowrap' }}>
+      {fmtD(data)} <span style={{ color: colors.textSubtle, fontSize: 'var(--fs-xs)' }}>{gg}</span>
+    </Td>
   )
 }
 
@@ -71,95 +74,59 @@ function DrawerRighe({ info, onClose, lordo }) {
 // sia ripetuta una volta per hotel dentro i blocchi accordion (vista "Tutte le strutture").
 function TabellaHotel({ sc, giorni, byChiave, categorie, lordo, totMese, onCellClick, mostraColonnaTotale = true, mostraNomeHotel = false }) {
   return (
-    <div style={{ overflowX: 'auto', fontSize: '0.78rem' }}>
-      <table style={{ borderCollapse: 'collapse', minWidth: 700, width: '100%' }}>
-        <thead>
-          {mostraNomeHotel && (
-            <tr style={{ background: '#1e3a5f' }}>
-              <th style={{ ...thSt, background: '#1e3a5f' }} rowSpan={2} />
-              <th style={{ ...thSt, textAlign: 'center', borderLeft: '2px solid #334e78' }} colSpan={categorie.length + (mostraColonnaTotale ? 2 : 1)}>
-                {NOMI[sc]}
-              </th>
+    <Table compact minWidth={700}>
+      <thead>
+        {mostraNomeHotel && (
+          <tr>
+            <Th rowSpan={2} style={{ verticalAlign: 'bottom' }}>Data</Th>
+            <Th center gruppo colSpan={categorie.length + (mostraColonnaTotale ? 2 : 1)}>{NOMI[sc]}</Th>
+          </tr>
+        )}
+        <tr className={mostraNomeHotel ? 'sub' : undefined}>
+          {!mostraNomeHotel && <Th style={{ minWidth: 80 }}>Data</Th>}
+          {categorie.map((c, i) => <Th key={c.code} num gruppo={i === 0}>{c.name}</Th>)}
+          <Th num gruppo style={{ fontWeight: 700 }}>Tot.</Th>
+          {mostraColonnaTotale && <Th num tot>TOT. GIORNO</Th>}
+        </tr>
+      </thead>
+      <tbody>
+        {giorni.map(data => {
+          const g = byChiave[`${data}_${sc}`]
+          return (
+            <tr key={data} className={giornoSettimana(data) === 'sab' ? 'ui-riga-evidenza' : undefined}>
+              <CellaData data={data} />
+              {categorie.map((c, i) => {
+                const val = campoValore(g?.per_categoria?.[c.code], lordo)
+                return (
+                  <Td key={c.code} num gruppo={i === 0}
+                    style={{ color: val ? undefined : VUOTO, cursor: val ? 'pointer' : 'default' }}
+                    onClick={() => val && onCellClick(data, c.code, c.name)}
+                    title={val ? 'Clicca per vedere le singole righe' : undefined}
+                  >
+                    {val ? formatEuro(val) : '—'}
+                  </Td>
+                )
+              })}
+              <Td num gruppo style={{ fontWeight: 700 }}>{g ? formatEuro(campoValore(g.totale, lordo)) : '—'}</Td>
+              {mostraColonnaTotale && (
+                <Td num tot style={{ fontWeight: 700 }}>{g ? formatEuro(campoValore(g.totale, lordo)) : '—'}</Td>
+              )}
             </tr>
-          )}
-          <tr style={{ background: '#2d4f7c', color: '#cbd5e1' }}>
-            {!mostraNomeHotel && (
-              <th style={{ ...thSt, background: '#1e3a5f', color: '#fff', textAlign: 'left', minWidth: 70 }}>Data</th>
-            )}
-            {categorie.map((c, i) => (
-              <th key={c.code} style={{
-                ...thSt, color: '#cbd5e1', fontSize: '0.68rem',
-                borderLeft: i === 0 ? '3px solid #4a6fa5' : '1px solid #3d6a9a',
-              }}>{c.name}</th>
-            ))}
-            <th style={{ ...thSt, color: '#fff', fontWeight: 700, borderLeft: '1px solid #3d6a9a' }}>Tot.</th>
-            {mostraColonnaTotale && (
-              <th style={{ ...thSt, borderLeft: '2px solid #334e78' }}>TOT. GIORNO</th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {giorni.map((data, idx) => {
-            const gg = giornoSettimana(data)
-            const isSab = gg === 'sab'
-            const rigaBg = isSab ? '#eff6ff' : idx % 2 === 0 ? '#fff' : '#f8fafc'
-            const g = byChiave[`${data}_${sc}`]
-            return (
-              <tr key={data} style={{ background: rigaBg }}>
-                <td style={{ ...tdSt, textAlign: 'left', fontWeight: isSab ? 700 : 400, color: '#475569' }}>
-                  {fmtD(data)} <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{gg}</span>
-                </td>
-                {categorie.map((c, i) => {
-                  const v = g?.per_categoria?.[c.code]
-                  const val = campoValore(v, lordo)
-                  return (
-                    <td key={c.code}
-                      style={{
-                        ...tdSt, color: !val ? '#e2e8f0' : '#1e293b', cursor: val ? 'pointer' : 'default',
-                        borderLeft: i === 0 ? '3px solid #7baec8' : '1px solid #86a8bf',
-                      }}
-                      onClick={() => val && onCellClick(data, c.code, c.name)}
-                    >
-                      {val ? formatEuro(val) : '—'}
-                    </td>
-                  )
-                })}
-                <td style={{ ...tdSt, fontWeight: 700, borderLeft: '2px solid #7baec8' }}>
-                  {g ? formatEuro(campoValore(g.totale, lordo)) : '—'}
-                </td>
-                {mostraColonnaTotale && (
-                  <td style={{ ...tdSt, fontWeight: 700, borderLeft: '2px solid #7baec8' }}>
-                    {g ? formatEuro(campoValore(g.totale, lordo)) : '—'}
-                  </td>
-                )}
-              </tr>
-            )
-          })}
+          )
+        })}
 
-          {/* background impostato su OGNI <td>, non solo sulla <tr>: lo sfondo non si eredita
-              dal genitore in CSS, e il foglio di stile globale (tr:nth-child(even) td) vince
-              sul <td> trasparente quando questa riga cade in posizione pari (dipende dal numero
-              di giorni del mese — bug reale osservato: maggio 31gg posizione pari, giugno 30gg
-              posizione dispari, stessa riga visibile in un mese e "spenta" nell'altro). */}
-          <tr style={{ background: '#1e3a5f', color: '#fff', fontWeight: 700 }}>
-            <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none', textAlign: 'left' }}>TOTALE MESE</td>
-            {categorie.map(c => (
-              <td key={c.code} style={{ ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none' }}>
-                {formatEuro(campoValore(totMese[c.code], lordo))}
-              </td>
-            ))}
-            <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', fontWeight: 800, borderBottom: 'none', borderLeft: '2px solid #4a6fa5' }}>
-              {formatEuro(campoValore(totMese.totale, lordo))}
-            </td>
-            {mostraColonnaTotale && (
-              <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', fontWeight: 800, borderBottom: 'none', borderLeft: '2px solid #4a6fa5' }}>
-                {formatEuro(campoValore(totMese.totale, lordo))}
-              </td>
-            )}
-          </tr>
-        </tbody>
-      </table>
-    </div>
+        <tr className="ui-riga-totale">
+          <Td>TOTALE MESE</Td>
+          {categorie.map((c, i) => (
+            <Td key={c.code} num gruppo={i === 0}>{formatEuro(campoValore(totMese[c.code], lordo))}</Td>
+          ))}
+          <Td num gruppo style={{ fontWeight: 800 }}>{formatEuro(campoValore(totMese.totale, lordo))}</Td>
+          {mostraColonnaTotale && (
+            <Td num tot style={{ fontWeight: 800 }}>{formatEuro(campoValore(totMese.totale, lordo))}</Td>
+          )}
+        </tr>
+      </tbody>
+    </Table>
   )
 }
 
@@ -168,59 +135,38 @@ function TabellaHotel({ sc, giorni, byChiave, categorie, lordo, totMese, onCellC
 // aprire i blocchi dettagliati per categoria sotto.
 function RiepilogoTutteStrutture({ strutture, giorni, byChiave, totMese, totGlobaleMese, lordo }) {
   return (
-    <div style={{ overflowX: 'auto', fontSize: '0.78rem', marginBottom: '1.5rem' }}>
-      <table style={{ borderCollapse: 'collapse', minWidth: 500, width: '100%' }}>
-        <thead>
-          <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-            <th style={{ ...thSt, textAlign: 'left', minWidth: 70 }}>Data</th>
-            {strutture.map(sc => (
-              <th key={sc} style={{ ...thSt }}>{NOMI[sc]}</th>
-            ))}
-            <th style={{ ...thSt, borderLeft: '2px solid #4a6fa5' }}>TOT. GIORNO</th>
-          </tr>
-        </thead>
-        <tbody>
-          {giorni.map((data, idx) => {
-            const gg = giornoSettimana(data)
-            const isSab = gg === 'sab'
-            const rigaBg = isSab ? '#eff6ff' : idx % 2 === 0 ? '#fff' : '#f8fafc'
-            let totGiorno = 0
-            return (
-              <tr key={data} style={{ background: rigaBg }}>
-                <td style={{ ...tdSt, textAlign: 'left', fontWeight: isSab ? 700 : 400, color: '#475569' }}>
-                  {fmtD(data)} <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{gg}</span>
-                </td>
-                {strutture.map(sc => {
-                  const g = byChiave[`${data}_${sc}`]
-                  const val = g ? campoValore(g.totale, lordo) : 0
-                  totGiorno += val
-                  return (
-                    <td key={sc} style={{ ...tdSt, color: !val ? '#e2e8f0' : '#1e293b' }}>
-                      {val ? formatEuro(val) : '—'}
-                    </td>
-                  )
-                })}
-                <td style={{ ...tdSt, fontWeight: 700, borderLeft: '2px solid #7baec8' }}>
-                  {totGiorno ? formatEuro(totGiorno) : '—'}
-                </td>
-              </tr>
-            )
-          })}
+    <Table compact minWidth={500} style={{ marginBottom: 24 }}>
+      <thead>
+        <tr>
+          <Th style={{ minWidth: 80 }}>Data</Th>
+          {strutture.map(sc => <Th key={sc} num>{NOMI[sc]}</Th>)}
+          <Th num tot>TOT. GIORNO</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {giorni.map(data => {
+          let totGiorno = 0
+          return (
+            <tr key={data} className={giornoSettimana(data) === 'sab' ? 'ui-riga-evidenza' : undefined}>
+              <CellaData data={data} />
+              {strutture.map(sc => {
+                const g = byChiave[`${data}_${sc}`]
+                const val = g ? campoValore(g.totale, lordo) : 0
+                totGiorno += val
+                return <Td key={sc} num style={{ color: val ? undefined : VUOTO }}>{val ? formatEuro(val) : '—'}</Td>
+              })}
+              <Td num tot style={{ fontWeight: 700 }}>{totGiorno ? formatEuro(totGiorno) : '—'}</Td>
+            </tr>
+          )
+        })}
 
-          <tr style={{ background: '#1e3a5f', color: '#fff', fontWeight: 700 }}>
-            <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none', textAlign: 'left' }}>TOTALE MESE</td>
-            {strutture.map(sc => (
-              <td key={sc} style={{ ...tdSt, background: '#1e3a5f', color: '#fff', borderBottom: 'none' }}>
-                {formatEuro(campoValore(totMese[sc].totale, lordo))}
-              </td>
-            ))}
-            <td style={{ ...tdSt, background: '#1e3a5f', color: '#fff', fontWeight: 800, borderBottom: 'none', borderLeft: '2px solid #4a6fa5' }}>
-              {formatEuro(campoValore(totGlobaleMese, lordo))}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+        <tr className="ui-riga-totale">
+          <Td>TOTALE MESE</Td>
+          {strutture.map(sc => <Td key={sc} num>{formatEuro(campoValore(totMese[sc].totale, lordo))}</Td>)}
+          <Td num tot style={{ fontWeight: 800 }}>{formatEuro(campoValore(totGlobaleMese, lordo))}</Td>
+        </tr>
+      </tbody>
+    </Table>
   )
 }
 
@@ -229,26 +175,25 @@ function RiepilogoTutteStrutture({ strutture, giorni, byChiave, totMese, totGlob
 // categoria (TabellaHotel) collassabile.
 function BloccoHotel({ sc, aperto, onToggle, giorni, byChiave, categorie, lordo, totMese, onCellClick }) {
   return (
-    <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, marginBottom: '1rem', overflow: 'hidden' }}>
+    <div className="ui-card" style={{ padding: 0, marginBottom: 16, overflow: 'hidden' }}>
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={aperto}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
-          padding: '0.75rem 1.1rem', border: 'none', cursor: 'pointer',
-          background: '#f1f5f9', color: '#1e293b',
+          padding: '12px 18px', border: 'none', borderRadius: 0, cursor: 'pointer',
+          background: colors.surfaceAlt, color: colors.text, fontSize: 'var(--fs-md)', fontWeight: 700,
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: '0.92rem' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, transform: aperto ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
           {NOMI[sc]}
         </span>
-        <span style={{ fontWeight: 700, fontSize: '0.92rem' }}>
-          Totale mese: {formatEuro(campoValore(totMese.totale, lordo))}
-        </span>
+        <span className="ui-num">Totale mese: {formatEuro(campoValore(totMese.totale, lordo))}</span>
       </button>
       {aperto && (
-        <div style={{ padding: '0.75rem' }}>
+        <div style={{ padding: 12 }}>
           <TabellaHotel
             sc={sc} giorni={giorni} byChiave={byChiave} categorie={categorie} lordo={lordo}
             totMese={totMese} onCellClick={onCellClick} mostraColonnaTotale={false}
@@ -319,13 +264,6 @@ export default function TabGiornaliera({ lordo }) {
   const byChiave = {}
   dati.forEach(g => { byChiave[`${g.data}_${g.struttura_code}`] = g })
 
-  const navMese = (delta) => {
-    let m = mese + delta, y = anno
-    if (m > 12) { m = 1; y++ }
-    if (m < 1) { m = 12; y-- }
-    setMese(m); setAnno(y)
-  }
-
   const toggleHotel = (sc) => {
     setAperti(prev => {
       const next = new Set(prev)
@@ -360,34 +298,26 @@ export default function TabGiornaliera({ lordo }) {
     })
   })
 
-  const selSt = { ...inpSt, fontSize: '0.82rem' }
-
   const apriDrawer = (sc) => (data, categoria_code, categoria_name) =>
     setDrawer({ data, struttura_code: sc, categoria_code, categoria_name })
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
-        <button onClick={() => navMese(-1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9' }}>←</button>
-        <span style={{ fontWeight: 700, minWidth: 120, textAlign: 'center' }}>{meseNome(mese)} {anno}</span>
-        <button onClick={() => navMese(1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9' }}>→</button>
-
-        <select value={struttura} onChange={e => setStruttura(e.target.value)} style={selSt}>
-          <option value="">Tutte le strutture</option>
-          {STRUTTURE_HOTEL.map(sc => <option key={sc} value={sc}>{NOMI[sc]}</option>)}
-        </select>
-        <select value={categoria} onChange={e => setCategoria(e.target.value)} style={selSt}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        <NavMese anno={anno} mese={mese} onChange={({ anno: y, mese: m }) => { setAnno(y); setMese(m) }} />
+        <SegmentedControl value={struttura} onChange={setStruttura} options={OPZIONI_STRUTTURA} />
+        <Select value={categoria} onChange={e => setCategoria(e.target.value)} aria-label="Categoria">
           <option value="">Tutte le categorie</option>
           {categorie.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-        </select>
-        <select value={canale} onChange={e => setCanale(e.target.value)} style={selSt}>
+        </Select>
+        <Select value={canale} onChange={e => setCanale(e.target.value)} aria-label="Canale">
           <option value="">Tutti i canali</option>
           {canaliLista.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={trattamento} onChange={e => setTrattamento(e.target.value)} style={selSt}>
+        </Select>
+        <Select value={trattamento} onChange={e => setTrattamento(e.target.value)} aria-label="Trattamento">
           <option value="">Tutti i trattamenti</option>
           {trattamentiLista.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
+        </Select>
 
         <div style={{ marginLeft: 'auto' }}>
           <ExportMenu
@@ -397,7 +327,7 @@ export default function TabGiornaliera({ lordo }) {
         </div>
       </div>
 
-      {loading && <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>}
+      {loading && <Loading />}
 
       {vistaTutte ? (
         <>
@@ -422,9 +352,6 @@ export default function TabGiornaliera({ lordo }) {
       )}
 
       {drawer && <DrawerRighe info={drawer} onClose={() => setDrawer(null)} lordo={lordo} />}
-      {drawer && (
-        <div onClick={() => setDrawer(null)} style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.1)' }} />
-      )}
     </div>
   )
 }

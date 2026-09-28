@@ -54,6 +54,18 @@ export function coloreStruttura(code, fallback = colors.textSubtle) {
   return COLORI_STRUTTURA[code] ?? fallback
 }
 
+// Palette per serie/categorie nei grafici (validata: banda di luminosità, croma minima,
+// separazione per daltonismo, contrasto — vedi skill dataviz). Ordine fisso, mai riassegnata
+// in base al filtro attivo. Gli slot sotto contrasto 3:1 (giallo, rosa, arancio) richiedono
+// etichette/legenda visibili, non il solo colore.
+export const PALETTE_CATEGORICA = [
+  '#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e34948', '#e87ba4', '#eb6834',
+]
+
+export function coloreSerie(idx) {
+  return PALETTE_CATEGORICA[idx % PALETTE_CATEGORICA.length]
+}
+
 // Scala testi (px). Usare solo questi valori.
 export const fontSize = {
   xs: 11,   // badge, note minime

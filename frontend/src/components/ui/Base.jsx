@@ -1,4 +1,5 @@
 // Componenti di base: pulsanti, titoli, card, badge, stati di caricamento.
+import { useRef, useState } from 'react'
 import { cx } from './classi.js'
 import { coloreStruttura } from '../../styles/tokens.js'
 
@@ -119,5 +120,35 @@ export function FileButton({ children, accept, onFile, variant = 'secondary', si
         onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
       />
     </label>
+  )
+}
+
+/**
+ * Area per trascinare un file (o cliccare per sceglierlo).
+ * onFile(File); accept come per <input type=file>; disabled durante il caricamento.
+ */
+export function DropZone({ onFile, accept, titolo, sottotitolo, disabled, icona }) {
+  const [sopra, setSopra] = useState(false)
+  const inputRef = useRef(null)
+  const scegli = (f) => { if (f && !disabled) onFile(f) }
+  return (
+    <div
+      className={cx('ui-dropzone', sopra && 'attiva', disabled && 'disattivata')}
+      onDragOver={e => { e.preventDefault(); setSopra(true) }}
+      onDragLeave={() => setSopra(false)}
+      onDrop={e => { e.preventDefault(); setSopra(false); scegli(e.dataTransfer.files[0]) }}
+      onClick={() => !disabled && inputRef.current?.click()}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click() }}
+    >
+      <input
+        ref={inputRef} type="file" accept={accept} style={{ display: 'none' }}
+        onChange={e => { scegli(e.target.files[0]); e.target.value = '' }}
+      />
+      {icona && <div style={{ fontSize: 28, marginBottom: 6 }}>{icona}</div>}
+      <p className="ui-dropzone-titolo">{titolo}</p>
+      {sottotitolo && <p className="ui-dropzone-sub">{sottotitolo}</p>}
+    </div>
   )
 }

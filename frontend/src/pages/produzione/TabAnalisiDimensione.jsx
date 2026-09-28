@@ -7,9 +7,10 @@ import api from '../../api/client'
 import { formatEuro, formatPerc } from '../../utils/format'
 import { ExportMenu } from '../../components/ExportMenu.jsx'
 import {
-  STRUTTURE_HOTEL, NOMI, meseNome, primoGiorno, ultimoGiorno,
-  thSt, tdSt, inpSt, PALETTE_CATEGORICA, campoValore, meseAnnoPrecedente,
+  STRUTTURE_HOTEL, meseNome, primoGiorno, ultimoGiorno, campoValore, meseAnnoPrecedente, OPZIONI_STRUTTURA,
 } from '../../utils/produzioneHelpers'
+import { Card, Dot, Loading, NavMese, SegmentedControl, StatoVuoto, Table, Td, Th } from '../../components/ui'
+import { colors, coloreSerie } from '../../styles/tokens.js'
 
 /** Tabella/grafici per una singola dimensione di analisi (canale, trattamento, tipo ospite).
  * Riusata da TabCanali/TabTrattamenti/TabTipoOspite — stessa aggregazione, cambia solo il campo. */
@@ -58,30 +59,14 @@ export default function TabAnalisiDimensione({ dimensione, campo, titolo, lordo 
     })
   }, [dimensione, campo, anno, struttura, lordo])
 
-  const navMese = (delta) => {
-    let m = mese + delta, y = anno
-    if (m > 12) { m = 1; y++ }
-    if (m < 1) { m = 12; y-- }
-    setMese(m); setAnno(y)
-  }
-
   const totale = dati.reduce((s, d) => s + campoValore(d, lordo), 0)
   const serieChiavi = [...new Set(dati.map(d => d[campo]))]
 
-  const selSt = { ...inpSt, fontSize: '0.82rem' }
-
   return (
     <div>
-      <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', margin: '0 0 12px' }}>{titolo}</h2>
-
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-        <button onClick={() => navMese(-1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9' }}>←</button>
-        <span style={{ fontWeight: 700, minWidth: 120, textAlign: 'center' }}>{meseNome(mese)} {anno}</span>
-        <button onClick={() => navMese(1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9' }}>→</button>
-        <select value={struttura} onChange={e => setStruttura(e.target.value)} style={selSt}>
-          <option value="">Tutte le strutture</option>
-          {STRUTTURE_HOTEL.map(sc => <option key={sc} value={sc}>{NOMI[sc]}</option>)}
-        </select>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
+        <NavMese anno={anno} mese={mese} onChange={({ anno: y, mese: m }) => { setAnno(y); setMese(m) }} />
+        <SegmentedControl value={struttura} onChange={setStruttura} options={OPZIONI_STRUTTURA} />
         <div style={{ marginLeft: 'auto' }}>
           <ExportMenu
             url={`/produzione/export/${dimensione}?data_da=${da}&data_a=${a}${struttura ? `&struttura_code=${struttura}` : ''}`}
@@ -90,100 +75,86 @@ export default function TabAnalisiDimensione({ dimensione, campo, titolo, lordo 
         </div>
       </div>
 
-      {loading && <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>}
+      {loading && <Loading />}
 
-      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 24 }}>
         {/* Tabella */}
-        <div style={{ flex: '1 1 380px', overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.82rem' }}>
+        <div style={{ flex: '1 1 420px', minWidth: 0 }}>
+          <Table compact>
             <thead>
-              <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                <th style={{ ...thSt, textAlign: 'left' }}>{titolo.replace('Analisi ', '')}</th>
-                {STRUTTURE_HOTEL.map(sc => <th key={sc} style={thSt}>{sc}</th>)}
-                <th style={thSt}>Totale</th>
-                <th style={thSt}>% sul totale</th>
+              <tr>
+                <Th>{titolo.replace('Analisi ', '')}</Th>
+                {STRUTTURE_HOTEL.map(sc => <Th key={sc} num>{sc}</Th>)}
+                <Th num>Totale</Th>
+                <Th num>% sul totale</Th>
               </tr>
             </thead>
             <tbody>
               {dati.map((d, idx) => (
-                <tr key={d[campo]} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                  <td style={{ ...tdSt, textAlign: 'left', fontWeight: 600 }}>
-                    <span style={{
-                      display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
-                      background: PALETTE_CATEGORICA[idx % PALETTE_CATEGORICA.length], marginRight: 6,
-                    }} />
-                    {d[campo]}
-                  </td>
+                <tr key={d[campo]}>
+                  <Td style={{ fontWeight: 600 }}>
+                    <Dot colore={coloreSerie(idx)} /> <span style={{ marginLeft: 4 }}>{d[campo]}</span>
+                  </Td>
                   {STRUTTURE_HOTEL.map(sc => (
-                    <td key={sc} style={tdSt}>{formatEuro(campoValore(d.per_struttura[sc], lordo))}</td>
+                    <Td key={sc} num>{formatEuro(campoValore(d.per_struttura[sc], lordo))}</Td>
                   ))}
-                  <td style={{ ...tdSt, fontWeight: 700 }}>{formatEuro(campoValore(d, lordo))}</td>
-                  <td style={tdSt}>{formatPerc(d.pct_totale)}</td>
+                  <Td num style={{ fontWeight: 700 }}>{formatEuro(campoValore(d, lordo))}</Td>
+                  <Td num>{formatPerc(d.pct_totale)}</Td>
                 </tr>
               ))}
               {dati.length === 0 && !loading && (
-                <tr><td colSpan={STRUTTURE_HOTEL.length + 3} style={{ ...tdSt, textAlign: 'center', color: '#94a3b8' }}>Nessun dato per il periodo selezionato</td></tr>
+                <tr><Td colSpan={STRUTTURE_HOTEL.length + 3} center muted>Nessun dato per il periodo selezionato</Td></tr>
+              )}
+              {dati.length > 0 && (
+                <tr className="ui-riga-sezione">
+                  <Td>TOTALE</Td>
+                  {STRUTTURE_HOTEL.map(sc => (
+                    <Td key={sc} num>{formatEuro(dati.reduce((s, d) => s + campoValore(d.per_struttura[sc], lordo), 0))}</Td>
+                  ))}
+                  <Td num>{formatEuro(totale)}</Td>
+                  <Td num>100%</Td>
+                </tr>
               )}
             </tbody>
-            {dati.length > 0 && (
-              <tfoot>
-                {/* background esplicito su ogni <td> (non solo sulla <tr>): vedi nota in
-                    TabGiornaliera.jsx — qui innocuo oggi (unico figlio di <tfoot>, sempre
-                    posizione dispari) ma reso comunque robusto per coerenza. */}
-                <tr style={{ background: '#f1f5f9', fontWeight: 700 }}>
-                  <td style={{ ...tdSt, background: '#f1f5f9', textAlign: 'left' }}>TOTALE</td>
-                  {STRUTTURE_HOTEL.map(sc => (
-                    <td key={sc} style={{ ...tdSt, background: '#f1f5f9' }}>
-                      {formatEuro(dati.reduce((s, d) => s + campoValore(d.per_struttura[sc], lordo), 0))}
-                    </td>
-                  ))}
-                  <td style={{ ...tdSt, background: '#f1f5f9' }}>{formatEuro(totale)}</td>
-                  <td style={{ ...tdSt, background: '#f1f5f9' }}>100%</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
+          </Table>
         </div>
 
         {/* Torta distribuzione */}
-        <div style={{ flex: '1 1 320px', minWidth: 280, height: 280 }}>
+        <Card style={{ flex: '1 1 320px', minWidth: 280, height: 300 }}>
           {dati.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={dati} dataKey={d => campoValore(d, lordo)} nameKey={campo} cx="50%" cy="50%" outerRadius={90}
                   label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
-                  {dati.map((d, idx) => (
-                    <Cell key={d[campo]} fill={PALETTE_CATEGORICA[idx % PALETTE_CATEGORICA.length]} />
-                  ))}
+                  {dati.map((d, idx) => <Cell key={d[campo]} fill={coloreSerie(idx)} />)}
                 </Pie>
                 <Tooltip formatter={(v) => formatEuro(v)} />
-                <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
+                <Legend wrapperStyle={{ fontSize: 'var(--fs-xs)' }} />
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', fontSize: '0.85rem' }}>
-              Nessun dato da visualizzare
-            </div>
+            <StatoVuoto>Nessun dato da visualizzare</StatoVuoto>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Trend mensile */}
-      <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b', margin: '0 0 10px' }}>Trend mensile {anno}</h3>
-      <div style={{ height: 300 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={trend}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-            <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatEuro(v).replace(',00', '')} />
-            <Tooltip formatter={(v) => formatEuro(v)} />
-            <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
-            {serieChiavi.map((s, idx) => (
-              <Bar key={s} dataKey={s} stackId="a" fill={PALETTE_CATEGORICA[idx % PALETTE_CATEGORICA.length]} radius={[2, 2, 0, 0]} />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <Card title={`Trend mensile ${anno}`}>
+        <div style={{ height: 300 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={trend}>
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
+              <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatEuro(v).replace(',00', '')} />
+              <Tooltip formatter={(v) => formatEuro(v)} />
+              <Legend wrapperStyle={{ fontSize: 'var(--fs-xs)' }} />
+              {serieChiavi.map((s, idx) => (
+                <Bar key={s} dataKey={s} stackId="a" fill={coloreSerie(idx)} radius={[2, 2, 0, 0]} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
     </div>
   )
 }
