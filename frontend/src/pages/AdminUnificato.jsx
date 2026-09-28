@@ -7,8 +7,8 @@ import AdminCruscottoSoglie from './admin/AdminCruscottoSoglie.jsx'
 import AdminUiKit from './admin/AdminUiKit.jsx'
 import api from '../api/client.js'
 import {
-  Badge, Button, Card, Checkbox, Field, Input, KpiTile, Loading, Messaggio, PageHeader, Select, StatoVuoto, Table, Td, Th,
-  useAvvisi, useConferma,
+  Badge, Button, Card, Checkbox, Field, Input, KpiTile, Loading, Messaggio, PageHeader, SegmentedControl, Select,
+  StatoVuoto, Table, Td, Th, useAvvisi, useConferma,
 } from '../components/ui'
 import { colors } from '../styles/tokens.js'
 import { mostraErrore } from '../utils/format.js'
@@ -773,14 +773,6 @@ function StatBox({ label, value, highlight }) {
 // Corrispettivi — helpers condivisi
 // ---------------------------------------------------------------------------
 
-const inputSm = { fontSize: 12, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4 }
-const btnSm   = { fontSize: 12, padding: '4px 12px', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }
-
-function useFeedback() {
-  const [msg, setMsg] = useState('')
-  const fb = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
-  return [msg, fb]
-}
 
 // ---------------------------------------------------------------------------
 // Corrispettivi — Tipi documento (sola consultazione)
@@ -1109,7 +1101,7 @@ function ProdCategorie() {
   const [editing, setEditing] = useState({}) // id → {name, descrizione, includi_report, colore, attivo}
   const [saving, setSaving] = useState(null)
   const [nuovo, setNuovo] = useState({ code: '', name: '' })
-  const [msg, fb] = useFeedback()
+  const avvisi = useAvvisi()
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -1117,11 +1109,11 @@ function ProdCategorie() {
       const r = await api.get('/produzione/categorie')
       setRighe(r.data)
     } catch (e) {
-      fb(mostraErrore(e), 'err')
+      avvisi.errore(mostraErrore(e))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [avvisi])
 
   useEffect(() => { carica() }, [carica])
 
@@ -1146,11 +1138,11 @@ function ProdCategorie() {
         ...body, colore: body.colore || null,
         tariffa_riferimento: body.tariffa_riferimento === '' ? null : Number(body.tariffa_riferimento),
       })
-      fb('Categoria salvata', 'ok')
+      avvisi.successo('Categoria salvata')
       cancellaEdit(id)
       carica()
     } catch (e) {
-      fb(mostraErrore(e), 'err')
+      avvisi.errore(mostraErrore(e))
     } finally {
       setSaving(null)
     }
@@ -1159,9 +1151,9 @@ function ProdCategorie() {
   const toggleAttivo = async (r) => {
     try {
       await api.put(`/produzione/categorie/${r.id}`, { attivo: !r.attivo })
-      fb(r.attivo ? 'Categoria disattivata' : 'Categoria attivata', 'ok')
+      avvisi.successo(r.attivo ? 'Categoria disattivata' : 'Categoria attivata')
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const sposta = async (idx, delta) => {
@@ -1174,11 +1166,11 @@ function ProdCategorie() {
         api.put(`/produzione/categorie/${altro.id}`, { ordine: questo.ordine }),
       ])
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const creaCategoria = async () => {
-    if (!nuovo.code || !nuovo.name) { fb('Codice e nome obbligatori', 'err'); return }
+    if (!nuovo.code || !nuovo.name) { avvisi.attenzione('Codice e nome obbligatori'); return }
     try {
       await api.post('/produzione/categorie', {
         code: nuovo.code.trim().toLowerCase().replace(/\s+/g, '_'),
@@ -1186,17 +1178,17 @@ function ProdCategorie() {
         ordine: righe.length ? Math.max(...righe.map(r => r.ordine)) + 1 : 0,
       })
       setNuovo({ code: '', name: '' })
-      fb('Categoria creata', 'ok')
+      avvisi.successo('Categoria creata')
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
-  if (loading) return <p style={{ color: '#64748b' }}>Caricamento...</p>
+  if (loading) return <Loading />
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>Categorie Produzione</h2>
-      <p style={{ color: '#64748b', fontSize: 14 }}>
+      <PageHeader title="Categorie Produzione" />
+      <p className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: -8, maxWidth: 900 }}>
         Categorie di ricavo usate nell'import di Statistiche Produzione (Quota Alloggio, Colazione, ecc.).
         Le categorie disattivate vengono mappate su "altro" nei nuovi import. "Includi nei report" = false
         salva comunque la riga nel DB ma la esclude da tutte le aggregazioni (usato per Riassetto).
@@ -1204,119 +1196,98 @@ function ProdCategorie() {
         se cambia la tariffa stagionale, si aggiorna qui senza toccare codice.
       </p>
 
-      {msg && (
-        <div style={{ padding: '8px 14px', borderRadius: 6, marginBottom: 16,
-                      background: msg.tipo === 'ok' ? '#d1fae5' : '#fee2e2',
-                      color: msg.tipo === 'ok' ? '#065f46' : '#991b1b', fontSize: 14 }}>
-          {msg.testo}
-        </div>
-      )}
-
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <Table compact>
         <thead>
-          <tr style={{ background: '#1e293b', color: '#fff' }}>
-            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Ordine</th>
-            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Codice</th>
-            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Nome</th>
-            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Includi report</th>
-            <th style={{ padding: '9px 12px', textAlign: 'right' }}>Tariffa €</th>
-            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Colore</th>
-            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Attivo</th>
-            <th style={{ padding: '9px 12px' }} />
+          <tr>
+            <Th center>Ordine</Th><Th>Codice</Th><Th>Nome</Th><Th center>Includi report</Th>
+            <Th num>Tariffa €</Th><Th>Colore</Th><Th center>Stato</Th><Th />
           </tr>
         </thead>
         <tbody>
           {righe.map((r, i) => {
             const ed = editing[r.id]
             return (
-              <tr key={r.id} style={{ background: i % 2 === 0 ? '#f8fafc' : '#fff', opacity: r.attivo ? 1 : 0.55 }}>
-                <td style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                  <button onClick={() => sposta(i, -1)} disabled={i === 0} style={{ ...btnSm, padding: '2px 6px', marginRight: 3 }}>▲</button>
-                  <button onClick={() => sposta(i, 1)} disabled={i === righe.length - 1} style={{ ...btnSm, padding: '2px 6px' }}>▼</button>
-                </td>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{r.code}</td>
-                <td style={{ padding: '8px 12px' }}>
+              <tr key={r.id} className={ed ? 'ui-riga-evidenza' : r.attivo ? undefined : 'ui-riga-attenuata'}>
+                <Td center style={{ whiteSpace: 'nowrap' }}>
+                  <Button variant="ghost" size="sm" onClick={() => sposta(i, -1)} disabled={i === 0} aria-label="Sposta su" style={{ padding: '2px 6px' }}>▲</Button>
+                  <Button variant="ghost" size="sm" onClick={() => sposta(i, 1)} disabled={i === righe.length - 1} aria-label="Sposta giù" style={{ padding: '2px 6px' }}>▼</Button>
+                </Td>
+                <Td><code>{r.code}</code></Td>
+                <Td>
+                  {ed ? <Input value={ed.name} onChange={e => aggiornaEdit(r.id, 'name', e.target.value)} style={{ width: '95%' }} /> : r.name}
+                </Td>
+                <Td center>
                   {ed ? (
-                    <input value={ed.name} onChange={e => aggiornaEdit(r.id, 'name', e.target.value)}
-                      style={{ width: '90%', padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1' }} />
-                  ) : r.name}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    <input type="checkbox" checked={ed.includi_report} onChange={e => aggiornaEdit(r.id, 'includi_report', e.target.checked)} aria-label="Includi nei report" />
+                  ) : (r.includi_report ? '✓' : <span style={{ color: colors.textSubtle }}>—</span>)}
+                </Td>
+                <Td num>
                   {ed ? (
-                    <input type="checkbox" checked={ed.includi_report} onChange={e => aggiornaEdit(r.id, 'includi_report', e.target.checked)} />
-                  ) : (r.includi_report ? '✓' : <span style={{ color: '#94a3b8' }}>—</span>)}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                  {ed ? (
-                    <input type="number" step="0.01" min="0" value={ed.tariffa_riferimento}
+                    <Input type="number" step="0.01" min="0" value={ed.tariffa_riferimento} className="ui-num"
                       onChange={e => aggiornaEdit(r.id, 'tariffa_riferimento', e.target.value)}
                       placeholder="—" title="Tariffa unitaria per l'assegnazione a prezzo (es. 20.00 €/notte)"
-                      style={{ width: 70, padding: '4px 6px', borderRadius: 5, border: '1px solid #cbd5e1', textAlign: 'right' }} />
-                  ) : (
-                    r.tariffa_riferimento != null ? `${r.tariffa_riferimento.toFixed(2)} €` : <span style={{ color: '#94a3b8' }}>—</span>
-                  )}
-                </td>
-                <td style={{ padding: '8px 12px' }}>
-                  {ed ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      <label style={{ cursor: 'pointer', display: 'inline-flex' }} title="Seleziona colore">
-                        <span style={{ width: 20, height: 20, borderRadius: 4, display: 'inline-block',
-                                       background: ed.colore || '#e2e8f0', border: '1px solid #cbd5e1' }} />
-                        <input type="color" value={ed.colore || '#6366f1'}
-                               onChange={e => aggiornaEdit(r.id, 'colore', e.target.value)}
-                               style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
-                      </label>
-                      <input type="text" value={ed.colore} onChange={e => aggiornaEdit(r.id, 'colore', e.target.value)}
-                        placeholder="#rrggbb" maxLength={7} spellCheck={false}
-                        style={{ width: 72, padding: '4px 6px', borderRadius: 5, fontSize: 12, fontFamily: 'monospace', border: '1px solid #cbd5e1' }} />
-                    </span>
-                  ) : (
-                    r.colore
-                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ width: 14, height: 14, borderRadius: 3, background: r.colore, border: '1px solid #cbd5e1', display: 'inline-block' }} />
-                          <code style={{ fontSize: 12 }}>{r.colore}</code>
-                        </span>
-                      : <span style={{ color: '#94a3b8', fontSize: 12 }}>auto</span>
-                  )}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                  <button onClick={() => toggleAttivo(r)} style={{ ...btnSm, background: r.attivo ? '#d1fae5' : '#fca5a5', color: r.attivo ? '#065f46' : '#7f1d1d' }}>
-                    {r.attivo ? 'Attiva' : 'Disattiva'}
+                      style={{ width: 80, textAlign: 'right', padding: '3px 6px' }} />
+                  ) : (r.tariffa_riferimento != null ? `${r.tariffa_riferimento.toFixed(2)} €` : <span style={{ color: colors.textSubtle }}>—</span>)}
+                </Td>
+                <Td><CampoColore modifica={!!ed} valore={ed ? ed.colore : r.colore} onChange={v => aggiornaEdit(r.id, 'colore', v)} /></Td>
+                <Td center>
+                  <button type="button" onClick={() => toggleAttivo(r)} title={r.attivo ? 'Clicca per disattivare' : 'Clicca per attivare'}
+                    className={`ui-badge ${r.attivo ? 'ui-badge-ok' : 'ui-badge-err'}`} style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {r.attivo ? 'attiva' : 'disattivata'}
                   </button>
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                </Td>
+                <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {ed ? (
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      <button onClick={() => salva(r.id)} disabled={saving === r.id}
-                        style={{ padding: '4px 12px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>
-                        {saving === r.id ? '...' : 'Salva'}
-                      </button>
-                      <button onClick={() => cancellaEdit(r.id)}
-                        style={{ padding: '4px 10px', background: '#e2e8f0', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>✕</button>
+                      <Button size="sm" onClick={() => salva(r.id)} disabled={saving === r.id}>{saving === r.id ? '…' : 'Salva'}</Button>
+                      <Button variant="secondary" size="sm" onClick={() => cancellaEdit(r.id)} aria-label="Annulla">✕</Button>
                     </div>
                   ) : (
-                    <button onClick={() => avviaEdit(r)}
-                      style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#475569' }}>
-                      Modifica
-                    </button>
+                    <Button variant="secondary" size="sm" onClick={() => avviaEdit(r)}>Modifica</Button>
                   )}
-                </td>
+                </Td>
               </tr>
             )
           })}
         </tbody>
-      </table>
+      </Table>
 
-      <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Nuova categoria:</span>
-        <input value={nuovo.code} onChange={e => setNuovo(v => ({ ...v, code: e.target.value }))}
-          placeholder="Codice (es. spiaggia)" style={{ ...inputSm, width: 160 }} />
-        <input value={nuovo.name} onChange={e => setNuovo(v => ({ ...v, name: e.target.value }))}
-          placeholder="Nome (es. Spiaggia)" style={{ ...inputSm, width: 180 }} />
-        <button onClick={creaCategoria} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
-      </div>
+      <Card title="Nuova categoria" style={{ marginTop: 16 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <Field label="Codice">
+            <Input value={nuovo.code} onChange={e => setNuovo(v => ({ ...v, code: e.target.value }))} placeholder="es. spiaggia" style={{ width: 160 }} />
+          </Field>
+          <Field label="Nome">
+            <Input value={nuovo.name} onChange={e => setNuovo(v => ({ ...v, name: e.target.value }))} placeholder="es. Spiaggia" style={{ width: 190 }} />
+          </Field>
+          <Button onClick={creaCategoria}>+ Aggiungi</Button>
+        </div>
+      </Card>
     </div>
   )
+}
+
+// Colore di una voce: in lettura swatch + codice (o "auto"), in modifica selettore + campo hex
+function CampoColore({ modifica, valore, onChange }) {
+  if (modifica) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <label style={{ cursor: 'pointer', display: 'inline-flex', position: 'relative' }} title="Seleziona colore">
+          <span style={{ width: 22, height: 22, borderRadius: 4, display: 'inline-block', background: valore || colors.border, border: `1px solid ${colors.borderStrong}` }} />
+          <input type="color" value={valore || colors.primary} onChange={e => onChange(e.target.value)}
+            style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} />
+        </label>
+        <Input type="text" value={valore} onChange={e => onChange(e.target.value)} placeholder="#rrggbb" maxLength={7}
+          spellCheck={false} style={{ width: 84, fontFamily: 'monospace', padding: '3px 6px' }} />
+      </span>
+    )
+  }
+  return valore
+    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 14, height: 14, borderRadius: 3, background: valore, border: `1px solid ${colors.borderStrong}`, display: 'inline-block' }} />
+        <code style={{ fontSize: 'var(--fs-sm)' }}>{valore}</code>
+      </span>
+    : <span className="ui-text-muted">auto</span>
 }
 
 // ---------------------------------------------------------------------------
@@ -1333,7 +1304,8 @@ function ProdMappingDettagli() {
   const [editing, setEditing] = useState({}) // id → {categoria_id, categoria_da_prezzo, conta_come_pasto}
   const [nuovo, setNuovo] = useState({ dettaglio_originale: '', categoria_id: '', categoria_da_prezzo: false, conta_come_pasto: false })
   const [ricalcolando, setRicalcolando] = useState(false)
-  const [msg, fb] = useFeedback()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -1345,11 +1317,11 @@ function ProdMappingDettagli() {
       setRighe(rMap.data)
       setCategorie(rCat.data.filter(c => c.attivo))
     } catch (e) {
-      fb(mostraErrore(e), 'err')
+      avvisi.errore(mostraErrore(e))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [avvisi])
 
   const caricaSmistare = useCallback(async () => {
     setLoadingSmistare(true)
@@ -1357,11 +1329,11 @@ function ProdMappingDettagli() {
       const r = await api.get('/produzione/altro-da-smistare')
       setDaSmistare(r.data)
     } catch (e) {
-      fb(mostraErrore(e), 'err')
+      avvisi.errore(mostraErrore(e))
     } finally {
       setLoadingSmistare(false)
     }
-  }, [])
+  }, [avvisi])
 
   useEffect(() => { carica(); caricaSmistare() }, [carica, caricaSmistare])
 
@@ -1374,23 +1346,28 @@ function ProdMappingDettagli() {
         categoria_da_prezzo: ed.categoria_da_prezzo,
         conta_come_pasto: ed.conta_come_pasto,
       })
-      fb('Mapping aggiornato', 'ok')
+      avvisi.successo('Mapping aggiornato')
       setEditing(prev => { const n = { ...prev }; delete n[r.id]; return n })
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const elimina = async (r) => {
-    if (!window.confirm(`Rimuovere il mapping per "${r.dettaglio_originale}"? Le nuove righe con questo testo ricadranno su "Altro".`)) return
+    if (!(await conferma({
+      titolo: `Rimuovere il mapping per "${r.dettaglio_originale}"?`,
+      messaggio: 'Le nuove righe con questo testo ricadranno su "Altro".',
+      confermaLabel: 'Rimuovi',
+      pericolo: true,
+    }))) return
     try {
       await api.delete(`/produzione/mapping-dettagli/${r.id}`)
-      fb('Mapping rimosso', 'ok')
+      avvisi.successo('Mapping rimosso')
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const crea = async () => {
-    if (!nuovo.dettaglio_originale || !nuovo.categoria_id) { fb('Testo e categoria obbligatori', 'err'); return }
+    if (!nuovo.dettaglio_originale || !nuovo.categoria_id) { avvisi.attenzione('Testo e categoria obbligatori'); return }
     try {
       await api.post('/produzione/mapping-dettagli', {
         dettaglio_originale: nuovo.dettaglio_originale.trim(),
@@ -1399,47 +1376,55 @@ function ProdMappingDettagli() {
         conta_come_pasto: nuovo.conta_come_pasto,
       })
       setNuovo({ dettaglio_originale: '', categoria_id: '', categoria_da_prezzo: false, conta_come_pasto: false })
-      fb('Mapping creato', 'ok')
+      avvisi.successo('Mapping creato')
       carica()
       caricaSmistare()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const ricalcolaCategorie = async () => {
-    if (!window.confirm(
-      'Riassegna la categoria di TUTTE le righe già importate in base al mapping attuale ' +
-      '(utile dopo aver smistato una voce da "Altro" a una categoria specifica). Procedere?'
-    )) return
+    if (!(await conferma({
+      titolo: 'Ricalcolare le categorie di tutte le righe già importate?',
+      messaggio: 'Riassegna la categoria di TUTTE le righe già importate in base al mapping attuale (utile dopo aver smistato una voce da "Altro" a una categoria specifica).',
+      confermaLabel: 'Ricalcola',
+    }))) return
     setRicalcolando(true)
     try {
       const { data } = await api.post('/produzione/ricalcola-categorie')
-      fb(`Ricalcolo completato: ${data.n_righe_aggiornate} righe aggiornate su ${data.n_righe_esaminate} esaminate.`, 'ok')
+      avvisi.successo(`Ricalcolo completato: ${data.n_righe_aggiornate} righe aggiornate su ${data.n_righe_esaminate} esaminate.`)
       caricaSmistare()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
     finally { setRicalcolando(false) }
   }
 
   const assegnaSmistata = async (voce) => {
     const categoria_id = smistaCat[voce.dettaglio_originale]
-    if (!categoria_id) { fb('Seleziona una categoria prima di assegnare', 'err'); return }
+    if (!categoria_id) { avvisi.attenzione('Seleziona una categoria prima di assegnare'); return }
     try {
       await api.post('/produzione/mapping-dettagli', {
         dettaglio_originale: voce.dettaglio_originale,
         categoria_id: Number(categoria_id),
         categoria_da_prezzo: false,
       })
-      fb(`"${voce.dettaglio_originale}" smistata`, 'ok')
+      avvisi.successo(`"${voce.dettaglio_originale}" smistata`)
       carica()
       caricaSmistare()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
-  if (loading) return <p style={{ color: '#64748b' }}>Caricamento...</p>
+  if (loading) return <Loading />
+
+  const chiudiEdit = (id) => setEditing(prev => { const n = { ...prev }; delete n[id]; return n })
+  const aggiornaEdit = (id, campo, valore) => setEditing(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valore } }))
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>Mapping Dettagli Produzione</h2>
-      <p style={{ color: '#64748b', fontSize: 14 }}>
+      <PageHeader title="Mapping dettagli Produzione">
+        <Button variant="secondary" onClick={ricalcolaCategorie} disabled={ricalcolando}>
+          {ricalcolando ? 'Ricalcolo in corso…' : 'Ricalcola categorie righe esistenti'}
+        </Button>
+      </PageHeader>
+      <p className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: -8, maxWidth: 900 }}>
         Collega il testo esatto della colonna "Articolo" dell'export Welcome (StatisticheProduzione.xlsx)
         alla categoria di ricavo. Il confronto è case-insensitive. Un testo non presente in questa lista
         ricade automaticamente su "Altro" — nessuna modifica al codice necessaria per aggiungere,
@@ -1452,171 +1437,110 @@ function ProdMappingDettagli() {
         per non contare anche i singoli piatti/bevande/coperti mappati nella stessa categoria
         colazione/pranzo/cena solo per finalità di ricavo (es. il ristorante Maremosso per Du Parc).
       </p>
+      <Messaggio tipo="info">
+        Il mapping si applica automaticamente solo alle righe importate DOPO la modifica. Usa
+        "Ricalcola categorie righe esistenti" (in alto a destra) per applicarlo retroattivamente anche
+        alle righe già in archivio.
+      </Messaggio>
 
-      <div style={{ marginBottom: 20 }}>
-        <button onClick={ricalcolaCategorie} disabled={ricalcolando}
-          style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#1e3a5f', color: '#fff',
-                   fontWeight: 600, fontSize: 13, cursor: ricalcolando ? 'not-allowed' : 'pointer' }}>
-          {ricalcolando ? 'Ricalcolo in corso…' : 'Ricalcola categorie righe esistenti'}
-        </button>
-        <p style={{ margin: '6px 0 0', fontSize: 12, color: '#64748b' }}>
-          Il mapping si applica automaticamente solo alle righe importate DOPO la modifica. Usa questo
-          bottone per applicarlo retroattivamente anche alle righe già in archivio.
+      <Card title='Da smistare — voci ancora in "Altro"' style={{ marginBottom: 20, boxShadow: `inset 4px 0 0 ${colors.warning}` }}>
+        <p className="ui-text-muted" style={{ marginTop: -6 }}>
+          Ordinate per importo totale (dati reali, tutti gli import), così si parte da quelle che valgono di più.
         </p>
-      </div>
-
-      {msg && (
-        <div style={{ padding: '8px 14px', borderRadius: 6, marginBottom: 16,
-                      background: msg.tipo === 'ok' ? '#d1fae5' : '#fee2e2',
-                      color: msg.tipo === 'ok' ? '#065f46' : '#991b1b', fontSize: 14 }}>
-          {msg.testo}
-        </div>
-      )}
-
-      <div style={{ border: '1.5px solid #fcd34d', background: '#fffbeb', borderRadius: 8, padding: '1rem 1.25rem', marginBottom: 20 }}>
-        <h3 style={{ margin: '0 0 8px', fontSize: 15, color: '#92400e' }}>Da smistare — voci ancora in "Altro"</h3>
-        <p style={{ margin: '0 0 10px', fontSize: 13, color: '#78350f' }}>
-          Ordinate per importo totale (dati reali, tutti gli import), così si parte da quelle che
-          valgono di più.
-        </p>
-        {loadingSmistare ? (
-          <p style={{ color: '#92400e', fontSize: 13 }}>Caricamento...</p>
-        ) : daSmistare.length === 0 ? (
-          <p style={{ color: '#166534', fontSize: 13, fontWeight: 600 }}>✓ Nessuna voce da smistare.</p>
+        {loadingSmistare ? <Loading /> : daSmistare.length === 0 ? (
+          <p style={{ color: colors.successText, fontWeight: 600, margin: 0 }}>✓ Nessuna voce da smistare.</p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '6px 10px', textAlign: 'left', color: '#92400e' }}>Testo Welcome</th>
-                <th style={{ padding: '6px 10px', textAlign: 'right', color: '#92400e' }}>N. righe</th>
-                <th style={{ padding: '6px 10px', textAlign: 'right', color: '#92400e' }}>Totale lordo</th>
-                <th style={{ padding: '6px 10px', color: '#92400e' }} />
-              </tr>
-            </thead>
+          <Table compact>
+            <thead><tr><Th>Testo Welcome</Th><Th num>N. righe</Th><Th num>Totale lordo</Th><Th /></tr></thead>
             <tbody>
               {daSmistare.slice(0, 30).map(v => (
-                <tr key={v.dettaglio_originale} style={{ borderTop: '1px solid #fde68a' }}>
-                  <td style={{ padding: '6px 10px', fontFamily: 'monospace' }}>{v.dettaglio_originale}</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>{v.n_righe}</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600 }}>{v.totale_lordo.toFixed(2)} €</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+                <tr key={v.dettaglio_originale}>
+                  <Td><code>{v.dettaglio_originale}</code></Td>
+                  <Td num>{v.n_righe}</Td>
+                  <Td num style={{ fontWeight: 600 }}>{v.totale_lordo.toFixed(2)} €</Td>
+                  <Td style={{ textAlign: 'right' }}>
                     <span style={{ display: 'inline-flex', gap: 6 }}>
-                      <select value={smistaCat[v.dettaglio_originale] || ''}
-                        onChange={e => setSmistaCat(prev => ({ ...prev, [v.dettaglio_originale]: e.target.value }))}
-                        style={{ padding: '3px 6px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: 12 }}>
+                      <Select value={smistaCat[v.dettaglio_originale] || ''} aria-label="Categoria"
+                        onChange={e => setSmistaCat(prev => ({ ...prev, [v.dettaglio_originale]: e.target.value }))}>
                         <option value="">— categoria —</option>
                         {categorie.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                      <button onClick={() => assegnaSmistata(v)} style={{ ...btnSm, background: '#1e293b', color: '#fff', fontSize: 12, padding: '3px 10px' }}>
-                        Assegna
-                      </button>
+                      </Select>
+                      <Button size="sm" onClick={() => assegnaSmistata(v)}>Assegna</Button>
                     </span>
-                  </td>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
-      </div>
+      </Card>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <Table compact>
         <thead>
-          <tr style={{ background: '#1e293b', color: '#fff' }}>
-            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Testo Welcome (Articolo)</th>
-            <th style={{ padding: '9px 12px', textAlign: 'left' }}>Categoria</th>
-            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Assegna per prezzo</th>
-            <th style={{ padding: '9px 12px', textAlign: 'center' }}>Conta come pasto</th>
-            <th style={{ padding: '9px 12px' }} />
-          </tr>
+          <tr><Th>Testo Welcome (Articolo)</Th><Th>Categoria</Th><Th center>Assegna per prezzo</Th><Th center>Conta come pasto</Th><Th /></tr>
         </thead>
         <tbody>
-          {righe.map((r, i) => {
+          {righe.map(r => {
             const ed = editing[r.id]
             return (
-              <tr key={r.id} style={{ background: i % 2 === 0 ? '#f8fafc' : '#fff' }}>
-                <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{r.dettaglio_originale}</td>
-                <td style={{ padding: '8px 12px' }}>
+              <tr key={r.id} className={ed ? 'ui-riga-evidenza' : undefined}>
+                <Td><code>{r.dettaglio_originale}</code></Td>
+                <Td>
                   {ed ? (
-                    <select value={ed.categoria_id} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], categoria_id: e.target.value } }))}
-                      style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1' }}>
+                    <Select value={ed.categoria_id} onChange={e => aggiornaEdit(r.id, 'categoria_id', e.target.value)} aria-label="Categoria">
                       {categorie.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  ) : (
-                    <span style={{ background: '#e0e7ff', color: '#3730a3', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
-                      {r.categoria_name}
-                    </span>
-                  )}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    </Select>
+                  ) : <Badge tono="info">{r.categoria_name}</Badge>}
+                </Td>
+                <Td center>
                   {ed ? (
-                    <input type="checkbox" checked={ed.categoria_da_prezzo}
-                      onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], categoria_da_prezzo: e.target.checked } }))} />
-                  ) : (
-                    r.categoria_da_prezzo
-                      ? <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>per prezzo</span>
-                      : <span style={{ color: '#94a3b8' }}>—</span>
-                  )}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    <input type="checkbox" checked={ed.categoria_da_prezzo} onChange={e => aggiornaEdit(r.id, 'categoria_da_prezzo', e.target.checked)} aria-label="Assegna per prezzo" />
+                  ) : (r.categoria_da_prezzo ? <Badge tono="warn">per prezzo</Badge> : <span style={{ color: colors.textSubtle }}>—</span>)}
+                </Td>
+                <Td center>
                   {ed ? (
-                    <input type="checkbox" checked={ed.conta_come_pasto}
-                      onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], conta_come_pasto: e.target.checked } }))} />
-                  ) : (
-                    r.conta_come_pasto
-                      ? <span style={{ background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>pasto</span>
-                      : <span style={{ color: '#94a3b8' }}>—</span>
-                  )}
-                </td>
-                <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                    <input type="checkbox" checked={ed.conta_come_pasto} onChange={e => aggiornaEdit(r.id, 'conta_come_pasto', e.target.checked)} aria-label="Conta come pasto" />
+                  ) : (r.conta_come_pasto ? <Badge tono="ok">pasto</Badge> : <span style={{ color: colors.textSubtle }}>—</span>)}
+                </Td>
+                <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {ed ? (
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      <button onClick={() => salvaCategoria(r)}
-                        style={{ padding: '4px 12px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>
-                        Salva
-                      </button>
-                      <button onClick={() => setEditing(prev => { const n = { ...prev }; delete n[r.id]; return n })}
-                        style={{ padding: '4px 10px', background: '#e2e8f0', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>✕</button>
+                      <Button size="sm" onClick={() => salvaCategoria(r)}>Salva</Button>
+                      <Button variant="secondary" size="sm" onClick={() => chiudiEdit(r.id)} aria-label="Annulla">✕</Button>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      <button onClick={() => setEditing(prev => ({ ...prev, [r.id]: { categoria_id: r.categoria_id, categoria_da_prezzo: r.categoria_da_prezzo, conta_come_pasto: r.conta_come_pasto } }))}
-                        style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#475569' }}>
+                      <Button variant="secondary" size="sm"
+                        onClick={() => setEditing(prev => ({ ...prev, [r.id]: { categoria_id: r.categoria_id, categoria_da_prezzo: r.categoria_da_prezzo, conta_come_pasto: r.conta_come_pasto } }))}>
                         Modifica
-                      </button>
-                      <button onClick={() => elimina(r)}
-                        style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #fca5a5', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#dc2626' }}>
-                        Rimuovi
-                      </button>
+                      </Button>
+                      <Button variant="danger-soft" size="sm" onClick={() => elimina(r)}>Rimuovi</Button>
                     </div>
                   )}
-                </td>
+                </Td>
               </tr>
             )
           })}
         </tbody>
-      </table>
+      </Table>
 
-      <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Nuovo mapping:</span>
-        <input value={nuovo.dettaglio_originale} onChange={e => setNuovo(v => ({ ...v, dettaglio_originale: e.target.value }))}
-          placeholder='Testo esatto (es. "Servizio Spiaggia")' style={{ ...inputSm, width: 220 }} />
-        <select value={nuovo.categoria_id} onChange={e => setNuovo(v => ({ ...v, categoria_id: e.target.value }))}
-          style={{ ...inputSm, width: 160 }}>
-          <option value="">— categoria —</option>
-          {categorie.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#374151' }}>
-          <input type="checkbox" checked={nuovo.categoria_da_prezzo}
-            onChange={e => setNuovo(v => ({ ...v, categoria_da_prezzo: e.target.checked }))} />
-          assegna per prezzo
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#374151' }}>
-          <input type="checkbox" checked={nuovo.conta_come_pasto}
-            onChange={e => setNuovo(v => ({ ...v, conta_come_pasto: e.target.checked }))} />
-          conta come pasto
-        </label>
-        <button onClick={crea} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
-      </div>
+      <Card title="Nuovo mapping" style={{ marginTop: 16 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <Field label="Testo esatto">
+            <Input value={nuovo.dettaglio_originale} onChange={e => setNuovo(v => ({ ...v, dettaglio_originale: e.target.value }))}
+              placeholder='es. "Servizio Spiaggia"' style={{ width: 230 }} />
+          </Field>
+          <Field label="Categoria">
+            <Select value={nuovo.categoria_id} onChange={e => setNuovo(v => ({ ...v, categoria_id: e.target.value }))} style={{ width: 170 }}>
+              <option value="">— categoria —</option>
+              {categorie.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+          </Field>
+          <Checkbox checked={nuovo.categoria_da_prezzo} onChange={v => setNuovo(n => ({ ...n, categoria_da_prezzo: v }))} label="assegna per prezzo" style={{ alignSelf: 'center' }} />
+          <Checkbox checked={nuovo.conta_come_pasto} onChange={v => setNuovo(n => ({ ...n, conta_come_pasto: v }))} label="conta come pasto" style={{ alignSelf: 'center' }} />
+          <Button onClick={crea}>+ Aggiungi</Button>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -1740,16 +1664,17 @@ function Placeholder({ sezione }) {
 // ---------------------------------------------------------------------------
 
 const VOCE_OPTIONS = [
-  { val: 'camere', label: 'Camere', color: '#3b82f6' },
-  { val: 'fnb',    label: 'F&B',    color: '#10b981' },
-  { val: null,     label: 'Altri reparti (default)', color: '#94a3b8' },
+  { value: 'camere', label: 'Camere' },
+  { value: 'fnb',    label: 'F&B' },
+  { value: null,     label: 'Altri reparti (default)' },
 ]
 
 function UsaliCCMapping() {
   const [albero, setAlbero] = useState([])
   const [mapping, setMapping] = useState({})
   const [salvando, setSalvando] = useState(false)
-  const [msg, setMsg] = useState(null)
+  const [modificato, setModificato] = useState(false)
+  const avvisi = useAvvisi()
 
   useEffect(() => {
     Promise.all([
@@ -1758,10 +1683,11 @@ function UsaliCCMapping() {
     ]).then(([ra, rm]) => {
       setAlbero(ra.data)
       setMapping(rm.data)
-    }).catch(e => alert(mostraErrore(e)))
-  }, [])
+    }).catch(e => avvisi.errore(mostraErrore(e)))
+  }, [avvisi])
 
   function setVoce(ccCode, val) {
+    setModificato(true)
     setMapping(prev => {
       const next = { ...prev }
       if (val === null) delete next[ccCode]
@@ -1771,73 +1697,59 @@ function UsaliCCMapping() {
   }
 
   async function salva() {
-    setSalvando(true); setMsg(null)
+    setSalvando(true)
     try {
       await api.put('/usali/cc-mapping', mapping)
-      setMsg({ tipo: 'ok', testo: 'Mappatura salvata.' })
+      setModificato(false)
+      avvisi.successo('Mappatura salvata.')
     } catch (e) {
-      setMsg({ tipo: 'err', testo: mostraErrore(e) })
+      avvisi.errore(mostraErrore(e))
     } finally { setSalvando(false) }
   }
 
-  if (!albero.length) return <div style={{ padding: 24, color: '#94a3b8' }}>Caricamento…</div>
+  if (!albero.length) return <Loading />
 
   return (
-    <div style={{ maxWidth: 720 }}>
-      <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Mappatura costi del lavoro</h3>
-      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
+    <div style={{ maxWidth: 820 }}>
+      <PageHeader title="Mappatura costi del lavoro">
+        <Button onClick={salva} disabled={salvando}>{salvando ? 'Salvataggio…' : 'Salva mappatura'}</Button>
+      </PageHeader>
+      <p className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: -8 }}>
         Assegna ogni Centro di Costo a una voce USALI. I costi vengono letti automaticamente
         dal modulo Dipendenti. Senza assegnazione → <strong>Altri reparti</strong>.
       </p>
+      {modificato && <Messaggio tipo="warn">Ci sono modifiche non salvate.</Messaggio>}
 
       {albero.map(struttura => (
-        <div key={struttura.code} style={{ marginBottom: 20, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-          {/* Header struttura */}
-          <div style={{ background: '#1e293b', color: '#fff', padding: '7px 14px', fontWeight: 600, fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>{struttura.name} <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 400 }}>({struttura.code})</span></span>
-            {/* Toggle rapido per tutta la struttura */}
+        <div key={struttura.code} className="ui-card" style={{ padding: 0, marginBottom: 20, overflow: 'hidden' }}>
+          {/* Header struttura con assegnazione rapida di tutti i CC */}
+          <div style={{ background: colors.primary, color: '#fff', padding: '8px 14px', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span>{struttura.name} <span style={{ fontSize: 'var(--fs-xs)', opacity: 0.7, fontWeight: 400 }}>({struttura.code})</span></span>
             <div style={{ display: 'flex', gap: 4 }}>
               {VOCE_OPTIONS.map(o => (
-                <button key={String(o.val)} onClick={() => {
+                <Button key={String(o.value)} variant="secondary" size="sm" onClick={() => {
                   const allCodes = [struttura.code,
                     ...struttura.categorie.flatMap(c => [c.code, ...c.reparti.map(r => r.code)])]
-                  allCodes.forEach(cc => setVoce(cc, o.val))
-                }} style={{ padding: '2px 8px', fontSize: 11, border: 'none', borderRadius: 4, cursor: 'pointer', background: o.color, color: '#fff', opacity: 0.85 }}>
+                  allCodes.forEach(cc => setVoce(cc, o.value))
+                }}>
                   Tutti {o.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
 
-          {/* Categorie e reparti */}
           {struttura.categorie.map(cat => (
             <div key={cat.code}>
-              {/* Riga categoria */}
-              <ToggleRigaCC
-                code={cat.code} name={cat.name} tipo="categoria"
-                voce={mapping[cat.code] ?? null} onChange={v => setVoce(cat.code, v)}
-              />
-              {/* Reparti figli */}
+              <ToggleRigaCC code={cat.code} name={cat.name} tipo="categoria"
+                voce={mapping[cat.code] ?? null} onChange={v => setVoce(cat.code, v)} />
               {cat.reparti.map(rep => (
-                <ToggleRigaCC
-                  key={rep.code}
-                  code={rep.code} name={rep.name} tipo="reparto"
-                  voce={mapping[rep.code] ?? null} onChange={v => setVoce(rep.code, v)}
-                  indent
-                />
+                <ToggleRigaCC key={rep.code} code={rep.code} name={rep.name} tipo="reparto"
+                  voce={mapping[rep.code] ?? null} onChange={v => setVoce(rep.code, v)} indent />
               ))}
             </div>
           ))}
         </div>
       ))}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={salva} disabled={salvando}
-          style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-          {salvando ? 'Salvataggio…' : 'Salva mappatura'}
-        </button>
-        {msg && <span style={{ fontSize: 13, color: msg.tipo === 'ok' ? '#16a34a' : '#dc2626' }}>{msg.testo}</span>}
-      </div>
     </div>
   )
 }
@@ -1845,33 +1757,16 @@ function UsaliCCMapping() {
 function ToggleRigaCC({ code, name, tipo, voce, onChange, indent }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', padding: '5px 14px',
-      paddingLeft: indent ? 32 : 14,
-      background: tipo === 'categoria' ? '#f8fafc' : '#fff',
-      borderBottom: '1px solid #f1f5f9',
-      gap: 12,
+      display: 'flex', alignItems: 'center', gap: 12, padding: '5px 14px', paddingLeft: indent ? 32 : 14,
+      background: tipo === 'categoria' ? colors.surfaceSoft : colors.surface,
+      borderBottom: `1px solid ${colors.surfaceAlt}`,
     }}>
-      <span style={{ flex: 1, fontSize: 13, color: '#374151' }}>
-        {tipo === 'reparto' && <span style={{ color: '#cbd5e1', marginRight: 6 }}>└</span>}
+      <span style={{ flex: 1, color: colors.textSecond, fontWeight: tipo === 'categoria' ? 600 : 400 }}>
+        {tipo === 'reparto' && <span style={{ color: colors.borderStrong, marginRight: 6 }}>└</span>}
         {name}
-        <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>{code}</span>
+        <code style={{ fontSize: 'var(--fs-xs)', color: colors.textSubtle, marginLeft: 6 }}>{code}</code>
       </span>
-      <div style={{ display: 'flex', gap: 3 }}>
-        {VOCE_OPTIONS.map(o => {
-          const attivo = voce === o.val
-          return (
-            <button key={String(o.val)} onClick={() => onChange(o.val)}
-              style={{
-                padding: '3px 10px', fontSize: 12, border: `1px solid ${attivo ? o.color : '#e2e8f0'}`,
-                borderRadius: 4, cursor: 'pointer', fontWeight: attivo ? 600 : 400,
-                background: attivo ? o.color : '#fff',
-                color: attivo ? '#fff' : '#64748b',
-              }}>
-              {o.label}
-            </button>
-          )
-        })}
-      </div>
+      <SegmentedControl value={voce} onChange={onChange} options={VOCE_OPTIONS} />
     </div>
   )
 }
@@ -1891,111 +1786,79 @@ const KPI_LABELS = {
 function UsaliKpiConfig() {
   const [config, setConfig] = useState(null)
   const [salvando, setSalvando] = useState(false)
-  const [msg, setMsg] = useState(null)
+  const [modificato, setModificato] = useState(false)
+  const avvisi = useAvvisi()
 
   useEffect(() => {
-    api.get('/usali/kpi-config').then(r => setConfig(r.data)).catch(e => alert(mostraErrore(e)))
-  }, [])
+    api.get('/usali/kpi-config').then(r => setConfig(r.data)).catch(e => avvisi.errore(mostraErrore(e)))
+  }, [avvisi])
 
   function aggiornaRange(tipo, kpiCode, campo, valore) {
+    setModificato(true)
     setConfig(prev => ({
       ...prev,
-      [tipo]: {
-        ...prev[tipo],
-        [kpiCode]: { ...prev[tipo][kpiCode], [campo]: valore },
-      },
+      [tipo]: { ...prev[tipo], [kpiCode]: { ...prev[tipo][kpiCode], [campo]: valore } },
     }))
   }
 
   async function salva() {
     setSalvando(true)
-    setMsg(null)
     try {
       await api.put('/usali/kpi-config', config)
-      setMsg({ tipo: 'ok', testo: 'Range KPI salvati.' })
+      setModificato(false)
+      avvisi.successo('Range KPI salvati.')
     } catch (e) {
-      setMsg({ tipo: 'err', testo: mostraErrore(e) })
+      avvisi.errore(mostraErrore(e))
     } finally {
       setSalvando(false)
     }
   }
 
-  if (!config) return <div style={{ padding: 24, color: '#94a3b8' }}>Caricamento…</div>
+  if (!config) return <Loading />
 
   const tipi = [
     { id: 'hotel', label: 'Hotel (DPH / CLB / INT)' },
     { id: 'ristoranti', label: 'Ristoranti (MMS / BON)' },
   ]
+  const campoPerc = (id, kpiCode, campo, valore) => (
+    <Input type="number" min={0} max={100} step={0.5} value={valore ?? ''} className="ui-num"
+      onChange={e => aggiornaRange(id, kpiCode, campo, parseFloat(e.target.value))}
+      style={{ width: 76, textAlign: 'center', padding: '3px 6px' }} />
+  )
 
   return (
-    <div style={{ maxWidth: 680 }}>
-      <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Range KPI USALI</h3>
-      <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
+    <div style={{ maxWidth: 720 }}>
+      <PageHeader title="Range KPI USALI">
+        <Button onClick={salva} disabled={salvando}>{salvando ? 'Salvataggio…' : 'Salva range'}</Button>
+      </PageHeader>
+      <p className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: -8 }}>
         I range definiscono la zona verde (●) del semaforo nella pagina USALI.
         Sotto il minimo → arancione; sopra il massimo → rosso.
       </p>
+      {modificato && <Messaggio tipo="warn">Ci sono modifiche non salvate.</Messaggio>}
 
       {tipi.map(({ id, label }) => (
-        <div key={id} style={{ marginBottom: 24, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-          <div style={{ background: '#334155', color: '#fff', padding: '8px 14px', fontWeight: 600, fontSize: 13 }}>
-            {label}
-          </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <Card key={id} title={label} style={{ marginBottom: 20 }}>
+          <Table compact>
             <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '8px 14px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>KPI</th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600, color: '#374151', width: 100 }}>Min %</th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600, color: '#374151', width: 100 }}>Max %</th>
-                <th style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600, color: '#94a3b8', width: 90 }}>Range</th>
-              </tr>
+              <tr><Th>KPI</Th><Th center>Min %</Th><Th center>Max %</Th><Th center>Range</Th></tr>
             </thead>
             <tbody>
-              {KPI_CODES.map((kpiCode, vi) => {
+              {KPI_CODES.map(kpiCode => {
                 const rng = config[id]?.[kpiCode] ?? { lo: 0, hi: 0 }
                 return (
-                  <tr key={kpiCode} style={{ background: vi % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '6px 14px', color: '#374151' }}>{KPI_LABELS[kpiCode]}</td>
-                    <td style={{ padding: '4px 10px', textAlign: 'center' }}>
-                      <input
-                        type="number" min={0} max={100} step={0.5}
-                        value={rng.lo ?? ''}
-                        onChange={e => aggiornaRange(id, kpiCode, 'lo', parseFloat(e.target.value))}
-                        style={{ width: 70, textAlign: 'center', padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13 }}
-                      />
-                    </td>
-                    <td style={{ padding: '4px 10px', textAlign: 'center' }}>
-                      <input
-                        type="number" min={0} max={100} step={0.5}
-                        value={rng.hi ?? ''}
-                        onChange={e => aggiornaRange(id, kpiCode, 'hi', parseFloat(e.target.value))}
-                        style={{ width: 70, textAlign: 'center', padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 13 }}
-                      />
-                    </td>
-                    <td style={{ padding: '4px 10px', textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
-                      {rng.lo}% – {rng.hi}%
-                    </td>
+                  <tr key={kpiCode}>
+                    <Td>{KPI_LABELS[kpiCode]}</Td>
+                    <Td center>{campoPerc(id, kpiCode, 'lo', rng.lo)}</Td>
+                    <Td center>{campoPerc(id, kpiCode, 'hi', rng.hi)}</Td>
+                    <Td center muted className="ui-num">{rng.lo}% – {rng.hi}%</Td>
                   </tr>
                 )
               })}
             </tbody>
-          </table>
-        </div>
+          </Table>
+        </Card>
       ))}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button
-          onClick={salva}
-          disabled={salvando}
-          style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-        >
-          {salvando ? 'Salvataggio…' : 'Salva range'}
-        </button>
-        {msg && (
-          <span style={{ fontSize: 13, color: msg.tipo === 'ok' ? '#16a34a' : '#dc2626' }}>
-            {msg.testo}
-          </span>
-        )}
-      </div>
     </div>
   )
 }
@@ -2025,7 +1888,8 @@ function UsaliMovimentiRighe() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState({}) // id → {reparto, conto, tipo, categoria_produzione}
   const [nuovo, setNuovo] = useState({ reparto: '', conto: '', riga_code: '', tipo: 'manuale', categoria_produzione: '', aliquota_iva: '10' })
-  const [msg, fb] = useFeedback()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const carica = useCallback(async () => {
     setLoading(true)
@@ -2037,11 +1901,11 @@ function UsaliMovimentiRighe() {
       setRighe(rRighe.data)
       setCategorie(rCat.data.filter(c => c.attivo))
     } catch (e) {
-      fb(mostraErrore(e), 'err')
+      avvisi.errore(mostraErrore(e))
     } finally {
       setLoading(false)
     }
-  }, [struttura])
+  }, [struttura, avvisi])
 
   useEffect(() => { carica() }, [carica])
 
@@ -2062,18 +1926,18 @@ function UsaliMovimentiRighe() {
         categoria_produzione: ed.tipo === 'auto_produzione' ? ed.categoria_produzione : null,
         aliquota_iva: Number(ed.aliquota_iva) || 0,
       })
-      fb('Riga salvata', 'ok')
+      avvisi.successo('Riga salvata')
       annullaEdit(r.id)
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const toggleAttivo = async (r) => {
     try {
       await api.put(`/usali/movimenti-righe/${r.id}`, { attivo: !r.attivo })
-      fb(r.attivo ? 'Riga disattivata' : 'Riga attivata', 'ok')
+      avvisi.successo(r.attivo ? 'Riga disattivata' : 'Riga attivata')
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const sposta = async (idx, delta) => {
@@ -2086,21 +1950,21 @@ function UsaliMovimentiRighe() {
         api.put(`/usali/movimenti-righe/${altra.id}`, { ordine: questa.ordine }),
       ])
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const elimina = async (r) => {
-    if (!window.confirm(`Eliminare la riga "${r.reparto} / ${r.conto}"?`)) return
+    if (!(await conferma({ titolo: `Eliminare la riga "${r.reparto} / ${r.conto}"?`, pericolo: true }))) return
     try {
       await api.delete(`/usali/movimenti-righe/${r.id}`)
-      fb('Riga eliminata', 'ok')
+      avvisi.successo('Riga eliminata')
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const crea = async () => {
-    if (!nuovo.reparto || !nuovo.conto || !nuovo.riga_code) { fb('Reparto, conto e codice riga obbligatori', 'err'); return }
-    if (nuovo.tipo === 'auto_produzione' && !nuovo.categoria_produzione) { fb('Seleziona una categoria Produzione', 'err'); return }
+    if (!nuovo.reparto || !nuovo.conto || !nuovo.riga_code) { avvisi.attenzione('Reparto, conto e codice riga obbligatori'); return }
+    if (nuovo.tipo === 'auto_produzione' && !nuovo.categoria_produzione) { avvisi.attenzione('Seleziona una categoria Produzione'); return }
     try {
       await api.post('/usali/movimenti-righe', {
         struttura_code: struttura, reparto: nuovo.reparto.trim(), conto: nuovo.conto.trim(),
@@ -2109,155 +1973,119 @@ function UsaliMovimentiRighe() {
         aliquota_iva: Number(nuovo.aliquota_iva) || 10,
       })
       setNuovo({ reparto: '', conto: '', riga_code: '', tipo: 'manuale', categoria_produzione: '', aliquota_iva: '10' })
-      fb('Riga creata', 'ok')
+      avvisi.successo('Riga creata')
       carica()
-    } catch (e) { fb(mostraErrore(e), 'err') }
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
+
+  const aggiornaEdit = (id, campo, valore) => setEditing(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valore } }))
+  const selectCategoria = (valore, onChange) => (
+    <Select value={valore} onChange={e => onChange(e.target.value)} aria-label="Categoria Produzione">
+      <option value="">— categoria —</option>
+      {categorie.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+    </Select>
+  )
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>Righe Movimenti Attivi</h2>
-      <p style={{ color: '#64748b', fontSize: 14 }}>
+      <PageHeader title="Righe Movimenti Attivi">
+        <SegmentedControl value={struttura} onChange={setStruttura}
+          options={STRUTTURE_MOVIMENTI.map(st => ({ value: st.code, label: st.label }))} />
+      </PageHeader>
+      <p className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: -8, maxWidth: 900 }}>
         Le voci di "Movimenti Attivi" (Reparto/Conto) non sono le stesse per ogni struttura — es. il
         Du Parc ha il Ristorante Mare Mosso (redirect automatico), Club Hotel e International hanno
         un Ristorante proprio, Buona Onda ha un set minimo tutto manuale. Gestisci qui quali righe
         esistono per ciascuna struttura, senza bisogno di modifiche al codice.
       </p>
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        {STRUTTURE_MOVIMENTI.map(s => (
-          <button key={s.code} onClick={() => setStruttura(s.code)} style={{
-            ...btnSm, padding: '6px 14px',
-            background: struttura === s.code ? '#1e293b' : '#f1f5f9',
-            color: struttura === s.code ? '#fff' : '#374151',
-          }}>{s.label}</button>
-        ))}
-      </div>
-
-      {msg && (
-        <div style={{ padding: '8px 14px', borderRadius: 6, marginBottom: 16,
-                      background: msg.tipo === 'ok' ? '#d1fae5' : '#fee2e2',
-                      color: msg.tipo === 'ok' ? '#065f46' : '#991b1b', fontSize: 14 }}>
-          {msg.testo}
-        </div>
-      )}
-
-      {loading ? <p style={{ color: '#64748b' }}>Caricamento...</p> : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      {loading ? <Loading /> : (
+        <Table compact>
           <thead>
-            <tr style={{ background: '#1e293b', color: '#fff' }}>
-              <th style={{ padding: '9px 12px', textAlign: 'center' }}>Ordine</th>
-              <th style={{ padding: '9px 12px', textAlign: 'left' }}>Reparto</th>
-              <th style={{ padding: '9px 12px', textAlign: 'left' }}>Conto</th>
-              <th style={{ padding: '9px 12px', textAlign: 'left' }}>Tipo</th>
-              <th style={{ padding: '9px 12px', textAlign: 'center' }}>Aliquota IVA %</th>
-              <th style={{ padding: '9px 12px', textAlign: 'center' }}>Attivo</th>
-              <th style={{ padding: '9px 12px' }} />
-            </tr>
+            <tr><Th center>Ordine</Th><Th>Reparto</Th><Th>Conto</Th><Th>Tipo</Th><Th center>Aliquota IVA %</Th><Th center>Stato</Th><Th /></tr>
           </thead>
           <tbody>
             {righe.map((r, i) => {
               const ed = editing[r.id]
               return (
-                <tr key={r.id} style={{ background: i % 2 === 0 ? '#f8fafc' : '#fff', opacity: r.attivo ? 1 : 0.55 }}>
-                  <td style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                    <button onClick={() => sposta(i, -1)} disabled={i === 0} style={{ ...btnSm, padding: '2px 6px', marginRight: 3 }}>▲</button>
-                    <button onClick={() => sposta(i, 1)} disabled={i === righe.length - 1} style={{ ...btnSm, padding: '2px 6px' }}>▼</button>
-                  </td>
-                  <td style={{ padding: '8px 12px' }}>
-                    {ed ? (
-                      <input value={ed.reparto} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], reparto: e.target.value } }))}
-                        style={{ width: 140, padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1' }} />
-                    ) : r.reparto}
-                  </td>
-                  <td style={{ padding: '8px 12px' }}>
-                    {ed ? (
-                      <input value={ed.conto} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], conto: e.target.value } }))}
-                        style={{ width: 220, padding: '4px 8px', borderRadius: 5, border: '1px solid #cbd5e1' }} />
-                    ) : r.conto}
-                  </td>
-                  <td style={{ padding: '8px 12px' }}>
+                <tr key={r.id} className={ed ? 'ui-riga-evidenza' : r.attivo ? undefined : 'ui-riga-attenuata'}>
+                  <Td center style={{ whiteSpace: 'nowrap' }}>
+                    <Button variant="ghost" size="sm" onClick={() => sposta(i, -1)} disabled={i === 0} aria-label="Sposta su" style={{ padding: '2px 6px' }}>▲</Button>
+                    <Button variant="ghost" size="sm" onClick={() => sposta(i, 1)} disabled={i === righe.length - 1} aria-label="Sposta giù" style={{ padding: '2px 6px' }}>▼</Button>
+                  </Td>
+                  <Td>{ed ? <Input value={ed.reparto} onChange={e => aggiornaEdit(r.id, 'reparto', e.target.value)} style={{ width: 150 }} /> : r.reparto}</Td>
+                  <Td>{ed ? <Input value={ed.conto} onChange={e => aggiornaEdit(r.id, 'conto', e.target.value)} style={{ width: 230 }} /> : r.conto}</Td>
+                  <Td>
                     {ed ? (
                       <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <select value={ed.tipo} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], tipo: e.target.value } }))}
-                          style={{ padding: '4px 6px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: 12 }}>
+                        <Select value={ed.tipo} onChange={e => aggiornaEdit(r.id, 'tipo', e.target.value)} aria-label="Tipo riga">
                           {TIPI_RIGA.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                        </select>
-                        {ed.tipo === 'auto_produzione' && (
-                          <select value={ed.categoria_produzione} onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], categoria_produzione: e.target.value } }))}
-                            style={{ padding: '4px 6px', borderRadius: 5, border: '1px solid #cbd5e1', fontSize: 12 }}>
-                            <option value="">— categoria —</option>
-                            {categorie.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-                          </select>
-                        )}
+                        </Select>
+                        {ed.tipo === 'auto_produzione' && selectCategoria(ed.categoria_produzione, v => aggiornaEdit(r.id, 'categoria_produzione', v))}
                       </span>
                     ) : (
                       <span>
+                        {r.tipo !== 'manuale' && <Badge tono="info" style={{ marginRight: 6 }}>AUTO</Badge>}
                         {TIPI_RIGA.find(t => t.value === r.tipo)?.label || r.tipo}
-                        {r.categoria_produzione && <span style={{ color: '#94a3b8' }}> ({r.categoria_produzione})</span>}
+                        {r.categoria_produzione && <span style={{ color: colors.textSubtle }}> ({r.categoria_produzione})</span>}
                       </span>
                     )}
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                  </Td>
+                  <Td center>
                     {ed ? (
-                      <input type="number" step="0.01" value={ed.aliquota_iva}
-                        onChange={e => setEditing(prev => ({ ...prev, [r.id]: { ...prev[r.id], aliquota_iva: e.target.value } }))}
-                        style={{ width: 60, padding: '4px 6px', borderRadius: 5, border: '1px solid #cbd5e1', textAlign: 'center' }} />
-                    ) : r.tipo === 'manuale' ? (
-                      `${r.aliquota_iva}%`
-                    ) : (
-                      <span style={{ color: '#94a3b8' }} title="Righe auto usano l'IVA reale dai dati sorgente, questa aliquota non è applicata">n/d</span>
+                      <Input type="number" step="0.01" value={ed.aliquota_iva} className="ui-num"
+                        onChange={e => aggiornaEdit(r.id, 'aliquota_iva', e.target.value)} style={{ width: 70, textAlign: 'center', padding: '3px 6px' }} />
+                    ) : r.tipo === 'manuale' ? `${r.aliquota_iva}%` : (
+                      <span style={{ color: colors.textSubtle }} title="Righe auto usano l'IVA reale dai dati sorgente, questa aliquota non è applicata">n/d</span>
                     )}
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                    <button onClick={() => toggleAttivo(r)} style={{ ...btnSm, background: r.attivo ? '#d1fae5' : '#fca5a5', color: r.attivo ? '#065f46' : '#7f1d1d' }}>
-                      {r.attivo ? 'Attiva' : 'Disattiva'}
+                  </Td>
+                  <Td center>
+                    <button type="button" onClick={() => toggleAttivo(r)} title={r.attivo ? 'Clicca per disattivare' : 'Clicca per attivare'}
+                      className={`ui-badge ${r.attivo ? 'ui-badge-ok' : 'ui-badge-err'}`} style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {r.attivo ? 'attiva' : 'disattivata'}
                     </button>
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                  </Td>
+                  <Td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {ed ? (
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                        <button onClick={() => salva(r)} style={{ padding: '4px 12px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>Salva</button>
-                        <button onClick={() => annullaEdit(r.id)} style={{ padding: '4px 10px', background: '#e2e8f0', border: 'none', borderRadius: 5, cursor: 'pointer', fontSize: 12 }}>✕</button>
+                        <Button size="sm" onClick={() => salva(r)}>Salva</Button>
+                        <Button variant="secondary" size="sm" onClick={() => annullaEdit(r.id)} aria-label="Annulla">✕</Button>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                        <button onClick={() => avviaEdit(r)} style={{ padding: '4px 12px', background: 'transparent', border: '1px solid #cbd5e1', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#475569' }}>Modifica</button>
-                        <button onClick={() => elimina(r)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #fca5a5', borderRadius: 5, cursor: 'pointer', fontSize: 12, color: '#dc2626' }}>Rimuovi</button>
+                        <Button variant="secondary" size="sm" onClick={() => avviaEdit(r)}>Modifica</Button>
+                        <Button variant="danger-soft" size="sm" onClick={() => elimina(r)}>Rimuovi</Button>
                       </div>
                     )}
-                  </td>
+                  </Td>
                 </tr>
               )
             })}
           </tbody>
-        </table>
+        </Table>
       )}
 
-      <div className="card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Nuova riga ({STRUTTURE_MOVIMENTI.find(s => s.code === struttura)?.label}):</span>
-        <input value={nuovo.reparto} onChange={e => setNuovo(v => ({ ...v, reparto: e.target.value }))}
-          placeholder="Reparto" style={{ ...inputSm, width: 140 }} />
-        <input value={nuovo.conto} onChange={e => setNuovo(v => ({ ...v, conto: e.target.value }))}
-          placeholder="Conto" style={{ ...inputSm, width: 200 }} />
-        <input value={nuovo.riga_code} onChange={e => setNuovo(v => ({ ...v, riga_code: e.target.value }))}
-          placeholder="Codice (es. mov_xyz)" style={{ ...inputSm, width: 140 }} />
-        <select value={nuovo.tipo} onChange={e => setNuovo(v => ({ ...v, tipo: e.target.value }))} style={{ ...inputSm, width: 200 }}>
-          {TIPI_RIGA.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
-        {nuovo.tipo === 'auto_produzione' && (
-          <select value={nuovo.categoria_produzione} onChange={e => setNuovo(v => ({ ...v, categoria_produzione: e.target.value }))} style={{ ...inputSm, width: 160 }}>
-            <option value="">— categoria —</option>
-            {categorie.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-          </select>
-        )}
-        {nuovo.tipo === 'manuale' && (
-          <input type="number" step="0.01" value={nuovo.aliquota_iva}
-            onChange={e => setNuovo(v => ({ ...v, aliquota_iva: e.target.value }))}
-            placeholder="Aliquota IVA %" style={{ ...inputSm, width: 100 }} />
-        )}
-        <button onClick={crea} style={{ ...btnSm, background: '#dc2626', color: '#fff' }}>+ Aggiungi</button>
-      </div>
+      <Card title={`Nuova riga — ${STRUTTURE_MOVIMENTI.find(st => st.code === struttura)?.label}`} style={{ marginTop: 16 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <Field label="Reparto"><Input value={nuovo.reparto} onChange={e => setNuovo(v => ({ ...v, reparto: e.target.value }))} style={{ width: 150 }} /></Field>
+          <Field label="Conto"><Input value={nuovo.conto} onChange={e => setNuovo(v => ({ ...v, conto: e.target.value }))} style={{ width: 210 }} /></Field>
+          <Field label="Codice riga"><Input value={nuovo.riga_code} onChange={e => setNuovo(v => ({ ...v, riga_code: e.target.value }))} placeholder="es. mov_xyz" style={{ width: 150 }} /></Field>
+          <Field label="Tipo">
+            <Select value={nuovo.tipo} onChange={e => setNuovo(v => ({ ...v, tipo: e.target.value }))} style={{ width: 230 }}>
+              {TIPI_RIGA.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </Select>
+          </Field>
+          {nuovo.tipo === 'auto_produzione' && (
+            <Field label="Categoria Produzione">{selectCategoria(nuovo.categoria_produzione, v => setNuovo(n => ({ ...n, categoria_produzione: v })))}</Field>
+          )}
+          {nuovo.tipo === 'manuale' && (
+            <Field label="Aliquota IVA %">
+              <Input type="number" step="0.01" value={nuovo.aliquota_iva} onChange={e => setNuovo(v => ({ ...v, aliquota_iva: e.target.value }))} style={{ width: 90 }} />
+            </Field>
+          )}
+          <Button onClick={crea}>+ Aggiungi</Button>
+        </div>
+      </Card>
     </div>
   )
 }

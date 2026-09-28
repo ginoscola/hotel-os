@@ -333,8 +333,11 @@ contrasto con l'app reale) è stato eliminato.
   Dipendenti, Classificazione trattamenti — **corretto un difetto**: i messaggi di esito comparivano
   come riquadro rosso vuoto, perché `fb(testo, tipo)` passava due argomenti a `useFeedback`, che ne
   gestiva uno solo e poi leggeva `msg.tipo`/`msg.testo` su una stringa; ora usa `useAvvisi` —, Stampanti
-  RT, Debug, Backup. Tranche C da fare: USALI e Statistiche Produzione, che usano ancora
-  `useFeedback`/`inputSm`/`btnSm`). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  RT, Debug, Backup), ✅ Admin tranche C (v3.15.14: USALI Mappatura costi lavoro — scelte Camere/F&B/
+  Altri come `SegmentedControl` per riga —, Range KPI, Righe Movimenti Attivi; Produzione Categorie e
+  Mapping dettagli. Stesso difetto dei messaggi vuoti corretto anche qui (Categorie, Mapping, Movimenti
+  usavano `fb(testo, tipo)`). Eliminati `useFeedback`/`inputSm`/`btnSm`. Con questa tranche **non
+  restano `window.confirm`/`alert` in tutta l'app**). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati
