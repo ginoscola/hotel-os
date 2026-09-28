@@ -1,17 +1,21 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../api/client'
 import { mostraErrore } from '../utils/format'
-import { isAdmin, fmtD, thSt, tdSt } from '../utils/corrispettiviHelpers'
+import { isAdmin, fmtD } from '../utils/corrispettiviHelpers'
+import {
+  Badge, Button, Checkbox, DropZone, Loading, Messaggio, SectionTitle, SegmentedControl, StatoVuoto,
+  Table, Td, Th, useAvvisi, useConferma,
+} from '../components/ui'
 
 export default function TabImport({ onImportato }) {
-  const [trascina, setTrascina] = useState(false)
   const [caricamento, setCaricamento] = useState(false)
   const [esito, setEsito] = useState(null)
   const [isTest, setIsTest] = useState(false)
   const [onConflict, setOnConflict] = useState('salta')
   const [storico, setStorico] = useState([])
   const [loadStor, setLoadStor] = useState(true)
-  const inputRef = useRef()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
 
   const caricaStorico = useCallback(async () => {
     try {
@@ -60,131 +64,90 @@ export default function TabImport({ onImportato }) {
   }
 
   const eliminaImport = async (id) => {
-    if (!window.confirm('Eliminare questa sessione di import?')) return
+    if (!(await conferma({ titolo: 'Eliminare questa sessione di import?', pericolo: true }))) return
     try {
       await api.delete(`/corrispettivi/import/${id}?conferma=true`)
       caricaStorico()
       onImportato()
-    } catch (err) { alert(mostraErrore(err)) }
+    } catch (err) { avvisi.errore(mostraErrore(err)) }
   }
 
   return (
-    <div style={{ maxWidth: 820 }}>
-      {/* Drop zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setTrascina(true) }}
-        onDragLeave={() => setTrascina(false)}
-        onDrop={(e) => { e.preventDefault(); setTrascina(false); gestisciFile(e.dataTransfer.files[0]) }}
-        onClick={() => inputRef.current?.click()}
-        style={{
-          border: `2px dashed ${trascina ? '#2563eb' : '#94a3b8'}`,
-          borderRadius: 12, padding: '2.5rem', textAlign: 'center',
-          cursor: 'pointer', background: trascina ? '#eff6ff' : '#f8fafc',
-          transition: 'all .15s', marginBottom: '1rem',
-        }}
-      >
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
-          onChange={(e) => gestisciFile(e.target.files[0])} />
-        {caricamento ? (
-          <p style={{ color: '#64748b', margin: 0 }}>Caricamento in corso…</p>
-        ) : (
-          <>
-            <p style={{ fontSize: '2rem', margin: 0 }}>📊</p>
-            <p style={{ color: '#475569', margin: '0.5rem 0 0' }}>
-              Trascina il file Excel esportato da Welcome PMS
-              <br />
-              <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
-                Formato base (18 col.) o formato esteso con Tassa di soggiorno (36 col.) — oppure clicca per selezionare
-              </span>
-            </p>
-          </>
+    <div style={{ maxWidth: 860 }}>
+      <DropZone
+        accept=".xlsx,.xls"
+        onFile={gestisciFile}
+        disabled={caricamento}
+        icona={caricamento ? null : '📊'}
+        titolo={caricamento ? 'Caricamento in corso…' : 'Trascina il file Excel esportato da Welcome PMS'}
+        sottotitolo={caricamento ? null : 'Formato base (18 col.) o formato esteso con Tassa di soggiorno (36 col.) — oppure clicca per selezionare'}
+      />
+
+      <div style={{ display: 'flex', gap: 24, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Checkbox checked={isTest} onChange={setIsTest} label="Segna come dati di test" />
+          {isTest && <Badge tono="warn">TEST</Badge>}
+        </div>
+        <SegmentedControl
+          label="Se già presente:"
+          value={onConflict}
+          onChange={setOnConflict}
+          options={[{ value: 'salta', label: 'Salta' }, { value: 'aggiorna', label: 'Aggiorna' }]}
+        />
+        {onConflict === 'aggiorna' && (
+          <Badge tono="warn">I doc. modificati manualmente non vengono sovrascritti</Badge>
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <input type="checkbox" checked={isTest} onChange={(e) => setIsTest(e.target.checked)} />
-          <span style={{ fontSize: '0.88rem', color: '#64748b' }}>Segna come dati di test</span>
-          {isTest && <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 4, fontSize: '0.78rem', fontWeight: 600 }}>TEST</span>}
-        </label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff7ed', border: '1.5px solid #fdba74', borderRadius: 8, padding: '5px 10px' }}>
-          <span style={{ fontSize: '0.85rem', color: '#9a3412', fontWeight: 600 }}>Se già presente:</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[['salta', 'Salta'], ['aggiorna', 'Aggiorna']].map(([v, l]) => (
-              <button key={v} onClick={() => setOnConflict(v)} style={{
-                padding: '5px 14px', borderRadius: 6, border: 'none',
-                fontSize: '0.85rem', cursor: 'pointer', fontWeight: onConflict === v ? 700 : 400,
-                background: onConflict === v ? '#ea580c' : 'transparent',
-                color: onConflict === v ? '#fff' : '#9a3412',
-              }}>{l}</button>
-            ))}
-          </div>
-          {onConflict === 'aggiorna' && (
-            <span style={{ fontSize: '0.75rem', color: '#92400e', background: '#fef3c7', padding: '2px 6px', borderRadius: 3 }}>
-              I doc. modificati manualmente non vengono sovrascritti
-            </span>
-          )}
-        </div>
-      </div>
-
       {esito && (
-        <div style={{
-          padding: '0.75rem 1rem', borderRadius: 8, marginBottom: '1.5rem', fontSize: '0.88rem',
-          background: esito.ok ? '#dcfce7' : '#fee2e2', color: esito.ok ? '#166534' : '#991b1b',
-        }}>
-          <strong>{esito.ok ? '✓' : '✗'} {esito.msg}</strong>
-          {esito.sub && <p style={{ margin: '0.25rem 0 0', opacity: 0.8 }}>{esito.sub}</p>}
+        <Messaggio tipo={esito.ok ? 'ok' : 'err'} onChiudi={() => setEsito(null)}>
+          <strong>{esito.msg}</strong>
+          {esito.sub && <div style={{ marginTop: 4, opacity: 0.85 }}>{esito.sub}</div>}
           {esito.warnings?.length > 0 && (
-            <details style={{ marginTop: '0.5rem' }}>
-              <summary style={{ cursor: 'pointer', fontSize: '0.82rem' }}>{esito.warnings.length} avvisi</summary>
-              <ul style={{ margin: '0.25rem 0 0 1rem', padding: 0 }}>
-                {esito.warnings.map((w, i) => <li key={i} style={{ fontSize: '0.8rem' }}>{w}</li>)}
+            <details style={{ marginTop: 6 }}>
+              <summary style={{ cursor: 'pointer' }}>{esito.warnings.length} avvisi</summary>
+              <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                {esito.warnings.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             </details>
           )}
-        </div>
+        </Messaggio>
       )}
 
-      <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 0.75rem', color: '#1e293b' }}>Storico import</h3>
+      <SectionTitle as="h3">Storico import</SectionTitle>
       {loadStor ? (
-        <p style={{ color: '#94a3b8', fontSize: '0.88rem' }}>Caricamento…</p>
+        <Loading />
       ) : storico.length === 0 ? (
-        <p style={{ color: '#94a3b8', fontSize: '0.88rem' }}>Nessun import effettuato.</p>
+        <StatoVuoto>Nessun import effettuato.</StatoVuoto>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+        <Table compact>
           <thead>
-            <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-              {['Data import', 'File', 'Periodo', 'Strutture', 'Scontrini', 'Fatture', 'Esclusi', ''].map(h => (
-                <th key={h} style={{ ...thSt, textAlign: 'left', color: '#fff' }}>{h}</th>
-              ))}
+            <tr>
+              <Th>Data import</Th><Th>File</Th><Th>Periodo</Th><Th>Strutture</Th>
+              <Th num>Scontrini</Th><Th num>Fatture</Th><Th num>Esclusi</Th><Th></Th>
             </tr>
           </thead>
           <tbody>
-            {storico.map((imp, idx) => (
-              <tr key={imp.id} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                <td style={{ ...tdSt, textAlign: 'left', color: '#64748b' }}>
-                  {imp.created_at ? new Date(imp.created_at).toLocaleDateString('it-IT') : '—'}
-                </td>
-                <td style={{ ...tdSt, textAlign: 'left', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {storico.map(imp => (
+              <tr key={imp.id}>
+                <Td muted>{imp.created_at ? new Date(imp.created_at).toLocaleDateString('it-IT') : '—'}</Td>
+                <Td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={imp.nome_file}>
                   {imp.nome_file || '—'}
-                </td>
-                <td style={{ ...tdSt, textAlign: 'left' }}>{fmtD(imp.data_da)} – {fmtD(imp.data_a)}</td>
-                <td style={{ ...tdSt, textAlign: 'left' }}>{(imp.strutture_presenti || []).join(', ') || '—'}</td>
-                <td style={tdSt}>{imp.n_scontrini}</td>
-                <td style={tdSt}>{imp.n_fatture}</td>
-                <td style={{ ...tdSt, color: imp.n_esclusi > 0 ? '#92400e' : '#94a3b8' }}>{imp.n_esclusi}</td>
-                <td style={tdSt}>
+                </Td>
+                <Td style={{ whiteSpace: 'nowrap' }}>{fmtD(imp.data_da)} – {fmtD(imp.data_a)}</Td>
+                <Td>{(imp.strutture_presenti || []).join(', ') || '—'}</Td>
+                <Td num>{imp.n_scontrini}</Td>
+                <Td num>{imp.n_fatture}</Td>
+                <Td num style={{ color: imp.n_esclusi > 0 ? 'var(--color-warning-text)' : 'var(--color-text-subtle)' }}>{imp.n_esclusi}</Td>
+                <Td center>
                   {isAdmin() && (
-                    <button onClick={() => eliminaImport(imp.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '0.8rem' }}>
-                      Elimina
-                    </button>
+                    <Button variant="danger-soft" size="sm" onClick={() => eliminaImport(imp.id)}>Elimina</Button>
                   )}
-                </td>
+                </Td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       )}
     </div>
   )

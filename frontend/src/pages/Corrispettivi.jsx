@@ -11,6 +11,7 @@ import TabFatturati from './TabFatturati'
 import TabCassa from './TabCassa'
 import api from '../api/client'
 import { isAdmin } from '../utils/corrispettiviHelpers'
+import { PageHeader, Tabs, ToggleIva } from '../components/ui'
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -62,36 +63,11 @@ export default function Corrispettivi() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>Corrispettivi</h1>
+      <PageHeader title="Corrispettivi">
+        <ToggleIva lordo={lordo} onChange={cambiaLordo} />
+      </PageHeader>
 
-        {/* Toggle IVA globale */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#fff7ed', border: '1.5px solid #fdba74', borderRadius: 8, padding: '5px 8px' }}>
-          <span style={{ fontSize: '0.85rem', color: '#9a3412', fontWeight: 600 }}>Valori:</span>
-          <button onClick={() => cambiaLordo(true)} style={{
-            padding: '5px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: lordo ? 700 : 400,
-            background: lordo ? '#ea580c' : 'transparent', color: lordo ? '#fff' : '#9a3412',
-          }}>IVA inclusa</button>
-          <button onClick={() => cambiaLordo(false)} style={{
-            padding: '5px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: !lordo ? 700 : 400,
-            background: !lordo ? '#ea580c' : 'transparent', color: !lordo ? '#fff' : '#9a3412',
-          }}>IVA esclusa</button>
-        </div>
-      </div>
-
-      {/* Tab bar */}
-      <div style={{ display: 'flex', borderBottom: '2px solid #e2e8f0', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 0 }}>
-        {tabsDisponibili.map(t => (
-          <button key={t.id} onClick={() => cambiaTab(t.id)} style={{
-            padding: '8px 18px', border: 'none',
-            borderBottom: tab === t.id ? '2px solid #1e3a5f' : '2px solid transparent',
-            background: 'none', cursor: 'pointer', fontSize: '0.88rem',
-            fontWeight: tab === t.id ? 700 : 400,
-            color: tab === t.id ? '#1e3a5f' : '#64748b',
-            marginBottom: -2, transition: 'all .15s',
-          }}>{t.label}</button>
-        ))}
-      </div>
+      <Tabs tabs={tabsDisponibili} value={tab} onChange={cambiaTab} />
 
       {/* Contenuto tab */}
       {tab === 'import' && (

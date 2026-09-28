@@ -116,6 +116,8 @@ export default function AdminUiKit() {
         <SegmentedControl value={seg} onChange={setSeg}
           options={[{ value: 'DPH', label: 'Du Parc' }, { value: 'CLB', label: 'Club Hotel' }, { value: 'INT', label: 'International' }]} />
         <ToggleIva lordo={lordo} onChange={setLordo} />
+        <SegmentedControl label="Se già presente:" value={seg === 'DPH' ? 'salta' : 'aggiorna'} onChange={() => {}}
+          options={[{ value: 'salta', label: 'Salta' }, { value: 'aggiorna', label: 'Aggiorna' }]} />
         <NavMese anno={periodo.anno} mese={periodo.mese} onChange={setPeriodo} />
         <NavAnno anno={annoDemo} onChange={setAnnoDemo} />
       </Blocco>
@@ -186,6 +188,8 @@ export default function AdminUiKit() {
             <tr className="ui-riga-ok"><Td>Completata (ui-riga-ok)</Td><Td num>{formatEuro(1000)}</Td><Td num>{formatEuro(900)}</Td><Td num tot>{formatEuro(1900)}</Td></tr>
             <tr className="ui-riga-evidenza"><Td>Evidenziata, es. sabato (ui-riga-evidenza)</Td><Td num>{formatEuro(500)}</Td><Td num>{formatEuro(400)}</Td><Td num tot>{formatEuro(900)}</Td></tr>
             <tr className="ui-riga-dettaglio"><Td colSpan={4}>Riga di dettaglio espansa (ui-riga-dettaglio): alloggio {formatEuro(300)} · colazione {formatEuro(120)}</Td></tr>
+            <tr className="ui-riga-annullata"><Td>Documento annullato (ui-riga-annullata)</Td><Td num>{formatEuro(-80)}</Td><Td num>—</Td><Td num tot>{formatEuro(-80)}</Td></tr>
+            <tr className="ui-riga-modificata"><Td>Corretto a mano (ui-riga-modificata)</Td><Td num>{formatEuro(210)}</Td><Td num>—</Td><Td num tot>{formatEuro(210)}</Td></tr>
             <tr className="ui-riga-subtotale"><Td>Subtotale (ui-riga-subtotale)</Td><Td num>{formatEuro(165640.5)}</Td><Td num>{formatEuro(130432.4)}</Td><Td num tot>{formatEuro(296072.9)}</Td></tr>
             <tr className="ui-riga-sezione"><Td>Totale sezione (ui-riga-sezione)</Td><Td num>{formatEuro(165640.5)}</Td><Td num>{formatEuro(130432.4)}</Td><Td num tot>{formatEuro(296072.9)}</Td></tr>
             <tr className="ui-riga-risultato"><Td>Risultato (ui-riga-risultato)</Td><Td num>{formatEuro(52000)}</Td><Td num>{formatEuro(41000)}</Td><Td num tot>{formatEuro(93000)}</Td></tr>
@@ -229,6 +233,15 @@ export default function AdminUiKit() {
           </tbody>
         </Table>
         <Paginazione pagina={pag} perPagina={20} totale={87} onChange={setPag} />
+        <Paginazione pagina={pag} perPagina={20} totale={87} onChange={setPag} estremi />
+      </Card>
+
+      <Card title="Log in stile console (classe ui-console)" style={{ marginBottom: 20 }}>
+        <div className="ui-console">
+          <div className="riga-info">[10:42:01] → X su RT1 (192.168.100.134)…</div>
+          <div className="riga-ok">[10:42:02] ✅ Report X stampato correttamente</div>
+          <div className="riga-err">[10:43:10] ❌ RT non raggiungibile — verifica rete/VPN</div>
+        </div>
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>

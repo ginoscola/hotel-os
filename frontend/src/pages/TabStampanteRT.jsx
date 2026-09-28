@@ -8,6 +8,8 @@
 import { useState, useEffect } from 'react'
 import api from '../api/client'
 import { mostraErrore } from '../utils/format'
+import { Badge, Button, Messaggio, Modal, SectionTitle, StatoVuoto } from '../components/ui'
+import { colors } from '../styles/tokens.js'
 
 const CONFERMA_Z_DELAY_MS = 2000
 const PING_TIMEOUT_MS = 3000
@@ -120,137 +122,116 @@ export default function TabStampanteRT({ isAdmin }) {
     inviaComando('Z')
   }
 
+  const disabilitato = !stampante || !!comandoInCorso
+  const etichetta = (testo) => (
+    <div style={{ fontSize: 'var(--fs-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.textSubtle, marginBottom: 8 }}>
+      {testo}
+    </div>
+  )
+  // Pulsante comando grande a tutta larghezza, testo allineato a sinistra
+  const stileComando = { justifyContent: 'flex-start', padding: '12px 18px', fontSize: 'var(--fs-md)', width: '100%' }
+
   return (
-    <div style={{ maxWidth: 560 }}>
-      <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', margin: '0 0 2px' }}>
-        Controllo Registratori Telematici
-      </h2>
-      <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 20px' }}>
+    <div style={{ maxWidth: 580 }}>
+      <SectionTitle style={{ marginBottom: 2 }}>Controllo Registratori Telematici</SectionTitle>
+      <p className="ui-text-muted" style={{ margin: '0 0 20px' }}>
         Invia comandi agli RT Epson FP-81 II senza tastiera fisica.
       </p>
 
-      <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: 8 }}>
-        Seleziona stampante
-      </div>
+      {etichetta('Seleziona stampante')}
 
-      {caricamentoErrore && (
-        <div style={{ padding: '10px 14px', background: '#fdecea', border: '1px solid #f5c6c3', borderRadius: 10, fontSize: '0.82rem', color: '#c62828', marginBottom: 20 }}>
-          {caricamentoErrore}
-        </div>
-      )}
+      <Messaggio tipo="err">{caricamentoErrore}</Messaggio>
 
       {!caricamentoErrore && stampanti.length === 0 && (
-        <div style={{ padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: '0.85rem', color: '#64748b', marginBottom: 20 }}>
-          Nessun registratore telematico configurato. Aggiungilo in Admin → Corrispettivi → Stampanti RT.
-        </div>
+        <StatoVuoto>Nessun registratore telematico configurato. Aggiungilo in Admin → Corrispettivi → Stampanti RT.</StatoVuoto>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }} role="radiogroup">
         {stampanti.map(s => {
           const vpn = !s.ip.startsWith('192.168.100.')
           const attiva = s.id === selezionata
           return (
-            <label key={s.id} onClick={() => setSelezionata(s.id)} style={{
+            <label key={s.id} onClick={() => setSelezionata(s.id)} role="radio" aria-checked={attiva} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-              border: `2px solid ${attiva ? '#1e3a5f' : '#e2e8f0'}`,
-              background: attiva ? '#eff6ff' : '#fff',
+              border: `2px solid ${attiva ? colors.primary : colors.border}`,
+              background: attiva ? colors.primarySoft : colors.surface,
               borderRadius: 12, cursor: 'pointer',
             }}>
               <span style={{
                 width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-                border: `2px solid ${attiva ? '#1e3a5f' : '#cbd5e1'}`,
-                background: attiva ? '#1e3a5f' : 'transparent',
+                border: `2px solid ${attiva ? colors.primary : colors.borderStrong}`,
+                background: attiva ? colors.primary : 'transparent',
                 boxShadow: attiva ? 'inset 0 0 0 3px #fff' : 'none',
               }} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b' }}>{s.nome}</div>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>
+                <div style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: colors.text }}>{s.nome}</div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: colors.textSubtle, fontFamily: 'monospace' }}>
                   {s.ip}{s.hotels?.length ? ` · ${s.hotels.join(', ')}` : ''}
                 </div>
               </div>
-              <span style={{
-                fontSize: '0.7rem', fontWeight: 700, padding: '3px 9px', borderRadius: 20,
-                background: vpn ? '#dcfce7' : '#e0e7ff',
-                color: vpn ? '#166534' : '#3730a3',
-              }}>{vpn ? 'VPN' : 'LAN'}</span>
+              <Badge tono={vpn ? 'ok' : 'info'}>{vpn ? 'VPN' : 'LAN'}</Badge>
             </label>
           )
         })}
       </div>
 
-      <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: 8 }}>
-        Comandi
-      </div>
+      {etichetta('Comandi')}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-        <button disabled={!stampante || !!comandoInCorso} onClick={() => inviaComando('X')} style={btnSt('#e8f4fd', '#1565c0', !stampante || !!comandoInCorso)}>
+        <Button variant="secondary" disabled={disabilitato} onClick={() => inviaComando('X')} style={stileComando}>
           📊 {comandoInCorso === 'X' ? 'Invio…' : 'Report X — Lettura giornaliera'}
-        </button>
-        <button disabled={!stampante || !!comandoInCorso} onClick={verificaStato} style={btnSt('#f0f4ff', '#3949ab', !stampante || !!comandoInCorso)}>
+        </Button>
+        <Button variant="secondary" disabled={disabilitato} onClick={verificaStato} style={stileComando}>
           🔍 {comandoInCorso === 'STATUS' ? 'Verifica…' : 'Stato stampante'}
-        </button>
+        </Button>
         {isAdmin && (
-          <button disabled={!stampante || !!comandoInCorso} onClick={apriConfermaZ} style={btnSt('#fdecea', '#c62828', !stampante || !!comandoInCorso)}>
+          <Button variant="danger-soft" disabled={disabilitato} onClick={apriConfermaZ} style={stileComando}>
             ⚠️ {comandoInCorso === 'Z' ? 'Chiusura in corso…' : 'Chiusura Z — Fiscale giornaliera'}
-          </button>
+          </Button>
         )}
       </div>
 
-      <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: 8 }}>
-        Log risposta
-      </div>
-      <div style={{ background: '#1a1a2e', borderRadius: 10, padding: 14, minHeight: 90, maxHeight: 220, overflowY: 'auto' }}>
-        {log.length === 0 && <span style={{ color: '#555', fontFamily: 'monospace', fontSize: '0.75rem' }}>In attesa di comandi…</span>}
+      {etichetta('Log risposta')}
+      <div className="ui-console">
+        {log.length === 0 && <span className="riga-vuota">In attesa di comandi…</span>}
         {log.map((l, i) => (
-          <div key={i} style={{
-            fontFamily: 'monospace', fontSize: '0.75rem', lineHeight: 1.7,
-            color: l.tipo === 'success' ? '#69f0ae' : l.tipo === 'error' ? '#ff6b6b' : '#ffd54f',
-          }}>
+          <div key={i} className={l.tipo === 'success' ? 'riga-ok' : l.tipo === 'error' ? 'riga-err' : 'riga-info'}>
             [{l.ts}] {l.messaggio}
           </div>
         ))}
       </div>
 
-      <div style={{ marginTop: 16, background: '#fff8e1', borderLeft: '4px solid #ffc107', borderRadius: 8, padding: '12px 14px', fontSize: '0.78rem', color: '#795548', lineHeight: 1.5 }}>
-        <strong style={{ color: '#5d4037' }}>Attenzione:</strong> la Chiusura Z è fiscalmente definitiva e non reversibile.
-        Usare solo a fine giornata dopo aver verificato i totali con il Report X.
+      <div style={{ marginTop: 16 }}>
+        <Messaggio tipo="warn">
+          <strong>Attenzione:</strong> la Chiusura Z è fiscalmente definitiva e non reversibile.
+          Usare solo a fine giornata dopo aver verificato i totali con il Report X.
+        </Messaggio>
       </div>
 
       {dialogZ && stampante && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 420 }}>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#c62828', marginBottom: 10 }}>⚠️ Chiusura fiscale Z</div>
-            <div style={{ fontSize: '0.85rem', color: '#334155', marginBottom: 6 }}>
+        <Modal
+          titolo="⚠️ Chiusura fiscale Z"
+          onChiudi={() => setDialogZ(false)}
+          larghezza={440}
+          chiudiSuSfondo={false}
+          footer={<>
+            <Button variant="secondary" onClick={() => setDialogZ(false)}>Annulla</Button>
+            <Button variant="danger" disabled={!confermaAbilitata} onClick={confermaZ}>
+              {confermaAbilitata ? 'Conferma chiusura Z' : 'Attendere…'}
+            </Button>
+          </>}
+        >
+          <div style={{ whiteSpace: 'normal' }}>
+            <div style={{ color: colors.text, marginBottom: 6 }}>
               Stampante: <strong>{stampante.nome}</strong> ({stampante.ip})
             </div>
-            <div style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5, marginBottom: 18 }}>
+            <div style={{ lineHeight: 1.5 }}>
               Questa operazione è <strong>definitiva</strong>: azzera i totalizzatori e trasmette i corrispettivi
               all'Agenzia delle Entrate. Non è reversibile.
             </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setDialogZ(false)} style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer', fontSize: '0.85rem' }}>
-                Annulla
-              </button>
-              <button disabled={!confermaAbilitata} onClick={confermaZ} style={{
-                padding: '9px 16px', borderRadius: 8, border: 'none', color: '#fff', fontSize: '0.85rem', fontWeight: 700,
-                background: confermaAbilitata ? '#c62828' : '#f3a5a5',
-                cursor: confermaAbilitata ? 'pointer' : 'not-allowed',
-              }}>
-                {confermaAbilitata ? 'Conferma chiusura Z' : 'Attendere…'}
-              </button>
-            </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   )
-}
-
-function btnSt(bg, color, disabled) {
-  return {
-    padding: '13px 18px', border: 'none', borderRadius: 12, fontSize: '0.9rem', fontWeight: 600,
-    textAlign: 'left', background: bg, color,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.55 : 1,
-  }
 }

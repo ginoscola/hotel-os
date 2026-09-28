@@ -252,6 +252,9 @@ contrasto con l'app reale) è stato eliminato.
   ora la riesporta): palette validata per serie/categorie nei grafici — usare questa, non colori a caso.
 - **`ExportMenu`** (componente condiviso) ha lo stile della libreria in tutta l'app; un errore di
   export compare come avviso temporaneo invece che come testo rosso accanto al pulsante.
+- `Paginazione estremi` (con « »), `SegmentedControl label="…"` (etichetta davanti alla pillola),
+  righe `ui-riga-annullata`/`ui-riga-modificata` (barra ambra = corretto a mano), classe
+  `ui-console` per log tipo terminale (righe `riga-info`/`riga-ok`/`riga-err`).
 - **`colors.accent`** (viola `#7c3aed`): unico colore extra ammesso oltre ai colori di significato,
   **solo** per "valore manuale che sostituisce il dato automatico" (oggi: Maturato in Forecast). Catalogo visivo: Admin → Sistema → Libreria UI (`?s=ui-kit`,
   `pages/admin/AdminUiKit.jsx`) — aggiornarlo quando si aggiunge un componente.
@@ -270,7 +273,12 @@ contrasto con l'app reale) è stato eliminato.
   ✅ Forecast (v3.15.2 — tolto il viola "di marca" e l'azzurro di Cancellazioni, tenuto
   `colors.accent` per il Maturato; titolo senza emoji), ✅ Statistiche Produzione (v3.15.3 —
   filtro struttura come `SegmentedControl` "Tutte/hotel" via `OPZIONI_STRUTTURA` in
-  `produzioneHelpers.js`; tolto il titolo interno duplicato delle tab Analisi). Da fare: gli altri moduli, per ultimi Dipendenti e AdminUnificato
+  `produzioneHelpers.js`; tolto il titolo interno duplicato delle tab Analisi), 🟡 Corrispettivi
+  tranche A (v3.15.4: contenitore, Import, Scontrini/Fatture, Penali, Cassa, Stampante RT, Dati di
+  test — la pillola "Se già presente: Salta/Aggiorna" dell'Import non è più arancione, l'arancione
+  resta solo per IVA; vista "Per hotel" di Scontrini/Fatture ora apre sul mese precedente come da
+  convenzione). Tranche B da fare: Corrispettivi giornalieri, Riepilogo Fatturati, Controllo RT,
+  Analisi Ricavi. Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
   (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
   (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
   si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati

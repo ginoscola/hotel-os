@@ -122,6 +122,8 @@
 .ui-seg .ui-seg-btn.attivo { background: var(--color-primary); color: #fff; font-weight: 700; }
 .ui-seg .ui-seg-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
+.ui-seg .ui-seg-label { font-size: var(--fs-base); font-weight: 600; color: var(--color-text-second); margin: 0 4px 0 6px; align-self: center; }
+
 /* Variante IVA (arancione) */
 .ui-seg.ui-seg-iva { background: var(--color-iva-bg); border: 1.5px solid var(--color-iva-border); align-items: center; padding: 3px 3px 3px 10px; }
 .ui-seg.ui-seg-iva .ui-seg-label { font-size: var(--fs-base); font-weight: 600; color: var(--color-iva-text); margin-right: 4px; }
@@ -248,6 +250,8 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: var(--fs-bas
 .ui-table > tbody > tr.ui-riga-attenuata > td { background: var(--color-surface-soft); color: var(--color-text-subtle); }
 .ui-table > tbody > tr.ui-riga-avviso > td { background: #fffbeb; }
 .ui-table > tbody > tr.ui-riga-ok > td { background: #f0fdf4; }
+.ui-table > tbody > tr.ui-riga-annullata > td { background: #fef9f9; opacity: .6; }
+.ui-table > tbody > tr.ui-riga-modificata > td:first-child { box-shadow: inset 3px 0 0 var(--color-warning); }
 .ui-table > tbody > tr.ui-riga-evidenza > td { background: var(--color-info-soft); }
 .ui-table > tbody > tr.ui-riga-dettaglio > td { background: var(--color-info-soft); padding: 8px 16px 10px 32px; font-size: var(--fs-sm); }
 .ui-table > tbody > tr.ui-riga-subtotale > td { background: var(--color-primary-soft); font-weight: 600; color: var(--color-primary); }
@@ -273,6 +277,17 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: var(--fs-bas
 .ui-modal-header h3 { margin: 0; font-size: var(--fs-lg); font-weight: 700; color: var(--color-text); flex: 1; }
 .ui-modal-body { padding: 12px 20px 4px; font-size: var(--fs-md); color: var(--color-text-second); line-height: 1.5; white-space: pre-line; }
 .ui-modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px; }
+
+/* ── Log in stile console ──────────────────────────────────────────────────── */
+.ui-console {
+  background: var(--color-text-strong); border-radius: var(--radius-lg); padding: 12px 14px;
+  min-height: 90px; max-height: 220px; overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-xs); line-height: 1.7;
+}
+.ui-console .riga-info { color: #fcd34d; }
+.ui-console .riga-ok { color: #6ee7b7; }
+.ui-console .riga-err { color: #fca5a5; }
+.ui-console .riga-vuota { color: var(--color-text-muted); }
 
 /* ── Pannello laterale (drawer) ────────────────────────────────────────────── */
 .ui-drawer-overlay { position: fixed; inset: 0; z-index: 999; background: rgba(15, 23, 42, .15); }

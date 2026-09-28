@@ -2,15 +2,23 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../api/client'
 import { formatEuro, mostraErrore } from '../utils/format'
 import {
-  STRUTTURE_HOTEL, NOME_CAT, thSt, tdSt, inpSt,
-  isAdmin, fmtD, meseNome, primoGiorno, ultimoGiorno, giornoSettimana, applyToggle,
+  STRUTTURE_HOTEL, NOME_CAT,
+  isAdmin, fmtD, primoGiorno, ultimoGiorno, giornoSettimana, applyToggle,
 } from '../utils/corrispettiviHelpers'
+import { meseAnnoPrecedente } from '../utils/produzioneHelpers'
+import {
+  Badge, Button, Checkbox, Field, HotelTag, Input, Loading, Messaggio, Modal, NavMese, Paginazione,
+  SegmentedControl, Select, Table, Td, Textarea, Th,
+} from '../components/ui'
+import { colors } from '../styles/tokens.js'
+
+const VUOTO = colors.borderStrong
 
 // ── CameraCell (usato nella lista documenti) ──────────────────────────────────
 
 function CameraCell({ camera }) {
   const [pos, setPos] = useState(null)
-  if (!camera) return <span style={{ color: '#94a3b8' }}>—</span>
+  if (!camera) return <span style={{ color: colors.textSubtle }}>—</span>
   const camere = camera.split(',').map(s => s.trim()).filter(Boolean)
   if (camere.length <= 4) return <span>{camera}</span>
 
@@ -22,28 +30,21 @@ function CameraCell({ camera }) {
 
   return (
     <>
-      <span onClick={apri} title={`${camere.length} camere — clicca per vedere tutte`}
-        style={{ cursor: 'pointer', color: '#334155' }}>
+      <span onClick={apri} title={`${camere.length} camere — clicca per vedere tutte`} style={{ cursor: 'pointer' }}>
         {camere.slice(0, 4).join(', ')}
-        <span style={{ color: '#2563eb', fontWeight: 600 }}>{' '}…+{camere.length - 4}</span>
+        <span style={{ color: colors.info, fontWeight: 600 }}>{' '}…+{camere.length - 4}</span>
       </span>
       {pos && (
         <>
-          <div onClick={() => setPos(null)}
-            style={{ position: 'fixed', inset: 0, zIndex: 999 }} />
-          <div style={{
-            position: 'fixed', top: pos.top, left: pos.left, zIndex: 1000,
-            background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
-            padding: '10px 14px', boxShadow: '0 4px 16px rgba(0,0,0,0.13)',
-            maxWidth: 320, maxHeight: 260, overflowY: 'auto',
-            fontSize: '0.82rem', color: '#334155', lineHeight: 1.7,
+          <div onClick={() => setPos(null)} style={{ position: 'fixed', inset: 0, zIndex: 999 }} />
+          <div className="ui-card" style={{
+            position: 'fixed', top: pos.top, left: pos.left, zIndex: 1000, padding: '10px 14px',
+            boxShadow: 'var(--shadow-pop)', maxWidth: 320, maxHeight: 260, overflowY: 'auto',
+            fontSize: 'var(--fs-sm)', lineHeight: 1.7, whiteSpace: 'normal',
           }}>
-            <div style={{ fontWeight: 700, marginBottom: 6, color: '#1e293b', fontSize: '0.85rem' }}>
-              {camere.length} camere
-            </div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>{camere.length} camere</div>
             <div style={{ wordBreak: 'break-word' }}>{camera}</div>
-            <button onClick={() => setPos(null)}
-              style={{ marginTop: 8, fontSize: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}>
+            <button className="ui-btn ui-btn-ghost ui-btn-sm" onClick={() => setPos(null)} style={{ marginTop: 6, padding: '2px 6px' }}>
               chiudi ✕
             </button>
           </div>
@@ -155,25 +156,21 @@ function ModalModifica({ doc, tipo, onSalva, onChiudi }) {
     }
   }
 
-  const lblSt = { fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }
-  const secSt = { marginTop: '0.75rem' }
+  const pieno = { width: '100%' }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 2000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }} onClick={e => { if (e.target === e.currentTarget) onChiudi() }}>
-      <div style={{
-        background: '#fff', borderRadius: 12, padding: '1.5rem', width: 520, maxWidth: '95vw',
-        maxHeight: '90vh', overflowY: 'auto',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-      }}>
-        <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#1e293b' }}>
-          Modifica {tipo === 'fattura' ? 'fattura' : 'scontrino'} {doc.suffisso} {doc.numero}
-        </h3>
-
+    <Modal
+      titolo={`Modifica ${tipo === 'fattura' ? 'fattura' : 'scontrino'} ${doc.suffisso} ${doc.numero}`}
+      onChiudi={onChiudi}
+      larghezza={540}
+      footer={<>
+        <Button variant="secondary" onClick={onChiudi}>Annulla</Button>
+        <Button onClick={salva} disabled={saving}>{saving ? 'Salvataggio…' : 'Salva modifiche'}</Button>
+      </>}
+    >
+      <div style={{ whiteSpace: 'normal', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {/* Griglia campi numerici */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem 1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
           {[
             ['totale_lordo', 'Totale lordo'],
             ['incassato',    'Incassato'],
@@ -182,58 +179,51 @@ function ModalModifica({ doc, tipo, onSalva, onChiudi }) {
             ['imponibile',   'Imponibile (totale)'],
             ['iva',          'IVA (totale)'],
           ].map(([k, label]) => (
-            <label key={k}>
-              <span style={lblSt}>{label}</span>
-              <input type="number" step="0.01" value={form[k]}
+            <Field key={k} label={label} style={pieno}>
+              <Input type="number" step="0.01" value={form[k]} className="ui-num"
                 onChange={e => setForm(f => ({ ...f, [k]: parseFloat(e.target.value) || 0 }))}
-                style={{ ...inpSt, width: '100%', boxSizing: 'border-box' }} />
-            </label>
+                style={pieno} />
+            </Field>
           ))}
         </div>
 
         {/* Disaggregazione imponibile (solo categoria arrangiamenti) */}
         {disagg && (
-          <div style={{ marginTop: '0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.6rem 0.9rem' }}>
-            <p style={{ margin: '0 0 0.4rem', fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          <div style={{ background: colors.surfaceSoft, border: `1px solid ${colors.border}`, borderRadius: 8, padding: '10px 14px' }}>
+            <div style={{ fontSize: 'var(--fs-xs)', fontWeight: 600, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
               Dettaglio IVA
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.25rem 0.75rem', fontSize: '0.8rem' }}>
-              <span style={{ color: '#94a3b8' }}></span>
-              <span style={{ color: '#64748b', fontWeight: 600 }}>Imponibile</span>
-              <span style={{ color: '#64748b', fontWeight: 600 }}>IVA</span>
+            </div>
+            <div className="ui-num" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px 12px', fontSize: 'var(--fs-sm)' }}>
+              <span />
+              <span style={{ color: colors.textMuted, fontWeight: 600 }}>Imponibile</span>
+              <span style={{ color: colors.textMuted, fontWeight: 600 }}>IVA</span>
 
-              <span style={{ color: '#475569' }}>Soggiorno (10%)</span>
-              <span style={{ color: '#1e293b' }}>{formatEuro(disagg.imp_arr)}</span>
-              <span style={{ color: '#1e293b' }}>{formatEuro(disagg.iva_arr)}</span>
+              <span style={{ color: colors.textSecond }}>Soggiorno (10%)</span>
+              <span>{formatEuro(disagg.imp_arr)}</span>
+              <span>{formatEuro(disagg.iva_arr)}</span>
 
-              <span style={{ color: '#475569' }}>Tassa soggiorno (0%)</span>
-              <span style={{ color: '#1e293b' }}>{formatEuro(disagg.imp_ts)}</span>
-              <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>esente</span>
+              <span style={{ color: colors.textSecond }}>Tassa soggiorno (0%)</span>
+              <span>{formatEuro(disagg.imp_ts)}</span>
+              <span style={{ color: colors.textSubtle, fontStyle: 'italic' }}>esente</span>
             </div>
             {doc.tassa_soggiorno == null && (
-              <p style={{ margin: '0.4rem 0 0', fontSize: '0.72rem', color: '#94a3b8', fontStyle: 'italic' }}>
+              <p style={{ margin: '6px 0 0', fontSize: 'var(--fs-xs)', color: colors.textSubtle, fontStyle: 'italic' }}>
                 * Tassa soggiorno calcolata per inferenza (formato base — valore esatto non disponibile)
               </p>
             )}
           </div>
         )}
 
-        {/* Categoria */}
-        <div style={secSt}>
-          <label style={lblSt}>Categoria</label>
-          <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-            style={{ ...inpSt, width: '100%' }}>
+        <Field label="Categoria" style={pieno}>
+          <Select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} style={pieno}>
             {['arrangiamenti', 'tassa_soggiorno', 'penali', 'shop', 'altro'].map(c => (
               <option key={c} value={c}>{NOME_CAT[c]}</option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Field>
 
-        {/* Forma di pagamento */}
-        <div style={secSt}>
-          <label style={lblSt}>Forma di pagamento</label>
-          <select value={form.tipo_pagamento} onChange={e => selezionaPagamento(e.target.value)}
-            style={{ ...inpSt, width: '100%' }}>
+        <Field label="Forma di pagamento" style={pieno}>
+          <Select value={form.tipo_pagamento} onChange={e => selezionaPagamento(e.target.value)} style={pieno}>
             <option value="">— non specificato —</option>
             {categoriePag.map(cat => (
               <optgroup key={cat} label={cat}>
@@ -242,36 +232,21 @@ function ModalModifica({ doc, tipo, onSalva, onChiudi }) {
                 ))}
               </optgroup>
             ))}
-          </select>
+          </Select>
           {form.categoria_pagamento && (
-            <span style={{ fontSize: '0.73rem', color: '#94a3b8', marginTop: 3, display: 'block' }}>
-              Categoria: {form.categoria_pagamento}
-            </span>
+            <span className="ui-text-muted" style={{ fontSize: 'var(--fs-xs)' }}>Categoria: {form.categoria_pagamento}</span>
           )}
-        </div>
+        </Field>
 
-        {/* Note */}
-        <div style={secSt}>
-          <label style={lblSt}>Note</label>
-          <textarea value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
-            rows={2} style={{ ...inpSt, width: '100%', boxSizing: 'border-box', resize: 'vertical' }} />
-        </div>
+        <Field label="Note" style={pieno}>
+          <Textarea value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} rows={2} style={pieno} />
+        </Field>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: '0.75rem', cursor: 'pointer' }}>
-          <input type="checkbox" checked={form.annullato} onChange={e => setForm(f => ({ ...f, annullato: e.target.checked }))} />
-          <span style={{ fontSize: '0.85rem' }}>Annullato</span>
-        </label>
+        <Checkbox checked={form.annullato} onChange={v => setForm(f => ({ ...f, annullato: v }))} label="Annullato" />
 
-        {err && <p style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '0.5rem' }}>{err}</p>}
-        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'flex-end' }}>
-          <button onClick={onChiudi} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9', border: '1px solid #e2e8f0' }}>Annulla</button>
-          <button onClick={salva} disabled={saving}
-            style={{ ...inpSt, cursor: 'pointer', background: '#1e3a5f', color: '#fff', border: 'none', fontWeight: 600 }}>
-            {saving ? 'Salvataggio…' : 'Salva modifiche'}
-          </button>
-        </div>
+        <Messaggio tipo="err">{err}</Messaggio>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -280,9 +255,10 @@ function ModalModifica({ doc, tipo, onSalva, onChiudi }) {
 function PerHotelView({ lordo, tipo }) {
   // tipo: 'scontrino' | 'fattura'
   const tipoApi = tipo === 'fattura' ? 'fatture' : 'scontrini'
-  const oggi = new Date()
-  const [anno, setAnno] = useState(oggi.getFullYear())
-  const [mese, setMese] = useState(oggi.getMonth() + 1)
+  // Default: mese precedente (convenzione dell'app, vedi CLAUDE.md "Selettore mese/anno")
+  const def = meseAnnoPrecedente()
+  const [anno, setAnno] = useState(def.anno)
+  const [mese, setMese] = useState(def.mese)
   const [dati, setDati] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -300,13 +276,6 @@ function PerHotelView({ lordo, tipo }) {
 
   useEffect(() => { carica() }, [carica])
 
-  const navMese = (delta) => {
-    let m = mese + delta, y = anno
-    if (m > 12) { m = 1; y++ }
-    if (m < 1) { m = 12; y-- }
-    setMese(m); setAnno(y)
-  }
-
   // Genera giorni del mese
   const giorni = []
   const cur = new Date(da + 'T00:00:00')
@@ -322,7 +291,7 @@ function PerHotelView({ lordo, tipo }) {
   const applyL = (v, aliq = 10) => lordo ? (v || 0) : applyToggle(v, lordo, aliq)
   const fmtL = (v, aliq = 10) => {
     const vv = applyL(v, aliq)
-    return vv === 0 ? <span style={{ color: '#e2e8f0' }}>—</span> : formatEuro(vv)
+    return vv === 0 ? <span style={{ color: VUOTO }}>—</span> : formatEuro(vv)
   }
 
   // Totali mese per struttura
@@ -348,114 +317,89 @@ function PerHotelView({ lordo, tipo }) {
 
   return (
     <div>
-      {/* Navigazione mese */}
-      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
-        <button onClick={() => navMese(-1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9', border: '1px solid #e2e8f0' }}>←</button>
-        <span style={{ fontWeight: 700, fontSize: '1rem', minWidth: 120, textAlign: 'center' }}>{meseNome(mese)} {anno}</span>
-        <button onClick={() => navMese(1)} style={{ ...inpSt, cursor: 'pointer', background: '#f1f5f9', border: '1px solid #e2e8f0' }}>→</button>
-        <span style={{ fontSize: '0.82rem', color: '#64748b', fontStyle: 'italic' }}>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+        <NavMese anno={anno} mese={mese} onChange={({ anno: y, mese: m }) => { setAnno(y); setMese(m) }} />
+        <span className="ui-text-muted" style={{ fontStyle: 'italic' }}>
           {titoloTipo} per hotel — suddivisione per categoria IVA
         </span>
       </div>
 
-      {loading && <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Caricamento…</p>}
+      {loading && <Loading />}
 
-      <div style={{ overflowX: 'auto', fontSize: '0.78rem' }}>
-        <table style={{ borderCollapse: 'collapse', minWidth: 900 }}>
-          <thead>
-            <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-              <th style={{ ...thSt, textAlign: 'left', minWidth: 70 }} rowSpan={2}>Data</th>
-              {STRUTTURE_HOTEL.map(sc => (
-                <th key={sc} style={{ ...thSt, textAlign: 'center', borderLeft: '2px solid #334e78' }} colSpan={6}>{sc}</th>
-              ))}
-              <th style={{ ...thSt, borderLeft: '2px solid #334e78' }} rowSpan={2}>TOT. GG</th>
-            </tr>
-            <tr style={{ background: '#2d4f7c', color: '#cbd5e1' }}>
-              {STRUTTURE_HOTEL.map(sc =>
-                CATS_LABEL.map((l, i) => (
-                  <th key={`${sc}_${i}`} style={{
-                    ...thSt, color: '#cbd5e1', fontSize: '0.7rem',
-                    borderLeft: i === 0 ? '3px solid #4a6fa5' : '1px solid #3d6a9a',
-                    fontWeight: i === 5 ? 700 : 400,
-                  }}>{l}</th>
-                ))
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {giorni.map((data, idx) => {
-              const g = byData[data]
-              const gg = giornoSettimana(data)
-              const isSab = gg === 'sab'
-              let totGG = 0
+      <Table compact minWidth={900}>
+        <thead>
+          <tr>
+            <Th rowSpan={2} style={{ minWidth: 80, verticalAlign: 'bottom' }}>Data</Th>
+            {STRUTTURE_HOTEL.map(sc => <Th key={sc} center gruppo colSpan={6}>{sc}</Th>)}
+            <Th num tot rowSpan={2} style={{ verticalAlign: 'bottom' }}>TOT. GG</Th>
+          </tr>
+          <tr className="sub">
+            {STRUTTURE_HOTEL.map(sc =>
+              CATS_LABEL.map((l, i) => (
+                <Th key={`${sc}_${i}`} num gruppo={i === 0} style={i === 5 ? { fontWeight: 700 } : undefined}>{l}</Th>
+              ))
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {giorni.map(data => {
+            const g = byData[data]
+            const gg = giornoSettimana(data)
+            const isSab = gg === 'sab'
+            let totGG = 0
 
-              return (
-                <tr key={data} style={{ background: isSab ? '#eff6ff' : idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                  <td style={{ ...tdSt, textAlign: 'left', fontWeight: isSab ? 700 : 400, color: '#475569' }}>
-                    {fmtD(data)} <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>{gg}</span>
-                  </td>
-                  {STRUTTURE_HOTEL.map(sc => {
-                    const blk = g?.strutture?.find(x => x.struttura_code === sc)?.[tipoApi === 'scontrini' ? 'scontrini' : 'fatture']
-                    const get = (cat) => blk?.[cat] || 0
-                    const totBlk = CATS.reduce((s, [cat, aliq]) => s + applyL(get(cat), aliq), 0)
-                    totGG += totBlk
-                    return CATS.map(([cat, aliq], i) => {
-                      const v = get(cat)
-                      return (
-                        <td key={`${sc}_${cat}`} style={{
-                          ...tdSt,
-                          color: v === 0 ? '#e2e8f0' : '#1e293b',
-                          borderLeft: i === 0 ? '2px solid #e2e8f0' : undefined,
-                        }}>
-                          {fmtL(v, aliq)}
-                        </td>
-                      )
-                    }).concat(
-                      <td key={`${sc}_tot`} style={{ ...tdSt, fontWeight: 700, color: totBlk === 0 ? '#e2e8f0' : '#1e293b' }}>
-                        {totBlk === 0 ? '—' : formatEuro(totBlk)}
-                      </td>
-                    )
-                  })}
-                  <td style={{ ...tdSt, fontWeight: 700, borderLeft: '2px solid #e2e8f0', color: totGG === 0 ? '#e2e8f0' : '#1e293b' }}>
-                    {totGG === 0 ? '—' : formatEuro(totGG)}
-                  </td>
-                </tr>
+            return (
+              <tr key={data} className={isSab ? 'ui-riga-evidenza' : undefined}>
+                <Td style={{ fontWeight: isSab ? 700 : 400, color: colors.textSecond, whiteSpace: 'nowrap' }}>
+                  {fmtD(data)} <span style={{ color: colors.textSubtle, fontSize: 'var(--fs-xs)' }}>{gg}</span>
+                </Td>
+                {STRUTTURE_HOTEL.map(sc => {
+                  const blk = g?.strutture?.find(x => x.struttura_code === sc)?.[tipoApi === 'scontrini' ? 'scontrini' : 'fatture']
+                  const get = (cat) => blk?.[cat] || 0
+                  const totBlk = CATS.reduce((s, [cat, aliq]) => s + applyL(get(cat), aliq), 0)
+                  totGG += totBlk
+                  return CATS.map(([cat, aliq], i) => (
+                    <Td key={`${sc}_${cat}`} num gruppo={i === 0}>{fmtL(get(cat), aliq)}</Td>
+                  )).concat(
+                    <Td key={`${sc}_tot`} num style={{ fontWeight: 700, color: totBlk === 0 ? VUOTO : undefined }}>
+                      {totBlk === 0 ? '—' : formatEuro(totBlk)}
+                    </Td>
+                  )
+                })}
+                <Td num tot style={{ fontWeight: 700, color: totGG === 0 ? VUOTO : undefined }}>
+                  {totGG === 0 ? '—' : formatEuro(totGG)}
+                </Td>
+              </tr>
+            )
+          })}
+          {/* Riga totale mese */}
+          <tr className="ui-riga-totale">
+            <Td>TOTALE</Td>
+            {STRUTTURE_HOTEL.map(sc => {
+              const t = totMese[sc]
+              const totTot = applyL(t.arr,10) + t.ts + t.pen + applyL(t.shop,22) + applyL(t.alt,10)
+              return [
+                [t.arr,10],[t.ts,0],[t.pen,0],[t.shop,22],[t.alt,10]
+              ].map(([v,aliq], i) => (
+                <Td key={`tot_${sc}_${i}`} num gruppo={i === 0}>
+                  {applyL(v,aliq) === 0 ? '—' : formatEuro(applyL(v,aliq))}
+                </Td>
+              )).concat(
+                <Td key={`tot_${sc}_t`} num style={{ fontWeight: 800 }}>{totTot === 0 ? '—' : formatEuro(totTot)}</Td>
               )
             })}
-            {/* Riga totale mese */}
-            <tr className="riga-totale" style={{ background: '#1e3a5f', color: '#fff', fontWeight: 700 }}>
-              <td style={{ ...tdSt, color: '#fff', borderBottom: 'none', textAlign: 'left' }}>TOTALE</td>
-              {STRUTTURE_HOTEL.map(sc => {
-                const t = totMese[sc]
-                const totTot = applyL(t.arr,10) + t.ts + t.pen + applyL(t.shop,22) + applyL(t.alt,10)
-                return [
-                  [t.arr,10],[t.ts,0],[t.pen,0],[t.shop,22],[t.alt,10]
-                ].map(([v,aliq], i) => (
-                  <td key={`tot_${sc}_${i}`} style={{
-                    ...tdSt, color: '#fff', borderBottom: 'none',
-                    borderLeft: i === 0 ? '3px solid #4a6fa5' : '1px solid #3d6a9a',
-                  }}>
-                    {applyL(v,aliq) === 0 ? '—' : formatEuro(applyL(v,aliq))}
-                  </td>
-                )).concat(
-                  <td key={`tot_${sc}_t`} style={{ ...tdSt, color: '#fff', fontWeight: 800, borderBottom: 'none' }}>
-                    {totTot === 0 ? '—' : formatEuro(totTot)}
-                  </td>
-                )
-              })}
-              <td style={{ ...tdSt, color: '#fff', fontWeight: 800, borderBottom: 'none', borderLeft: '2px solid #334e78' }}>
-                {(() => {
-                  const tot = STRUTTURE_HOTEL.reduce((s, sc) => {
-                    const t = totMese[sc]
-                    return s + applyL(t.arr,10) + t.ts + t.pen + applyL(t.shop,22) + applyL(t.alt,10)
-                  }, 0)
-                  return tot === 0 ? '—' : formatEuro(tot)
-                })()}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+            <Td num tot style={{ fontWeight: 800 }}>
+              {(() => {
+                const tot = STRUTTURE_HOTEL.reduce((s, sc) => {
+                  const t = totMese[sc]
+                  return s + applyL(t.arr,10) + t.ts + t.pen + applyL(t.shop,22) + applyL(t.alt,10)
+                }, 0)
+                return tot === 0 ? '—' : formatEuro(tot)
+              })()}
+            </Td>
+          </tr>
+        </tbody>
+      </Table>
     </div>
   )
 }
@@ -493,23 +437,15 @@ export default function TabDocumenti({ endpoint, tipo, lordo, refreshKey }) {
 
   useEffect(() => { carica() }, [carica])
 
-  const totPages = Math.ceil(totale / PER_PAGE)
-
-  const applyL = (v, aliq = 10) => lordo ? (v || 0) : applyToggle(v, lordo, aliq)
+  const setFiltro = (k, v) => { setFiltri(f => ({ ...f, [k]: v })); setPage(1) }
+  const cambiaVista = (v) => { setVista(v); localStorage.setItem(lsKeyVista, v) }
 
   return (
     <div>
       {/* Toggle vista Lista / Per hotel (scontrini e fatture) */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: '1rem' }}>
-        {[['lista', 'Lista documenti'], ['per_hotel', 'Per hotel']].map(([v, l]) => (
-          <button key={v} onClick={() => { setVista(v); localStorage.setItem(lsKeyVista, v) }} style={{
-            padding: '5px 14px', borderRadius: 6, border: '1px solid', fontSize: '0.82rem',
-            cursor: 'pointer', fontWeight: vista === v ? 700 : 400,
-            background: vista === v ? '#1e3a5f' : '#f8fafc',
-            color: vista === v ? '#fff' : '#64748b',
-            borderColor: vista === v ? '#1e3a5f' : '#e2e8f0',
-          }}>{l}</button>
-        ))}
+      <div style={{ marginBottom: 16 }}>
+        <SegmentedControl value={vista} onChange={cambiaVista}
+          options={[{ value: 'lista', label: 'Lista documenti' }, { value: 'per_hotel', label: 'Per hotel' }]} />
       </div>
 
       {vista === 'per_hotel' && <PerHotelView lordo={lordo} tipo={tipo} />}
@@ -517,142 +453,90 @@ export default function TabDocumenti({ endpoint, tipo, lordo, refreshKey }) {
       {vista === 'lista' && (
       <>
       {/* Filtri */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem', alignItems: 'flex-end' }}>
-        {[['data_da', 'Dal', 'date'], ['data_a', 'Al', 'date']].map(([k, l, t]) => (
-          <label key={k}>
-            <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>{l}</span>
-            <input type={t} value={filtri[k]} onChange={e => { setFiltri(f => ({ ...f, [k]: e.target.value })); setPage(1) }}
-              style={inpSt} />
-          </label>
-        ))}
-        <label>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Struttura</span>
-          <select value={filtri.struttura_code} onChange={e => { setFiltri(f => ({ ...f, struttura_code: e.target.value })); setPage(1) }}
-            style={inpSt}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
+        <Field label="Dal"><Input type="date" value={filtri.data_da} onChange={e => setFiltro('data_da', e.target.value)} /></Field>
+        <Field label="Al"><Input type="date" value={filtri.data_a} onChange={e => setFiltro('data_a', e.target.value)} /></Field>
+        <Field label="Struttura">
+          <Select value={filtri.struttura_code} onChange={e => setFiltro('struttura_code', e.target.value)}>
             <option value="">Tutte</option>
             {STRUTTURE_HOTEL.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </label>
-        <label>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Categoria</span>
-          <select value={filtri.categoria} onChange={e => { setFiltri(f => ({ ...f, categoria: e.target.value })); setPage(1) }}
-            style={inpSt}>
+          </Select>
+        </Field>
+        <Field label="Categoria">
+          <Select value={filtri.categoria} onChange={e => setFiltro('categoria', e.target.value)}>
             <option value="">Tutte</option>
             {['arrangiamenti', 'tassa_soggiorno', 'penali', 'shop', 'altro'].map(c => (
               <option key={c} value={c}>{NOME_CAT[c]}</option>
             ))}
-          </select>
-        </label>
-        <label>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Stato</span>
-          <select value={filtri.annullato} onChange={e => { setFiltri(f => ({ ...f, annullato: e.target.value })); setPage(1) }}
-            style={inpSt}>
+          </Select>
+        </Field>
+        <Field label="Stato">
+          <Select value={filtri.annullato} onChange={e => setFiltro('annullato', e.target.value)}>
             <option value="">Tutti</option>
             <option value="false">Validi</option>
             <option value="true">Annullati</option>
-          </select>
-        </label>
-        <label>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>N. documento</span>
-          <input value={filtri.numero} onChange={e => { setFiltri(f => ({ ...f, numero: e.target.value })); setPage(1) }}
-            placeholder="es. 1042" style={{ ...inpSt, width: 90 }} />
-        </label>
-        <label>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>N. camera</span>
-          <input value={filtri.camera} onChange={e => { setFiltri(f => ({ ...f, camera: e.target.value })); setPage(1) }}
-            placeholder="es. 312" style={{ ...inpSt, width: 80 }} />
-        </label>
+          </Select>
+        </Field>
+        <Field label="N. documento">
+          <Input value={filtri.numero} onChange={e => setFiltro('numero', e.target.value)} placeholder="es. 1042" style={{ width: 100 }} />
+        </Field>
+        <Field label="N. camera">
+          <Input value={filtri.camera} onChange={e => setFiltro('camera', e.target.value)} placeholder="es. 312" style={{ width: 90 }} />
+        </Field>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.82rem', color: '#64748b', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-        <span>{loading ? 'Caricamento…' : `${totale} documenti trovati`}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span className="ui-text-muted">{loading ? 'Caricamento…' : `${totale} documenti trovati`}</span>
         {!loading && totaleImporto !== null && (
-          <span style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 5, padding: '2px 10px', color: '#166534', fontWeight: 700, fontSize: '0.82rem' }}>
-            Totale filtrato: {formatEuro(totaleImporto)}
-          </span>
+          <Badge tono="ok" style={{ fontSize: 'var(--fs-sm)', padding: '3px 10px' }}>Totale filtrato: {formatEuro(totaleImporto)}</Badge>
         )}
       </div>
-      {errore && <p style={{ color: '#ef4444', fontSize: '0.85rem' }}>{errore}</p>}
+      <Messaggio tipo="err">{errore}</Messaggio>
 
       {!loading && docs.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-            <thead>
-              <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                {['Data', 'N.', 'Suff.', 'Struttura', 'Camera', 'Categoria', 'Totale', 'Imponibile', 'IVA', 'Ann.', 'Mod.', ''].map(h => (
-                  <th key={h} style={{ ...thSt, color: '#fff', ...(h === 'Camera' ? { textAlign: 'left' } : {}) }}>{h}</th>
-                ))}
+        <Table compact>
+          <thead>
+            <tr>
+              <Th>Data</Th><Th num>N.</Th><Th>Suff.</Th><Th>Struttura</Th><Th>Camera</Th><Th>Categoria</Th>
+              <Th num>Totale</Th><Th num>Imponibile</Th><Th num>IVA</Th><Th center>Ann.</Th><Th center>Mod.</Th><Th></Th>
+            </tr>
+          </thead>
+          <tbody>
+            {docs.map(d => (
+              <tr key={d.id} className={[d.annullato && 'ui-riga-annullata', d.modificato_manualmente && 'ui-riga-modificata'].filter(Boolean).join(' ') || undefined}>
+                <Td style={{ color: colors.textSecond, whiteSpace: 'nowrap' }}>{fmtD(d.data_documento)}</Td>
+                <Td num>{d.numero}</Td>
+                <Td muted>{d.suffisso}</Td>
+                <Td><HotelTag code={d.struttura_code} /></Td>
+                <Td style={{ color: colors.textMuted }}><CameraCell camera={d.camera} /></Td>
+                <Td><Badge>{NOME_CAT[d.categoria] || d.categoria || '—'}</Badge></Td>
+                <Td num style={{ color: d.totale_lordo < 0 ? colors.danger : undefined, fontWeight: 600 }}>
+                  {formatEuro(d.totale_lordo || 0)}
+                </Td>
+                <Td num>{formatEuro(d.imponibile || 0)}</Td>
+                <Td num style={{ color: colors.textMuted }}>
+                  {d.iva > 0 ? formatEuro(d.iva) : <span style={{ color: VUOTO }}>—</span>}
+                </Td>
+                <Td center style={{ color: colors.danger }}>{d.annullato ? '✗' : ''}</Td>
+                <Td center>{d.modificato_manualmente ? <span title="Modificato manualmente">✏️</span> : ''}</Td>
+                <Td center>
+                  {isAdmin() && <Button variant="secondary" size="sm" onClick={() => setDocMod(d)}>Modifica</Button>}
+                </Td>
               </tr>
-            </thead>
-            <tbody>
-              {docs.map((d, idx) => (
-                <tr key={d.id} style={{
-                  background: d.annullato ? '#fef9f9' : idx % 2 === 0 ? '#fff' : '#f8fafc',
-                  opacity: d.annullato ? 0.65 : 1,
-                  borderLeft: d.modificato_manualmente ? '3px solid #f59e0b' : undefined,
-                }}>
-                  <td style={{ ...tdSt, color: '#475569' }}>{fmtD(d.data_documento)}</td>
-                  <td style={tdSt}>{d.numero}</td>
-                  <td style={{ ...tdSt, color: '#94a3b8' }}>{d.suffisso}</td>
-                  <td style={{ ...tdSt, fontWeight: 600 }}>{d.struttura_code}</td>
-                  <td style={{ ...tdSt, color: '#64748b', textAlign: 'left' }}><CameraCell camera={d.camera} /></td>
-                  <td style={tdSt}>
-                    <span style={{ background: '#f1f5f9', borderRadius: 3, padding: '1px 5px', fontSize: '0.72rem' }}>
-                      {NOME_CAT[d.categoria] || d.categoria || '—'}
-                    </span>
-                  </td>
-                  <td style={{ ...tdSt, color: d.totale_lordo < 0 ? '#ef4444' : '#1e293b', fontWeight: 600 }}>
-                    {formatEuro(d.totale_lordo || 0)}
-                  </td>
-                  <td style={tdSt}>{formatEuro(d.imponibile || 0)}</td>
-                  <td style={{ ...tdSt, color: '#64748b' }}>
-                    {d.iva > 0 ? formatEuro(d.iva) : <span style={{ color: '#cbd5e1' }}>—</span>}
-                  </td>
-                  <td style={{ ...tdSt, textAlign: 'center', color: d.annullato ? '#ef4444' : '#94a3b8' }}>
-                    {d.annullato ? '✗' : ''}
-                  </td>
-                  <td style={{ ...tdSt, textAlign: 'center' }}>
-                    {d.modificato_manualmente ? <span title="Modificato manualmente">✏️</span> : ''}
-                  </td>
-                  <td style={tdSt}>
-                    {isAdmin() && (
-                      <button onClick={() => setDocMod(d)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.78rem' }}>
-                        Modifica
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              <tr style={{ background: '#f1f5f9', borderTop: '2px solid #cbd5e1' }}>
-                <td colSpan={6} style={{ ...tdSt, textAlign: 'right', color: '#475569', fontWeight: 600, fontSize: '0.75rem' }}>
-                  Totale pagina ({docs.length} doc.):
-                </td>
-                <td style={{ ...tdSt, fontWeight: 700, color: '#1e293b' }}>
-                  {formatEuro(docs.reduce((s, d) => s + (d.totale_lordo || 0), 0))}
-                </td>
-                <td style={{ ...tdSt, fontWeight: 600, color: '#475569' }}>
-                  {formatEuro(docs.reduce((s, d) => s + (d.imponibile || 0), 0))}
-                </td>
-                <td style={{ ...tdSt, fontWeight: 600, color: '#475569' }}>
-                  {formatEuro(docs.reduce((s, d) => s + (d.iva || 0), 0))}
-                </td>
-                <td colSpan={3} />
-              </tr>
-            </tbody>
-          </table>
-        </div>
+            ))}
+            <tr className="ui-riga-sezione">
+              <Td colSpan={6} style={{ textAlign: 'right', fontSize: 'var(--fs-sm)' }}>Totale pagina ({docs.length} doc.):</Td>
+              <Td num>{formatEuro(docs.reduce((s, d) => s + (d.totale_lordo || 0), 0))}</Td>
+              <Td num>{formatEuro(docs.reduce((s, d) => s + (d.imponibile || 0), 0))}</Td>
+              <Td num>{formatEuro(docs.reduce((s, d) => s + (d.iva || 0), 0))}</Td>
+              <Td colSpan={3} />
+            </tr>
+          </tbody>
+        </Table>
       )}
 
-      {/* Paginazione */}
-      {totPages > 1 && (
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => setPage(1)} disabled={page === 1} style={{ ...inpSt, cursor: 'pointer' }}>«</button>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{ ...inpSt, cursor: 'pointer' }}>‹</button>
-          <span style={{ fontSize: '0.82rem', color: '#64748b' }}>Pag. {page} / {totPages}</span>
-          <button onClick={() => setPage(p => Math.min(totPages, p + 1))} disabled={page === totPages} style={{ ...inpSt, cursor: 'pointer' }}>›</button>
-          <button onClick={() => setPage(totPages)} disabled={page === totPages} style={{ ...inpSt, cursor: 'pointer' }}>»</button>
-        </div>
+      {totale > PER_PAGE && (
+        <Paginazione pagina={page} perPagina={PER_PAGE} totale={totale} onChange={setPage} estremi />
       )}
 
       {/* Modal modifica */}

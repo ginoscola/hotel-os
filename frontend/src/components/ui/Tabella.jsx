@@ -3,6 +3,7 @@
 // Righe speciali: className sulla <tr>
 //   ui-riga-attenuata (dati assenti) · ui-riga-avviso (da compilare) · ui-riga-ok (completata)
 //   ui-riga-evidenza (es. sabato) · ui-riga-dettaglio (riga espansa sotto una riga, con colSpan)
+//   ui-riga-annullata (documento annullato, attenuato) · ui-riga-modificata (barra ambra: corretto a mano)
 //   ui-riga-subtotale · ui-riga-sezione · ui-riga-risultato · ui-riga-totale
 // Lo sfondo è applicato alle <td> dal CSS (non alla <tr>): niente più bug riga pari/dispari.
 import { cx } from './classi.js'
@@ -54,14 +55,19 @@ export function ThOrdinabile({ campo, ordinaPer, direzione, onOrdina, num, cente
   )
 }
 
-/** ◀ Pagina N — X risultati ▶ */
-export function Paginazione({ pagina, perPagina, totale, onChange }) {
-  const ultima = pagina * perPagina >= totale
+/**
+ * ◀ Pagina N di M — X risultati ▶   (con estremi: anche « prima e » ultima pagina)
+ */
+export function Paginazione({ pagina, perPagina, totale, onChange, estremi = false }) {
+  const pagine = Math.max(1, Math.ceil(totale / perPagina))
+  const btn = 'ui-btn ui-btn-secondary ui-btn-sm'
   return (
     <div className="ui-paginazione">
-      <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={pagina <= 1} onClick={() => onChange(pagina - 1)} aria-label="Pagina precedente">◀</button>
-      <span className="ui-num">Pagina {pagina} — {totale} risultati</span>
-      <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" disabled={ultima} onClick={() => onChange(pagina + 1)} aria-label="Pagina successiva">▶</button>
+      {estremi && <button type="button" className={btn} disabled={pagina <= 1} onClick={() => onChange(1)} aria-label="Prima pagina">«</button>}
+      <button type="button" className={btn} disabled={pagina <= 1} onClick={() => onChange(pagina - 1)} aria-label="Pagina precedente">◀</button>
+      <span className="ui-num">Pagina {pagina} di {pagine} — {totale} risultati</span>
+      <button type="button" className={btn} disabled={pagina >= pagine} onClick={() => onChange(pagina + 1)} aria-label="Pagina successiva">▶</button>
+      {estremi && <button type="button" className={btn} disabled={pagina >= pagine} onClick={() => onChange(pagine)} aria-label="Ultima pagina">»</button>}
     </div>
   )
 }

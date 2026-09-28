@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../api/client'
 import { ExportMenu } from '../components/ExportMenu'
 import { formatEuro, mostraErrore } from '../utils/format'
-import { STRUTTURE_HOTEL, thSt, tdSt, inpSt, fmtD } from '../utils/corrispettiviHelpers'
+import { STRUTTURE_HOTEL, fmtD } from '../utils/corrispettiviHelpers'
+import {
+  Badge, Field, HotelTag, Input, Messaggio, Paginazione, Select, StatoVuoto, Table, Td, Th,
+} from '../components/ui'
+import { colors } from '../styles/tokens.js'
 
 const TIPO_LABEL = { scontrino: 'Scontrino', fattura: 'Fattura' }
 
@@ -36,7 +40,7 @@ export default function TabPenali({ refreshKey }) {
 
   useEffect(() => { carica() }, [carica])
 
-  const totPages = Math.ceil(totale / PER_PAGE)
+  const setFiltro = (k, v) => { setFiltri(f => ({ ...f, [k]: v })); setPage(1) }
 
   const exportParams = new URLSearchParams(filtri)
   Array.from(exportParams.keys()).forEach(k => !exportParams.get(k) && exportParams.delete(k))
@@ -45,98 +49,68 @@ export default function TabPenali({ refreshKey }) {
   return (
     <div>
       {/* Filtri */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem', alignItems: 'flex-end' }}>
-        {[['data_da', 'Dal', 'date'], ['data_a', 'Al', 'date']].map(([k, l, t]) => (
-          <label key={k}>
-            <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>{l}</span>
-            <input type={t} value={filtri[k]} onChange={e => { setFiltri(f => ({ ...f, [k]: e.target.value })); setPage(1) }}
-              style={inpSt} />
-          </label>
-        ))}
-        <label>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>Struttura</span>
-          <select value={filtri.struttura_code} onChange={e => { setFiltri(f => ({ ...f, struttura_code: e.target.value })); setPage(1) }}
-            style={inpSt}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'flex-end' }}>
+        <Field label="Dal"><Input type="date" value={filtri.data_da} onChange={e => setFiltro('data_da', e.target.value)} /></Field>
+        <Field label="Al"><Input type="date" value={filtri.data_a} onChange={e => setFiltro('data_a', e.target.value)} /></Field>
+        <Field label="Struttura">
+          <Select value={filtri.struttura_code} onChange={e => setFiltro('struttura_code', e.target.value)}>
             <option value="">Tutte</option>
             {STRUTTURE_HOTEL.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </label>
-        <label>
-          <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginBottom: 3 }}>N. documento</span>
-          <input value={filtri.numero} onChange={e => { setFiltri(f => ({ ...f, numero: e.target.value })); setPage(1) }}
-            placeholder="es. 1042" style={{ ...inpSt, width: 90 }} />
-        </label>
+          </Select>
+        </Field>
+        <Field label="N. documento">
+          <Input value={filtri.numero} onChange={e => setFiltro('numero', e.target.value)} placeholder="es. 1042" style={{ width: 100 }} />
+        </Field>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.82rem', color: '#64748b', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-        <span>{loading ? 'Caricamento…' : `${totale} penali trovate`}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span className="ui-text-muted">{loading ? 'Caricamento…' : `${totale} penali trovate`}</span>
         {!loading && totaleImporto !== null && (
-          <span style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 5, padding: '2px 10px', color: '#991b1b', fontWeight: 700, fontSize: '0.82rem' }}>
-            Totale filtrato: {formatEuro(totaleImporto)}
-          </span>
+          <Badge tono="err" style={{ fontSize: 'var(--fs-sm)', padding: '3px 10px' }}>Totale filtrato: {formatEuro(totaleImporto)}</Badge>
         )}
         <span style={{ marginLeft: 'auto' }}>
           <ExportMenu url={exportUrl} nome="corrispettivi_penali" />
         </span>
       </div>
-      {errore && <p style={{ color: '#ef4444', fontSize: '0.85rem' }}>{errore}</p>}
+      <Messaggio tipo="err">{errore}</Messaggio>
 
       {!loading && docs.length === 0 && !errore && (
-        <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Nessuna penale trovata per i filtri selezionati.</p>
+        <StatoVuoto>Nessuna penale trovata per i filtri selezionati.</StatoVuoto>
       )}
 
       {!loading && docs.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-            <thead>
-              <tr style={{ background: '#1e3a5f', color: '#fff' }}>
-                {['Data', 'N. Documento', 'Tipo', 'Struttura', 'Intestatario', 'Importo', 'Ann.'].map(h => (
-                  <th key={h} style={{ ...thSt, color: '#fff', ...(h === 'Intestatario' ? { textAlign: 'left' } : {}) }}>{h}</th>
-                ))}
+        <Table compact>
+          <thead>
+            <tr>
+              <Th>Data</Th><Th>N. Documento</Th><Th>Tipo</Th><Th>Struttura</Th>
+              <Th>Intestatario</Th><Th num>Importo</Th><Th center>Ann.</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {docs.map(d => (
+              <tr key={d.id} className={d.annullato ? 'ui-riga-annullata' : undefined}>
+                <Td style={{ color: colors.textSecond }}>{fmtD(d.data_documento)}</Td>
+                <Td>{d.numero}{d.suffisso ? <span style={{ color: colors.textSubtle }}> {d.suffisso}</span> : null}</Td>
+                <Td style={{ color: colors.textMuted }}>{TIPO_LABEL[d.tipo] || d.tipo}</Td>
+                <Td><HotelTag code={d.struttura_code} /></Td>
+                <Td>{d.intestazione || <span style={{ color: colors.borderStrong }}>—</span>}</Td>
+                <Td num style={{ color: d.totale_lordo < 0 ? colors.danger : undefined, fontWeight: 600 }}>
+                  {formatEuro(d.totale_lordo || 0)}
+                </Td>
+                <Td center style={{ color: colors.danger }}>{d.annullato ? '✗' : ''}</Td>
               </tr>
-            </thead>
-            <tbody>
-              {docs.map((d, idx) => (
-                <tr key={d.id} style={{
-                  background: d.annullato ? '#fef9f9' : idx % 2 === 0 ? '#fff' : '#f8fafc',
-                  opacity: d.annullato ? 0.65 : 1,
-                }}>
-                  <td style={{ ...tdSt, color: '#475569' }}>{fmtD(d.data_documento)}</td>
-                  <td style={tdSt}>{d.numero}{d.suffisso ? <span style={{ color: '#94a3b8' }}> {d.suffisso}</span> : null}</td>
-                  <td style={{ ...tdSt, color: '#64748b' }}>{TIPO_LABEL[d.tipo] || d.tipo}</td>
-                  <td style={{ ...tdSt, fontWeight: 600 }}>{d.struttura_code}</td>
-                  <td style={{ ...tdSt, textAlign: 'left', color: '#334155' }}>{d.intestazione || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
-                  <td style={{ ...tdSt, color: d.totale_lordo < 0 ? '#ef4444' : '#1e293b', fontWeight: 600 }}>
-                    {formatEuro(d.totale_lordo || 0)}
-                  </td>
-                  <td style={{ ...tdSt, textAlign: 'center', color: d.annullato ? '#ef4444' : '#94a3b8' }}>
-                    {d.annullato ? '✗' : ''}
-                  </td>
-                </tr>
-              ))}
-              <tr style={{ background: '#f1f5f9', borderTop: '2px solid #cbd5e1' }}>
-                <td colSpan={5} style={{ ...tdSt, textAlign: 'right', color: '#475569', fontWeight: 600, fontSize: '0.75rem' }}>
-                  Totale pagina ({docs.length} doc.):
-                </td>
-                <td style={{ ...tdSt, fontWeight: 700, color: '#1e293b' }}>
-                  {formatEuro(docs.reduce((s, d) => s + (d.totale_lordo || 0), 0))}
-                </td>
-                <td />
-              </tr>
-            </tbody>
-          </table>
-        </div>
+            ))}
+            <tr className="ui-riga-sezione">
+              <Td colSpan={5} style={{ textAlign: 'right', fontSize: 'var(--fs-sm)' }}>Totale pagina ({docs.length} doc.):</Td>
+              <Td num>{formatEuro(docs.reduce((s, d) => s + (d.totale_lordo || 0), 0))}</Td>
+              <Td />
+            </tr>
+          </tbody>
+        </Table>
       )}
 
-      {/* Paginazione */}
-      {totPages > 1 && (
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => setPage(1)} disabled={page === 1} style={{ ...inpSt, cursor: 'pointer' }}>«</button>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{ ...inpSt, cursor: 'pointer' }}>‹</button>
-          <span style={{ fontSize: '0.82rem', color: '#64748b' }}>Pag. {page} / {totPages}</span>
-          <button onClick={() => setPage(p => Math.min(totPages, p + 1))} disabled={page === totPages} style={{ ...inpSt, cursor: 'pointer' }}>›</button>
-          <button onClick={() => setPage(totPages)} disabled={page === totPages} style={{ ...inpSt, cursor: 'pointer' }}>»</button>
-        </div>
+      {totale > PER_PAGE && (
+        <Paginazione pagina={page} perPagina={PER_PAGE} totale={totale} onChange={setPage} estremi />
       )}
     </div>
   )
