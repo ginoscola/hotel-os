@@ -15,21 +15,6 @@ export const NOME_CAT = {
   penali: 'Penali (0%)', shop: 'Shop (22%)', altro: 'Altro',
 }
 
-// ── Stili base condivisi (tabelle e input) ────────────────────────────────────
-
-export const thSt = {
-  padding: '6px 8px', fontWeight: 600, fontSize: '0.75rem',
-  whiteSpace: 'nowrap', textAlign: 'right',
-}
-export const tdSt = {
-  padding: '5px 8px', fontSize: '0.8rem', borderBottom: '1px solid #f1f5f9',
-  whiteSpace: 'nowrap', textAlign: 'right',
-}
-export const inpSt = {
-  padding: '5px 8px', border: '1px solid #e2e8f0',
-  borderRadius: 5, fontSize: '0.85rem', color: '#1e293b',
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // isAdmin vive in utils/auth.js (serve anche fuori da Corrispettivi, es. Home): re-esportata

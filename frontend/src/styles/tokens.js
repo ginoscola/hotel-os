@@ -25,6 +25,7 @@ export const colors = {
 
   // Colori di significato (fg = testo/icona, bg = sfondo tenue, text = testo su bg)
   success: '#16a34a', successBg: '#dcfce7', successText: '#166534',
+  successBgStrong: '#bbf7d0', // colonne totale su righe risultato (Conto Economico)
   danger:  '#dc2626', dangerBg:  '#fee2e2', dangerText:  '#991b1b',
   warning: '#d97706', warningBg: '#fef3c7', warningText: '#92400e',
   info:    '#2563eb', infoBg:    '#dbeafe', infoText:    '#1e40af',

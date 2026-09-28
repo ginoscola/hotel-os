@@ -1,4 +1,5 @@
 import { ReferenceArea } from 'recharts'
+import { colors } from '../styles/tokens.js'
 
 // Funzione (non componente) che restituisce un <ReferenceArea> diretto per Recharts.
 // Recharts riconosce i figli per tipo: un componente wrapper viene ignorato,
@@ -20,7 +21,7 @@ export default function pastReferenceArea(data, dateKey, displayKey, refDate) {
     <ReferenceArea
       x1={data[0][dk]}
       x2={cutoff}
-      fill="#1e293b"
+      fill={colors.text}
       fillOpacity={0.07}
       ifOverflow="visible"
     />

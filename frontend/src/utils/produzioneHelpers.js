@@ -4,13 +4,13 @@ import { formatEuro } from './format'
 import { PALETTE_CATEGORICA, colors } from '../styles/tokens.js'
 import {
   isAdmin, fmtD, meseNome, primoGiorno, ultimoGiorno, giornoSettimana,
-  thSt, tdSt, inpSt, STRUTTURE_HOTEL, NOMI,
+  STRUTTURE_HOTEL, NOMI,
 } from './corrispettiviHelpers'
 
 // Riesportate: stesse utility generiche già in uso in Corrispettivi, non duplicare.
 export {
   isAdmin, fmtD, meseNome, primoGiorno, ultimoGiorno, giornoSettimana,
-  thSt, tdSt, inpSt, STRUTTURE_HOTEL, NOMI,
+  STRUTTURE_HOTEL, NOMI,
 }
 
 export const LS_TAB = 'produzione_tab'

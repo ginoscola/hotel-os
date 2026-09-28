@@ -109,7 +109,6 @@ Bug reale (trovato settembre 2026): mancavano sia `produzione` (`/statistiche-pr
 da `prod004_2026` come modulo separato da USALI) sia `forecast` (`/forecast`), quindi su quelle pagine
 restava evidenziato "Statistiche" (default di fallback della funzione). Corretto aggiungendo entrambi
 i prefissi mancanti — ma resta un passo manuale da ricordare a ogni nuovo modulo, non automatico.
-Placeholder: `WorkInProgress.jsx`.
 ⚠️ **`getSubnav()` (`NavBar.jsx`) mostrava "— in sviluppo" sotto la NavBar per ogni modulo diverso
 da `revenue`** (unico con una vera sotto-nav propria, i link agli hotel): un fallback rimasto da
 quando gli altri moduli erano effettivamente non ancora fatti, mai aggiornato mano a mano che sono
@@ -296,7 +295,7 @@ contrasto con l'app reale) è stato eliminato.
   `ui-riga-avviso` da compilare, `ui-riga-ok` completata, `ui-riga-subtotale`, `ui-riga-sezione`,
   `ui-riga-risultato`, `ui-riga-totale`) — il CSS colora le `<td>`, quindi il bug riga pari/dispari
   (vedi "Righe tabella con sfondo custom") non si presenta. I selettori `.ui-table > tbody > tr > td`
-  hanno specificità più alta delle regole globali th/td di `index.css` apposta.
+  sono espliciti (`index.css` non ha più regole globali su tabelle dal v3.16.0).
 - **Migrazione a fasi, un modulo alla volta** (verifica visiva dell'utente dopo ciascuno):
   ✅ USALI (pilota, v3.15.0), ✅ Budget (v3.15.1 — ora ha un titolo pagina con hotel come
   `SegmentedControl`, anno/versione in `PageHeader`; colori grafici Budget/Actual = `textSubtle`/`info`).
@@ -337,12 +336,17 @@ contrasto con l'app reale) è stato eliminato.
   Altri come `SegmentedControl` per riga —, Range KPI, Righe Movimenti Attivi; Produzione Categorie e
   Mapping dettagli. Stesso difetto dei messaggi vuoti corretto anche qui (Categorie, Mapping, Movimenti
   usavano `fb(testo, tipo)`). Eliminati `useFeedback`/`inputSm`/`btnSm`. Con questa tranche **non
-  restano `window.confirm`/`alert` in tutta l'app**). Poi: gli altri moduli, per ultimi Dipendenti e AdminUnificato
-  (i più pesanti). La tab Cancellazioni di Forecast passerà dall'azzurro al blu notte migrando Forecast
-  (l'azzurro era stato chiesto solo per togliere il viola, che sparisce comunque). **Solo alla fine**
-  si alleggeriscono le regole globali th/td/button di `index.css` e si eliminano gli stili duplicati
-  negli helper (`thSt`/`tdSt`/`inpSt` in `corrispettiviHelpers.js`/`produzioneHelpers.js`): toccarle
-  prima romperebbe le pagine non ancora migrate. Export xlsx/pdf (colori nel backend) fuori ambito.
+  restano `window.confirm`/`alert` in tutta l'app**), ✅ Pulizia finale (v3.16.0 — **migrazione
+  completata**, tutte le pagine sulla libreria): `index.css` ridotto a reset di base (body con variabili,
+  titoli, `button` nativo per i pochi pulsanti con stile inline — interruttori, accordion); **eliminate
+  le regole globali su `th`/`td`/`tr`/`select`/`input[type=date]`** e le classi vecchie `.card`,
+  `.grid-kpi`, `.sezione`, `.badge*`, `.text-muted`, `.text-right`, `tr.riga-totale` (verificato: nessun
+  uso residuo; tutte le tabelle passano da `<Table>`, tutti i campi da `ui-input`). NavBar.css su
+  variabili (blu notte, font), pagina 403 di `ProtectedRoute` e `PastReferenceArea` sui token, colore
+  colonne totale delle righe risultato del Conto Economico come token `successBgStrong`. Eliminati
+  `thSt`/`tdSt`/`inpSt` dagli helper e `WorkInProgress.jsx` (non più importato da nessuna parte).
+  Export xlsx/pdf (colori nel backend) fuori ambito. **Pagine nuove**: usare solo la libreria — senza
+  `<Table>` una `<table>` nuda oggi non ha alcuno stile (nessuna regola globale di ripiego).
 - Nelle pagine migrate: nessun colore esadecimale scritto a mano, nessun `fontSize` fuori scala
   (11/12/13/14/16/18/22), nessun `alert()`/`confirm()`.
 
@@ -993,7 +997,7 @@ Tab attiva: `localStorage('corrispettivi_tab')`.
 
 **Diviso per file** (stesso pattern dello split backend — `Corrispettivi.jsx` è solo tab bar + routing,
 ~130 righe invece di ~3000): `frontend/src/utils/corrispettiviHelpers.js` (costanti/helper condivisi:
-`STRUTTURE_HOTEL`, `NOMI`, `NOME_CAT`, `thSt`/`tdSt`/`inpSt`, `isAdmin`, `fmtD`, `meseNome`,
+`STRUTTURE_HOTEL`, `NOMI`, `NOME_CAT`, `isAdmin`, `fmtD`, `meseNome`,
 `primoGiorno`/`ultimoGiorno`, `giornoSettimana`, `applyToggle`/`fmtToggle` — import da qui, non
 ridefinire), `TabImport.jsx`, `TabDocumenti.jsx` (+ `ModalModifica`, `PerHotelView`, `CameraCell` —
 componenti privati usati solo da scontrini/fatture), `TabGiornalieri.jsx` (+ `DrawerDocumenti`),
@@ -1941,7 +1945,9 @@ mostrava un falso allarme, non un problema reale di scheduling. Fix: `_launchd_a
 - Prima di creare nuova tabella, verificare se qualcosa di simile esiste già
 
 ### Righe tabella con sfondo custom (totali, evidenziate) — impostare il background su ogni `<td>`
-`index.css` ha una regola globale `tr:nth-child(even) td { background: #edf1f7; }` che si applica a
+Oggi la regola è in `styles/ui.css` (`.ui-table > tbody > tr:nth-child(even) > td`, righe alterne di
+ogni `<Table>`) e il modo corretto è una classe `ui-riga-*` sulla `<tr>` (vedi Libreria UI). Storia: fino
+al v3.16.0 `index.css` aveva una regola globale `tr:nth-child(even) td { background: #edf1f7; }` su
 **tutte** le tabelle dell'app. Uno stile inline `background` messo solo sulla `<tr>` (non sui singoli
 `<td>`) NON dipinge i `<td>` figli — in CSS il background non si eredita dal genitore — quindi per le
 righe dispari il `<td>` trasparente lascia vedere il colore della `<tr>` (sembra funzionare), ma per

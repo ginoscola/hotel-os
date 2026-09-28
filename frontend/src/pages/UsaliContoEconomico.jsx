@@ -282,7 +282,7 @@ export default function UsaliContoEconomico() {
   function renderRigaTotale(sezione) {
     const isMargine = sezione.tipo === 'risultato_c' || sezione.tipo === 'risultato_e'
     // Colonne totale (HOTEL/GRUPPO) leggermente più scure del resto della riga
-    const bgTot = isMargine ? '#bbf7d0' : colors.border
+    const bgTot = isMargine ? colors.successBgStrong : colors.border
 
     return (
       <tr key={sezione.codice} className={isMargine ? 'ui-riga-risultato' : 'ui-riga-sezione'}>

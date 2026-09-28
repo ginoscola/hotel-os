@@ -2,8 +2,8 @@
    Libreria UI HotelOS — variabili + classi usate da components/ui/.
    Valori allineati a styles/tokens.js (se cambi uno, cambia anche l'altro).
    Importato DOPO index.css (main.jsx): a parità di specificità vince questo file.
-   ⚠️ index.css ha regole globali su th/td/button/select: i selettori tabella qui sotto
-   hanno specificità volutamente più alta (".ui-table > tbody > tr > td") per batterle.
+   index.css contiene solo reset di base (body, titoli, button nativo): nessuna regola globale
+   su tabelle/select. I selettori tabella restano comunque espliciti (".ui-table > tbody > tr > td").
    ─────────────────────────────────────────────────────────────────────────── */
 
 :root {

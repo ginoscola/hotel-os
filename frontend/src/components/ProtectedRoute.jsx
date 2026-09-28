@@ -1,4 +1,5 @@
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
+import { colors } from '../styles/tokens.js'
 
 /**
  * Legge l'utente corrente da localStorage.
@@ -83,13 +84,13 @@ function PaginaAccesoNegato({ titolo, messaggio }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', minHeight: '60vh', gap: '1rem', color: '#374151',
+      justifyContent: 'center', minHeight: '60vh', gap: '1rem', color: colors.textSecond,
     }}>
       <div style={{ fontSize: 64, lineHeight: 1 }}>403</div>
-      <h2 style={{ margin: 0, color: '#dc2626' }}>{titolo}</h2>
-      <p style={{ color: '#6b7280', margin: 0 }}>{messaggio}</p>
+      <h2 style={{ margin: 0, color: colors.danger }}>{titolo}</h2>
+      <p style={{ color: colors.textMuted, margin: 0 }}>{messaggio}</p>
       <a href="/home"
-        style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600, fontSize: 14 }}>
+        style={{ color: colors.primary, textDecoration: 'none', fontWeight: 600, fontSize: 'var(--fs-md)' }}>
         ← Torna alla Home
       </a>
     </div>
