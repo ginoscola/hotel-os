@@ -142,6 +142,7 @@ export default function Dipendenti() {
     try {
       const r = await api.post(`/dipendenti/import?is_test=${isTest}`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 180000, // PDF cedolini anche ~20 MB: il parsing supera i 30s di default
       })
       setUploadState({ stato: 'ok', messaggio: '', risultato: r.data })
       // Ricarica dati

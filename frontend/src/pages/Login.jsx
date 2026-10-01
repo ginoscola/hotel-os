@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import axios from 'axios'
+import { API_URL } from '../api/client'
 import { Button, Field, Input, Messaggio } from '../components/ui'
 
 export default function Login() {
@@ -29,8 +30,7 @@ export default function Login() {
       const form = new URLSearchParams()
       form.append('username', username)
       form.append('password', password)
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-      const { data } = await axios.post(`${apiUrl}/auth/login`, form, {
+      const { data } = await axios.post(`${API_URL}/auth/login`, form, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       })
       localStorage.setItem('auth_token', data.access_token)
@@ -38,7 +38,7 @@ export default function Login() {
 
       // Carica e salva i permessi modulo per ProtectedRoute
       try {
-        const { data: moduli } = await axios.get(`${apiUrl}/modules/`, {
+        const { data: moduli } = await axios.get(`${API_URL}/modules/`, {
           headers: { Authorization: `Bearer ${data.access_token}` },
         })
         const permessi = {}

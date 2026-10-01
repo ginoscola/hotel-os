@@ -184,6 +184,17 @@ euristica a `index.html`, che punta al bundle con hash. Fix in `deploy/hotelos.n
 Se un utente vede ancora "la versione di prima" dopo un build: prima verificare con
 `curl -s https://hotelos.kmdimare-hub.com/ | grep -o 'assets/index-[^"]*'` che il server dia il bundle
 nuovo, poi ricarica forzata nel browser.
+⚠️ **Upload grandi da ufficio: "Network Error"** (bug reale, 01/10/2026, import PDF cedolini ~20 MB).
+Due cause in sequenza: (1) nginx API senza `client_max_body_size` → default 1 MB, 413 senza header
+CORS che il browser mostra come "Network Error" — fix in `deploy/hotelos-api.nginx.conf` (50M +
+`proxy_read/send_timeout 300s`; il file va copiato a mano in `/etc/nginx/sites-available/hotelos-api`
++ `nginx -t && systemctl reload nginx`, Claude non ha sudo su nginx). (2) Anche in LAN il frontend
+chiamava l'indirizzo pubblico (`VITE_API_URL`), quindi l'upload usciva su internet e rientrava dal
+tunnel Cloudflare: uplink lento, cloudflared "Incoming request ended abruptly: context canceled",
+timeout dopo ~3 min. Fix: `API_URL` in `api/client.js` (esportato, usato anche da `Login.jsx`) — se
+la pagina è aperta da `192.168.x.x:8080` le chiamate vanno a `:8081` sullo stesso host (nginx API in
+LAN), altrimenti `VITE_API_URL`. Nuovi punti che costruiscono URL API a mano devono importare
+`API_URL`, non rileggere `VITE_API_URL`. Import Dipendenti con `timeout: 180000` dedicato.
 
 ## Comandi sviluppo
 ⚠️ **Dal 23 settembre 2026 lo sviluppo avviene sul server Linux**, non più sul Mac Mini (migrazione
