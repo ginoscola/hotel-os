@@ -12,6 +12,7 @@ import TabCassa from './TabCassa'
 import api from '../api/client'
 import { isAdmin } from '../utils/corrispettiviHelpers'
 import { PageHeader, Tabs, ToggleIva } from '../components/ui'
+import { colors } from '../styles/tokens.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,14 @@ export default function Corrispettivi() {
   return (
     <div>
       <PageHeader title="Corrispettivi">
-        <ToggleIva lordo={lordo} onChange={cambiaLordo} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <ToggleIva lordo={lordo} onChange={cambiaLordo} />
+          {tab === 'analisi' && !lordo && (
+            <span style={{ fontSize: 'var(--fs-sm)', color: colors.warningText }}>
+              ⚠ Valori presunti: IVA complessiva stimata al 10%
+            </span>
+          )}
+        </div>
       </PageHeader>
 
       <Tabs tabs={tabsDisponibili} value={tab} onChange={cambiaTab} />
@@ -110,7 +118,7 @@ export default function Corrispettivi() {
         <TabStampanteRT isAdmin={isAdmin()} />
       )}
       {tab === 'analisi' && (
-        <TabAnalisiRicavi hotels={hotels} isAdmin={isAdmin()} />
+        <TabAnalisiRicavi hotels={hotels} isAdmin={isAdmin()} lordo={lordo} />
       )}
       {tab === 'test' && isAdmin() && (
         <TabTest onPulito={() => setRefreshKey(k => k + 1)} />

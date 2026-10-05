@@ -992,6 +992,30 @@ Endpoint (prefix `/analisi-ricavi`):
 - `GET /trattamenti?hotel_code=&anno=&mese=[&mese_fine=]` → classificazione + ridistribuzione
 - `GET /reparti?hotel_code=&anno=&mese=[&mese_fine=]` → revenue_module solo per mese singolo
 - `GET /gruppo?anno=&mese=[&mese_fine=]` → aggregato tutti gli hotel; `mese_fine` per range
+  + **ristoranti MMS/BON** (ottobre 2026): `ristoranti_codes=['MMS','BON']` = colonne aggiuntive dopo
+  gli hotel nella vista Gruppo. Nessun dato Passbi per loro: solo `SUM(corrispettivi_manuali.
+  arrangiamenti_lordo)` (is_test=false, stesso anno/range mesi) in una riga reparto dedicata
+  `'Ristorante (corrispettivi manuali)'` (`RIGA_RISTORANTI_MANUALI`), distinta dalla riga
+  'Maremosso' di Passbi (= addebiti in camera degli ospiti DPH). Entra in `totale_reparti` e nelle %;
+  nei Trattamenti le colonne MMS/BON sono sempre '—' (un ristorante non ha BB/HB/…) e
+  `totale_trattamenti` resta solo hotel — quindi i due totali del Gruppo differiscono di questa riga.
+  Solo vista Gruppo (+ export Gruppo), non selezionabili come hotel singolo.
+  **Terza tabella "Reparti — Gruppo ripartiti sui Corrispettivi"** (`reparti_corrispettivi`,
+  `corrispettivi_per_struttura`, `totale_reparti_corrispettivi`; foglio export "Reparti su
+  Corrispettivi"): per ogni hotel il totale di `report_fatturati()` nei mesi della vista (riusato,
+  non riaggregato: IVA inclusa, annullati e tassa di soggiorno esclusi) è ripartito tra i reparti in
+  proporzione ai valori Passbi **di quell'hotel** (non alle % di gruppo), centesimo di arrotondamento
+  sul reparto più grande → ogni colonna = Corrispettivi esatti (verificato apr–set 2026 =
+  1.841.975,63€ = Riepilogo Fatturati). MMS/BON invariati. Hotel con Corrispettivi ma senza reparti nel
+  periodo → riga `'Non ripartibile (nessun dato reparti)'`. `_reparti_su_corrispettivi()`.
+  **Toggle IVA su questa tabella = netto REALE, non il 10% presunto**: `get_gruppo` calcola la
+  ripartizione due volte (`report_fatturati(lordo=True|False)`, IVA per categoria: penali 0%, shop
+  22%…) e manda la versione netta in `netto_corrispettivi`; frontend (`vistaIva`) ed export
+  (`_scorpora_iva_presunta`) la sostituiscono invece di dividere per 1,10 (titolo foglio "IVA
+  esclusa", senza "presunta"). Le due tabelle PassBI restano sulla stima al 10%. Titoli a schermo
+  ed export: "Trattamenti/Reparti — Gruppo (fonte PassBI)".
+  Perché serve: Passbi (maturato, sembra includere la tassa di soggiorno) supera i Corrispettivi di
+  ~65k€ sulla stagione 2026 (~25k€ al netto della TS: residuo simile anche Produzione vs Corrispettivi).
 - `GET|POST|PUT /classificazione[/{codice}]` → include campo `colore`
 - `GET /export?hotel_code=&anno=&mese=[&mese_fine=]&vista_dettaglio=` → export Excel della vista
   corrente di `TabAnalisiRicavi.jsx` (riusa `get_trattamenti()`/`get_reparti()`/`get_gruppo()`, non
@@ -1003,10 +1027,16 @@ Endpoint (prefix `/analisi-ricavi`):
   frontend). Non esporta la colonna "Δ Revenue" dei Trattamenti: a schermo è solo un placeholder
   (sempre "—", mai calcolato) — nulla di reale da esportare lì. Il confronto Reparti vs Revenue
   module invece è reale (`revenue_module`, solo mese singolo) ed è incluso in fondo al foglio Reparti
-  quando disponibile. Titolo di ogni foglio include "IVA inclusa": a differenza di
-  Corrispettivi/Produzione questo modulo non ha né un campo IVA né un toggle lordo/netto — il
-  "valore" è preso così com'è dal CSV Passbi (Dashboard Analisi Ricavi), che è sempre IVA inclusa
-  (confermato dall'utente) — dicitura fissa, non uno stato dinamico da un toggle inesistente.
+  quando disponibile. Il "valore" è preso così com'è dal CSV Passbi (Dashboard Analisi Ricavi),
+  sempre IVA inclusa e **senza aliquota** (confermato dall'utente).
+  **Toggle IVA (ottobre 2026)**: il toggle globale di Corrispettivi ora vale anche qui, con **IVA
+  presunta al 10% su tutto** (scelta esplicita dell'utente, è una stima: un reparto con voci al 22%
+  risulta sovrastimato). Con "IVA esclusa" tutti gli importi sono divisi per 1,10 (`vistaIva()` in
+  `TabAnalisiRicavi.jsx`, `_scorpora_iva_presunta()` in `analisi_ricavi.py` per l'export, param
+  `lordo`; titolo foglio "IVA esclusa (presunta al 10%)"); % invariate; `revenue_module` (Δ
+  Revenue) non toccato. Sotto la pillola compare l'avviso "Valori presunti: IVA complessiva stimata
+  al 10%" (solo tab Analisi Ricavi + IVA esclusa). DB sempre IVA inclusa: una modifica inline fatta
+  in vista netta viene rimoltiplicata ×1,10 prima del `PUT` (`aLordo()`).
 
 Frontend `TabAnalisiRicavi.jsx`: bottoni hotel [DPH][CLB][INT][Gruppo]; frecce ◀▶ mese/anno; toggle Range (mese_fine); toggle dettaglio/macrocategorie; toggle Δ Revenue (solo hotel singolo). Default: mese precedente a quello corrente. Colori: priorità DB → `CATEGORIA_COLORI` → palette.
 Admin `corr-classificazione`: `CorrClassificazioneTrattamenti` con colonna Colore (swatch + hex).

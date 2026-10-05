@@ -16,6 +16,37 @@ import { colors, PALETTE_CATEGORICA, coloreSerie } from '../styles/tokens.js'
 const MESI = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
               'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
 
+// Il CSV Passbi è sempre IVA inclusa e non riporta l'aliquota: con "IVA esclusa" si scorpora
+// un'IVA presunta al 10% su tutto (stima — avviso sotto il toggle in Corrispettivi.jsx).
+// Le % restano invariate (aliquota uniforme). revenue_module non toccato (non viene da Passbi).
+// Stessa regola dell'export backend (_scorpora_iva_presunta in analisi_ricavi.py).
+export const ALIQUOTA_IVA_PRESUNTA = 0.10
+const K_IVA = 1 + ALIQUOTA_IVA_PRESUNTA
+const CHIAVI_IMPORTO = ['valore', 'totale', 'totale_trattamenti', 'totale_reparti']
+
+function scorporaRiga(r) {
+  const out = { ...r }
+  for (const c of CHIAVI_IMPORTO) if (out[c] != null) out[c] = out[c] / K_IVA
+  if (out.per_hotel) {
+    out.per_hotel = Object.fromEntries(Object.entries(out.per_hotel).map(([h, v]) => [h, v / K_IVA]))
+  }
+  return out
+}
+
+function vistaIva(dati, lordo) {
+  if (!dati || lordo) return dati
+  const out = scorporaRiga(dati)
+  if (out.trattamenti) out.trattamenti = out.trattamenti.map(scorporaRiga)
+  if (out.reparti) out.reparti = out.reparti.map(scorporaRiga)
+  // Tabella ripartita sui Corrispettivi: il backend dà già il netto REALE (IVA per categoria,
+  // come Riepilogo Fatturati IVA esclusa) — si usa quello, non lo scorporo presunto al 10%
+  if (out.netto_corrispettivi) Object.assign(out, out.netto_corrispettivi)
+  return out
+}
+
+// Valore digitato in cella → valore da salvare (in DB sempre IVA inclusa)
+const aLordo = (v, lordo) => (lordo ? v : Math.round(v * K_IVA * 100) / 100)
+
 const _oggi = new Date()
 const MESE_DEFAULT = _oggi.getMonth() === 0 ? 12 : _oggi.getMonth()
 const ANNO_DEFAULT = _oggi.getMonth() === 0 ? _oggi.getFullYear() - 1 : _oggi.getFullYear()
@@ -119,8 +150,9 @@ function CellaValore({ valore, modificato, onSalva, disabled }) {
 }
 
 // ── Tabella Trattamenti ───────────────────────────────────────────────────────
-function TabellaTrattamenti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDelta, vistaDettaglio }) {
-  const [dati, setDati] = useState(null)
+function TabellaTrattamenti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDelta, vistaDettaglio, lordo }) {
+  const [datiRaw, setDati] = useState(null)
+  const dati = vistaIva(datiRaw, lordo)
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState(null)
   const avvisi = useAvvisi()
@@ -145,7 +177,7 @@ function TabellaTrattamenti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDe
 
   const aggiornaValore = async (id, nuovoValore) => {
     try {
-      await api.put(`/analisi-ricavi/trattamenti/${id}`, { valore: nuovoValore })
+      await api.put(`/analisi-ricavi/trattamenti/${id}`, { valore: aLordo(nuovoValore, lordo) })
       carica()
     } catch (e) {
       avvisi.errore(mostraErrore(e))
@@ -240,8 +272,9 @@ function TabellaTrattamenti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDe
 }
 
 // ── Tabella Reparti ───────────────────────────────────────────────────────────
-function TabellaReparti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDelta }) {
-  const [dati, setDati] = useState(null)
+function TabellaReparti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDelta, lordo }) {
+  const [datiRaw, setDati] = useState(null)
+  const dati = vistaIva(datiRaw, lordo)
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState(null)
   const avvisi = useAvvisi()
@@ -266,7 +299,7 @@ function TabellaReparti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDelta 
 
   const aggiorna = async (id, nuovoValore) => {
     try {
-      await api.put(`/analisi-ricavi/reparti/${id}`, { valore: nuovoValore })
+      await api.put(`/analisi-ricavi/reparti/${id}`, { valore: aLordo(nuovoValore, lordo) })
       carica()
     } catch (e) {
       avvisi.errore(mostraErrore(e))
@@ -506,8 +539,9 @@ function SubtabImport({ hotels, isAdmin }) {
 }
 
 // ── Vista Gruppo ───────────────────────────────────────────────────────────────
-function VistGruppo({ anno, mese, meseFine, vistaDettaglio }) {
-  const [dati, setDati] = useState(null)
+function VistGruppo({ anno, mese, meseFine, vistaDettaglio, lordo }) {
+  const [datiRaw, setDati] = useState(null)
+  const dati = vistaIva(datiRaw, lordo)
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState(null)
 
@@ -526,7 +560,10 @@ function VistGruppo({ anno, mese, meseFine, vistaDettaglio }) {
   if (errore) return <Messaggio tipo="err">{errore}</Messaggio>
   if (!dati) return null
 
-  const hotels = dati.hotel_codes
+  // Colonne: hotel (dati Passbi) + ristoranti MMS/BON (solo incasso manuale Corrispettivi,
+  // valorizzato nella riga reparto dedicata; nei trattamenti sempre '—')
+  const ristoranti = dati.ristoranti_codes || []
+  const hotels = [...dati.hotel_codes, ...ristoranti]
 
   // Tabella trattamenti gruppo con colonne per hotel
   const trattAmostare = vistaDettaglio
@@ -549,7 +586,7 @@ function VistGruppo({ anno, mese, meseFine, vistaDettaglio }) {
 
   return (
     <div>
-      <SectionTitle as="h3">Trattamenti — Gruppo</SectionTitle>
+      <SectionTitle as="h3">Trattamenti — Gruppo (fonte PassBI)</SectionTitle>
       {trattAmostare.length === 0 ? (
         <StatoVuoto>Nessun dato per questo periodo.</StatoVuoto>
       ) : (
@@ -583,7 +620,7 @@ function VistGruppo({ anno, mese, meseFine, vistaDettaglio }) {
               {vistaDettaglio && <Td />}
               {hotels.map(h => (
                 <Td key={h} num>
-                  {formatEuro(dati.trattamenti.filter(t => t.per_hotel?.[h]).reduce((s, t) => s + (t.per_hotel[h] || 0), 0))}
+                  {ristoranti.includes(h) ? '—' : formatEuro(dati.trattamenti.filter(t => t.per_hotel?.[h]).reduce((s, t) => s + (t.per_hotel[h] || 0), 0))}
                 </Td>
               ))}
               <Td num tot>{formatEuro(dati.totale_trattamenti)}</Td>
@@ -593,7 +630,7 @@ function VistGruppo({ anno, mese, meseFine, vistaDettaglio }) {
         </Table>
       )}
 
-      <SectionTitle as="h3" style={{ marginTop: 24 }}>Reparti — Gruppo</SectionTitle>
+      <SectionTitle as="h3" style={{ marginTop: 24 }}>Reparti — Gruppo (fonte PassBI)</SectionTitle>
       {dati.reparti.length === 0 ? (
         <StatoVuoto>Nessun dato.</StatoVuoto>
       ) : (
@@ -628,6 +665,47 @@ function VistGruppo({ anno, mese, meseFine, vistaDettaglio }) {
           </tbody>
         </Table>
       )}
+
+      <SectionTitle as="h3" style={{ marginTop: 24 }}>Reparti — Gruppo ripartiti sui Corrispettivi</SectionTitle>
+      <p className="ui-text-muted" style={{ marginTop: 0, marginBottom: 8 }}>
+        Il totale di ogni hotel è quello dei Corrispettivi del periodo (come in Riepilogo Fatturati:
+        senza tassa di soggiorno), ripartito tra i reparti secondo le % Passbi di quell'hotel.
+        MMS e BON invariati. Con IVA esclusa usa l'IVA reale dei documenti, non la stima al 10%.
+      </p>
+      {!dati.reparti_corrispettivi?.length ? (
+        <StatoVuoto>Nessun dato.</StatoVuoto>
+      ) : (
+        <Table compact>
+          <thead>
+            <tr>
+              <Th>Reparto</Th>
+              {hotels.map(h => <Th key={h} num>{h}</Th>)}
+              <Th num tot>Totale</Th>
+              <Th num>%</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {dati.reparti_corrispettivi.map(r => (
+              <tr key={r.reparto}>
+                <Td>{r.reparto}</Td>
+                {hotels.map(h => (
+                  <Td key={h} num style={{ color: colors.textMuted }}>{r.per_hotel?.[h] ? formatEuro(r.per_hotel[h]) : '—'}</Td>
+                ))}
+                <Td num tot>{formatEuro(r.valore)}</Td>
+                <Td num style={{ color: colors.textMuted }}>{pctFmt(r.pct)}</Td>
+              </tr>
+            ))}
+            <tr className="ui-riga-sezione">
+              <Td>Totale Corrispettivi</Td>
+              {hotels.map(h => (
+                <Td key={h} num>{formatEuro(dati.corrispettivi_per_struttura?.[h] || 0)}</Td>
+              ))}
+              <Td num tot>{formatEuro(dati.totale_reparti_corrispettivi)}</Td>
+              <Td num>100%</Td>
+            </tr>
+          </tbody>
+        </Table>
+      )}
     </div>
   )
 }
@@ -643,7 +721,7 @@ function meseSuccessivo(mese, anno) {
 }
 
 // ── Componente principale ──────────────────────────────────────────────────────
-export default function TabAnalisiRicavi({ hotels, isAdmin }) {
+export default function TabAnalisiRicavi({ hotels, isAdmin, lordo = true }) {
   const [showImport, setShowImport] = useState(false)
   const [hotelSel, setHotelSel] = useState(
     () => localStorage.getItem('ar_hotel') || 'GRUPPO'
@@ -707,7 +785,7 @@ export default function TabAnalisiRicavi({ hotels, isAdmin }) {
 
   const esportaExcel = async () => {
     try {
-      const params = { hotel_code: hotelSel, anno, mese, vista_dettaglio: vistaDettaglio }
+      const params = { hotel_code: hotelSel, anno, mese, vista_dettaglio: vistaDettaglio, lordo }
       if (rangeMode && meseFineEff !== mese) params.mese_fine = meseFineEff
       const res = await api.get('/analisi-ricavi/export', { params, responseType: 'blob' })
       const url = URL.createObjectURL(res.data)
@@ -766,21 +844,21 @@ export default function TabAnalisiRicavi({ hotels, isAdmin }) {
 
           {/* Contenuto */}
           {isGruppo ? (
-            <VistGruppo anno={anno} mese={mese} meseFine={meseFineEff} vistaDettaglio={vistaDettaglio} />
+            <VistGruppo anno={anno} mese={mese} meseFine={meseFineEff} vistaDettaglio={vistaDettaglio} lordo={lordo} />
           ) : (
             <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 320 }}>
                 <SectionTitle as="h3">Trattamenti — {hotelSel}</SectionTitle>
                 <TabellaTrattamenti
                   hotelCode={hotelSel} anno={anno} mese={mese} meseFine={meseFineEff}
-                  isAdmin={isAdmin} mostraDelta={mostraDelta} vistaDettaglio={vistaDettaglio}
+                  isAdmin={isAdmin} mostraDelta={mostraDelta} vistaDettaglio={vistaDettaglio} lordo={lordo}
                 />
               </div>
               <div style={{ flex: 1, minWidth: 280 }}>
                 <SectionTitle as="h3">Reparti — {hotelSel}</SectionTitle>
                 <TabellaReparti
                   hotelCode={hotelSel} anno={anno} mese={mese} meseFine={meseFineEff}
-                  isAdmin={isAdmin} mostraDelta={mostraDelta}
+                  isAdmin={isAdmin} mostraDelta={mostraDelta} lordo={lordo}
                 />
               </div>
             </div>

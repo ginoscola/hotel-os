@@ -22,7 +22,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from sqlalchemy import func, text
+from sqlalchemy import extract, func, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -33,6 +33,7 @@ from app.models.analisi_ricavi import (
     AnalisiRicaviTrattamento,
     TrattamentoClassificazione,
 )
+from app.models.corrispettivi import CorrispettiviManuale
 from app.models.revenue import Hotel
 from app.services.analisi_ricavi_parser import auto_rileva_coppia
 
@@ -522,7 +523,11 @@ def modifica_reparto(
 
 # ── Vista gruppo ──────────────────────────────────────────────────────────────
 
-@router.get("/gruppo")
+RISTORANTI_MANUALI = ['MMS', 'BON']
+RIGA_RISTORANTI_MANUALI = 'Ristorante (corrispettivi manuali)'
+
+
+@router.get('/gruppo')
 def get_gruppo(
     anno: int = Query(...),
     mese: int = Query(..., ge=1, le=12),
@@ -530,7 +535,8 @@ def get_gruppo(
     db: Session = Depends(get_db),
     _u=Depends(richiedi_utente_attivo),
 ):
-    """Aggrega trattamenti e reparti di tutti gli hotel per il mese (o range di mesi)."""
+    """Aggrega trattamenti e reparti di tutti gli hotel per il mese (o range di mesi), più una
+    riga reparto con l'incasso manuale dei ristoranti MMS/BON (colonne `ristoranti_codes`)."""
     mese_fine = mese_fine or mese
     classificazioni = {c.codice: {
         'nome_display': c.nome_display,
@@ -592,10 +598,37 @@ def get_gruppo(
         entry['valore'] += float(row.valore)
         entry['per_hotel'][row.hotel_code] = float(row.valore)
 
+    # Ristoranti MMS/BON: nessun dato Passbi, solo l'incasso inserito a mano in Corrispettivi
+    # (arrangiamenti_lordo, IVA inclusa come il resto). Riga reparto dedicata, distinta da
+    # 'Maremosso' (= addebiti in camera degli ospiti hotel, già nei dati Passbi di DPH).
+    man_rows = db.query(
+        CorrispettiviManuale.struttura_code,
+        func.sum(CorrispettiviManuale.arrangiamenti_lordo).label('valore'),
+    ).filter(
+        CorrispettiviManuale.is_test.is_(False),
+        CorrispettiviManuale.struttura_code.in_(RISTORANTI_MANUALI),
+        extract('year', CorrispettiviManuale.data_giorno) == anno,
+        extract('month', CorrispettiviManuale.data_giorno) >= mese,
+        extract('month', CorrispettiviManuale.data_giorno) <= mese_fine,
+    ).group_by(CorrispettiviManuale.struttura_code).all()
+    per_ristorante = {r.struttura_code: float(r.valore) for r in man_rows if r.valore}
+    if per_ristorante:
+        by_reparto[RIGA_RISTORANTI_MANUALI] = {
+            'reparto': RIGA_RISTORANTI_MANUALI,
+            'valore': sum(per_ristorante.values()),
+            'per_hotel': per_ristorante,
+        }
+
     totale_rep = sum(e['valore'] for e in by_reparto.values())
     reparti = sorted(by_reparto.values(), key=lambda x: x['valore'], reverse=True)
     for r in reparti:
         r['pct'] = round(r['valore'] / totale_rep * 100, 2) if totale_rep > 0 else 0
+
+    codes = sorted(hotel_codes_tratt | hotel_codes_rep)
+    reparti_corr, corr_per_struttura = _reparti_su_corrispettivi(
+        db, anno, mese, mese_fine, by_reparto, codes)
+    reparti_corr_n, corr_per_struttura_n = _reparti_su_corrispettivi(
+        db, anno, mese, mese_fine, by_reparto, codes, lordo=False)
 
     label = MESI_IT[mese] if mese == mese_fine else f"{MESI_IT[mese]}–{MESI_IT[mese_fine]}"
     return {
@@ -604,12 +637,86 @@ def get_gruppo(
         'mese_fine': mese_fine,
         'mese_nome': label,
         'hotel_codes': sorted(hotel_codes_tratt | hotel_codes_rep),
+        # Colonne aggiuntive dopo gli hotel: valorizzate solo nella riga reparto dei manuali
+        'ristoranti_codes': RISTORANTI_MANUALI,
         'trattamenti': sorted(trattamenti, key=lambda x: classificazioni.get(
             x['codice'], {}).get('ordine', 50)),
         'reparti': reparti,
         'totale_trattamenti': round(totale_finale, 2),
         'totale_reparti': round(totale_rep, 2),
+        'reparti_corrispettivi': reparti_corr,
+        'totale_reparti_corrispettivi': round(sum(corr_per_struttura.values()), 2),
+        'corrispettivi_per_struttura': corr_per_struttura,
+        # Versione IVA esclusa con netto reale: il toggle la usa al posto dello scorporo al 10%
+        'netto_corrispettivi': {
+            'reparti_corrispettivi': reparti_corr_n,
+            'totale_reparti_corrispettivi': round(sum(corr_per_struttura_n.values()), 2),
+            'corrispettivi_per_struttura': corr_per_struttura_n,
+        },
     }
+
+
+RIGA_NON_RIPARTITO = 'Non ripartibile (nessun dato reparti)'
+
+
+def _reparti_su_corrispettivi(db: Session, anno: int, mese: int, mese_fine: int,
+                              by_reparto: dict, hotel_codes: List[str], lordo: bool = True):
+    """Tabella Reparti riportata sui Corrispettivi: per ogni hotel il totale Corrispettivi del
+    periodo (= Riepilogo Fatturati: IVA inclusa, annullati e tassa di soggiorno esclusi) è
+    ripartito tra i reparti in proporzione ai valori Passbi DI QUELL'HOTEL, così ogni colonna
+    torna esattamente sui Corrispettivi. MMS/BON invariati (riga manuale = già i corrispettivi).
+    lordo=False → netto REALE di report_fatturati (IVA per categoria: penali 0%, shop 22%…), non
+    il 10% presunto delle tabelle Passbi: la colonna torna sul Riepilogo Fatturati IVA esclusa.
+    Un hotel con Corrispettivi ma senza reparti nel periodo finisce in RIGA_NON_RIPARTITO."""
+    from app.routers.corrispettivi_report import report_fatturati
+
+    fatt = report_fatturati(anno=anno, lordo=lordo, is_test=False, db=db, _=None)
+    corr: dict = {}
+    for m in fatt['mesi']:
+        if mese <= m['mese'] <= mese_fine:
+            for sc, d in m['per_struttura'].items():
+                corr[sc] = corr.get(sc, 0.0) + d['totale']
+
+    tot_passbi = {h: sum(e['per_hotel'].get(h, 0.0) for e in by_reparto.values()
+                         if e['reparto'] != RIGA_RISTORANTI_MANUALI)
+                  for h in hotel_codes}
+    righe: dict = {}
+    for e in by_reparto.values():
+        per_hotel = {}
+        if e['reparto'] == RIGA_RISTORANTI_MANUALI:
+            # = incasso manuale MMS/BON, letto da report_fatturati per avere anche il netto
+            per_hotel = {c: corr[c] for c in e['per_hotel'] if corr.get(c)}
+        else:
+            for h in hotel_codes:
+                v, t = e['per_hotel'].get(h, 0.0), tot_passbi[h]
+                if v and t:
+                    per_hotel[h] = v / t * corr.get(h, 0.0)
+        righe[e['reparto']] = {'reparto': e['reparto'], 'per_hotel': per_hotel}
+    orfani = {h: corr[h] for h in hotel_codes if corr.get(h) and not tot_passbi[h]}
+    if orfani:
+        righe[RIGA_NON_RIPARTITO] = {'reparto': RIGA_NON_RIPARTITO, 'per_hotel': orfani}
+
+    for r in righe.values():
+        r['per_hotel'] = {h: round(v, 2) for h, v in r['per_hotel'].items() if v}
+    # Centesimo di arrotondamento sul reparto più grande, così la colonna = Corrispettivi esatti
+    for h in hotel_codes:
+        quote = [r for r in righe.values() if h in r['per_hotel']]
+        if quote and corr.get(h):
+            diff = round(corr[h] - sum(r['per_hotel'][h] for r in quote), 2)
+            if diff:
+                big = max(quote, key=lambda r: r['per_hotel'][h])
+                big['per_hotel'][h] = round(big['per_hotel'][h] + diff, 2)
+    for r in righe.values():
+        r['valore'] = round(sum(r['per_hotel'].values()), 2)
+    totale = sum(r['valore'] for r in righe.values())
+    lista = sorted((r for r in righe.values() if r['valore']), key=lambda x: x['valore'], reverse=True)
+    for r in lista:
+        r['pct'] = round(r['valore'] / totale * 100, 2) if totale > 0 else 0
+
+    struttura = {h: round(corr.get(h, 0.0), 2) for h in hotel_codes}
+    struttura.update({c: round(sum(r['per_hotel'].get(c, 0.0) for r in lista), 2)
+                      for c in RISTORANTI_MANUALI})
+    return lista, struttura
 
 
 def _aggrega_per_categoria(trattamenti: list, hotels: Optional[List[str]] = None) -> list:
@@ -632,6 +739,35 @@ def _aggrega_per_categoria(trattamenti: list, hotels: Optional[List[str]] = None
     return righe
 
 
+ALIQUOTA_IVA_PRESUNTA = 0.10
+_CHIAVI_IMPORTO = ('valore', 'totale', 'totale_trattamenti', 'totale_reparti')
+
+
+def _scorpora_iva_presunta(dati: dict) -> dict:
+    """Copia di una risposta trattamenti/reparti/gruppo con gli importi divisi per 1,10.
+    Il CSV Passbi non ha aliquota: IVA presunta al 10% su tutto (stessa regola del frontend).
+    Le pct restano invariate (aliquota uniforme). revenue_module non toccato: non viene da Passbi."""
+    k = 1 + ALIQUOTA_IVA_PRESUNTA
+
+    def riga(r: dict) -> dict:
+        r = dict(r)
+        for c in _CHIAVI_IMPORTO:
+            if r.get(c) is not None:
+                r[c] = round(r[c] / k, 2)
+        if r.get('per_hotel'):
+            r['per_hotel'] = {h: round(v / k, 2) for h, v in r['per_hotel'].items()}
+        return r
+
+    out = riga(dati)
+    # Tabella sui Corrispettivi: netto reale già calcolato dal backend, nessuna stima
+    if out.get('netto_corrispettivi'):
+        out.update(out.pop('netto_corrispettivi'))
+    for lista in ('trattamenti', 'reparti'):
+        if lista in out:
+            out[lista] = [riga(r) for r in out[lista]]
+    return out
+
+
 @router.get("/export")
 def export_analisi_ricavi(
     hotel_code: str = Query(..., description="Codice hotel, oppure 'GRUPPO'"),
@@ -639,6 +775,7 @@ def export_analisi_ricavi(
     mese: int = Query(..., ge=1, le=12),
     mese_fine: Optional[int] = Query(None, ge=1, le=12),
     vista_dettaglio: bool = Query(True),
+    lordo: bool = Query(True),
     db: Session = Depends(get_db),
     _u=Depends(richiedi_utente_attivo),
 ):
@@ -673,9 +810,10 @@ def export_analisi_ricavi(
 
     label_periodo = MESI_IT[mese] if mese == mese_fine_eff else f"{MESI_IT[mese]}–{MESI_IT[mese_fine_eff]} {anno}"
     label_vista = 'Dettaglio' if vista_dettaglio else 'Macrocategorie'
-    # I valori del file Passbi (Dashboard Analisi Ricavi) sono sempre IVA inclusa: nessun toggle
-    # a schermo (a differenza di Corrispettivi/Produzione), dicitura fissa non uno stato dinamico.
-    label_iva = 'IVA inclusa'
+    # I valori del file Passbi (Dashboard Analisi Ricavi) sono sempre IVA inclusa, senza aliquota:
+    # con lordo=False si scorpora un'IVA presunta al 10% su tutto (stima, come a schermo).
+    label_iva = 'IVA inclusa' if lordo else 'IVA esclusa (presunta al 10%)'
+    sc = (lambda d: d) if lordo else _scorpora_iva_presunta
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -718,13 +856,13 @@ def export_analisi_ricavi(
             ws.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 2, 30)
 
     if hotel_code == 'GRUPPO':
-        dati = get_gruppo(anno=anno, mese=mese, mese_fine=mese_fine, db=db, _u=None)
-        hotels = dati['hotel_codes']
+        dati = sc(get_gruppo(anno=anno, mese=mese, mese_fine=mese_fine, db=db, _u=None))
+        hotels = dati['hotel_codes'] + dati['ristoranti_codes']
 
         # ── Foglio Trattamenti — Gruppo ───────────────────────────────────────
         ws1 = wb.create_sheet('Trattamenti Gruppo')
         n_col = (2 if vista_dettaglio else 1) + len(hotels) + 2
-        _titolo(ws1, f"Analisi Ricavi — Trattamenti Gruppo — {label_periodo} — Vista: {label_vista} — {label_iva}", n_col)
+        _titolo(ws1, f"Analisi Ricavi — Trattamenti Gruppo (fonte PassBI) — {label_periodo} — Vista: {label_vista} — {label_iva}", n_col)
         if vista_dettaglio:
             _hdr(ws1, 2, ['Codice', 'Categoria'] + hotels + ['Totale', '%'])
             righe = dati['trattamenti']
@@ -734,11 +872,15 @@ def export_analisi_ricavi(
             righe = _aggrega_per_categoria(dati['trattamenti'], hotels)
             get_label = lambda t: [t['categoria']]
         pct_col = n_col
+        # Ristoranti senza trattamento (BB/HB/...): '—' come a schermo
+        rist = set(dati['ristoranti_codes'])
         for i, t in enumerate(righe):
-            vals = get_label(t) + [t.get('per_hotel', {}).get(h) or 0.0 for h in hotels] + [t['valore'], t['pct']]
+            vals = get_label(t) + ['—' if h in rist else (t.get('per_hotel', {}).get(h) or 0.0) for h in hotels] + \
+                   [t['valore'], t['pct']]
             _riga(ws1, i + 3, vals, alt=i % 2 == 1, pct_cols=(pct_col,))
         tot_vals = (['TOTALE', ''] if vista_dettaglio else ['TOTALE']) + \
-                   [round(sum(t.get('per_hotel', {}).get(h) or 0.0 for t in righe), 2) for h in hotels] + \
+                   ['—' if h in rist else round(sum(t.get('per_hotel', {}).get(h) or 0.0 for t in righe), 2)
+                    for h in hotels] + \
                    [dati['totale_trattamenti'], 100.0]
         _riga_tot(ws1, len(righe) + 3, tot_vals, pct_cols=(pct_col,))
         _autowidth(ws1)
@@ -746,7 +888,7 @@ def export_analisi_ricavi(
         # ── Foglio Reparti — Gruppo (sempre dettaglio, nessun toggle a schermo) ──
         ws2 = wb.create_sheet('Reparti Gruppo')
         n_col2 = 1 + len(hotels) + 2
-        _titolo(ws2, f"Analisi Ricavi — Reparti Gruppo — {label_periodo} — {label_iva}", n_col2)
+        _titolo(ws2, f"Analisi Ricavi — Reparti Gruppo (fonte PassBI) — {label_periodo} — {label_iva}", n_col2)
         _hdr(ws2, 2, ['Reparto'] + hotels + ['Totale', '%'])
         for i, r in enumerate(dati['reparti']):
             vals = [r['reparto']] + [r.get('per_hotel', {}).get(h) or 0.0 for h in hotels] + [r['valore'], r['pct']]
@@ -756,10 +898,26 @@ def export_analisi_ricavi(
         _riga_tot(ws2, len(dati['reparti']) + 3, tot_vals2, pct_cols=(n_col2,))
         _autowidth(ws2)
 
+        # ── Foglio Reparti ripartiti sui Corrispettivi ───────────────────────
+        ws3 = wb.create_sheet('Reparti su Corrispettivi')
+        _titolo(ws3, f"Analisi Ricavi — Reparti Gruppo ripartiti sui Corrispettivi — {label_periodo} — {'IVA inclusa' if lordo else 'IVA esclusa'}", n_col2)
+        _hdr(ws3, 2, ['Reparto'] + hotels + ['Totale', '%'])
+        rc = dati['reparti_corrispettivi']
+        for i, r in enumerate(rc):
+            vals = [r['reparto']] + [r.get('per_hotel', {}).get(h) or 0.0 for h in hotels] + [r['valore'], r['pct']]
+            _riga(ws3, i + 3, vals, alt=i % 2 == 1, pct_cols=(n_col2,))
+        tot_vals3 = ['TOTALE'] + [dati['corrispettivi_per_struttura'].get(h, 0.0) for h in hotels] + \
+                    [dati['totale_reparti_corrispettivi'], 100.0]
+        _riga_tot(ws3, len(rc) + 3, tot_vals3, pct_cols=(n_col2,))
+        _autowidth(ws3)  # prima della nota, che altrimenti allargherebbe la colonna A
+        ws3.cell(row=len(rc) + 5, column=1,
+                 value='Totale di ogni hotel = Corrispettivi del periodo (Riepilogo Fatturati, senza tassa di '
+                       'soggiorno), ripartito secondo le % dei reparti Passbi di quell\'hotel. MMS/BON invariati.')
+
         filename = f"analisi_ricavi_gruppo_{anno}_{mese:02d}.xlsx"
     else:
-        dati_t = get_trattamenti(hotel_code=hotel_code, anno=anno, mese=mese, mese_fine=mese_fine, db=db, _u=None)
-        dati_r = get_reparti(hotel_code=hotel_code, anno=anno, mese=mese, mese_fine=mese_fine, db=db, _u=None)
+        dati_t = sc(get_trattamenti(hotel_code=hotel_code, anno=anno, mese=mese, mese_fine=mese_fine, db=db, _u=None))
+        dati_r = sc(get_reparti(hotel_code=hotel_code, anno=anno, mese=mese, mese_fine=mese_fine, db=db, _u=None))
 
         # ── Foglio Trattamenti ────────────────────────────────────────────────
         ws1 = wb.create_sheet('Trattamenti')
