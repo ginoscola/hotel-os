@@ -85,6 +85,21 @@ function roomsAvailabileSettimana(ws, stagione) {
   return giorni > 0 ? stagione.total_rooms * giorni : null
 }
 
+const numInput = (v) => parseFloat(String(v || '').replace(',', '.')) || null
+
+// Valori di una riga della tab Inserimento: input (edit locale > DB) + KPI ricalcolati
+function valoriRiga(s, edit, stagione) {
+  const occupancy = numInput(edit.occupancy ?? s.occupancy)
+  const adr       = numInput(edit.adr ?? s.adr)
+  const adrFnb    = numInput(edit.adr_fnb ?? s.adr_fnb)
+  const adrExtra  = numInput(edit.adr_extra ?? s.adr_extra)
+  // Per righe senza DB: cam.disp. dal frontend
+  const ra = s.rooms_available_budget ?? s.rooms_available
+    ?? roomsAvailabileSettimana(s.week_start, stagione)
+  const kpi = calcolaKpiFrontend(occupancy, adr, adrFnb, adrExtra, ra)
+  return { occupancy, adr, adrFnb, adrExtra, ra, kpi }
+}
+
 function labelSettimana(ws) {
   const d = new Date(ws + 'T00:00:00')
   const we = new Date(ws + 'T00:00:00')
@@ -266,6 +281,32 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
     }
   }
 
+  // Riga TOTALE: somme sulla stagione, KPI sui totali (mai media delle settimane)
+  const totali = useMemo(() => {
+    const t = { ra: 0, rs: 0, rooms: 0, fnb: 0, extra: 0, tot: 0 }
+    for (const s of tutteLeSettimane) {
+      const { ra, kpi } = valoriRiga(s, localEdit[s.week_start] || {}, stagione)
+      t.ra += ra || 0
+      if (kpi.rooms_sold == null) continue
+      t.rs += kpi.rooms_sold
+      t.rooms += kpi.revenue_rooms
+      t.fnb += kpi.revenue_fnb
+      t.extra += kpi.revenue_extra
+      t.tot += kpi.revenue_total
+    }
+    const sd = (n, d) => d ? n / d : null
+    return {
+      ...t,
+      occupancy: sd(t.rs * 100, t.ra),
+      adr: sd(t.rooms, t.rs),
+      adrFnb: sd(t.fnb, t.rs),
+      adrExtra: sd(t.extra, t.rs),
+      incFnb: sd(t.fnb * 100, t.tot),
+      revpar: sd(t.rooms, t.ra),
+      trevpar: sd(t.tot, t.ra),
+    }
+  }, [tutteLeSettimane, localEdit, stagione])
+
   // Intestazioni delle colonne editabili: azzurrine per distinguerle da quelle calcolate
   const thInput = { color: colors.infoBg }
 
@@ -312,17 +353,10 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
                 const ws = s.week_start
                 const vuota = !!s._vuota
                 const edit = localEdit[ws] || {}
-                const occupancy = parseFloat(String((edit.occupancy ?? s.occupancy) || '').replace(',', '.')) || null
-                const adr      = parseFloat(String((edit.adr ?? s.adr) || '').replace(',', '.')) || null
-                const adrFnb   = parseFloat(String((edit.adr_fnb ?? s.adr_fnb) || '').replace(',', '.')) || null
-                const adrExtra = parseFloat(String((edit.adr_extra ?? s.adr_extra) || '').replace(',', '.')) || null
-                // Per righe senza DB: calcola mese e cam.disp. dal frontend
-                const ra = s.rooms_available_budget ?? s.rooms_available
-                  ?? roomsAvailabileSettimana(ws, stagione)
+                const { occupancy, ra, kpi } = valoriRiga(s, edit, stagione)
                 const { mese: mc, anno: ac } = s.mese_contabile
                   ? { mese: s.mese_contabile, anno: s.anno_contabile }
                   : calcolaMeseContabile(ws)
-                const kpi    = calcolaKpiFrontend(occupancy, adr, adrFnb, adrExtra, ra)
                 const mese   = `${MESI_IT[mc - 1].slice(0, 3)} ${ac}`
                 const stato  = salvataggio[ws]
                 // Settimana senza budget in DB → attenuata; con budget ma senza occupancy → da compilare
@@ -362,6 +396,21 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
                   </tr>
                 )
               })}
+              <tr className="ui-riga-totale">
+                <Td>TOTALE</Td>
+                <Td></Td>
+                <Td num>{totali.ra ? formatN(totali.ra) : '—'}</Td>
+                <Td num>{totali.occupancy != null ? formatPerc(totali.occupancy) : '—'}</Td>
+                <Td num>{totali.adr != null ? formatEuro(totali.adr) : '—'}</Td>
+                <Td num>{totali.adrFnb != null ? formatEuro(totali.adrFnb) : '—'}</Td>
+                <Td num>{totali.adrExtra != null ? formatEuro(totali.adrExtra) : '—'}</Td>
+                <Td num>{totali.rs ? formatN(totali.rs) : '—'}</Td>
+                <Td num>{totali.incFnb != null ? formatPerc(totali.incFnb) : '—'}</Td>
+                <Td num>{totali.revpar != null ? formatEuro(totali.revpar) : '—'}</Td>
+                <Td num>{totali.trevpar != null ? formatEuro(totali.trevpar) : '—'}</Td>
+                <Td num>{totali.tot ? formatEuro(totali.tot) : '—'}</Td>
+                <Td></Td>
+              </tr>
             </tbody>
           </Table>
           <div className="ui-text-muted" style={{ marginTop: 6 }}>

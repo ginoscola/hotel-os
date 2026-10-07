@@ -1525,6 +1525,11 @@ non ha CREATEDB): oggi non eseguibili — mai puntarli al DB reale, il fixture f
 mezzanotte del sabato diventa venerdì 22:00Z, quindi le chiavi erano venerdì e non combaciavano con i
 `week_start` (sabato) del DB; un valore digitato a mano sarebbe stato salvato con `week_start` di venerdì.
 Fix: data formattata in ora locale. Mai `toISOString()` per ricavare una data da un `Date` locale.
+Riga **TOTALE** in fondo alla tab Inserimento (v3.18.2): somme di stagione e KPI sui totali (occupancy =
+Σcamere vendute/Σcamere disponibili, ADR/F&B/Extra per camera = Σrevenue/Σcamere vendute, RevPAR/TrevPAR su
+Σdisponibili). Le camere disponibili includono anche le settimane ancora senza budget (contano 0 vendute):
+l'occupancy totale è quella della stagione intera, non solo delle settimane compilate. Calcolo per riga
+estratto in `valoriRiga()`, usato sia dalle righe sia dal totale.
 
 ⚠️ **3 bug reali scoperti e corretti (luglio 2026)**, trovati risolvendo i 401 mascherati nei test
 di integrazione (`test_budget.py`/`test_config.py`/`test_dashboard_gruppo_modalita.py`: le fixture
