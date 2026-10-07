@@ -402,3 +402,61 @@ def test_hotel_id_fk_rifiuta_id_non_valido(test_engine):
     assert ("foreign key" in str(exc_info.value).lower()
             or "violates" in str(exc_info.value).lower()
             or "IntegrityError" in type(exc_info.value).__name__)
+
+
+# ===========================================================================
+# TEST PRECOMPILA DA ANNO PRECEDENTE
+# ===========================================================================
+
+def _stagione_dph_2027_e_actual_2026(test_engine):
+    """Stagione DPH 2027 (2 settimane) + consuntivo 2026 sulla settimana corrispondente alla prima."""
+    with test_engine.connect() as conn:
+        dph_id = conn.execute(text("SELECT id FROM hotels WHERE code='DPH'")).scalar()
+        # 2027-06-05 (sab) − 364gg = 2026-06-06 (sab)
+        conn.execute(text("""
+            INSERT INTO hotel_seasons (hotel_id, season_year, open_date, close_date, total_rooms)
+            VALUES (:hid, 2027, '2027-06-05', '2027-06-18', 43)
+        """), {'hid': dph_id})
+        for i in range(7):
+            conn.execute(text("""
+                INSERT INTO daily_revenue
+                  (hotel_code, hotel_id, data, rooms_sold, rooms_available, pax,
+                   revenue_rooms, revenue_fnb, revenue_extra, revenue_total, snapshot_date)
+                VALUES ('DPH', :hid, :data, 30, 43, 60, 3000, 900, 300, 4200, '2026-09-21')
+            """), {'hid': dph_id, 'data': date(2026, 6, 6) + timedelta(days=i)})
+        conn.commit()
+
+
+def test_precompila_anno_precedente(client, test_engine):
+    _stagione_dph_2027_e_actual_2026(test_engine)
+    resp = client.post("/budget/DPH/2027/precompila-anno-precedente?version=v1")
+    assert resp.status_code == 200
+    d = resp.json()
+    assert d['n_compilate'] == 1
+    assert d['settimane_senza_dati'] == ['2027-06-12']
+
+    b = client.get("/budget/DPH/2027/2027-06-05?version=v1").json()
+    assert b['occupancy'] == pytest.approx(30 / 43 * 100, abs=0.01)
+    assert b['adr'] == pytest.approx(100.0)
+    assert b['adr_fnb'] == pytest.approx(30.0)
+    assert b['adr_extra'] == pytest.approx(10.0)
+    assert b['camere_vendute'] == 210
+
+
+def test_precompila_non_sovrascrive_senza_flag(client, test_engine):
+    _stagione_dph_2027_e_actual_2026(test_engine)
+    client.put("/budget/DPH/2027/2027-06-05", json={'occupancy': 50.0, 'adr': 120.0})
+
+    d = client.post("/budget/DPH/2027/precompila-anno-precedente?version=v1").json()
+    assert d['n_compilate'] == 0
+    assert d['settimane_saltate'] == ['2027-06-05']
+    assert client.get("/budget/DPH/2027/2027-06-05?version=v1").json()['adr'] == pytest.approx(120.0)
+
+    d = client.post("/budget/DPH/2027/precompila-anno-precedente?version=v1&sovrascrivi=true").json()
+    assert d['n_compilate'] == 1
+    assert client.get("/budget/DPH/2027/2027-06-05?version=v1").json()['adr'] == pytest.approx(100.0)
+
+
+def test_precompila_senza_stagione_404(client):
+    resp = client.post("/budget/CLB/2027/precompila-anno-precedente")
+    assert resp.status_code == 404

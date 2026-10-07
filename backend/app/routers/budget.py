@@ -15,6 +15,7 @@ Struttura endpoint:
     GET  /budget/{hotel_code}/{season_year}/config        → config hotel/anno
     PUT  /budget/{hotel_code}/{season_year}/config        → salva config
     POST /budget/{hotel_code}/{season_year}/import-excel  → importa da .xlsx
+    POST /budget/{hotel_code}/{season_year}/precompila-anno-precedente → riempie dal consuntivo anno-1
     GET  /budget/gruppo/{season_year}/confronto           → confronto gruppo
     GET  /budget/gruppo/{season_year}/proiezione          → proiezione gruppo
 """
@@ -269,7 +270,8 @@ def _actual_settimanale(hotel: Hotel, season_year: int, version: str, db: Sessio
     q = (
         db.query(DailyRevenue)
         .filter(
-            DailyRevenue.hotel_id == hotel.id,
+            # hotel_code, non hotel_id: l'upload non valorizzava hotel_id (righe dal 15/06/2026 a NULL)
+            DailyRevenue.hotel_code == hotel.code,
             DailyRevenue.is_test == False,  # noqa: E712
         )
         .order_by(DailyRevenue.data)
@@ -1028,6 +1030,79 @@ def import_excel(
         'n_righe_lette': risultato['n_righe_lette'],
         'n_righe_salvate': salvate,
         'righe_non_parsate': risultato['righe_non_parsate'],
+    }
+
+
+@router.post("/{hotel_code}/{season_year}/precompila-anno-precedente")
+def precompila_anno_precedente(
+    hotel_code: str,
+    season_year: int,
+    version: str = Query('v1'),
+    sovrascrivi: bool = Query(False),
+    db: Session = Depends(get_db),
+    utente=Depends(richiedi_admin),
+):
+    """Riempie il budget con il consuntivo (daily_revenue, snapshot più recente) dell'anno precedente.
+
+    Settimana corrispondente = week_start − 364 giorni (stesso giorno della settimana).
+    Dal consuntivo si ricavano i 4 input (occupancy %, ADR, F&B e Extra per camera venduta);
+    camere vendute e revenue vengono poi ricalcolati da _calcola_e_salva sulle camere
+    disponibili dell'anno di budget. Settimane già compilate: saltate salvo `sovrascrivi`.
+    """
+    hotel = _hotel_o_404(hotel_code, db)
+    settimane = _settimane_stagione(hotel, season_year, db)
+    if not settimane:
+        raise HTTPException(404, f"Nessuna stagione {season_year} configurata per {hotel.code}")
+
+    offset = timedelta(days=364)
+    actual = _actual_settimanale(
+        hotel, season_year - 1, version, db,
+        week_da=settimane[0][0] - offset, week_a=settimane[-1][0] - offset,
+    )
+    esistenti = {
+        r.week_start for r in db.query(BudgetEntry.week_start).filter(
+            BudgetEntry.hotel_id == hotel.id,
+            BudgetEntry.season_year == season_year,
+            BudgetEntry.version == version,
+        )
+    }
+
+    def _r(v):
+        return round(v, 2) if v is not None else None
+
+    compilate, saltate, senza_dati = 0, [], []
+    for ws, _we in settimane:
+        if ws in esistenti and not sovrascrivi:
+            saltate.append(ws.isoformat())
+            continue
+        a = actual.get(ws - offset)
+        if not a or not a['rooms_sold']:
+            senza_dati.append(ws.isoformat())
+            continue
+        rs = a['rooms_sold']
+        _calcola_e_salva(
+            hotel=hotel,
+            season_year=season_year,
+            week_start=ws,
+            occupancy=_r(a['occupancy']),
+            adr=_r(a['adr']),
+            adr_fnb=_r(a['revenue_fnb'] / rs),
+            adr_extra=_r(a['revenue_extra'] / rs),
+            version=version,
+            notes=f"Da consuntivo {season_year - 1} (sett. {(ws - offset).strftime('%d/%m/%Y')})",
+            updated_by_id=utente.id,
+            db=db,
+        )
+        compilate += 1
+
+    return {
+        'hotel_code': hotel.code,
+        'season_year': season_year,
+        'anno_sorgente': season_year - 1,
+        'version': version,
+        'n_compilate': compilate,
+        'settimane_saltate': saltate,
+        'settimane_senza_dati': senza_dati,
     }
 
 

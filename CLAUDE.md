@@ -1503,6 +1503,24 @@ denominatore (il totale prenotato quel mese, cancellato o no).
 Endpoint chiave: `PUT /budget/{hotel}/{year}/{week_start}`, `GET /budget/{hotel}/{year}/confronto[/mensile]`, `GET /budget/{hotel}/{year}/proiezione`, `POST /budget/{hotel}/{year}/import-excel`, `GET /budget/gruppo/{year}/confronto|proiezione`.
 Frontend: 4 tab (Inserimento / Confronto Actual vs Budget / Proiezione / Gruppo).
 
+**Riempi con dati anno precedente** (v3.18.0, ottobre 2026): `POST /budget/{hotel}/{anno}/precompila-anno-precedente?version=&sovrascrivi=false`
+(admin) + pulsante "Riempi con dati {anno-1}" nella tab Inserimento. Sorgente = **consuntivo** (statistiche
+`daily_revenue`, snapshot più recente via `_actual_settimanale()`), non il budget dell'anno prima. Settimana
+corrispondente = `week_start − 364gg` (sabato↔sabato). Copia i 4 input (occupancy %, ADR, F&B ed Extra per
+camera venduta = revenue/rooms_sold della settimana); camere vendute e revenue ricalcolati da
+`_calcola_e_salva()` sulle camere disponibili dell'anno di budget (stagioni diverse → settimane parziali
+scalate). Settimane senza consuntivo (es. CLB 2027 apre il 22/05, nel 2026 chiuso) restano vuote e sono
+elencate nella risposta; già compilate saltate salvo `sovrascrivi`. Budget 2027 v1 di DPH/CLB/INT compilato
+così il 07/10/2026 (note riga "Da consuntivo 2026 (sett. …)").
+⚠️ **`daily_revenue.hotel_id` era NULL su tutti gli upload dal 15/06/2026** (bug reale, trovato qui):
+`_upsert_daily_revenue` in `upload.py` non valorizzava mai `hotel_id` (le righe precedenti erano state
+riempite da una migrazione), e `_actual_settimanale()` filtrava proprio su `hotel_id` → Confronto Actual vs
+Budget, Proiezione e il gauge "vs budget" della Home usavano per ogni data l'ultimo snapshot fino all'08/06
+(es. DPH Ferragosto 12% invece di 90%). Fix: `_actual_settimanale()` filtra su `hotel_code`, l'upload
+valorizza `hotel_id`, backfill di 5.520 righe. ⚠️ I test di integrazione (`test_budget.py` ecc.) puntano
+ancora al DB Mac `ginoscola@localhost/revenue_master_test`, inesistente sul server Linux (e `hotelos_user`
+non ha CREATEDB): oggi non eseguibili — mai puntarli al DB reale, il fixture fa TRUNCATE di `hotels`.
+
 ⚠️ **3 bug reali scoperti e corretti (luglio 2026)**, trovati risolvendo i 401 mascherati nei test
 di integrazione (`test_budget.py`/`test_config.py`/`test_dashboard_gruppo_modalita.py`: le fixture
 `client` sovrascrivevano solo `get_db`, non l'autenticazione — override diretto di `richiedi_admin`/

@@ -420,12 +420,17 @@ def _upsert_righe(
         ).all()
     )
 
+    hotel_id = db.execute(
+        select(Hotel.id).where(Hotel.code == righe[0].hotel_code)
+    ).scalar()
+
     n_inserite = 0
     n_aggiornate = 0
 
     for riga in righe:
         valori = {
             "hotel_code": riga.hotel_code,
+            "hotel_id": hotel_id,
             "data": riga.data,
             "rooms_sold": riga.rooms_sold,
             "rooms_available": riga.rooms_available,

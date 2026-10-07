@@ -4,11 +4,11 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import api from '../api/client.js'
-import { formatEuro, formatPerc, formatN, mostraErrore } from '../utils/format.js'
+import { formatData, formatEuro, formatPerc, formatN, mostraErrore } from '../utils/format.js'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import {
   Badge, Button, Card, Field, FileButton, HotelTag, Input, KpiTile, Loading, Messaggio, Modal,
-  PageHeader, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi,
+  PageHeader, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
 } from '../components/ui'
 import { colors } from '../styles/tokens.js'
 
@@ -110,6 +110,8 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
   const [errore, setErrore] = useState(null)
   const debRef = useRef({})
   const avvisi = useAvvisi()
+  const conferma = useConferma()
+  const [precompilando, setPrecompilando] = useState(false)
 
   const caricaDati = useCallback(async () => {
     setLoading(true)
@@ -223,6 +225,45 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
     }
   }
 
+  async function precompilaAnnoPrecedente() {
+    const annoPrec = anno - 1
+    if (!(await conferma({
+      titolo: `Riempire con i dati ${annoPrec}?`,
+      messaggio: `Ogni settimana viene compilata con occupazione, ADR, F&B ed Extra per camera ` +
+        `realmente registrati nella stessa settimana del ${annoPrec} (statistiche, ultimo snapshot). ` +
+        `Versione ${version}. Le settimane senza dati ${annoPrec} restano vuote.`,
+      confermaLabel: 'Riempi',
+    }))) return
+    let sovrascrivi = false
+    if (settimane.length > 0) {
+      sovrascrivi = await conferma({
+        titolo: `${settimane.length} settimane già compilate`,
+        messaggio: 'Vuoi sovrascrivere anche quelle con i dati dell\'anno precedente, o riempire solo le settimane vuote?',
+        confermaLabel: 'Sovrascrivi tutto',
+        annullaLabel: 'Solo le vuote',
+        pericolo: true,
+      })
+    }
+    setPrecompilando(true)
+    try {
+      const { data } = await api.post(
+        `/budget/${hotel}/${anno}/precompila-anno-precedente?version=${version}&sovrascrivi=${sovrascrivi}`
+      )
+      avvisi.successo(`Compilate ${data.n_compilate} settimane con i dati ${annoPrec}`)
+      if (data.settimane_senza_dati.length > 0) {
+        avvisi.attenzione(
+          `Nessun dato ${annoPrec} per ${data.settimane_senza_dati.length} settimane ` +
+          `(${data.settimane_senza_dati.map(formatData).join(', ')}): da compilare a mano`
+        )
+      }
+      caricaDati()
+    } catch (e) {
+      avvisi.errore(mostraErrore(e, 'Errore riempimento da anno precedente'))
+    } finally {
+      setPrecompilando(false)
+    }
+  }
+
   // Intestazioni delle colonne editabili: azzurrine per distinguerle da quelle calcolate
   const thInput = { color: colors.infoBg }
 
@@ -236,6 +277,9 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
         </Field>
         <Button variant="secondary" onClick={() => setMostraModale(true)}>Nuova versione</Button>
         <FileButton accept=".xlsx" onFile={importaExcel}>Importa da Excel</FileButton>
+        <Button variant="secondary" onClick={precompilaAnnoPrecedente} disabled={precompilando}>
+          {precompilando ? 'Riempimento…' : `Riempi con dati ${anno - 1}`}
+        </Button>
       </div>
 
       <Messaggio tipo="err" onChiudi={() => setErrore(null)}>{errore}</Messaggio>
