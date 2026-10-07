@@ -1520,6 +1520,11 @@ Budget, Proiezione e il gauge "vs budget" della Home usavano per ogni data l'ult
 valorizza `hotel_id`, backfill di 5.520 righe. ⚠️ I test di integrazione (`test_budget.py` ecc.) puntano
 ancora al DB Mac `ginoscola@localhost/revenue_master_test`, inesistente sul server Linux (e `hotelos_user`
 non ha CREATEDB): oggi non eseguibili — mai puntarli al DB reale, il fixture fa TRUNCATE di `hotels`.
+⚠️ **Tab Inserimento mostrava tutte le settimane vuote anche con budget in DB** (bug reale, v3.18.1):
+`tutteLeSettimane` in `Budget.jsx` generava le chiavi settimana con `toISOString()` (UTC) — in Italia la
+mezzanotte del sabato diventa venerdì 22:00Z, quindi le chiavi erano venerdì e non combaciavano con i
+`week_start` (sabato) del DB; un valore digitato a mano sarebbe stato salvato con `week_start` di venerdì.
+Fix: data formattata in ora locale. Mai `toISOString()` per ricavare una data da un `Date` locale.
 
 ⚠️ **3 bug reali scoperti e corretti (luglio 2026)**, trovati risolvendo i 401 mascherati nei test
 di integrazione (`test_budget.py`/`test_config.py`/`test_dashboard_gruppo_modalita.py`: le fixture

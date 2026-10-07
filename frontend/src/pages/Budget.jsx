@@ -144,9 +144,11 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
     // Calcola primo sabato ≤ open_date
     const d = new Date(open + 'T00:00:00')
     while (d.getDay() !== 6) d.setDate(d.getDate() - 1)
+    // Data locale, non toISOString(): in UTC+1/+2 la mezzanotte del sabato diventerebbe venerdì
+    const iso = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
     const weeks = []
-    while (d.toISOString().slice(0, 10) <= close) {
-      weeks.push(d.toISOString().slice(0, 10))
+    while (iso(d) <= close) {
+      weeks.push(iso(d))
       d.setDate(d.getDate() + 7)
     }
     const budgetMap = Object.fromEntries(settimane.map(s => [s.week_start, s]))
