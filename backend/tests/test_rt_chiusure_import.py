@@ -25,7 +25,7 @@ from app.main import app
 from app.models.revenue import User, Hotel, RtPrinter  # noqa: F401
 from app.models.corrispettivi import RtChiusura  # noqa: F401
 
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 FIXTURE_PATH = os.path.join(os.path.dirname(__file__), 'fixtures', 'corrisp_20260630_mock.xml')
 
 # Data di test isolata dai dati reali già presenti in rt_chiusure

@@ -23,7 +23,7 @@ from app.main import app
 from app.models.revenue import AppConfig  # noqa: F401 — per Base.metadata
 from app.services.weekly_aggregator import _leggi_week_start, _reset_week_start_cache
 
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

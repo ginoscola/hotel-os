@@ -19,13 +19,16 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from starlette.testclient import TestClient
 
+from types import SimpleNamespace
+
+from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import Base, get_db
 from app.main import app
 from app.models.revenue import DailyRevenue, ImportSession  # noqa: F401
 from app.services.weekly_aggregator import settimana_di
 
 UPLOADS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 
 # Salta i test che richiedono i file CSV reali se non disponibili
 _FILE_CSV_DISPONIBILI = os.path.isfile(os.path.join(UPLOADS_DIR, "PlanningForecast-CLB1.csv"))
@@ -62,6 +65,9 @@ def client(test_engine, TestSession):
         finally:
             db.close()
     app.dependency_overrides[get_db] = override_get_db
+    utente_finto = SimpleNamespace(id=None, ruolo="admin")
+    app.dependency_overrides[richiedi_admin] = lambda: utente_finto
+    app.dependency_overrides[richiedi_utente_attivo] = lambda: utente_finto
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -241,8 +247,8 @@ class TestConfrontoSettimanaPrecedente:
         assert resp2.status_code == 200
 
         # I KPI devono essere diversi (settimane diverse)
-        k1 = resp1.json()["kpi_periodo"]
-        k2 = resp2.json()["kpi_periodo"]
+        k1 = resp1.json()["kpi_stagione"]
+        k2 = resp2.json()["kpi_stagione"]
         # Almeno rooms_sold o revenue devono differire tra le due settimane
         assert k1["rooms_sold"] != k2["rooms_sold"] or k1["adr"] != k2["adr"]
 
@@ -329,7 +335,7 @@ class TestExportExcel:
         wb = openpyxl.load_workbook(io.BytesIO(resp.content))
         ws = wb.active
         # 113 giorni CLB + 1 intestazione
-        assert ws.max_row == 114
+        assert ws.max_row == 115  # intestazione + 113 giorni + riga TOTALE
 
     @richiede_csv
     def test_export_xlsx_gruppo(self, client):
@@ -421,7 +427,7 @@ class TestExportCSV:
         import csv as csv_mod
         contenuto = resp.content.decode("utf-8-sig")
         reader = list(csv_mod.reader(contenuto.splitlines()))
-        assert len(reader) == 114  # 113 dati + 1 intestazione
+        assert len(reader) == 115  # 113 dati + 1 intestazione + riga TOTALE
 
     @richiede_csv
     def test_export_csv_con_filtro_periodo(self, client):
@@ -431,7 +437,7 @@ class TestExportCSV:
         import csv as csv_mod
         contenuto = resp.content.decode("utf-8-sig")
         reader = list(csv_mod.reader(contenuto.splitlines()))
-        assert len(reader) == 8  # 7 giorni + 1 intestazione
+        assert len(reader) == 9  # 7 giorni + 1 intestazione + riga TOTALE
 
     @richiede_csv
     def test_export_pdf_hotel_settimanale(self, client):
@@ -517,4 +523,4 @@ class TestKpiStagioneSnapshot:
         contenuto = resp.content.decode("utf-8-sig")
         reader = list(csv_mod.reader(contenuto.splitlines()))
         # 113 giorni CLB + 1 intestazione
-        assert len(reader) == 114
+        assert len(reader) == 115  # + riga TOTALE

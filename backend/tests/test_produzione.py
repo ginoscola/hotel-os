@@ -1,6 +1,6 @@
 """Test per il modulo Statistiche Produzione (dentro USALI).
 
-Usa lo stesso DB di test (revenue_master_test) degli altri test suite (test_budget.py, ecc.).
+Usa lo stesso DB di test (TEST_DATABASE_URL in .env) degli altri test suite (test_budget.py, ecc.).
 Usa il file reale uploads/StatisticheProduzione.xlsx come fixture (488 righe, giugno 2026,
 3 strutture, 86 righe riassetto — numeri verificati manualmente prima di scrivere i test).
 """
@@ -25,7 +25,7 @@ from app.models.rooms import Room  # noqa: F401
 from app.services.prod_parser import _carica_mapping_dettagli, _categoria_da_prezzo, parse_xlsx
 from app.utils.struttura_resolver import carica_mappa_rooms, struttura_da_camera
 
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 FILE_TEST = os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "StatisticheProduzione.xlsx")
 
 

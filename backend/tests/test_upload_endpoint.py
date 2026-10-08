@@ -1,7 +1,7 @@
 """
 Test end-to-end del endpoint POST /upload/coppia/{hotel_code}.
 
-Usa un database PostgreSQL di test (revenue_master_test) separato dal DB di produzione.
+Usa un database PostgreSQL di test (TEST_DATABASE_URL in .env) separato dal DB di produzione.
 Le tabelle vengono create prima della suite e distrutte dopo.
 Ogni test riparte con daily_revenue vuota (fixture autouse pulisce la tabella).
 
@@ -26,12 +26,15 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from starlette.testclient import TestClient
 
+from types import SimpleNamespace
+
+from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import Base, get_db
 from app.main import app
 from app.models.revenue import DailyRevenue, ImportSession  # noqa: F401 — necessario per Base.metadata
 
 UPLOADS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 
 
 def percorso(nome):
@@ -67,6 +70,9 @@ def client(test_engine, TestSession):
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    utente_finto = SimpleNamespace(id=None, ruolo="admin")
+    app.dependency_overrides[richiedi_admin] = lambda: utente_finto
+    app.dependency_overrides[richiedi_utente_attivo] = lambda: utente_finto
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -347,7 +353,8 @@ class TestErrori:
         assert resp.status_code == 422
 
     def test_csv_vuoto_restituisce_risposta_valida(self, client):
-        """CSV con solo intestazione valida → nessuna riga, risposta 200 con 0 importate."""
+        """CSV con solo intestazione → 422: due file senza righe risultano identici e
+        parse_coppia() li rifiuta (controllo anti-file-doppio, luglio 2026)."""
         intestazione = b"DATA;EVENTI;CV;CP;PAX;RICAVI TRAT;EXTRA TRATT;ADR;RPAR;RMP;OCCUP\n"
         resp = client.post(
             "/upload/coppia/CLB",
@@ -356,10 +363,8 @@ class TestErrori:
                 "file2": ("vuoto.csv", io.BytesIO(intestazione), "text/csv"),
             },
         )
-        assert resp.status_code == 200
-        j = resp.json()
-        assert j["righe_importate"] == 0
-        assert j["kpi_periodo"] is None
+        assert resp.status_code == 422
+        assert "identici" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

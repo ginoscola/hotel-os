@@ -224,9 +224,18 @@ fallimenti a cascata mascherano bug reali — vedi Modulo Budget più sotto, dov
 ha nascosto per mesi che il salvataggio budget non funzionava mai. Pattern corretto in tutti i file
 test a luglio 2026: `app.dependency_overrides[richiedi_admin] = lambda: SimpleNamespace(id=None)`
 (id=None se il codice usa `utente.id` per popolare FK verso `users`, altrimenti `lambda: None` basta).
-⚠️ Alcuni test (`test_parser_e_bulk.py`, `test_navigazione_confronto_export.py`, `test_upload_endpoint.py`)
-falliscono con traceback che punta a `/Users/ginoscola/revenue-master/` invece di `hotel-os` — sono
-un'altra directory di progetto, non file di questo repo: ignorare, non nel nostro ambito.
+**Database di test dedicato** (ottobre 2026): `hotel_os_test` (owner `hotelos_user`), URL in
+`TEST_DATABASE_URL` di `backend/.env`, letto **solo** da `tests/_db.py` (`from tests._db import
+TEST_DB_URL` in ogni file di test con DB — mai un URL scritto nel test). `_db.py` blocca l'avvio se
+l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fixture fanno
+`create_all`/`drop_all`/TRUNCATE. Schema da `Base.metadata.create_all()` (non dalle migrazioni),
+quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
+`payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
+`SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 494 test verdi (08/10/2026). I tre
+file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
+`test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
+TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
 
 ⚠️ **`app/models/__init__.py` importa tutti i moduli modello attivi** (revenue, rooms, corrispettivi,
 analisi_ricavi, usali, produzione, shared — non `fiscal.py`, dismesso) per registrare in SQLAlchemy le
@@ -236,8 +245,8 @@ solo `app.models.revenue` fallisce con `InvalidRequestError: ... failed to locat
 bug reale che nascondeva un problema più serio in `test_dipendenti.py` (vedi sotto).
 
 ⚠️ **`tests/test_dipendenti.py` usa CF_TEST/ANNO_TEST sintetici, mai i CF/anno reali del PDF di test**:
-non esiste un DB di test separato (nessun `conftest.py`, i test girano sullo stesso database di
-sviluppo/produzione). Il fixture `_pulisci_db()` cancellava Employee/EmployeeMonthly/PayrollEntry per
+fino a ottobre 2026 non esisteva un DB di test separato (i test giravano sullo stesso database di
+produzione — oggi girano su `hotel_os_test`, vedi sopra, ma la regola resta). Il fixture `_pulisci_db()` cancellava Employee/EmployeeMonthly/PayrollEntry per
 codice fiscale SENZA distinguere test da produzione — dato che i CF nel PDF fixture sono di dipendenti
 reali (Balducci Annie, Sanchioni Manuel, Palazzi Alice, ecc.), eseguire questi test ha azzerato i loro
 dati reali su tutti i mesi (incidente reale, luglio 2026, recuperato nella stessa sessione — mascherato
@@ -1517,9 +1526,9 @@ così il 07/10/2026 (note riga "Da consuntivo 2026 (sett. …)").
 riempite da una migrazione), e `_actual_settimanale()` filtrava proprio su `hotel_id` → Confronto Actual vs
 Budget, Proiezione e il gauge "vs budget" della Home usavano per ogni data l'ultimo snapshot fino all'08/06
 (es. DPH Ferragosto 12% invece di 90%). Fix: `_actual_settimanale()` filtra su `hotel_code`, l'upload
-valorizza `hotel_id`, backfill di 5.520 righe. ⚠️ I test di integrazione (`test_budget.py` ecc.) puntano
-ancora al DB Mac `ginoscola@localhost/revenue_master_test`, inesistente sul server Linux (e `hotelos_user`
-non ha CREATEDB): oggi non eseguibili — mai puntarli al DB reale, il fixture fa TRUNCATE di `hotels`.
+valorizza `hotel_id`, backfill di 5.520 righe. I test di integrazione (`test_budget.py` ecc.) girano
+sul DB dedicato `hotel_os_test` (vedi "Comandi sviluppo") — mai puntarli al DB reale, il fixture fa
+TRUNCATE di `hotels`.
 ⚠️ **Tab Inserimento mostrava tutte le settimane vuote anche con budget in DB** (bug reale, v3.18.1):
 `tutteLeSettimane` in `Budget.jsx` generava le chiavi settimana con `toISOString()` (UTC) — in Italia la
 mezzanotte del sabato diventa venerdì 22:00Z, quindi le chiavi erano venerdì e non combaciavano con i

@@ -1,7 +1,7 @@
 """
 Test per il modulo Budget: calculator, router, versioning, confronto, proiezione.
 
-Usa lo stesso DB di test (revenue_master_test) degli altri test suite.
+Usa lo stesso DB di test (TEST_DATABASE_URL in .env) degli altri test suite.
 """
 
 import os
@@ -23,7 +23,7 @@ from app.main import app
 from app.models.revenue import BudgetConfig, BudgetEntry, DailyRevenue, Hotel  # noqa: F401
 from app.services.budget_calculator import calcola_kpi_budget, calcola_mese_contabile
 
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

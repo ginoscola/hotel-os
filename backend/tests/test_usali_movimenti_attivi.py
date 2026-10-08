@@ -2,7 +2,7 @@
 PER STRUTTURA (DPH/CLB/INT/BON), incluso il redirect Maremosso (solo DPH: pranzo/cena Du Parc +
 righe Welcome Reparto='Maremosso').
 
-Usa lo stesso DB di test (revenue_master_test) delle altre suite.
+Usa lo stesso DB di test (TEST_DATABASE_URL in .env) delle altre suite.
 """
 import os
 import sys
@@ -24,7 +24,7 @@ from app.models.produzione import ProdCategoria, ProdImport, ProdRiga  # noqa: F
 from app.models.corrispettivi import CorrispettiviDocumento, CorrispettiviManuale  # noqa: F401
 from app.models.usali import UsaliMovimentoRiga, UsaliVoceManuali  # noqa: F401
 
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 
 
 @pytest.fixture(scope="module")

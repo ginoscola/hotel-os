@@ -1,6 +1,6 @@
 """Test per la Home / Cruscotto gruppo (routers/home.py).
 
-Stesso DB di test isolato (revenue_master_test) e stesso pattern di auth degli altri suite
+Stesso DB di test isolato (TEST_DATABASE_URL in .env) e stesso pattern di auth degli altri suite
 recenti (es. test_produzione_ricavi_camere.py): override diretto di richiedi_utente_attivo/
 richiedi_admin, non solo get_db (altrimenti gli endpoint protetti rispondono 401 e mascherano
 bug reali — vedi nota CLAUDE.md sul modulo Budget).
@@ -30,7 +30,7 @@ from app.models.home import DashboardKpiSoglia  # noqa: F401
 from app.models.produzione import ProdCategoria, ProdImport, ProdRiga  # noqa: F401
 from app.models.rooms import Room  # noqa: F401
 
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 
 
 @pytest.fixture(scope="module")

@@ -20,11 +20,53 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.services.payroll_parser import parse_pdf
 from app.services.payroll_import_service import importa_payroll
-from app.database import SessionLocal
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+import app.models  # noqa: F401 — registra tutti i modelli in Base.metadata
+from app.database import Base
 from app.models.revenue import (
     Employee, CostCenter, EmployeeCCDefault, EmployeeCostCenterMonthly, EmployeeMonthly,
-    PayrollImport, PayrollEntry,
+    PayrollImport, PayrollEntry, PayrollCostType,
 )
+
+from tests._db import TEST_DB_URL  # noqa: E402
+
+# Semi minimi normalmente inseriti dalle migrazioni (j0k1l2m3n4o5): il DB di test è creato da
+# Base.metadata.create_all(), senza catena Alembic, quindi vanno inseriti qui.
+_SEED_COST_TYPES = [
+    ("ret_netta", "Retribuzione Netta", "dipendente", "positivo", 1),
+    ("contr_prev_dip", "Contributi Previdenziali", "dipendente", "positivo", 2),
+    ("contr_san_dip", "Contributo Servizio Sanitario Nazionale", "dipendente", "positivo", 3),
+    ("irpef", "Tassazione IRPEF", "dipendente", "positivo", 4),
+    ("altre_trattenute", "Altre Trattenute", "dipendente", "positivo", 5),
+    ("anticipi_inps", "Anticipi Azienda c/o INPS", "dipendente", "negativo", 6),
+    ("tot_lordo", "Totale Retribuzione Lorda", "dipendente", "positivo", 7),
+    ("contr_prev_az", "Contribuzione Previdenziale Azienda", "azienda", "positivo", 8),
+    ("contr_san_az", "Contribuzione Serv. Sanitario Azienda", "azienda", "positivo", 9),
+    ("inail", "Contribuzione INAIL (Infortuni) Azienda", "azienda", "positivo", 10),
+    ("altri_enti", "Contribuzione Altri Enti", "azienda", "positivo", 11),
+    ("tfr", "Accantonamento TFR", "azienda", "positivo", 12),
+    ("tot_costo_az", "Totale Costo Aziendale Effettivo", "azienda", "positivo", 13),
+]
+_SEED_CENTRI = [("KMDIMARE", "KM di Mare"), ("CLB", "Club Hotel")]
+
+
+@pytest.fixture(scope="module")
+def SessionTest():
+    engine = create_engine(TEST_DB_URL)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    for code, name, cat, segno, ordine in _SEED_COST_TYPES:
+        db.add(PayrollCostType(code=code, name=name, categoria=cat, segno=segno, ordine=ordine))
+    for code, name in _SEED_CENTRI:
+        db.add(CostCenter(code=code, name=name, tipo="struttura"))
+    db.commit()
+    db.close()
+    yield Session
+    Base.metadata.drop_all(engine)
+    engine.dispose()
 
 PDF_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "uploads",
                         "202604_costi  aziendali .pdf")
@@ -199,9 +241,9 @@ def _pulisci_db(db):
 
 
 @pytest.fixture
-def db_pulito():
-    """Sessione DB con cleanup pre e post test."""
-    db = SessionLocal()
+def db_pulito(SessionTest):
+    """Sessione DB di test con cleanup pre e post test."""
+    db = SessionTest()
     _pulisci_db(db)  # pulizia preventiva per dati di test precedenti
     try:
         yield db

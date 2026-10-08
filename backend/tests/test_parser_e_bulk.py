@@ -2,7 +2,7 @@
 Test per le nuove funzionalità del parser (Excel, snapshot_date, hotel_code da file)
 e per l'endpoint di bulk import.
 
-Usa lo stesso DB di test (revenue_master_test) configurato in test_upload_endpoint.py.
+Usa lo stesso DB di test (TEST_DATABASE_URL in .env) configurato in test_upload_endpoint.py.
 """
 
 import os
@@ -18,6 +18,9 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from starlette.testclient import TestClient
 
+from types import SimpleNamespace
+
+from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import Base, get_db
 from app.main import app
 from app.models.revenue import DailyRevenue, ImportSession  # noqa: F401 — per Base.metadata
@@ -28,7 +31,7 @@ from app.services.file_parser import (
 )
 
 UPLOADS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +63,9 @@ def client(test_engine, TestSession):
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    utente_finto = SimpleNamespace(id=None, ruolo="admin")
+    app.dependency_overrides[richiedi_admin] = lambda: utente_finto
+    app.dependency_overrides[richiedi_utente_attivo] = lambda: utente_finto
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -190,26 +196,39 @@ def test_parser_excel_produce_stessi_risultati_csv():
     ws.append([datetime(2026, 6, 1, 0, 0), "", 45, 30, 60, 2000.50, 150.00, 66.68, 44.45, 66.68, 66.67])
     ws.append([datetime(2026, 6, 2, 0, 0), "", 45, 25, 50, 1800.00, 120.00, 72.00, 40.00, 72.00, 55.56])
 
+    # file1 = comprensivo ristorante: stesso file con RICAVI TRAT +300 (F&B). Due file identici
+    # vengono rifiutati da parse_coppia (bug reale luglio 2026).
+    wb1 = openpyxl.Workbook()
+    ws1 = wb1.active
+    for i, r in enumerate(ws.iter_rows(values_only=True)):
+        r = list(r)
+        if i > 0:
+            r[5] += 300.00
+        ws1.append(r)
+
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
         path_xlsx = f.name
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+        path_xlsx1 = f.name
     wb.save(path_xlsx)
+    wb1.save(path_xlsx1)
 
     try:
         parser = ParserCSV("CLB")
-        # Stesso file per entrambi → fnb = max(0, ricavi_trat - ricavi_trat) = 0
-        righe = parser.parse_coppia(path_xlsx, path_xlsx)
+        righe = parser.parse_coppia(path_xlsx1, path_xlsx)
 
         assert len(righe) == 2
         assert righe[0].data == date(2026, 6, 1)
         assert righe[1].data == date(2026, 6, 2)
-        # revenue_rooms = ricavi_trat del file "alloggio" (file2 = stesso file)
+        # revenue_rooms = ricavi_trat del file "alloggio" (file2)
         assert abs(righe[0].revenue_rooms - 2000.50) < 0.01
-        assert righe[0].revenue_fnb == 0.0  # stesso file → differenza = 0
+        assert abs(righe[0].revenue_fnb - 300.00) < 0.01  # file1 - file2
         assert abs(righe[0].revenue_extra - 150.00) < 0.01
         assert righe[0].rooms_sold == 30
         assert righe[0].rooms_available == 45
     finally:
         os.unlink(path_xlsx)
+        os.unlink(path_xlsx1)
 
 
 def test_parser_excel_ignora_righe_sdly():
@@ -224,17 +243,28 @@ def test_parser_excel_ignora_righe_sdly():
     # Riga SDLY: la stringa non è un datetime, viene passata come stringa
     ws.append(["01/06/2026 (SDLY)", "", 45, 28, 56, 1900.00, 95.00])
 
+    # file1 = comprensivo ristorante (RICAVI TRAT più alto): file identici rifiutati
+    wb1 = openpyxl.Workbook()
+    ws1 = wb1.active
+    ws1.append(["DATA", "EVENTI", "CV", "CP", "PAX", "RICAVI TRAT", "EXTRA TRATT"])
+    ws1.append([datetime(2026, 6, 1, 0, 0), "", 45, 30, 60, 2400.00, 100.00])
+    ws1.append(["01/06/2026 (SDLY)", "", 45, 28, 56, 2300.00, 95.00])
+
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
         path_xlsx = f.name
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+        path_xlsx1 = f.name
     wb.save(path_xlsx)
+    wb1.save(path_xlsx1)
 
     try:
         parser = ParserCSV("CLB")
-        righe = parser.parse_coppia(path_xlsx, path_xlsx)
+        righe = parser.parse_coppia(path_xlsx1, path_xlsx)
         assert len(righe) == 1
         assert righe[0].data == date(2026, 6, 1)
     finally:
         os.unlink(path_xlsx)
+        os.unlink(path_xlsx1)
 
 
 # ---------------------------------------------------------------------------

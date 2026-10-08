@@ -1,7 +1,7 @@
 """Test per GET /produzione/ricavi-camere e /produzione/ricavi-camere/export.
 
 Fonte dati: prod_righe (registro Produzione), non i documenti fiscali di Corrispettivi.
-Stesso DB di test degli altri suite (revenue_master_test); auth sovrascritta via
+Stesso DB di test degli altri suite (TEST_DATABASE_URL in .env); auth sovrascritta via
 override diretto di richiedi_utente_attivo/richiedi_admin.
 """
 import os
@@ -23,7 +23,7 @@ from app.main import app
 from app.models.produzione import ProdCategoria, ProdImport, ProdRiga  # noqa: F401
 from app.models.rooms import Room  # noqa: F401
 
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 
 
 @pytest.fixture(scope="module")

@@ -19,7 +19,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models.revenue import User  # noqa: F401 — per Base.metadata
 
-TEST_DB_URL = "postgresql://ginoscola@localhost:5432/revenue_master_test"
+from tests._db import TEST_DB_URL  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures
