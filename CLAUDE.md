@@ -211,8 +211,10 @@ cd backend && source venv/bin/activate && pytest tests/ -v
 **Riavvio sul server**: `./restart_server.sh` (= `sudo systemctl restart hotelos-backend` + attesa
 backend pronto + status), `./restart_server.sh --build` per ricompilare anche il frontend.
 Lanciabile da qualsiasi cartella come **`hotelos-restart`** (`hotelos-restart --build`): link
-`~/.local/bin/hotelos-restart` → `restart_server.sh` (`~/.local/bin` è nel PATH via `~/.profile`,
-attivo dal login successivo alla sua creazione). Lo script ricava la propria cartella con
+`~/.local/bin/hotelos-restart` → `restart_server.sh`. `~/.local/bin` va nel PATH sia da
+`~/.profile` (shell di login, SSH) sia da `~/.bashrc` (riga aggiunta a mano): **il terminale
+integrato di VSCode non è una shell di login e non legge `~/.profile`** — con la sola riga di
+`.profile` il comando dava "command not found". Lo script ricava la propria cartella con
 `readlink -f "$0"`, quindi segue il link (con `dirname "$0"` puntava a `~/.local/bin` e `--build`
 non trovava il frontend). Il link non è nel repo: se si rifà il server, ricrearlo con
 `ln -s /srv/progetti/hotel-os/restart_server.sh ~/.local/bin/hotelos-restart`. Mai
