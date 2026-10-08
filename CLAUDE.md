@@ -196,11 +196,13 @@ la pagina è aperta da `192.168.x.x:8080` le chiamate vanno a `:8081` sullo stes
 LAN), altrimenti `VITE_API_URL`. Nuovi punti che costruiscono URL API a mano devono importare
 `API_URL`, non rileggere `VITE_API_URL`. Import Dipendenti con `timeout: 180000` dedicato.
 
-**Dipendenze frontend** (`npm audit`, 08/10/2026, v3.19.2): aggiornati axios 1.20 / form-data 4.0.6 /
-react-router-dom 6.30.6 con `npm audit fix` (senza `--force`). Restano 4 avvisi che richiedono major
-(vite 8, react-router 7), **lasciati apposta**: vite/esbuild toccano solo il dev server (in produzione
-nginx serve `dist/` statico); react-router = open redirect solo con percorsi da input utente (l'app
-naviga solo verso percorsi fissi) + SSR (non usato). Rivalutare se si passa a react-router 7.
+**Dipendenze frontend** (08/10/2026, fuori stagione): `npm audit` a **0 vulnerabilità**. v3.19.2:
+axios 1.20 / form-data 4.0.6 (`npm audit fix`). v3.19.3: **react-router-dom 7** (6.30 → 7.18; l'app
+usa solo BrowserRouter/Routes/Route/Link/NavLink/Navigate + hook base, nessuna route `*` né link
+relativi, quindi nessun cambiamento di comportamento v7 da gestire) e **vite 8 + @vitejs/plugin-react 6**
+(motore rolldown/oxc: build ~0,5s invece di ~4,6s; richiede Node ≥ 20.19/22.12 — server su 22.22).
+`vite.config.js` invariato. L'avviso "chunks larger than 500 kB" ora cita
+`build.rolldownOptions` invece di `rollupOptions`: se un giorno si fa code-splitting, usare quella chiave.
 ⚠️ npm di sistema è 9.2.0: ogni `npm install` toglie i campi `"libc"` dal lockfile (campo nato con
 npm 10) — modifica innocua, non è una modifica dell'utente.
 
