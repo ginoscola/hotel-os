@@ -8,6 +8,7 @@ import TabPenali from './TabPenali'
 import TabGiornalieri from './TabGiornalieri'
 import TabTest from './TabTest'
 import TabFatturati from './TabFatturati'
+import TabTotali from './TabTotali'
 import TabCassa from './TabCassa'
 import api from '../api/client'
 import { isAdmin } from '../utils/corrispettiviHelpers'
@@ -26,6 +27,7 @@ const TABS_BASE = [
   { id: 'fatture', label: 'Fatture' },
   { id: 'penali', label: 'Penali' },
   { id: 'fatturati', label: 'Riepilogo Fatturati' },
+  { id: 'totali', label: 'Totali' },
   { id: 'cassa', label: 'Cassa' },
   { id: 'rt', label: 'Controllo RT' },
   { id: 'rt-stampante', label: 'Stampante RT' },
@@ -107,6 +109,9 @@ export default function Corrispettivi() {
       )}
       {tab === 'fatturati' && (
         <TabFatturati lordo={lordo} />
+      )}
+      {tab === 'totali' && (
+        <TabTotali lordo={lordo} />
       )}
       {tab === 'cassa' && (
         <TabCassa />

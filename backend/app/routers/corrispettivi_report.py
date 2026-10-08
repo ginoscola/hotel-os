@@ -12,6 +12,8 @@ Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
   GET    /export/fatturati      → export Excel riepilogo fatturati
   GET    /export/giornaliero    → export Excel tabella mensile Corrispettivi giornalieri
   GET    /export/tipo-incasso   → export xlsx/csv/pdf riepilogo Tipo Incasso
+  GET    /report/totali         → totali mensili per struttura, scontrini (RT) e fatture separati
+  GET    /export/totali         → export xlsx/csv/pdf della tab Totali
 """
 from datetime import date
 from typing import List, Optional, Set
@@ -948,6 +950,123 @@ def export_tipo_incasso(
         + [round(sum(dati['totale_anno'].values()), 2)]
     )
     return _risposta_tabella(formato, f'corrispettivi_tipo_incasso_{anno}', f'Tipo Incasso {anno}', intestazioni, righe)
+
+
+@router.get("/report/totali")
+def report_totali(
+    anno: int = Query(..., ge=2020, le=2030),
+    lordo: bool = Query(True),
+    con_ts: bool = Query(True, description="include la tassa di soggiorno"),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """Totali mensili per struttura (tab 'Totali'), scontrini e fatture in due sezioni.
+
+    Riusa report_giornaliero() sull'anno intero e somma per mese: i valori coincidono per
+    costruzione con la somma dei giorni di 'Corrispettivi giornalieri' (annullati inclusi,
+    come lì — diverso da report_fatturati, che li esclude). IVA e tassa di soggiorno sono
+    applicate lato server (servono identiche anche nell'export): lordo=false scorpora l'IVA
+    per categoria come la giornaliera; con_ts=false toglie la colonna tassa_soggiorno.
+    Gli incassi manuali MMS/BON stanno negli scontrini; le loro fatture sono sempre None.
+    """
+    from app.utils.locale_it import MESI_IT
+
+    giorni = report_giornaliero(
+        data_da=date(anno, 1, 1), data_a=date(anno, 12, 31), struttura_code=None,
+        tipo='tutti', lordo=lordo, is_test=is_test, db=db, _=None,
+    )
+
+    # sezione → struttura → mese → valore
+    acc = {'scontrini': {}, 'fatture': {}}
+    mesi_presenti: Set[int] = set()
+    for g in giorni:
+        m = int(g['data'][5:7])
+        for s in g['strutture']:
+            sc = s['struttura_code']
+            for sez in ('scontrini', 'fatture'):
+                cats = s[sez]
+                v = cats['totale'] - (0.0 if con_ts else cats.get('tassa_soggiorno', 0.0))
+                if sez == 'scontrini':
+                    v += s['manuale']
+                if v:
+                    mesi_presenti.add(m)
+                acc[sez].setdefault(sc, {})
+                acc[sez][sc][m] = acc[sez][sc].get(m, 0.0) + v
+
+    mesi = sorted(mesi_presenti)
+
+    def _sezione(sez: str) -> dict:
+        righe = []
+        totale_mese = {m: 0.0 for m in mesi}
+        # Ordine del prospetto: Maremosso accanto a Du Parc (struttura fisica), Buona Onda in fondo
+        for sc in ('DPH', 'MMS', 'CLB', 'INT', 'BON'):
+            if sez == 'fatture' and sc in STRUTTURE_MANUALI:
+                righe.append({'struttura_code': sc, 'nome': NOME_STRUTTURA[sc], 'per_mese': None, 'totale': None})
+                continue
+            per_mese = {m: round(acc[sez].get(sc, {}).get(m, 0.0), 2) for m in mesi}
+            for m in mesi:
+                totale_mese[m] += per_mese[m]
+            righe.append({
+                'struttura_code': sc, 'nome': NOME_STRUTTURA[sc],
+                'per_mese': {str(m): v for m, v in per_mese.items()},
+                'totale': round(sum(per_mese.values()), 2),
+            })
+        return {
+            'righe': righe,
+            'totale_mese': {str(m): round(v, 2) for m, v in totale_mese.items()},
+            'totale': round(sum(totale_mese.values()), 2),
+        }
+
+    scontrini, fatture = _sezione('scontrini'), _sezione('fatture')
+    return {
+        'anno': anno,
+        'lordo': lordo,
+        'con_ts': con_ts,
+        'mesi': [{'mese': m, 'nome_mese': MESI_IT[m - 1]} for m in mesi],
+        'scontrini': scontrini,
+        'fatture': fatture,
+        'totale_generale': round(scontrini['totale'] + fatture['totale'], 2),
+    }
+
+
+@router.get("/export/totali")
+def export_totali(
+    anno: int = Query(..., ge=2020, le=2030),
+    lordo: bool = Query(True),
+    con_ts: bool = Query(True),
+    formato: str = Query('xlsx', pattern="^(xlsx|csv|pdf)$"),
+    is_test: bool = Query(False),
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """Export della tab 'Totali' (stessi dati di report_totali): un'unica tabella con le due
+    sezioni Scontrini (Stampanti RT) e Fatture una sotto l'altra, più una riga finale che
+    dichiara IVA e tassa di soggiorno (il file deve restare chiaro fuori dall'app)."""
+    from app.routers.corrispettivi_documenti import _risposta_tabella
+
+    dati = report_totali(anno=anno, lordo=lordo, con_ts=con_ts, is_test=is_test, db=db, _=None)
+    mesi = dati['mesi']
+    vuota = [''] * (len(mesi) + 1)
+    intestazioni = ['Struttura'] + [m['nome_mese'] for m in mesi] + ['Totale']
+    righe = []
+    for chiave, titolo in (('scontrini', 'SCONTRINI (STAMPANTI RT)'), ('fatture', 'FATTURE')):
+        sez = dati[chiave]
+        righe.append([titolo] + vuota)
+        for r in sez['righe']:
+            if r['per_mese'] is None:
+                righe.append([r['nome']] + ['—'] * (len(mesi) + 1))
+            else:
+                righe.append([r['nome']] + [r['per_mese'][str(m['mese'])] for m in mesi] + [r['totale']])
+        righe.append([f'TOTALE {titolo.split(" ")[0]}']
+                     + [sez['totale_mese'][str(m['mese'])] for m in mesi] + [sez['totale']])
+        righe.append([''] + vuota)
+    righe.append(['TOTALE GENERALE'] + [''] * len(mesi) + [dati['totale_generale']])
+    nota = (f"{'IVA inclusa' if lordo else 'IVA esclusa'} — "
+            f"tassa di soggiorno {'inclusa' if con_ts else 'esclusa'}")
+    righe.append([nota] + vuota)
+    return _risposta_tabella(formato, f'corrispettivi_totali_{anno}', f'Corrispettivi — Totali {anno} ({nota})',
+                             intestazioni, righe)
 
 
 @router.get("/admin/test-stats")

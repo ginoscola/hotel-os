@@ -812,6 +812,26 @@ via `PUT/DELETE /corrispettivi/incasso-storico` diretto (o riesumare il pannello
 commit di questo lavoro). `home.py::_perc_contante` legge `totale_anno['Contante']`, che già include
 il pregresso confluito.
 
+### Tab "Totali" (`TabTotali.jsx`, ottobre 2026, v3.19.0)
+Prospetto annuale per mese × struttura in **due tabelle**: "Scontrini (Stampanti RT)" e "Fatture"
+(righe DPH, MMS, CLB, INT, BON — Maremosso accanto a Du Parc, come nel foglio esterno da cui nasce;
+MMS/BON = incassi manuali negli scontrini, fatture sempre "—"), riga TOTALE per sezione + totale
+generale. Toggle IVA = quello globale di Corrispettivi; toggle **Tassa di soggiorno inclusa/esclusa**
+proprio (`localStorage('corrispettivi_totali_con_ts')`).
+- `GET /corrispettivi/report/totali?anno=&lordo=&con_ts=` (`report_totali()` in
+  `corrispettivi_report.py`): **riusa `report_giornaliero()`** sull'anno intero e somma per mese —
+  stessa fonte della tab "Corrispettivi giornalieri" (scelta dell'utente), quindi **annullati
+  inclusi** come lì, a differenza di `report_fatturati` che li esclude: i totali possono differire
+  leggermente dal Riepilogo Fatturati. Verificato: con IVA e TS incluse `totale_generale` =
+  Σ `totale_giorno` della giornaliera al centesimo (1.896.693,98€, 2026). IVA scorporata e TS tolta
+  **lato server** (eccezione al pattern "backend sempre lordo", come `/check`), perché l'export deve
+  dare gli stessi numeri a schermo.
+- `GET /corrispettivi/export/totali?anno=&lordo=&con_ts=&formato=xlsx|csv|pdf` → una sola tabella
+  con le due sezioni una sotto l'altra (riusa `_risposta_tabella` di `corrispettivi_documenti`) +
+  riga finale che dichiara IVA/TS. Frontend con `ExportMenu`.
+- Il foglio di riferimento mostrato dall'utente era del **2025**: nessun dato 2025 nel DB
+  (corrispettivi da aprile 2026), quindi nessun confronto numerico possibile.
+
 ### Tab "Cassa" — cassa contante reale di gruppo (`TabCassa.jsx`, settembre 2026)
 Il **vero scopo** per cui è nata la tab Tipo Incasso: sapere quanto contante fisico ha in mano il
 gruppo. **Cassa reale = saldo iniziale + Σ contante incassato − Σ versamenti in banca + Σ rettifiche**
@@ -1050,8 +1070,8 @@ Endpoint (prefix `/analisi-ricavi`):
 Frontend `TabAnalisiRicavi.jsx`: bottoni hotel [DPH][CLB][INT][Gruppo]; frecce ◀▶ mese/anno; toggle Range (mese_fine); toggle dettaglio/macrocategorie; toggle Δ Revenue (solo hotel singolo). Default: mese precedente a quello corrente. Colori: priorità DB → `CATEGORIA_COLORI` → palette.
 Admin `corr-classificazione`: `CorrClassificazioneTrattamenti` con colonna Colore (swatch + hex).
 
-### Frontend Corrispettivi.jsx (11 tab)
-Import | Corrispettivi giornalieri (drawer cella→documenti) | Scontrini | Fatture | Penali | Riepilogo Fatturati | Cassa | Controllo RT | Stampante RT | Analisi Ricavi | Dati di test.
+### Frontend Corrispettivi.jsx (12 tab)
+Import | Corrispettivi giornalieri (drawer cella→documenti) | Scontrini | Fatture | Penali | Riepilogo Fatturati | Totali | Cassa | Controllo RT | Stampante RT | Analisi Ricavi | Dati di test.
 `PerHotelView`: generico per scontrini/fatture, `localStorage('scontrini_vista'|'fatture_vista')`.
 Tab attiva: `localStorage('corrispettivi_tab')`.
 
