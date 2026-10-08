@@ -203,8 +203,10 @@ relativi, quindi nessun cambiamento di comportamento v7 da gestire) e **vite 8 +
 (motore rolldown/oxc: build ~0,5s invece di ~4,6s; richiede Node ≥ 20.19/22.12 — server su 22.22).
 `vite.config.js` invariato. L'avviso "chunks larger than 500 kB" ora cita
 `build.rolldownOptions` invece di `rollupOptions`: se un giorno si fa code-splitting, usare quella chiave.
-⚠️ npm di sistema è 9.2.0: ogni `npm install` toglie i campi `"libc"` dal lockfile (campo nato con
-npm 10) — modifica innocua, non è una modifica dell'utente.
+**npm**: dall'08/10/2026 è npm **10.9.9** in `/usr/local/bin/npm` (`sudo npm install -g npm@10`), che
+ha la precedenza su npm 9.2.0 del pacchetto Ubuntu (`/usr/bin/npm`, lasciato come riserva; per tornarci
+`sudo npm uninstall -g npm && hash -r`). npm 9.2 toglieva i campi `"libc"` dal lockfile a ogni
+`npm install` (campo nato con npm 10): modifica innocua, ormai non più prodotta.
 
 ## Comandi sviluppo
 ⚠️ **Dal 23 settembre 2026 lo sviluppo avviene sul server Linux**, non più sul Mac Mini (migrazione
