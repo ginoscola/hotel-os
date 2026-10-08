@@ -8,7 +8,8 @@
 # porta 8000. Versione Mac precedente (lsof + uvicorn --reload): nello storico git.
 
 set -euo pipefail
-PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# readlink -f: funziona anche se lanciato da un link (es. ~/.local/bin/hotelos-restart)
+PROJECT_DIR="$(dirname "$(readlink -f "$0")")"
 
 if [ "${1:-}" = "--build" ]; then
   echo "Build frontend…"
