@@ -196,6 +196,14 @@ la pagina è aperta da `192.168.x.x:8080` le chiamate vanno a `:8081` sullo stes
 LAN), altrimenti `VITE_API_URL`. Nuovi punti che costruiscono URL API a mano devono importare
 `API_URL`, non rileggere `VITE_API_URL`. Import Dipendenti con `timeout: 180000` dedicato.
 
+**Dipendenze frontend** (`npm audit`, 08/10/2026, v3.19.2): aggiornati axios 1.20 / form-data 4.0.6 /
+react-router-dom 6.30.6 con `npm audit fix` (senza `--force`). Restano 4 avvisi che richiedono major
+(vite 8, react-router 7), **lasciati apposta**: vite/esbuild toccano solo il dev server (in produzione
+nginx serve `dist/` statico); react-router = open redirect solo con percorsi da input utente (l'app
+naviga solo verso percorsi fissi) + SSR (non usato). Rivalutare se si passa a react-router 7.
+⚠️ npm di sistema è 9.2.0: ogni `npm install` toglie i campi `"libc"` dal lockfile (campo nato con
+npm 10) — modifica innocua, non è una modifica dell'utente.
+
 ## Comandi sviluppo
 ⚠️ **Dal 23 settembre 2026 lo sviluppo avviene sul server Linux**, non più sul Mac Mini (migrazione
 completata — vedi `docs/MIGRAZIONE_LINUX.md`): VSCode Remote-SSH (alias `kmdimare-remote` da fuori
