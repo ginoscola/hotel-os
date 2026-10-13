@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import api from '../api/client'
-import { formatEuro, formatPerc, mostraErrore } from '../utils/format'
+import { formatEuro, formatPerc, mostraErrore, percentualiA100 } from '../utils/format'
 import {
   Badge, Button, Card, Checkbox, Dot, DropZone, HotelTag, Input, KpiTile, Loading, Messaggio, PageHeader,
   SectionTitle, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
@@ -1464,8 +1464,9 @@ function AnalisiCC() {
               .map(d => ({ ...d, colore: coloreStruttura(d.struttura_code) }))
 
             const dataTorta = tortaVista === 'struttura' ? dataTortaStruttura : dataTortaReparto
-            const totale = dataTorta.reduce((acc, d) => acc + d.value, 0)
             if (dataTorta.length === 0) return null
+            const legendaTorta = [...dataTorta].sort((x, y) => y.value - x.value)
+            const percTorta = percentualiA100(legendaTorta.map(d => d.value))
 
             const labelPeriodo = periodoTipo === 'anno'
               ? `${anno}`
@@ -1487,7 +1488,7 @@ function AnalisiCC() {
                   <ReTooltip formatter={(value, name) => [formatEuro(value), name]} contentStyle={{ fontSize: 12, borderRadius: 6 }} />
                 </PieChart>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 4, flex: 1, overflowY: 'auto' }}>
-                  {[...dataTorta].sort((x, y) => y.value - x.value).map((d, i) => (
+                  {legendaTorta.map((d, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 'var(--fs-sm)' }}>
                       <span style={{ width: 10, height: 10, borderRadius: 2, background: d.colore, flexShrink: 0 }} />
                       <span style={{ flex: 1, color: colors.textSecond, lineHeight: 1.2 }}>
@@ -1497,7 +1498,7 @@ function AnalisiCC() {
                         {d.name}
                       </span>
                       <span className="ui-num" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                        {totale > 0 ? (d.value / totale * 100).toFixed(1) : '0'}%
+                        {percTorta[i].toFixed(1)}%
                       </span>
                     </div>
                   ))}
@@ -1651,6 +1652,7 @@ function AnalisiCC() {
                     {dettaglioDip && dettaglioDip.length === 0 && <StatoVuoto>Nessun dipendente trovato.</StatoVuoto>}
                     {dettaglioDip && dettaglioDip.length > 0 && (() => {
                       const totale = dettaglioDip.reduce((acc, d) => acc + d.costo_anno, 0)
+                      const percDip = percentualiA100(dettaglioDip.map(d => d.costo_anno))
                       return (
                         <Table compact>
                           <thead>
@@ -1675,7 +1677,7 @@ function AnalisiCC() {
                                   </Td>
                                 )}
                                 <Td num>{formatEuro(d.costo_anno)}</Td>
-                                <Td num style={{ color: colors.textMuted }}>{totale > 0 ? (d.costo_anno / totale * 100).toFixed(1) : '0'}%</Td>
+                                <Td num style={{ color: colors.textMuted }}>{percDip[i].toFixed(1)}%</Td>
                               </tr>
                             ))}
                             <tr className="ui-riga-totale">

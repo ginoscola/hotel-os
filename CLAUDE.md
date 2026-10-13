@@ -287,6 +287,7 @@ UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % 
 
 ## Utility frontend (format.js)
 - `formatEuro(v)`, `formatEuroK(v)` (≥1000 → "Xk €"), `formatPerc(v)`, `formatN(v)`, `formatData(iso)`, `addDays(isoDate, n)`, `calcolaDelta(val, ref)`
+- `percentualiA100(valori, decimali=1)` — percentuali di ripartizione che, arrotondate, sommano sempre esattamente 100 (metodo del resto maggiore). Usarla per ogni legenda/colonna "% sul totale" che l'utente usa per ripartire costi: con `toFixed(1)` per voce la somma poteva dare 100,1/99,9 (bug segnalato ottobre 2026, torta "Ripartizione" e dettaglio dipendenti in Dipendenti → Analisi CC).
 - `mostraErrore(e)` — **OBBLIGATORIO in ogni catch block**. Se `localStorage('debug_errori')==='true'` → stack trace completo; altrimenti prima riga. **Mai** usare inline `e.response?.data?.detail || e.message`.
 
 ## Libreria UI (`components/ui/` + `styles/tokens.js` + `styles/ui.css`) — settembre 2026

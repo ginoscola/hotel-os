@@ -51,6 +51,26 @@ export function calcolaDelta(corrente, confronto) {
   return ((corrente - confronto) / Math.abs(confronto)) * 100
 }
 
+/** Percentuali di ripartizione che sommano sempre esattamente 100 una volta arrotondate
+ *  (metodo del resto maggiore): si tronca ogni quota al decimale e i decimi mancanti vanno
+ *  alle voci con il resto più alto. Restituisce numeri nello stesso ordine di `valori`;
+ *  tutti 0 se il totale è 0. Usare con `toFixed(decimali)` per la visualizzazione. */
+export function percentualiA100(valori, decimali = 1) {
+  const totale = valori.reduce((acc, v) => acc + v, 0)
+  if (!totale) return valori.map(() => 0)
+  const scala = 10 ** decimali
+  const esatte = valori.map(v => v / totale * 100 * scala)
+  const base = esatte.map(Math.floor)
+  let mancanti = 100 * scala - base.reduce((acc, v) => acc + v, 0)
+  const ordine = esatte.map((v, i) => i).sort((a, b) => (esatte[b] - base[b]) - (esatte[a] - base[a]))
+  for (const i of ordine) {
+    if (mancanti <= 0) break
+    base[i] += 1
+    mancanti -= 1
+  }
+  return base.map(v => v / scala)
+}
+
 /** Restituisce il messaggio di errore da una risposta axios.
  *  Se debug_errori è attivo in localStorage, mostra il dettaglio completo del backend.
  *  Altrimenti mostra solo la prima riga (messaggio breve).
