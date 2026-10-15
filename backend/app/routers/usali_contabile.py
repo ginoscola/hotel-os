@@ -33,9 +33,12 @@ from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
 from app.models.revenue import Hotel, User
 from app.models.usali_contabile import (
-    UsaliImport, UsaliRegolaSegmento, UsaliRiga, UsaliSegmento, UsaliStrutturaGestionale,
+    UsaliCategoriaKpi, UsaliImport, UsaliRegolaSegmento, UsaliRiga, UsaliSegmento, UsaliStrutturaGestionale,
 )
 from app.services.usali_contabile_parser import ErroreImportUsali, parse_export
+from app.services.usali_contabile_kpi import (
+    CATEGORIE_KPI, calcola_kpi, carica_mappa_categorie, categoria_di, produzione_mensile,
+)
 from app.services.usali_contabile_report import costruisci_report
 from app.services.usali_segmenti import assegna_segmenti
 from app.utils.locale_it import MESI_IT
@@ -383,8 +386,10 @@ def scarica_file_originale(
 
 # ── Report ───────────────────────────────────────────────────────────────────
 
-def _calcola_report(db: Session, struttura: str, anno: int, mese_da: int, mese_a: int,
-                    segmento_id: Optional[int]) -> dict:
+def _carica_righe(db: Session, struttura: str, anno: int, mese_da: int, mese_a: int,
+                  segmento_id: Optional[int]) -> dict:
+    """Foglie di (anno, mesi ≤ mese_a) e (anno-1, mese_da..mese_a), già filtrate sul segmento
+    se richiesto. Unica lettura usata da report, export e KPI."""
     if not (1 <= mese_da <= mese_a <= 12):
         raise HTTPException(400, "Intervallo mesi non valido")
     righe = (
@@ -399,7 +404,6 @@ def _calcola_report(db: Session, struttura: str, anno: int, mese_da: int, mese_a
         .all()
     )
     mesi_importati = {(r.anno, r.mese) for r in righe}
-    prec_disponibile = any(a == anno - 1 for a, _ in mesi_importati)
 
     errori_segmento = []
     segmento = None
@@ -415,6 +419,7 @@ def _calcola_report(db: Session, struttura: str, anno: int, mese_da: int, mese_a
                 "sezione": q.riga.sezione, "reparto": q.riga.reparto,
                 "sottoreparto": q.riga.sottoreparto, "conto_nome": q.riga.conto_nome,
                 "ordine": q.riga.ordine, "percorso_testo": q.riga.percorso_testo,
+                "tipo": q.riga.tipo,
             }
             for q in quote if q.segmento_id == segmento_id
         ]
@@ -426,11 +431,23 @@ def _calcola_report(db: Session, struttura: str, anno: int, mese_da: int, mese_a
             {"conto": k[0], "motivo": k[1], "periodi": sorted(v)} for k, v in visti.items()
         ]
 
-    rep = costruisci_report(righe, anno, mese_da, mese_a, mesi_importati, prec_disponibile)
-    rep.update({
-        "struttura": struttura,
+    return {
+        "righe": righe,
+        "mesi_importati": mesi_importati,
         "segmento": {"id": segmento.id, "nome": segmento.nome} if segmento else None,
         "errori_segmento": errori_segmento,
+    }
+
+
+def _calcola_report(db: Session, struttura: str, anno: int, mese_da: int, mese_a: int,
+                    segmento_id: Optional[int]) -> dict:
+    dati = _carica_righe(db, struttura, anno, mese_da, mese_a, segmento_id)
+    prec_disponibile = any(a == anno - 1 for a, _ in dati["mesi_importati"])
+    rep = costruisci_report(dati["righe"], anno, mese_da, mese_a, dati["mesi_importati"], prec_disponibile)
+    rep.update({
+        "struttura": struttura,
+        "segmento": dati["segmento"],
+        "errori_segmento": dati["errori_segmento"],
     })
     return rep
 
@@ -524,3 +541,124 @@ def export_conto_economico(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nome}"'},
     )
+
+
+# ── KPI ──────────────────────────────────────────────────────────────────────
+
+@router.get("/kpi")
+def kpi_conto_economico(
+    struttura: str,
+    anno: int,
+    mese_da: int = Query(1, ge=1, le=12),
+    mese_a: int = Query(12, ge=1, le=12),
+    segmento_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """KPI mensili e di periodo. Con un segmento, gli importi sono quelli del segmento ma le
+    camere restano quelle dell'intera struttura (la produzione non è segmentata)."""
+    dati = _carica_righe(db, struttura, anno, mese_da, mese_a, segmento_id)
+    out = calcola_kpi(
+        dati["righe"], carica_mappa_categorie(db), produzione_mensile(db, struttura, anno),
+        anno, mese_da, mese_a, dati["mesi_importati"],
+    )
+    out.update({"struttura": struttura, "segmento": dati["segmento"],
+                "errori_segmento": dati["errori_segmento"]})
+    return out
+
+
+# ── Categorie KPI ────────────────────────────────────────────────────────────
+
+def _valida_categoria(body: dict) -> dict:
+    conto = (body.get("conto_nome") or "").strip()
+    categoria = (body.get("categoria") or "").strip()
+    if not conto:
+        raise HTTPException(400, "Nome conto obbligatorio")
+    if categoria not in CATEGORIE_KPI:
+        raise HTTPException(400, f"Categoria non valida: usare una tra {', '.join(CATEGORIE_KPI)}")
+    return {"conto_nome": conto, "reparto": (body.get("reparto") or "").strip(), "categoria": categoria}
+
+
+def _fmt_categoria(c: UsaliCategoriaKpi) -> dict:
+    return {"id": c.id, "conto_nome": c.conto_nome, "reparto": c.reparto, "categoria": c.categoria}
+
+
+@router.get("/categorie-kpi")
+def lista_categorie_kpi(db: Session = Depends(get_db), _=Depends(richiedi_utente_attivo)):
+    righe = db.query(UsaliCategoriaKpi).order_by(UsaliCategoriaKpi.categoria, UsaliCategoriaKpi.conto_nome).all()
+    return {"categorie": list(CATEGORIE_KPI), "mappature": [_fmt_categoria(c) for c in righe]}
+
+
+def _esiste_categoria(db: Session, conto: str, reparto: str, escludi_id: Optional[int] = None) -> bool:
+    q = db.query(UsaliCategoriaKpi).filter(
+        func.lower(UsaliCategoriaKpi.conto_nome) == conto.lower(),
+        func.lower(UsaliCategoriaKpi.reparto) == reparto.lower(),
+    )
+    if escludi_id:
+        q = q.filter(UsaliCategoriaKpi.id != escludi_id)
+    return db.query(q.exists()).scalar()
+
+
+@router.post("/categorie-kpi")
+def crea_categoria_kpi(body: dict = Body(...), db: Session = Depends(get_db), _=Depends(richiedi_admin)):
+    dati = _valida_categoria(body)
+    if _esiste_categoria(db, dati["conto_nome"], dati["reparto"]):
+        raise HTTPException(409, "Esiste già una mappatura per questo conto/reparto")
+    c = UsaliCategoriaKpi(**dati)
+    db.add(c)
+    db.commit()
+    return _fmt_categoria(c)
+
+
+@router.put("/categorie-kpi/{cat_id}")
+def aggiorna_categoria_kpi(cat_id: int, body: dict = Body(...), db: Session = Depends(get_db),
+                           _=Depends(richiedi_admin)):
+    c = db.get(UsaliCategoriaKpi, cat_id)
+    if not c:
+        raise HTTPException(404, "Mappatura non trovata")
+    dati = _valida_categoria({**_fmt_categoria(c), **body})
+    if _esiste_categoria(db, dati["conto_nome"], dati["reparto"], escludi_id=cat_id):
+        raise HTTPException(409, "Esiste già una mappatura per questo conto/reparto")
+    for k, v in dati.items():
+        setattr(c, k, v)
+    db.commit()
+    return _fmt_categoria(c)
+
+
+@router.delete("/categorie-kpi/{cat_id}")
+def elimina_categoria_kpi(cat_id: int, db: Session = Depends(get_db), _=Depends(richiedi_admin)):
+    c = db.get(UsaliCategoriaKpi, cat_id)
+    if not c:
+        raise HTTPException(404, "Mappatura non trovata")
+    db.delete(c)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/categorie-kpi/non-categorizzati")
+def conti_non_categorizzati(
+    struttura: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_utente_attivo),
+):
+    """Conti di costo presenti negli import senza categoria KPI (i conti nuovi che arrivano dal
+    gestionale finiscono qui). Assegnare 'altro' per toglierli dall'elenco."""
+    q = db.query(
+        UsaliRiga.conto_nome, UsaliRiga.reparto, UsaliRiga.sezione, UsaliRiga.tipo,
+        func.sum(UsaliRiga.importo), func.array_agg(func.distinct(UsaliRiga.struttura_code)),
+    ).filter(UsaliRiga.tipo == "costo")
+    if struttura:
+        q = q.filter(UsaliRiga.struttura_code == struttura)
+    gruppi = q.group_by(UsaliRiga.conto_nome, UsaliRiga.reparto, UsaliRiga.sezione, UsaliRiga.tipo).all()
+
+    mappa = carica_mappa_categorie(db)
+    out = []
+    for conto, reparto, sezione, tipo, totale, strutture in gruppi:
+        riga = {"conto_nome": conto, "reparto": reparto, "tipo": tipo}
+        if categoria_di(riga, mappa) is None:
+            out.append({
+                "conto_nome": conto, "reparto": reparto, "sezione": sezione,
+                "totale": round(float(totale or 0), 2), "strutture": sorted(strutture or []),
+            })
+    out.sort(key=lambda x: x["totale"])   # costi più pesanti (più negativi) in cima
+    return out

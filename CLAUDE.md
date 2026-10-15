@@ -1903,7 +1903,7 @@ tenere a mente confrontando report per-struttura esportati prima di questa migra
 Terza scheda del modulo USALI (non un modulo NavBar a sé): conto economico **dalla contabilità
 vera**, export Flexmonster del gestionale già riclassificato USALI — distinto dal "Conto Economico"
 interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 modelli+parser+test,
-✅ 2 import anteprima/conferma + report, 3 KPI + categorie, 4 frontend.
+✅ 2 import anteprima/conferma + report, ✅ 3 KPI + categorie, 4 frontend.
 - **Modelli** `models/usali_contabile.py`, migrazione `usali006_2026`: `usali_struttura_gestionale`
   (id gestionale→`struttura_code`, seed 128→DPH), `usali_import` (log, sha256 xlsx, file originali),
   `usali_riga` (conto×mese, dato grezzo mai modificato; `percorso` JSON + `percorso_testo`),
@@ -1952,6 +1952,22 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
   classificato), Reddito Netto — tutti dalle foglie. Colonne: mesi (`None` = mese non importato, non
   zero), totale, % ricavi, progressivo da gennaio, stesso periodo anno precedente + Δ (solo se esiste).
   Con `segmento_id` le righe passano da `assegna_segmenti()`; righe non coperte → `errori_segmento`.
+- **KPI** `services/usali_contabile_kpi.py` + `GET /usali/contabile/kpi?struttura&anno&mese_da&mese_a&segmento_id`:
+  importi dalla contabilità, camere disponibili/vendute/presenze da `daily_revenue` (snapshot più
+  recente per data, una query per anno — `produzione_mensile()`). Stato mese: `ok` / `chiuso` (fuori
+  `hotel_seasons`: solo costi) / `mancante` (in stagione senza dati Revenue: KPI per camera `None`, mai
+  0) / `non_applicabile` (BON). KPI per camera (occupazione, ADR, RevPAR, TRevPAR, GOPPAR, CPOR, utenze
+  per camera venduta) di periodo = Σ numeratori / Σ denominatori dei **soli mesi `ok`**; rapporti sugli
+  importi (GOP %, personale %, food/beverage cost % su ricavi reparto F&B, commissioni Camere % su
+  ricavi camere, margine Camere %) su tutti i mesi importati. ADR/RevPAR usano i **ricavi camere della
+  contabilità**, non `daily_revenue.revenue_rooms`. `gop_cumulato` sempre da gennaio. Con un segmento
+  gli importi sono del segmento ma le camere restano quelle della struttura.
+- **Categorie KPI** (`usali_categoria_kpi`): match case-insensitive su nome conto, regola con `reparto`
+  specifico vince su quella generica (`reparto=''`); solo righe di costo. Food/beverage contano solo in
+  Costi Operativi > Food & Beverage, commissioni solo in Costi Operativi > Camere. Endpoint:
+  `GET|POST /categorie-kpi`, `PUT|DELETE /categorie-kpi/{id}`, `GET /categorie-kpi/non-categorizzati`
+  (conti di costo importati senza categoria: assegnare `altro` per toglierli). Con il seed, sul file DPH
+  2026 restano 63 conti senza categoria (manutenzioni, informatica, marketing…).
 - Fixture `tests/fixtures/usali/export-1.xlsx` + `pivot-1.csv` (DPH gen–set 2026, 223 conti).
   ⚠️ **Non lasciarli in `uploads/`**: `test_bulk_scan_cartella_uploads` (import massivo Revenue)
   scansiona tutta la cartella e li conta come coppie in errore.
