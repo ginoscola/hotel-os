@@ -73,9 +73,22 @@ const SEZIONI = [
     label: 'E — EBITDAR (C – D)', codice: 'ebitdar', tipo: 'risultato_e',
     voci: [],
   },
+  {
+    label: 'F — COSTI NON OPERATIVI', codice: 'tot_non_operativi', tipo: 'totale_f',
+    voci: [
+      { key: 'affitti', label: 'Affitti — terreni ed edifici' },
+      { key: 'altri_non_operativi', label: 'Altri costi non operativi' },
+    ],
+  },
+  {
+    label: 'G — EBITDA (E – F)', codice: 'ebitda', tipo: 'risultato_g',
+    voci: [],
+  },
 ]
 
-const KPI_CODES = ['ebitdar_pct', 'fnb_cost_pct', 'lavoro_pct', 'utenze_pct']
+const SEZIONI_RISULTATO = new Set(['risultato_c', 'risultato_e', 'risultato_g'])
+
+const KPI_CODES = ['ebitdar_pct', 'ebitda_pct', 'fnb_cost_pct', 'lavoro_pct', 'utenze_pct']
 
 // Blocchi KPI separati per tipo di struttura. Nessun blocco "Ristoranti": con Maremosso
 // accorpato in DPH resterebbe solo Buona Onda, ridondante con la sua colonna nella tabella sopra.
@@ -162,6 +175,8 @@ function FontiDati({ strutture }) {
   const conContabile = strutture.filter(s => s.contabile)
   if (!conContabile.length) return null
   const nonQuadra = conContabile.filter(s => Math.abs(s.contabile.differenza_gop ?? 0) >= 0.01)
+  const ebitdaNonQuadra = conContabile.filter(s =>
+    Math.abs(s.contabile.differenza_gop ?? 0) < 0.01 && Math.abs(s.contabile.differenza_ebitda ?? 0) >= 0.01)
   return (
     <>
       <Messaggio tipo="info">
@@ -170,12 +185,18 @@ function FontiDati({ strutture }) {
           return `${s.nome} ${elencoMesi(c.mesi_contabili)}${c.mesi_altre_fonti.length ? ` (${elencoMesi(c.mesi_altre_fonti)} da PMS/cedolini/manuali)` : ''}`
         }).join(' · ')}.
         Costo del lavoro per reparto dai cedolini (ripartizione Dipendenti); «Costo del lavoro non suddiviso» comprende la
-        differenza tra personale in contabilità e cedolini. L'EBITDAR coincide con il GOP contabile.
+        differenza tra personale in contabilità e cedolini. L'EBITDAR coincide con il GOP contabile, l'EBITDA
+        (dopo affitti e altri costi non operativi) con l'EBITDA contabile.
       </Messaggio>
       {nonQuadra.map(s => (
         <Messaggio key={s.struttura_code} tipo="warn">
           {s.nome}: EBITDAR diverso dal GOP contabile di {formatEuro(s.contabile.differenza_gop)} — qualche conto
           contabile non ha una voce corrispondente per questa struttura.
+        </Messaggio>
+      ))}
+      {ebitdaNonQuadra.map(s => (
+        <Messaggio key={s.struttura_code} tipo="warn">
+          {s.nome}: EBITDA diverso dall'EBITDA contabile di {formatEuro(s.contabile.differenza_ebitda)}.
         </Messaggio>
       ))}
     </>
@@ -315,7 +336,7 @@ export default function UsaliContoEconomico() {
   }
 
   function renderRigaTotale(sezione) {
-    const isMargine = sezione.tipo === 'risultato_c' || sezione.tipo === 'risultato_e'
+    const isMargine = SEZIONI_RISULTATO.has(sezione.tipo)
     // Colonne totale (HOTEL/GRUPPO) leggermente più scure del resto della riga
     const bgTot = isMargine ? colors.successBgStrong : colors.border
 
@@ -421,7 +442,7 @@ export default function UsaliContoEconomico() {
                     )
                   })}
                   {renderRigaTotale(sezione)}
-                  {sezione.tipo === 'risultato_c' && (
+                  {(sezione.tipo === 'risultato_c' || sezione.tipo === 'risultato_e') && (
                     <tr><td colSpan={COL_ORDER.length + 1} style={{ height: 4, padding: 0, background: colors.border }} /></tr>
                   )}
                 </React.Fragment>

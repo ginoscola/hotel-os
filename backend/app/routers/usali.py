@@ -57,12 +57,14 @@ VOCI_HOTEL = [
     'lavoro_altri_reparti', 'fdv_altri_reparti',
     'lavoro_non_suddiviso', 'altri_costi_admin', 'consulenze',
     'informatica', 'marketing', 'manutenzioni', 'utenze',
+    'affitti', 'altri_non_operativi',
 ]
 VOCI_RISTORANTI = [
     'ricavi_altri_operativi', 'ricavi_vari_operativi',
     'lavoro_fnb', 'fdv_fnb', 'attrezzature_fnb', 'consulenze_fnb', 'altri_costi_fnb',
     'lavoro_non_suddiviso', 'altri_costi_admin', 'consulenze',
     'informatica', 'marketing', 'manutenzioni', 'utenze',
+    'affitti', 'altri_non_operativi',
 ]
 
 APP_CONFIG_KEY_KPI = 'usali_kpi_ranges'
@@ -70,6 +72,7 @@ APP_CONFIG_KEY_CC_MAP = 'usali_cc_voce_mapping'
 
 KPI_VOCI_LABELS = {
     'ebitdar_pct': 'EBITDAR su ricavi',
+    'ebitda_pct': 'EBITDA su ricavi',
     'fnb_cost_pct': 'F&B cost su ricavi',
     'lavoro_pct': 'Costo del lavoro',
     'utenze_pct': 'Costo energetico su ricavi',
@@ -78,12 +81,14 @@ KPI_VOCI_LABELS = {
 KPI_DEFAULT = {
     'hotel': {
         'ebitdar_pct': {'lo': 30, 'hi': 35},
+        'ebitda_pct':  {'lo': 15, 'hi': 20},
         'fnb_cost_pct': {'lo': 18, 'hi': 22},
         'lavoro_pct':   {'lo': 28, 'hi': 30},
         'utenze_pct':   {'lo': 5,  'hi': 7},
     },
     'ristoranti': {
         'ebitdar_pct': {'lo': 20, 'hi': 30},
+        'ebitda_pct':  {'lo': 20, 'hi': 30},
         'fnb_cost_pct': {'lo': 25, 'hi': 35},
         'lavoro_pct':   {'lo': 25, 'hi': 30},
         'utenze_pct':   {'lo': 2,  'hi': 5},
@@ -92,13 +97,17 @@ KPI_DEFAULT = {
 
 
 def _leggi_kpi_config(db: Session) -> dict:
+    """Config salvata, completata con i default per i KPI aggiunti dopo il salvataggio."""
+    config = {tipo: {k: dict(v) for k, v in kpi.items()} for tipo, kpi in KPI_DEFAULT.items()}
     row = db.query(AppConfig).filter(AppConfig.key == APP_CONFIG_KEY_KPI).first()
     if row:
         try:
-            return json.loads(row.value)
+            salvata = json.loads(row.value)
         except Exception:
-            pass
-    return KPI_DEFAULT
+            salvata = {}
+        for tipo, kpi in salvata.items():
+            config.setdefault(tipo, {}).update(kpi)
+    return config
 
 
 def _salva_kpi_config(db: Session, config: dict):
@@ -405,6 +414,12 @@ def _calcola_struttura(struttura_code: str, anno: int, mese: int,
 
     ebitdar = margine - tot_costi_indiretti  # E
 
+    # ── Costi non operativi (tra EBITDAR ed EBITDA, USALI) ────────────────────
+    affitti = manuali.get('affitti', 0.0)
+    altri_non_op = manuali.get('altri_non_operativi', 0.0)
+    tot_non_operativi = affitti + altri_non_op  # F
+    ebitda = ebitdar - tot_non_operativi  # G
+
     # ── KPI (su tot_ricavi, None se ricavi=0) ─────────────────────────────────
     def pct(v): return round(v / tot_ricavi * 100, 1) if tot_ricavi else None
 
@@ -476,9 +491,17 @@ def _calcola_struttura(struttura_code: str, anno: int, mese: int,
         'utenze_cum': _c.get('utenze'),
         'tot_costi_indiretti': round(tot_costi_indiretti, 2),  # D
         'ebitdar': round(ebitdar, 2),                  # E
+        # Costi non operativi
+        'affitti': affitti,
+        'affitti_cum': _c.get('affitti'),
+        'altri_non_operativi': altri_non_op,
+        'altri_non_operativi_cum': _c.get('altri_non_operativi'),
+        'tot_non_operativi': round(tot_non_operativi, 2),  # F
+        'ebitda': round(ebitda, 2),                    # G
         # KPI
         'kpi': {
             'ebitdar_pct': pct(ebitdar),
+            'ebitda_pct': pct(ebitda),
             'fnb_cost_pct': pct(fnb_cost),
             'lavoro_pct': pct(tot_lavoro),
             'utenze_pct': pct(utenze),
@@ -497,6 +520,7 @@ def _somma_strutture(strutture: list, nome: str, struttura_code: str) -> dict:
     tot_lavoro = s('lavoro_camere') + s('lavoro_fnb') + s('lavoro_altri_reparti') + s('lavoro_non_suddiviso')
     fnb_cost = s('lavoro_fnb') + s('fdv_fnb')
     ebitdar = s('ebitdar')
+    ebitda = s('ebitda')
     utenze = s('utenze')
 
     return {
@@ -537,8 +561,13 @@ def _somma_strutture(strutture: list, nome: str, struttura_code: str) -> dict:
         'utenze': utenze,
         'tot_costi_indiretti': s('tot_costi_indiretti'),
         'ebitdar': ebitdar,
+        'affitti': s('affitti'),
+        'altri_non_operativi': s('altri_non_operativi'),
+        'tot_non_operativi': s('tot_non_operativi'),
+        'ebitda': ebitda,
         'kpi': {
             'ebitdar_pct': pct(ebitdar),
+            'ebitda_pct': pct(ebitda),
             'fnb_cost_pct': pct(fnb_cost),
             'lavoro_pct': pct(tot_lavoro),
             'utenze_pct': pct(utenze),
@@ -639,6 +668,7 @@ def get_report(
 
             voci = voci_da_contabile(db, codice, anno, mesi_c)
             gop_contabile = voci.pop('gop', 0.0)
+            ebitda_contabile = voci.pop('ebitda', 0.0)
             personale_contabile = voci.pop('personale_contabile', 0.0)
             # Lavoro per reparto dai cedolini (ripartizione CC di Dipendenti); la differenza col
             # personale in contabilità va in "Costo del lavoro non suddiviso".
@@ -657,6 +687,7 @@ def get_report(
                 'mesi_contabili': mesi_c,
                 'mesi_altre_fonti': mesi_v,
                 'gop_contabile': round(gop_contabile, 2),
+                'ebitda_contabile': round(ebitda_contabile, 2),
                 'personale_contabile': round(personale_contabile, 2),
                 'personale_cedolini': round(sum(_fl(v) for v in cedolini.values()), 2),
             }
@@ -668,6 +699,7 @@ def get_report(
             # EBITDAR deve coincidere col GOP contabile: ≠ 0 solo se una voce non ha posto in
             # questa struttura (es. costi Camere su un ristorante) — mostrato come avviso.
             controllo['differenza_gop'] = round(res['ebitdar'] - controllo['gop_contabile'], 2)
+            controllo['differenza_ebitda'] = round(res['ebitda'] - controllo['ebitda_contabile'], 2)
         strutture_result.append(res)
 
     hotel_list = [s for s in strutture_result if s['struttura_code'] in STRUTTURE_HOTEL]

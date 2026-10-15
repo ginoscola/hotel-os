@@ -6,6 +6,7 @@ cedolini in "lavoro non suddiviso", voci non modificabili a mano. Mesi senza con
 di sempre.
 """
 import importlib.util
+import json
 import os
 import sys
 from types import SimpleNamespace
@@ -125,6 +126,11 @@ def test_ytd_ebitdar_uguale_gop_contabile(client):
     # Utenze = conti contabili di Costi Generali > Utenze
     assert s["utenze"] == pytest.approx(10473.15 + 23343.96 + 3064.45, abs=0.02)
     assert "manutenzioni" in s["voci_auto"] and "ricavi_camere" in s["voci_auto"]
+    # Non Operativi tra EBITDAR ed EBITDA: il conto di transito voucher (+2.981,15) in "altri"
+    assert s["affitti"] == 0 and "affitti" in s["voci_auto"]
+    assert s["altri_non_operativi"] == pytest.approx(-2981.15, abs=0.01)
+    assert s["ebitda"] == pytest.approx(105037.14 + 2981.15, abs=0.01)
+    assert c["differenza_ebitda"] == 0
 
 
 def test_mese_singolo(client):
@@ -159,6 +165,26 @@ def test_voci_manuali_ignorate_e_mesi_misti(client, test_engine):
     assert s["ebitdar"] == pytest.approx(105037.14 - 500, abs=0.01)
 
 
+def test_affitto_manuale_nei_mesi_senza_contabilita(client):
+    body = {"struttura_code": "CLB", "anno": 2025, "mese": 6, "voce_code": "affitti", "valore": 12000}
+    assert client.put("/usali/voce", json=body).status_code == 200
+    r = client.get("/usali/report", params={"anno": 2025, "mese": 6, "ytd": "false"})
+    s = next(x for x in r.json()["strutture"] if x["struttura_code"] == "CLB")
+    assert s["affitti"] == 12000 and s["tot_non_operativi"] == 12000
+    assert s["ebitda"] == pytest.approx(s["ebitdar"] - 12000, abs=0.01)
+
+
+def test_kpi_config_salvata_completata_coi_default(client, test_engine):
+    vecchia = {"hotel": {"ebitdar_pct": {"lo": 31, "hi": 36}}, "ristoranti": {}}
+    with test_engine.begin() as conn:
+        conn.execute(text("DELETE FROM app_config WHERE key = 'usali_kpi_ranges'"))
+        conn.execute(text("INSERT INTO app_config (key, value) VALUES ('usali_kpi_ranges', :v)"),
+                     {"v": json.dumps(vecchia)})
+    cfg = client.get("/usali/kpi-config").json()
+    assert cfg["hotel"]["ebitdar_pct"]["lo"] == 31
+    assert cfg["hotel"]["ebitda_pct"]["lo"] == 15 and "ebitda_pct" in cfg["ristoranti"]
+
+
 def test_mesi_senza_contabilita_come_prima(client):
     r = client.get("/usali/report", params={"anno": 2025, "mese": 6, "ytd": "false"})
     assert r.status_code == 200
@@ -178,4 +204,6 @@ def test_mappatura_voci():
     assert voce_interna(riga("Costi Operativi", "Altri Reparti Operativi", "Noleggi"), None) == "fdv_altri_reparti"
     assert voce_interna(riga("Costi Generali", "Amministrativo e Generale", "Prestazioni Professionali"), None) == "consulenze"
     assert voce_interna(riga("Costi Generali", "Utenze", "Gas"), "utenze") == "utenze"
-    assert voce_interna(riga("Non Operativi", "Costi", "Affitti"), None) is None
+    assert voce_interna(riga("Non Operativi", "Costi", "Affitti - Terreni ed Edifici"), None) == "affitti"
+    assert voce_interna(riga("Non Operativi", "Costi", "Acquisto Voucher per dipendenti"), None) == "altri_non_operativi"
+    assert voce_interna(riga("Deprezzamenti", "Costi Generali", "Servizi con Contratto"), None) is None

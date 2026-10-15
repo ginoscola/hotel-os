@@ -6,8 +6,10 @@ voluta: il costo del lavoro di Camere / F&B / Altri reparti resta quello dei ced
 per centro di costo fatta in Dipendenti, coerente col resto di HotelOS); i conti contabili di
 categoria "personale" non vanno nelle voci ma in un totale (`personale_contabile`), e la
 differenza totale contabile − cedolini finisce in "Costo del lavoro non suddiviso". Così
-l'EBITDAR coincide comunque con il GOP della scheda "Conto Economico contabile". Non Operativi (affitti…) e Deprezzamenti stanno sotto l'EBITDAR e
-sono esclusi. I mesi senza import contabile restano sulle fonti di sempre (PMS + cedolini +
+l'EBITDAR coincide comunque con il GOP della scheda "Conto Economico contabile". I Non Operativi
+vanno tra EBITDAR ed EBITDA (USALI): "Affitti" per i conti di affitto, il resto (IMU, assicurazioni,
+conto di transito voucher…) in "Altri costi non operativi" — così l'EBITDA coincide con quello
+contabile. Deprezzamenti (sotto l'EBITDA) esclusi. I mesi senza import contabile restano sulle fonti di sempre (PMS + cedolini +
 voci manuali), vedi get_report() in routers/usali.py.
 
 Valori in positivo (ricavi e costi), come le voci del Conto Economico interno.
@@ -24,6 +26,7 @@ from app.services.usali_contabile_kpi import carica_mappa_categorie, categoria_d
 S_RICAVI = "Ricavi Operativi"
 S_COSTI_OP = "Costi Operativi"
 S_COSTI_GEN = "Costi Generali"
+S_NON_OP = "Non Operativi"
 
 # Voci che _calcola_struttura() legge dal dict `auto` (tutte le altre dal dict `manuali`)
 VOCI_AUTO = ("ricavi_camere", "ricavi_fnb")
@@ -45,7 +48,7 @@ REPARTO_GENERALI = {
 
 def voce_interna(riga, categoria: Optional[str]) -> Optional[str]:
     """Voce del Conto Economico interno per una riga contabile di costo NON di personale o di
-    ricavo (None = sotto l'EBITDAR). Il personale lo gestisce voci_da_contabile()."""
+    ricavo (None = sotto l'EBITDA). Il personale lo gestisce voci_da_contabile()."""
     sez, rep = riga.sezione, riga.reparto
     nome = (riga.conto_nome or "").strip().lower()
 
@@ -80,7 +83,10 @@ def voce_interna(riga, categoria: Optional[str]) -> Optional[str]:
             return REPARTO_GENERALI[rep]
         return "consulenze" if nome in CONSULENZE else "altri_costi_admin"
 
-    return None   # Non Operativi, Deprezzamenti, non classificato
+    if sez == S_NON_OP:
+        return "affitti" if "affitt" in nome else "altri_non_operativi"
+
+    return None   # Deprezzamenti, non classificato
 
 
 def mesi_contabili(db: Session, struttura: str, anno: int) -> set:
@@ -93,7 +99,8 @@ def mesi_contabili(db: Session, struttura: str, anno: int) -> set:
 def voci_da_contabile(db: Session, struttura: str, anno: int, mesi: list) -> dict:
     """{voce: importo positivo} sommato sui mesi dati, più:
     - 'personale_contabile': costo del personale totale in contabilità (sopra l'EBITDAR)
-    - 'gop': GOP contabile, per il controllo EBITDAR = GOP."""
+    - 'gop': GOP contabile, per il controllo EBITDAR = GOP
+    - 'ebitda': EBITDA contabile (GOP + Non Operativi), per il controllo EBITDA."""
     if not mesi:
         return {}
     mappa = carica_mappa_categorie(db)
@@ -104,10 +111,16 @@ def voci_da_contabile(db: Session, struttura: str, anno: int, mesi: list) -> dic
     )
     out = defaultdict(float)
     for r in righe:
+        imp = float(r.importo)
+        if r.sezione == S_NON_OP:
+            # Costi in positivo; un eventuale provento non operativo riduce il costo
+            out["ebitda"] += imp
+            out[voce_interna(r, None)] -= imp
+            continue
         if r.sezione not in (S_RICAVI, S_COSTI_OP, S_COSTI_GEN):
             continue
-        imp = float(r.importo)
         out["gop"] += imp
+        out["ebitda"] += imp
         categoria = categoria_di(r, mappa)
         if categoria == "personale":
             out["personale_contabile"] -= imp

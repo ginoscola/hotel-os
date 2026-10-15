@@ -1778,9 +1778,10 @@ function ToggleRigaCC({ code, name, tipo, voce, onChange, indent }) {
 // USALI — Range KPI
 // ---------------------------------------------------------------------------
 
-const KPI_CODES = ['ebitdar_pct', 'fnb_cost_pct', 'lavoro_pct', 'utenze_pct']
+const KPI_CODES = ['ebitdar_pct', 'ebitda_pct', 'fnb_cost_pct', 'lavoro_pct', 'utenze_pct']
 const KPI_LABELS = {
   ebitdar_pct: 'EBITDAR su ricavi',
+  ebitda_pct: 'EBITDA su ricavi (dopo affitti)',
   fnb_cost_pct: 'F&B cost su ricavi',
   lavoro_pct: 'Costo del lavoro su ricavi',
   utenze_pct: 'Costo energetico su ricavi',

@@ -1856,12 +1856,21 @@ vedi sezione successiva) per ogni (struttura, mese) con un import contabile — 
   del venduto, attrezzature/porcellana/posate…=attrezzature, resto=**Altri costi F&B** (voce nuova
   `altri_costi_fnb`); Altri reparti → costo del venduto altri reparti; Costi Generali → Amministrativo
   (Prestazioni professionali=consulenze), Funzionamento=manutenzioni, Informatica, Utenze, Vendite e
-  Marketing). Non Operativi e Deprezzamenti esclusi (sotto l'EBITDAR).
+  Marketing). Non Operativi in F (sotto l'EBITDAR), Deprezzamenti esclusi.
 - **Costo del lavoro per reparto resta dai cedolini** (ripartizione CC di Dipendenti — scelta esplicita
   dell'utente, "più coerente con HotelOS"); i conti contabili di categoria personale vanno in un totale
   e **la differenza personale contabile − cedolini finisce in "Costo del lavoro non suddiviso"** (può
   essere negativa: INT 2026 −1.242 €). Così **EBITDAR = GOP contabile** al centesimo (`contabile.
   differenza_gop`, avviso in pagina se ≠ 0). Verificato DPH/CLB/INT/BON gen–set e giugno 2026.
+- **F — Costi non operativi e G — EBITDA** (v3.22.0): come da USALI gli affitti stanno tra GOP/EBITDAR
+  ed EBITDA (non sotto, con interessi/imposte/ammortamenti). Sezione contabile "Non Operativi" →
+  `affitti` (conto con "affitt" nel nome) o `altri_non_operativi` (tutto il resto, compreso il conto
+  di transito "Acquisto Voucher per dipendenti" — scelta dell'utente, così EBITDA = EBITDA contabile,
+  `contabile.differenza_ebitda`). Nei mesi senza contabilità sono voci manuali. KPI `ebitda_pct`
+  con range proprio (default hotel 15–20%, ristoranti 20–30%, stime da affinare in Admin):
+  `_leggi_kpi_config()` completa una config salvata con i default dei KPI aggiunti dopo. Affitti
+  2026 gen–set: CLB 108.452 €, INT 112.192 € (rateo mensile, anche fuori stagione).
+  Deprezzamenti restano esclusi (sotto l'EBITDA).
 - Mesi senza contabilità → fonti di sempre (`_dati_fonti_interne()`: PMS/corrispettivi + cedolini +
   voci manuali); periodi misti sommati per intervalli contigui (`_intervalli()`). Le voci manuali dei
   mesi contabili restano in `usali_voci_manuali` ma sono ignorate (reversibile); `PUT /usali/voce` su
