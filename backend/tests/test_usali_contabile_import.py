@@ -349,3 +349,46 @@ def test_strutture_e_periodi(client):
     assert "BON" in strutture and not strutture["CLB"]["ha_dati"]
     periodi = client.get("/usali/contabile/periodi", params={"struttura": "DPH"}).json()
     assert periodi == [{"anno": 2026, "mesi": list(range(1, 10))}]
+
+
+def test_elimina_import(client, TestSession):
+    primo = _importa(client)
+    with TestSession() as db:
+        imp = db.get(UsaliImport, primo["import_id"])
+        file_salvati = [imp.percorso_xlsx, imp.percorso_csv]
+    assert all(os.path.exists(f) for f in file_salvati)
+
+    r = client.delete(f"/usali/contabile/import/{primo['import_id']}")
+    assert r.status_code == 400   # senza conferma non cancella nulla
+    with TestSession() as db:
+        assert db.query(UsaliRiga).count() == 2007
+
+    r = client.delete(f"/usali/contabile/import/{primo['import_id']}", params={"conferma": "true"})
+    assert r.status_code == 200, r.text
+    assert r.json()["righe_eliminate"] == 2007
+    assert r.json()["periodi_rimossi"] == [f"2026-{m:02d}" for m in range(1, 10)]
+    with TestSession() as db:
+        assert db.query(UsaliRiga).count() == 0
+        assert db.query(UsaliImport).count() == 0
+    assert not any(os.path.exists(f) for f in file_salvati)
+    assert client.get("/usali/contabile/import").json() == []
+
+    # Lo stesso file si può reimportare (non è più "già importato")
+    _importa(client)
+    assert client.delete("/usali/contabile/import/999", params={"conferma": "true"}).status_code == 404
+
+
+def test_elimina_import_sostituito_non_tocca_i_mesi_altrui(client, TestSession):
+    primo = _importa(client)
+    nuovo = _xlsx_modificato(_solo_ago_set_con_settembre_modificato)
+    j = _anteprima(client, xlsx=nuovo, csv=None, nome_xlsx="export-2.xlsx", struttura="DPH").json()
+    secondo = client.post("/usali/contabile/conferma", json={"token": j["token"], "struttura_code": "DPH"}).json()
+
+    r = client.delete(f"/usali/contabile/import/{secondo['import_id']}", params={"conferma": "true"})
+    assert r.json()["periodi_rimossi"] == ["2026-08", "2026-09"]
+    rep = _report(client)
+    assert rep["mesi_importati"] == list(range(1, 8))   # gen–lug restano dal primo import
+    assert rep["sintesi"]["netto"]["valori"][:7] == NETTO_2026[:7]
+    assert rep["sintesi"]["netto"]["valori"][7:] == [None, None]
+    assert client.delete(f"/usali/contabile/import/{primo['import_id']}",
+                         params={"conferma": "true"}).json()["righe_eliminate"] == 223 * 7

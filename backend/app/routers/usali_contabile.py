@@ -368,6 +368,37 @@ def storico_import(
     ]
 
 
+@router.delete("/import/{import_id}")
+def elimina_import(
+    import_id: int,
+    conferma: bool = False,
+    db: Session = Depends(get_db),
+    _=Depends(richiedi_admin),
+):
+    """Elimina un import: le sue righe ancora in vigore, la voce di storico e i file originali.
+    I mesi tolti tornano "non importati": un import precedente che quei mesi li aveva già
+    sostituiti NON viene ripristinato (le sue righe non esistono più) — va reimportato."""
+    imp = db.get(UsaliImport, import_id)
+    if not imp:
+        raise HTTPException(404, "Import non trovato")
+    if not conferma:
+        raise HTTPException(400, "Eliminazione non confermata: aggiungere ?conferma=true")
+
+    periodi = sorted({
+        _periodo_txt(a, m) for a, m in
+        db.query(UsaliRiga.anno, UsaliRiga.mese).filter(UsaliRiga.import_id == import_id).distinct()
+    })
+    n_righe = db.query(UsaliRiga).filter(UsaliRiga.import_id == import_id).delete(synchronize_session=False)
+    file_da_cancellare = [p for p in (imp.percorso_xlsx, imp.percorso_csv) if p]
+    struttura = imp.struttura_code
+    db.delete(imp)
+    db.commit()
+    for p in file_da_cancellare:
+        Path(p).unlink(missing_ok=True)
+    return {"import_id": import_id, "struttura": struttura,
+            "righe_eliminate": n_righe, "periodi_rimossi": periodi}
+
+
 @router.get("/import/{import_id}/file/{tipo}")
 def scarica_file_originale(
     import_id: int, tipo: str,

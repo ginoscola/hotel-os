@@ -1929,8 +1929,8 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
   impostata la vista Flexmonster): non sono conti, vengono ignorati ma verificati — ogni subtotale deve
   valere la somma delle foglie sotto di lui (±0,01), altrimenti errore "riesportare con tutte le righe
   espanse" (`_verifica_subtotali`). Prima venivano rifiutati con "intestazione con importi".
-- Id struttura gestionale: **128 = DPH** (seed migrazione), **129 = CLB** (inserito a mano 15/10/2026
-  in `usali_struttura_gestionale`, letto dal CSV del Club). INT/BON da aggiungere al primo CSV.
+- Id struttura gestionale: **128 = DPH** (seed migrazione), **129 = CLB**, **248 = INT** (inseriti a mano
+  15/10/2026 in `usali_struttura_gestionale`, letti dai CSV). BON da aggiungere al primo CSV.
 - **Segmenti** `services/usali_segmenti.py::assegna_segmenti(righe, regole)`, **in lettura**, mai
   salvati sulle righe: vincono le regole con priorità più alta, devono sommare a 100% (ripartizioni
   tipo utenze 70/30, arrotondamento sull'ultima quota); riga non coperta → errore, mai scartata.
@@ -1942,7 +1942,10 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
   presenti, `gia_importato` se stesso sha256 xlsx), `POST /conferma` (`{token, struttura_code?,
   note?}`; 409 se sha già importato; in UNA transazione cancella le righe dei (struttura, anno, mese)
   del file e inserisce le nuove → l'ultimo import vince, i precedenti restano nel log),
-  `GET /import` (storico con `periodi_in_vigore`), `GET /import/{id}/file/xlsx|csv`, `GET /strutture`,
+  `GET /import` (storico con `periodi_in_vigore`), `GET /import/{id}/file/xlsx|csv`,
+  `DELETE /import/{id}?conferma=true` (admin: righe ancora in vigore + voce di storico + file originali;
+  i mesi tolti tornano "non importati", un import precedente già sostituito NON viene ripristinato —
+  le sue righe non esistono più, va reimportato; pulsante "Elimina" nello storico), `GET /strutture`,
   `GET /segmenti`, `GET /periodi`, `GET /report?struttura&anno&mese_da&mese_a&segmento_id`,
   `GET /report/export` (xlsx). Struttura: dal CSV via `usali_struttura_gestionale`, altrimenti scelta
   dall'utente; scelta in conflitto col CSV → 400.

@@ -6,7 +6,7 @@ import { mostraErrore } from '../../utils/format.js'
 import { isAdmin } from '../../utils/auth.js'
 import {
   Badge, Button, Card, DropZone, Field, Input, Loading, Messaggio, Modal, Select, StatoVuoto,
-  Table, Td, Th, useAvvisi,
+  Table, Td, Th, useAvvisi, useConferma,
 } from '../../components/ui'
 import { Euro, periodiCompatti, periodoLabel, scarica } from './helpers.jsx'
 
@@ -170,6 +170,7 @@ export default function ImportCE({ struttura, strutture, onImportato }) {
   const [errore, setErrore] = useState(null)
   const [modale, setModale] = useState(false)
   const avvisi = useAvvisi()
+  const conferma = useConferma()
   const admin = isAdmin()
 
   const carica = useCallback(() => {
@@ -186,6 +187,29 @@ export default function ImportCE({ struttura, strutture, onImportato }) {
         tipo === 'xlsx' ? imp.nome_file_xlsx : imp.nome_file_csv)
     } catch (e) {
       avvisi.errore(mostraErrore(e, 'File non disponibile'))
+    }
+  }
+
+  async function elimina(imp) {
+    const inVigore = imp.periodi_in_vigore.length
+    if (!(await conferma({
+      titolo: `Eliminare l'import #${imp.id} (${imp.struttura})?`,
+      messaggio: (inVigore
+        ? `Verranno cancellati dal database i dati di ${periodiCompatti(imp.periodi_in_vigore)} per ${imp.struttura}: `
+          + 'quei mesi risulteranno non importati finché non carichi di nuovo il file giusto. '
+          + 'Un import precedente sostituito da questo non viene ripristinato. '
+        : 'Nessun mese è più in vigore da questo import: viene tolto solo dallo storico. ')
+        + 'Vengono cancellati anche i file originali salvati. L\'operazione non si può annullare.',
+      pericolo: true,
+      ritardoMs: 1500,
+    }))) return
+    try {
+      const r = await api.delete(`/usali/contabile/import/${imp.id}`, { params: { conferma: true } })
+      avvisi.successo(`Import #${imp.id} eliminato (${r.data.righe_eliminate} righe)`)
+      carica()
+      onImportato()
+    } catch (e) {
+      avvisi.errore(mostraErrore(e, 'Errore durante l\'eliminazione'))
     }
   }
 
@@ -208,6 +232,7 @@ export default function ImportCE({ struttura, strutture, onImportato }) {
               <Th>Esito</Th>
               <Th>Utente</Th>
               <Th>Note</Th>
+              {admin && <Th></Th>}
             </tr>
           </thead>
           <tbody>
@@ -238,6 +263,9 @@ export default function ImportCE({ struttura, strutture, onImportato }) {
                 </Td>
                 <Td>{i.utente || '—'}</Td>
                 <Td>{i.note || ''}</Td>
+                {admin && (
+                  <Td><Button size="sm" variant="danger-soft" onClick={() => elimina(i)}>Elimina</Button></Td>
+                )}
               </tr>
             ))}
           </tbody>
