@@ -1899,11 +1899,11 @@ riclassifica anche i mesi già chiusi in Dipendenti → Analisi CC (Cucina/Sala/
 "Maremosso" invece che "Hotel Du Parc" anche per i mesi passati) — coerente con l'obiettivo, da
 tenere a mente confrontando report per-struttura esportati prima di questa migrazione.
 
-## Modulo USALI — Conto Economico contabile (import dal gestionale, in corso — ottobre 2026)
+## Modulo USALI — Conto Economico contabile (import dal gestionale, ottobre 2026)
 Terza scheda del modulo USALI (non un modulo NavBar a sé): conto economico **dalla contabilità
 vera**, export Flexmonster del gestionale già riclassificato USALI — distinto dal "Conto Economico"
 interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 modelli+parser+test,
-✅ 2 import anteprima/conferma + report, ✅ 3 KPI + categorie, 4 frontend.
+✅ 2 import anteprima/conferma + report, ✅ 3 KPI + categorie, ✅ 4 frontend (v3.20.3).
 - **Modelli** `models/usali_contabile.py`, migrazione `usali006_2026`: `usali_struttura_gestionale`
   (id gestionale→`struttura_code`, seed 128→DPH), `usali_import` (log, sha256 xlsx, file originali),
   `usali_riga` (conto×mese, dato grezzo mai modificato; `percorso` JSON + `percorso_testo`),
@@ -1968,6 +1968,23 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
   `GET|POST /categorie-kpi`, `PUT|DELETE /categorie-kpi/{id}`, `GET /categorie-kpi/non-categorizzati`
   (conti di costo importati senza categoria: assegnare `altro` per toglierli). Con il seed, sul file DPH
   2026 restano 63 conti senza categoria (manutenzioni, informatica, marketing…).
+- **Frontend** `pages/usaliContabile/` (terza scheda di `Usali.jsx`, `UsaliContabile.jsx`): filtri
+  struttura (`SegmentedControl`, solo strutture con dati o mappate a un id gestionale) / segmento /
+  anno / mese da–a (default: anno più recente importato, gennaio → ultimo mese importato), sotto-schede
+  `TabellaCE.jsx` (righe espandibili via `id`/`parent`, classi `ui-riga-sezione|subtotale|totale`,
+  negativi in rosso — `colors.dangerBg` sulle righe totale blu notte —, export xlsx con pulsante
+  dedicato, non `ExportMenu`: solo xlsx), `KpiCE.jsx` (card, grafico `ComposedChart` Ricavi/GOP a barre
+  + GOP cumulato a linea su un solo asse €, tabella KPI per mese con badge chiuso/no camere),
+  `ImportCE.jsx` (storico + download originali per tutti; modale import con anteprima solo admin).
+  Euro senza decimali via `formatEuroIntero()` (`utils/format.js`, formato it-IT "1.234 €" come il
+  resto dell'app). Admin: `?s=usali-categorie-kpi` → `pages/admin/AdminUsaliCategorieKpi.jsx`
+  (conti da classificare + mappature).
+- ⚠️ **"Acquisto Voucher per dipendenti"** (Non Operativi) è un conto di transito: deve azzerarsi con
+  l'uso dei voucher in busta paga (righe "Voucher" dei reparti, già categoria personale). Non va
+  messo in personale. Nel file DPH 2026 vale +2.981 € (non ancora a zero).
+- **Budget non collegato**: `budget_entries` è settimanale (mese contabile), solo ricavi camere/F&B/
+  extra, nessun costo → nessun confronto GOP/EBITDA possibile. Servirebbe un budget mensile per
+  sezione/reparto USALI (anno, mese, struttura, voce) con le stesse chiavi del report.
 - Fixture `tests/fixtures/usali/export-1.xlsx` + `pivot-1.csv` (DPH gen–set 2026, 223 conti).
   ⚠️ **Non lasciarli in `uploads/`**: `test_bulk_scan_cartella_uploads` (import massivo Revenue)
   scansiona tutta la cartella e li conta come coppie in errore.

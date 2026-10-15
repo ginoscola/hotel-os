@@ -5,6 +5,12 @@ export function formatEuro(v) {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, useGrouping: true }).format(v)
 }
 
+/** Euro senza decimali (Conto Economico contabile): "1.234 €", "-1.294 €". */
+export function formatEuroIntero(v) {
+  if (v == null) return '—'
+  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: true }).format(v)
+}
+
 export function formatPerc(v) {
   if (v == null) return '—'
   return `${v.toFixed(1)}%`
