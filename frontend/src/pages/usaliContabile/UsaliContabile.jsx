@@ -9,6 +9,9 @@ import TabellaCE from './TabellaCE.jsx'
 import KpiCE from './KpiCE.jsx'
 import ImportCE from './ImportCE.jsx'
 
+const ORDINE_STRUTTURE = ['DPH', 'CLB', 'INT', 'BON']
+const ordineStruttura = (c) => (ORDINE_STRUTTURE.indexOf(c) + 1) || 99
+
 const LS_VISTA = 'usali_contabile_vista'
 const LS_STRUTTURA = 'usali_contabile_struttura'
 
@@ -67,8 +70,9 @@ export default function UsaliContabile() {
   }
   const dopoImport = useCallback(() => setVersione(v => v + 1), [])
 
-  const opzioniStruttura = strutture
-    .filter(s => s.ha_dati || s.code === struttura || s.id_gestionale.length)
+  // Sempre tutte le strutture (anche senza dati: da lì si importa il primo file)
+  const opzioniStruttura = [...strutture]
+    .sort((a, b) => ordineStruttura(a.code) - ordineStruttura(b.code))
     .map(s => ({ value: s.code, label: s.nome }))
 
   const filtri = { struttura, segmentoId: segmentoId ? Number(segmentoId) : null, anno, meseDa, meseA }

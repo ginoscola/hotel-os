@@ -1969,7 +1969,7 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
   (conti di costo importati senza categoria: assegnare `altro` per toglierli). Con il seed, sul file DPH
   2026 restano 63 conti senza categoria (manutenzioni, informatica, marketing…).
 - **Frontend** `pages/usaliContabile/` (terza scheda di `Usali.jsx`, `UsaliContabile.jsx`): filtri
-  struttura (`SegmentedControl`, solo strutture con dati o mappate a un id gestionale) / segmento /
+  struttura (`SegmentedControl`, sempre tutte: DPH/CLB/INT/BON, anche senza dati) / segmento /
   anno / mese da–a (default: anno più recente importato, gennaio → ultimo mese importato), sotto-schede
   `TabellaCE.jsx` (righe espandibili via `id`/`parent`, classi `ui-riga-sezione|subtotale|totale`,
   negativi in rosso — `colors.dangerBg` sulle righe totale blu notte —, export xlsx con pulsante
