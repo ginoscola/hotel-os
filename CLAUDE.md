@@ -1846,6 +1846,33 @@ come `escluso_pensione`), `_categorie_attive()` di `produzione_report` e `_rispo
 
 ## Modulo USALI — Conto Economico
 
+**Dal 15/10/2026 alimentato dalla contabilità importata** (scheda "Conto Economico contabile",
+vedi sezione successiva) per ogni (struttura, mese) con un import contabile — scelta dell'utente:
+"pagina tutta automatica", override delle voci inserite a mano. `get_report()` in `usali.py`:
+- mesi con contabilità → `voci_da_contabile()` (`services/usali_contabile_ce.py`): ricavi Camere/F&B/
+  Altri reparti/Ricavi vari dai conti contabili; costi con corrispondenza fissa reparto/conto → voce
+  (`voce_interna()`: Camere → Servizi con Contratto=appalto, Biancheria/Lavanderia=lavanderia,
+  Prestazioni professionali=consulenze, resto=altri costi camere; F&B → categoria food/beverage=costo
+  del venduto, attrezzature/porcellana/posate…=attrezzature, resto=**Altri costi F&B** (voce nuova
+  `altri_costi_fnb`); Altri reparti → costo del venduto altri reparti; Costi Generali → Amministrativo
+  (Prestazioni professionali=consulenze), Funzionamento=manutenzioni, Informatica, Utenze, Vendite e
+  Marketing). Non Operativi e Deprezzamenti esclusi (sotto l'EBITDAR).
+- **Costo del lavoro per reparto resta dai cedolini** (ripartizione CC di Dipendenti — scelta esplicita
+  dell'utente, "più coerente con HotelOS"); i conti contabili di categoria personale vanno in un totale
+  e **la differenza personale contabile − cedolini finisce in "Costo del lavoro non suddiviso"** (può
+  essere negativa: INT 2026 −1.242 €). Così **EBITDAR = GOP contabile** al centesimo (`contabile.
+  differenza_gop`, avviso in pagina se ≠ 0). Verificato DPH/CLB/INT/BON gen–set e giugno 2026.
+- Mesi senza contabilità → fonti di sempre (`_dati_fonti_interne()`: PMS/corrispettivi + cedolini +
+  voci manuali); periodi misti sommati per intervalli contigui (`_intervalli()`). Le voci manuali dei
+  mesi contabili restano in `usali_voci_manuali` ma sono ignorate (reversibile); `PUT /usali/voce` su
+  un mese contabile → 409. Risposta: `voci_auto` (celle non modificabili) e `contabile` (mesi, GOP,
+  personale contabile/cedolini). Nei mesi contabili "Ricavi ristorante e bar — clienti esterni" (DPH)
+  è vuota: la contabilità non separa ospiti/esterni del Mare Mosso, tutto è in ricavi F&B.
+- ⚠️ Corretto un difetto storico di `_voci_manuali()`: una voce non salvata per il mese finale dava
+  delta = −cumulato precedente (es. DPH ottobre: EBITDAR +351.055 € con ricavi 0). Ora vale 0.
+- Conti alimentari non classificati in Admin → Categorie KPI finiscono in "Altri costi F&B" invece
+  che nel costo del venduto: classificarli sposta la cifra.
+
 **Maremosso (MMS) è accorpato su Du Parc, nessuna colonna propria** (settembre 2026, assetto
 finale dopo due iterazioni — vedi sotto). Confermato dall'utente: stessa azienda e partita IVA di
 Du Parc, licenza e registratore fiscale propri ma nessun obbligo di separazione contabile —

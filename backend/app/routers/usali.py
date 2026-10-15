@@ -27,6 +27,9 @@ from app.models.revenue import (
 )
 from app.models.corrispettivi import CorrispettiviDocumento, CorrispettiviManuale
 from app.models.produzione import ProdCategoria, ProdRiga
+from app.services.usali_contabile_ce import (
+    VOCI_AUTO as VOCI_AUTO_CONTABILE, mesi_contabili, voci_da_contabile,
+)
 
 router = APIRouter(prefix="/usali", tags=["usali"])
 
@@ -50,14 +53,14 @@ NOME_STRUTTURA = {
 VOCI_HOTEL = [
     'ricavi_altri_operativi', 'ricavi_vari_operativi',
     'lavoro_camere', 'appalto_camere', 'lavanderia', 'consulenze_camere', 'altri_costi_camere',
-    'lavoro_fnb', 'fdv_fnb', 'attrezzature_fnb', 'consulenze_fnb',
+    'lavoro_fnb', 'fdv_fnb', 'attrezzature_fnb', 'consulenze_fnb', 'altri_costi_fnb',
     'lavoro_altri_reparti', 'fdv_altri_reparti',
     'lavoro_non_suddiviso', 'altri_costi_admin', 'consulenze',
     'informatica', 'marketing', 'manutenzioni', 'utenze',
 ]
 VOCI_RISTORANTI = [
     'ricavi_altri_operativi', 'ricavi_vari_operativi',
-    'lavoro_fnb', 'fdv_fnb', 'attrezzature_fnb', 'consulenze_fnb',
+    'lavoro_fnb', 'fdv_fnb', 'attrezzature_fnb', 'consulenze_fnb', 'altri_costi_fnb',
     'lavoro_non_suddiviso', 'altri_costi_admin', 'consulenze',
     'informatica', 'marketing', 'manutenzioni', 'utenze',
 ]
@@ -337,8 +340,10 @@ def _voci_manuali(
     cum = per_mese.get(mese_fine, {})
     prev = per_mese.get(mese_ini - 1, {}) if mese_ini > 1 else {}
 
-    all_voci = set(cum) | set(prev)
-    delta = {v: cum.get(v, 0.0) - prev.get(v, 0.0) for v in all_voci}
+    # Solo le voci salvate a mese_fine: una voce non inserita per quel mese vale 0 nel periodo
+    # (prima set(cum) | set(prev): una voce assente a mese_fine dava delta = −cumulato precedente,
+    # cioè un costo negativo enorme sul primo mese non compilato).
+    delta = {v: cum[v] - prev.get(v, 0.0) for v in cum}
     return delta, cum
 
 
@@ -377,11 +382,13 @@ def _calcola_struttura(struttura_code: str, anno: int, mese: int,
     fdv_fnb = manuali.get('fdv_fnb', 0.0)
     attrezzature_fnb = manuali.get('attrezzature_fnb', 0.0)
     consulenze_fnb = manuali.get('consulenze_fnb', 0.0)
+    altri_costi_fnb = manuali.get('altri_costi_fnb', 0.0)
     lavoro_altri = (_fl(_lav_alt_a) if _lav_alt_a is not None else manuali.get('lavoro_altri_reparti', 0.0)) if is_hotel else 0.0
     fdv_altri = manuali.get('fdv_altri_reparti', 0.0) if is_hotel else 0.0
     tot_costi_diretti = (lavoro_camere + appalto_camere + lavanderia + consulenze_camere +
                          altri_costi_camere + lavoro_fnb +
-                         fdv_fnb + attrezzature_fnb + consulenze_fnb + lavoro_altri + fdv_altri)  # B
+                         fdv_fnb + attrezzature_fnb + consulenze_fnb + altri_costi_fnb +
+                         lavoro_altri + fdv_altri)  # B
 
     margine = tot_ricavi - tot_costi_diretti  # C
 
@@ -443,7 +450,9 @@ def _calcola_struttura(struttura_code: str, anno: int, mese: int,
         'attrezzature_fnb_cum': _c.get('attrezzature_fnb'),
         'consulenze_fnb': consulenze_fnb,
         'consulenze_fnb_cum': _c.get('consulenze_fnb'),
-        'tot_costi_fnb': round(lavoro_fnb + fdv_fnb + attrezzature_fnb + consulenze_fnb, 2),
+        'altri_costi_fnb': altri_costi_fnb,
+        'altri_costi_fnb_cum': _c.get('altri_costi_fnb'),
+        'tot_costi_fnb': round(lavoro_fnb + fdv_fnb + attrezzature_fnb + consulenze_fnb + altri_costi_fnb, 2),
         'lavoro_altri_reparti': lavoro_altri,
         'lavoro_altri_reparti_auto': _lav_alt_a is not None and is_hotel,
         'fdv_altri_reparti': fdv_altri,
@@ -513,7 +522,8 @@ def _somma_strutture(strutture: list, nome: str, struttura_code: str) -> dict:
         'fdv_fnb': s('fdv_fnb'),
         'attrezzature_fnb': s('attrezzature_fnb'),
         'consulenze_fnb': s('consulenze_fnb'),
-        'tot_costi_fnb': round(s('lavoro_fnb') + s('fdv_fnb') + s('attrezzature_fnb') + s('consulenze_fnb'), 2),
+        'altri_costi_fnb': s('altri_costi_fnb'),
+        'tot_costi_fnb': round(s('lavoro_fnb') + s('fdv_fnb') + s('attrezzature_fnb') + s('consulenze_fnb') + s('altri_costi_fnb'), 2),
         'lavoro_altri_reparti': s('lavoro_altri_reparti'),
         'fdv_altri_reparti': s('fdv_altri_reparti'),
         'tot_costi_diretti': s('tot_costi_diretti'),
@@ -536,6 +546,60 @@ def _somma_strutture(strutture: list, nome: str, struttura_code: str) -> dict:
     }
 
 
+# ── Fonti per intervallo di mesi ───────────────────────────────────────────────
+
+def _lavoro_cedolini(db: Session, codice: str, anno: int, mese_ini: int, mese_fine: int,
+                     cc_mapping: dict) -> dict:
+    """Costo del lavoro Camere / F&B / Altri reparti dai cedolini (Dipendenti), con il personale
+    di Maremosso sommato al F&B di Du Parc."""
+    lavoro = _lavoro_da_dipendenti(db, codice, anno, mese_ini, mese_fine, cc_mapping) or {}
+    if codice == 'DPH':
+        lavoro['lavoro_fnb'] = _lavoro_fnb_dph_con_maremosso(
+            db, anno, mese_ini, mese_fine, cc_mapping, lavoro.get('lavoro_fnb')
+        )
+    return lavoro
+
+
+def _dati_fonti_interne(db: Session, codice: str, anno: int, mese_ini: int, mese_fine: int,
+                        cc_mapping: dict) -> tuple:
+    """(auto, manuali_delta, manuali_cum) da PMS/corrispettivi + cedolini + voci manuali per un
+    intervallo di mesi contiguo — il Conto Economico com'era prima della contabilità."""
+    da = date(anno, mese_ini, 1)
+    a = date(anno, mese_fine, calendar.monthrange(anno, mese_fine)[1])
+    manuali_delta, manuali_cum = _voci_manuali(db, codice, anno, mese_fine, mese_ini)
+
+    if codice in STRUTTURE_HOTEL:
+        auto = _revenue_mensile_hotel(db, codice, da, a)
+    else:
+        auto = {'ricavi_camere': None, 'ricavi_fnb': _ricavi_ristorante(db, codice, da, a)}
+    auto.update(_lavoro_cedolini(db, codice, anno, mese_ini, mese_fine, cc_mapping))
+    if codice == 'DPH':
+        # Maremosso è il ristorante di Du Parc (stessa azienda): niente riga propria, ma il
+        # ricavo dei clienti esterni (stampante fiscale MMS) resta visibile su una riga a sé.
+        auto['ricavi_fnb_esterni'] = _ricavi_ristorante(db, 'MMS', da, a)
+    return auto, manuali_delta, manuali_cum
+
+
+def _intervalli(mesi: list) -> list:
+    """[1,2,3,7,8] → [(1,3), (7,8)]"""
+    out = []
+    for m in mesi:
+        if out and out[-1][1] == m - 1:
+            out[-1] = (out[-1][0], m)
+        else:
+            out.append((m, m))
+    return out
+
+
+def _somma_in(dst: dict, src: dict):
+    """Somma src in dst; None = dato assente (resta None solo se assente ovunque)."""
+    for k, v in src.items():
+        if v is None:
+            dst.setdefault(k, None)
+        else:
+            dst[k] = (dst.get(k) or 0.0) + v
+
+
 # ── Endpoint ───────────────────────────────────────────────────────────────────
 
 @router.get("/report")
@@ -552,36 +616,59 @@ def get_report(
     ytd=True  → cumulativo gennaio..mese (YTD).
     Valori sempre netti IVA.
     """
-    da = date(anno, 1, 1) if ytd else date(anno, mese, 1)
-    a = date(anno, mese, calendar.monthrange(anno, mese)[1])
     mese_ini = 1 if ytd else mese
 
     cc_mapping = _leggi_cc_mapping(db)
     strutture_result = []
 
+    mesi = list(range(mese_ini, mese + 1))
     for codice in TUTTE_STRUTTURE:
-        manuali_delta, manuali_cum = _voci_manuali(db, codice, anno, mese, mese_ini)
+        mesi_c = [m for m in mesi if m in mesi_contabili(db, codice, anno)]
+        mesi_v = [m for m in mesi if m not in mesi_c]
 
-        if codice in STRUTTURE_HOTEL:
-            auto = _revenue_mensile_hotel(db, codice, da, a)
+        if not mesi_c:
+            # Nessun import contabile nel periodo: fonti di sempre (PMS + cedolini + manuali)
+            auto, manuali_delta, manuali_cum = _dati_fonti_interne(db, codice, anno, mese_ini, mese, cc_mapping)
+            voci_auto, controllo = [], None
         else:
-            ricavi_ristr = _ricavi_ristorante(db, codice, da, a)
-            auto = {'ricavi_camere': None, 'ricavi_fnb': ricavi_ristr}
+            auto, manuali_delta, manuali_cum = {}, {}, {}
+            for m_ini, m_fin in _intervalli(mesi_v):
+                a_, m_, _ = _dati_fonti_interne(db, codice, anno, m_ini, m_fin, cc_mapping)
+                _somma_in(auto, a_)
+                _somma_in(manuali_delta, m_)
 
-        lavoro = _lavoro_da_dipendenti(db, codice, anno, mese_ini, mese, cc_mapping)
-        if lavoro:
-            auto.update(lavoro)
+            voci = voci_da_contabile(db, codice, anno, mesi_c)
+            gop_contabile = voci.pop('gop', 0.0)
+            personale_contabile = voci.pop('personale_contabile', 0.0)
+            # Lavoro per reparto dai cedolini (ripartizione CC di Dipendenti); la differenza col
+            # personale in contabilità va in "Costo del lavoro non suddiviso".
+            cedolini = {}
+            for m_ini, m_fin in _intervalli(mesi_c):
+                _somma_in(cedolini, _lavoro_cedolini(db, codice, anno, m_ini, m_fin, cc_mapping))
+            _somma_in(auto, cedolini)
+            voci['lavoro_non_suddiviso'] = personale_contabile - sum(_fl(v) for v in cedolini.values())
+            for k, v in voci.items():
+                _somma_in(auto if k in VOCI_AUTO_CONTABILE else manuali_delta, {k: v})
 
-        if codice == 'DPH':
-            # Maremosso è il ristorante di Du Parc (stessa azienda): niente riga propria, ma il
-            # ricavo dei clienti esterni (stampante fiscale MMS) resta visibile su una riga a sé
-            # sotto "Ricavi ristorante e bar", e il costo del lavoro F&B si somma qui.
-            auto['ricavi_fnb_esterni'] = _ricavi_ristorante(db, 'MMS', da, a)
-            auto['lavoro_fnb'] = _lavoro_fnb_dph_con_maremosso(
-                db, anno, mese_ini, mese, cc_mapping, auto.get('lavoro_fnb')
-            )
+            # Con la contabilità ogni voce è automatica (niente editing a mano)
+            voci_auto = VOCI_HOTEL + ['ricavi_camere', 'ricavi_fnb', 'lavoro_camere', 'lavoro_fnb',
+                                      'lavoro_altri_reparti', 'ricavi_fnb_esterni']
+            controllo = {
+                'mesi_contabili': mesi_c,
+                'mesi_altre_fonti': mesi_v,
+                'gop_contabile': round(gop_contabile, 2),
+                'personale_contabile': round(personale_contabile, 2),
+                'personale_cedolini': round(sum(_fl(v) for v in cedolini.values()), 2),
+            }
 
-        strutture_result.append(_calcola_struttura(codice, anno, mese, auto, manuali_delta, manuali_cum))
+        res = _calcola_struttura(codice, anno, mese, auto, manuali_delta, manuali_cum)
+        res['voci_auto'] = voci_auto
+        res['contabile'] = controllo
+        if controllo and not mesi_v:
+            # EBITDAR deve coincidere col GOP contabile: ≠ 0 solo se una voce non ha posto in
+            # questa struttura (es. costi Camere su un ristorante) — mostrato come avviso.
+            controllo['differenza_gop'] = round(res['ebitdar'] - controllo['gop_contabile'], 2)
+        strutture_result.append(res)
 
     hotel_list = [s for s in strutture_result if s['struttura_code'] in STRUTTURE_HOTEL]
 
@@ -628,6 +715,11 @@ def upsert_voce(
         raise HTTPException(400, f"Voce '{voce_code}' non valida")
     if not anno or not mese:
         raise HTTPException(400, "anno e mese obbligatori")
+    if mese in mesi_contabili(db, struttura, anno):
+        raise HTTPException(
+            409, "Per questo mese il Conto Economico è calcolato dalla contabilità importata: "
+                 "le voci non si modificano a mano."
+        )
 
     if valore is None:
         db.query(UsaliVoceManuali).filter(

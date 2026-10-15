@@ -47,6 +47,7 @@ const SEZIONI = [
       { key: 'fdv_fnb', label: 'Costo del venduto F&B', gruppo: 'fnb' },
       { key: 'attrezzature_fnb', label: 'Acquisto e noleggio attrezzature F&B', gruppo: 'fnb' },
       { key: 'consulenze_fnb', label: 'Consulenze F&B', gruppo: 'fnb' },
+      { key: 'altri_costi_fnb', label: 'Altri costi F&B', gruppo: 'fnb' },
       { key: 'tot_costi_fnb', label: 'Totale costi F&B', subtotale: true, gruppo: 'fnb' },
       { key: 'lavoro_altri_reparti', label: 'Costo del lavoro — Altri reparti', soloHotel: true },
       { key: 'fdv_altri_reparti', label: 'Costo del venduto altri reparti', soloHotel: true },
@@ -149,6 +150,38 @@ function CellaEditabile({ valore, valoreCum, onSalva, disabled, evidenziata }) {
   )
 }
 
+// ── Fonte dei dati per struttura (contabilità / fonti interne) + controllo GOP ─
+const MESI_BREVI = ['', 'gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
+
+function elencoMesi(mesi) {
+  if (!mesi?.length) return ''
+  return mesi.length > 2 ? `${MESI_BREVI[mesi[0]]}–${MESI_BREVI[mesi.at(-1)]}` : mesi.map(m => MESI_BREVI[m]).join(', ')
+}
+
+function FontiDati({ strutture }) {
+  const conContabile = strutture.filter(s => s.contabile)
+  if (!conContabile.length) return null
+  const nonQuadra = conContabile.filter(s => Math.abs(s.contabile.differenza_gop ?? 0) >= 0.01)
+  return (
+    <>
+      <Messaggio tipo="info">
+        Dati dalla <strong>contabilità importata</strong> (scheda «Conto Economico contabile»): {conContabile.map(s => {
+          const c = s.contabile
+          return `${s.nome} ${elencoMesi(c.mesi_contabili)}${c.mesi_altre_fonti.length ? ` (${elencoMesi(c.mesi_altre_fonti)} da PMS/cedolini/manuali)` : ''}`
+        }).join(' · ')}.
+        Costo del lavoro per reparto dai cedolini (ripartizione Dipendenti); «Costo del lavoro non suddiviso» comprende la
+        differenza tra personale in contabilità e cedolini. L'EBITDAR coincide con il GOP contabile.
+      </Messaggio>
+      {nonQuadra.map(s => (
+        <Messaggio key={s.struttura_code} tipo="warn">
+          {s.nome}: EBITDAR diverso dal GOP contabile di {formatEuro(s.contabile.differenza_gop)} — qualche conto
+          contabile non ha una voce corrispondente per questa struttura.
+        </Messaggio>
+      ))}
+    </>
+  )
+}
+
 // ── Componente principale ───────────────────────────────────────────────────
 export default function UsaliContoEconomico() {
   const oggi = new Date()
@@ -218,6 +251,8 @@ export default function UsaliContoEconomico() {
   function isAutoField(col, voce) {
     const s = mappa[col]
     if (!s) return false
+    // Mesi con contabilità importata: tutte le voci sono automatiche
+    if (s.voci_auto?.includes(voce.key)) return true
     // Ricavi auto (da daily_revenue / corrispettivi)
     if (voce.auto) {
       if (voce.key === 'ricavi_camere')       return s.ricavi_camere_auto
@@ -330,14 +365,16 @@ export default function UsaliContoEconomico() {
 
       {/* Legenda */}
       <div className="ui-text-muted" style={{ display: 'flex', gap: 20, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span><span style={{ color: colors.infoText }}>●</span> Dato automatico (revenue / dipendenti)</span>
-        <span>Clicca su una cella per inserire/modificare</span>
+        <span><span style={{ color: colors.infoText }}>●</span> Dato automatico (contabilità / revenue / dipendenti)</span>
+        <span>Clicca su una cella bianca per inserire/modificare</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
           <span><Dot colore={colors.success} /> In range</span>
           <span><Dot colore={colors.warning} /> Sotto range</span>
           <span><Dot colore={colors.danger} /> Fuori range</span>
         </span>
       </div>
+
+      {dati && <FontiDati strutture={dati.strutture} />}
 
       {loading ? (
         <Loading />
