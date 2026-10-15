@@ -40,9 +40,9 @@ class UsaliImport(Base):
     utente_id         = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
     periodi           = Column(JSON, nullable=False)          # ["2026-01", "2026-02", ...]
-    n_righe           = Column(Integer, nullable=False, default=0)
-    quadratura_ok     = Column(Boolean, nullable=False, default=False)
-    csv_arricchito    = Column(Boolean, nullable=False, default=False)
+    n_righe           = Column(Integer, nullable=False, default=0, server_default="0")
+    quadratura_ok     = Column(Boolean, nullable=False, default=False, server_default="false")
+    csv_arricchito    = Column(Boolean, nullable=False, default=False, server_default="false")
     avvisi            = Column(JSON, nullable=True)
     note              = Column(Text, nullable=True)
 
@@ -56,7 +56,7 @@ class UsaliRiga(Base):
     struttura_code = Column(String(10), nullable=False)
     anno           = Column(Integer, nullable=False)
     mese           = Column(Integer, nullable=False)
-    ordine         = Column(Integer, nullable=False, default=0)   # riga nel file: ordine di stampa
+    ordine         = Column(Integer, nullable=False, default=0, server_default="0")   # riga nel file: ordine di stampa
     percorso       = Column(JSON, nullable=False)                 # nomi dalla radice alla foglia
     percorso_testo = Column(String(1000), nullable=False, index=True)
     sezione        = Column(String(50), nullable=True)
@@ -66,10 +66,10 @@ class UsaliRiga(Base):
     id_conti       = Column(Integer, nullable=True)
     id_reparto     = Column(Integer, nullable=True)
     tipo           = Column(String(10), nullable=False)           # 'ricavo' | 'costo'
-    ammortamento   = Column(Boolean, nullable=False, default=False)
+    ammortamento   = Column(Boolean, nullable=False, default=False, server_default="false")
     # 4 decimali, non 2: il gestionale ripartisce costi condivisi con frazioni di centesimo;
     # arrotondando ogni conto al centesimo i totali mensili sbagliavano di qualche cent.
-    importo        = Column(Numeric(14, 4), nullable=False, default=0)
+    importo        = Column(Numeric(14, 4), nullable=False, default=0, server_default="0")
 
     __table_args__ = (
         Index("ix_usali_riga_struttura_periodo", "struttura_code", "anno", "mese"),
@@ -101,12 +101,12 @@ class UsaliRegolaSegmento(Base):
 
     id             = Column(Integer, primary_key=True, autoincrement=True)
     struttura_code = Column(String(10), nullable=False)
-    priorita       = Column(Integer, nullable=False, default=0)
+    priorita       = Column(Integer, nullable=False, default=0, server_default="0")
     tipo_match     = Column(String(30), nullable=False)
-    pattern        = Column(String(500), nullable=False, default="")
+    pattern        = Column(String(500), nullable=False, default="", server_default="")
     segmento_id    = Column(Integer, ForeignKey("usali_segmento.id", ondelete="CASCADE"), nullable=False)
-    percentuale    = Column(Numeric(5, 2), nullable=False, default=100)
-    valida_dal     = Column(String(7), nullable=False, default="2000-01")
+    percentuale    = Column(Numeric(5, 2), nullable=False, default=100, server_default="100")
+    valida_dal     = Column(String(7), nullable=False, default="2000-01", server_default="2000-01")
     valida_al      = Column(String(7), nullable=True)
 
 

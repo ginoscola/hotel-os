@@ -1903,7 +1903,7 @@ tenere a mente confrontando report per-struttura esportati prima di questa migra
 Terza scheda del modulo USALI (non un modulo NavBar a sé): conto economico **dalla contabilità
 vera**, export Flexmonster del gestionale già riclassificato USALI — distinto dal "Conto Economico"
 interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 modelli+parser+test,
-2 import anteprima/conferma + report, 3 KPI + categorie, 4 frontend.
+✅ 2 import anteprima/conferma + report, 3 KPI + categorie, 4 frontend.
 - **Modelli** `models/usali_contabile.py`, migrazione `usali006_2026`: `usali_struttura_gestionale`
   (id gestionale→`struttura_code`, seed 128→DPH), `usali_import` (log, sha256 xlsx, file originali),
   `usali_riga` (conto×mese, dato grezzo mai modificato; `percorso` JSON + `percorso_testo`),
@@ -1930,6 +1930,28 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
   tipo utenze 70/30, arrotondamento sull'ultima quota); riga non coperta → errore, mai scartata.
   `percorso_prefisso` = sotto-percorso contiguo case-insensitive (`'Food & Beverage > Ristorante'`
   prende ricavi e costi), `''` = tutto. `valida_dal/al` = 'YYYY-MM'.
+- **Router** `routers/usali_contabile.py` (prefix `/usali/contabile`): `POST /anteprima` (admin,
+  multipart `xlsx` + `csv` facoltativo + `struttura_code`; parsing, nessuna scrittura DB, file in
+  `{storage}/_anteprima/{token}/` per 24h, confronto netto/ricavi vecchio→nuovo per i mesi già
+  presenti, `gia_importato` se stesso sha256 xlsx), `POST /conferma` (`{token, struttura_code?,
+  note?}`; 409 se sha già importato; in UNA transazione cancella le righe dei (struttura, anno, mese)
+  del file e inserisce le nuove → l'ultimo import vince, i precedenti restano nel log),
+  `GET /import` (storico con `periodi_in_vigore`), `GET /import/{id}/file/xlsx|csv`, `GET /strutture`,
+  `GET /segmenti`, `GET /periodi`, `GET /report?struttura&anno&mese_da&mese_a&segmento_id`,
+  `GET /report/export` (xlsx). Struttura: dal CSV via `usali_struttura_gestionale`, altrimenti scelta
+  dall'utente; scelta in conflitto col CSV → 400.
+- **File originali**: `uploads/usali_contabile/{struttura}/{anno}/{import_id}_{nome}` (env
+  `USALI_CONTABILE_DIR` per sovrascrivere, usato dai test). `uploads/` è di `gino`, il backend gira
+  come `hotelos`: scrittura concessa via ACL (`setfacl -m u:hotelos:rx uploads`,
+  `setfacl -m u:hotelos:rwx` + default ACL su `uploads/usali_contabile`). Se si ricrea la cartella,
+  rifare le ACL o l'import fallisce con PermissionError.
+- **Report** `services/usali_contabile_report.py::costruisci_report()` (pura): righe piatte con
+  `id`/`parent`/`livello`/`tipo` (sezione/reparto/sottoreparto/conto/subtotale/profitto_reparto/
+  totale), ordine: Ricavi Op., Costi Op., Profitto dei Reparti Operativi (+ per reparto, abbinati per
+  nome; solo-ricavi = ricavi), Costi Generali, GOP, Non Operativi, EBITDA, Deprezzamenti, (Non
+  classificato), Reddito Netto — tutti dalle foglie. Colonne: mesi (`None` = mese non importato, non
+  zero), totale, % ricavi, progressivo da gennaio, stesso periodo anno precedente + Δ (solo se esiste).
+  Con `segmento_id` le righe passano da `assegna_segmenti()`; righe non coperte → `errori_segmento`.
 - Fixture `tests/fixtures/usali/export-1.xlsx` + `pivot-1.csv` (DPH gen–set 2026, 223 conti).
   ⚠️ **Non lasciarli in `uploads/`**: `test_bulk_scan_cartella_uploads` (import massivo Revenue)
   scansiona tutta la cartella e li conta come coppie in errore.
