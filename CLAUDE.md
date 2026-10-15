@@ -1899,6 +1899,41 @@ riclassifica anche i mesi già chiusi in Dipendenti → Analisi CC (Cucina/Sala/
 "Maremosso" invece che "Hotel Du Parc" anche per i mesi passati) — coerente con l'obiettivo, da
 tenere a mente confrontando report per-struttura esportati prima di questa migrazione.
 
+## Modulo USALI — Conto Economico contabile (import dal gestionale, in corso — ottobre 2026)
+Terza scheda del modulo USALI (non un modulo NavBar a sé): conto economico **dalla contabilità
+vera**, export Flexmonster del gestionale già riclassificato USALI — distinto dal "Conto Economico"
+interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 modelli+parser+test,
+2 import anteprima/conferma + report, 3 KPI + categorie, 4 frontend.
+- **Modelli** `models/usali_contabile.py`, migrazione `usali006_2026`: `usali_struttura_gestionale`
+  (id gestionale→`struttura_code`, seed 128→DPH), `usali_import` (log, sha256 xlsx, file originali),
+  `usali_riga` (conto×mese, dato grezzo mai modificato; `percorso` JSON + `percorso_testo`),
+  `usali_segmento`/`usali_regola_segmento` (seed: un segmento "Du Parc + Maremosso" + regola catch-all),
+  `usali_categoria_kpi` (conto→personale/food/beverage/commissioni/utenze/altro). Strutture come
+  `struttura_code` (String), non id: BON/MMS non esistono in `hotels`.
+- ⚠️ **`usali_riga.importo` è `Numeric(14,4)`, non (12,2)**: il gestionale ripartisce costi condivisi
+  (utenze, informatica, commissioni bancarie…) con frazioni di centesimo; arrotondando ogni conto al
+  centesimo i totali mensili sbagliavano di 2-4 cent (gennaio −6.831,59 invece di −6.831,55). Con 4
+  decimali tutti i valori attesi tornano al centesimo. Arrotondare solo in presentazione.
+- **Parser** `services/usali_contabile_parser.py::parse_export(xlsx, csv=None)`: gerarchia dal
+  rientro cella (`alignment.indent`), **foglia = riga la cui successiva ha rientro ≤** (non "ha
+  importi": esistono foglie tutte a zero, es. Colazione > Servizi con Contratto); intestazione con
+  importi → errore. Sezione = primo nodo del percorso dalla radice tra Ricavi Operativi/Costi
+  Operativi/Costi Generali/Non Operativi/Deprezzamenti (Deprezzamenti contiene a sua volta "Costi
+  Generali"). Reparto = nodo dopo la sezione; sottoreparto = nodi intermedi senza le ripetizioni del
+  reparto ("Altri Reparti Operativi" annidato 3 volte). Quadratura vs "Gran Totale" su valori pieni
+  (±0,01) → `ErroreImportUsali` se non quadra. Mesi via `MESI_IT`. CSV: solo arricchimento
+  (`Azione`, `id_conti`, `id_reparti_N`, `Ammortamento=1`, struttura da `id_strutture_concat_work`),
+  abbinato per indice riga con verifica nome; un nome diverso → arricchimento scartato per tutto il
+  file con avviso. Solo CSV → rifiutato.
+- **Segmenti** `services/usali_segmenti.py::assegna_segmenti(righe, regole)`, **in lettura**, mai
+  salvati sulle righe: vincono le regole con priorità più alta, devono sommare a 100% (ripartizioni
+  tipo utenze 70/30, arrotondamento sull'ultima quota); riga non coperta → errore, mai scartata.
+  `percorso_prefisso` = sotto-percorso contiguo case-insensitive (`'Food & Beverage > Ristorante'`
+  prende ricavi e costi), `''` = tutto. `valida_dal/al` = 'YYYY-MM'.
+- Fixture `tests/fixtures/usali/export-1.xlsx` + `pivot-1.csv` (DPH gen–set 2026, 223 conti).
+  ⚠️ **Non lasciarli in `uploads/`**: `test_bulk_scan_cartella_uploads` (import massivo Revenue)
+  scansiona tutta la cartella e li conta come coppie in errore.
+
 ## Modulo USALI — Movimenti Attivi
 Seconda tab di `Usali.jsx` (`UsaliMovimentiAttivi.jsx`), accanto a "Conto Economico". Tabella
 Reparto/Conto/Imponibile mensile (formato di un foglio di inserimento esterno preesistente),

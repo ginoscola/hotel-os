@@ -15,3 +15,4 @@ from app.models import produzione  # noqa: F401
 from app.models import shared  # noqa: F401
 from app.models import home  # noqa: F401
 from app.models import prenotazioni  # noqa: F401
+from app.models import usali_contabile  # noqa: F401
