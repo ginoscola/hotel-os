@@ -154,6 +154,7 @@ def _parse_xlsx(xlsx_bytes: bytes) -> tuple:
 
     periodi = sorted(set(mappa.values()))
     righe = []
+    subtotali = []   # (indice in nodi, riga, rientro, nome) delle intestazioni con importi
     stack = []   # [(indent, nome)]
     for i, (r, indent, nome) in enumerate(nodi):
         while stack and stack[-1][0] >= indent:
@@ -164,10 +165,10 @@ def _parse_xlsx(xlsx_bytes: bytes) -> tuple:
 
         valori = {col: ws.cell(r, col).value for col in mappa}
         if not is_foglia:
-            if any(v not in (None, "", 0) for v in valori.values()):
-                raise ErroreImportUsali(
-                    f"Riga {r} '{nome}' è un'intestazione (ha righe figlie) ma contiene importi"
-                )
+            # Alcuni export (es. CLB) riportano i subtotali anche sulle intestazioni: non sono
+            # conti, servono solo come controllo (devono coincidere con la somma delle foglie).
+            if any(isinstance(v, (int, float)) and v != 0 for v in valori.values()):
+                subtotali.append((i, r, indent, nome))
             continue
 
         percorso = [n for _, n in stack]
@@ -195,9 +196,36 @@ def _parse_xlsx(xlsx_bytes: bytes) -> tuple:
         if abs(somma - totale) > TOLLERANZA_QUADRATURA:
             differenze[periodo] = round(somma - totale, 2)
 
+    _verifica_subtotali(ws, mappa, nodi, subtotali, {riga.ordine for riga in righe})
+
     nomi_per_riga = {r: nome for r, _, nome in nodi}
     nomi_per_riga[riga_totale] = GRAN_TOTALE
     return righe, periodi, differenze, nomi_per_riga
+
+
+def _verifica_subtotali(ws, mappa: dict, nodi: list, subtotali: list, righe_foglia: set):
+    """Ogni intestazione con importi deve valere la somma delle foglie sotto di lei (le righe
+    successive con rientro maggiore). Se non torna, il file non è affidabile: errore."""
+    for i, r, indent, nome in subtotali:
+        discendenti = []
+        for r2, ind2, _ in nodi[i + 1:]:
+            if ind2 <= indent:
+                break
+            if r2 in righe_foglia:
+                discendenti.append(r2)
+        for col, (anno, mese) in mappa.items():
+            v = ws.cell(r, col).value
+            sub = float(v) if isinstance(v, (int, float)) else 0.0
+            somma = 0.0
+            for r2 in discendenti:
+                x = ws.cell(r2, col).value
+                somma += float(x) if isinstance(x, (int, float)) else 0.0
+            if abs(somma - sub) > TOLLERANZA_QUADRATURA:
+                raise ErroreImportUsali(
+                    f"Riga {r} '{nome}', {MESI_IT[mese - 1]} {anno}: il subtotale del file "
+                    f"({sub:,.2f} €) non coincide con la somma dei suoi conti ({somma:,.2f} €). "
+                    f"Riesportare dal gestionale con tutte le righe espanse."
+                )
 
 
 _RE_ID_CONTI = re.compile(r"[?&]id_conti=(\d+)")

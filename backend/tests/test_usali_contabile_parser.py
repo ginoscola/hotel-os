@@ -260,3 +260,40 @@ def test_regola_validita_temporale(risultato):
     assert errori == []
     mms = _per_mese(quote, MMS)
     assert all(m >= 7 for (_, m) in mms)
+
+
+# ── Export con subtotali sulle intestazioni (formato CLB) ────────────────────
+
+def _con_subtotali(xlsx_bytes, errore_su=None):
+    """Scrive su ogni intestazione la somma delle foglie sotto di lei, come fanno alcuni export
+    del gestionale. errore_su: nome di un'intestazione su cui sbagliare il subtotale di 1 €."""
+    def modifica(ws):
+        righe = [(r, int(ws.cell(r, 1).alignment.indent or 0)) for r in range(4, ws.max_row)
+                 if ws.cell(r, 1).value]   # esclusa l'ultima riga (Gran Totale)
+        foglie = {r for i, (r, ind) in enumerate(righe)
+                  if i + 1 == len(righe) or righe[i + 1][1] <= ind}
+        for i, (r, ind) in enumerate(righe):
+            if r in foglie:
+                continue
+            discendenti = []
+            for r2, ind2 in righe[i + 1:]:
+                if ind2 <= ind:
+                    break
+                if r2 in foglie:
+                    discendenti.append(r2)
+            for col in range(2, 11):
+                somma = sum((ws.cell(f, col).value or 0) for f in discendenti)
+                ws.cell(r, col).value = somma + (1 if ws.cell(r, 1).value == errore_su else 0)
+    return _xlsx_modificato(xlsx_bytes, modifica)
+
+
+def test_subtotali_su_intestazioni_accettati(xlsx_bytes):
+    r = parse_export(_con_subtotali(xlsx_bytes))
+    assert len(r.righe) == 223
+    assert _totali(r.righe) == _d("-6831.55", "-7933.76", "-22907.78", "-44562.45", "-24407.67",
+                                  "7971.45", "67716.00", "129358.28", "9556.32")
+
+
+def test_subtotale_sbagliato_rifiutato(xlsx_bytes):
+    with pytest.raises(ErroreImportUsali, match="Utenze.*non coincide"):
+        parse_export(_con_subtotali(xlsx_bytes, errore_su="Utenze"))

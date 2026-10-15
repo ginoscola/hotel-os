@@ -1925,6 +1925,12 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
   (`Azione`, `id_conti`, `id_reparti_N`, `Ammortamento=1`, struttura da `id_strutture_concat_work`),
   abbinato per indice riga con verifica nome; un nome diverso → arricchimento scartato per tutto il
   file con avviso. Solo CSV → rifiutato.
+  ⚠️ **Alcuni export hanno i subtotali anche sulle intestazioni** (CLB sì, DPH no — dipende da come è
+  impostata la vista Flexmonster): non sono conti, vengono ignorati ma verificati — ogni subtotale deve
+  valere la somma delle foglie sotto di lui (±0,01), altrimenti errore "riesportare con tutte le righe
+  espanse" (`_verifica_subtotali`). Prima venivano rifiutati con "intestazione con importi".
+- Id struttura gestionale: **128 = DPH** (seed migrazione), **129 = CLB** (inserito a mano 15/10/2026
+  in `usali_struttura_gestionale`, letto dal CSV del Club). INT/BON da aggiungere al primo CSV.
 - **Segmenti** `services/usali_segmenti.py::assegna_segmenti(righe, regole)`, **in lettura**, mai
   salvati sulle righe: vincono le regole con priorità più alta, devono sommare a 100% (ripartizioni
   tipo utenze 70/30, arrotondamento sull'ultima quota); riga non coperta → errore, mai scartata.
