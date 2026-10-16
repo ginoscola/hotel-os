@@ -1859,7 +1859,7 @@ Elenco voci **fisso nel codice** (`voci_struttura()` in `routers/produzione_occu
   import); Colazione = quota colazione + colazione extra, Ristorante = pranzi + cene (`_conta_pasti()`
   di Conteggio pasti, solo righe `conta_come_pasto`) — **solo ospiti hotel**, i clienti esterni del
   Mare Mosso non hanno conteggio persone. Dato mancante → `None` ("—"), mai zero inventato.
-- **Manuali**: Altri Reparti Operativi, Pasticceria, Utenze (kWh, m³ acqua, Smc gas), tutto BON.
+- **Manuali**: Altri Reparti Operativi, Utenze (kWh, m³ acqua, Smc gas), tutto BON. Pasticceria tolta su richiesta dell'utente.
 - Tabella `prod_occupazione_consumi` (`prod007_2026`, UNIQUE struttura/anno/mese/voce_code): solo valori
   inseriti a mano. Su una voce automatica è una **correzione** che sostituisce il calcolo (viola
   `colors.accent` a schermo); `PUT` con `valore=null` la cancella e ripristina l'automatico.
