@@ -143,3 +143,28 @@ class ProdRiga(Base):
         # sovrappone a dati di test non deve essere scartato come "duplicato" di quelli.
         UniqueConstraint("is_test", "oid_welcome", name="uq_prod_riga_antiduplicati"),
     )
+
+
+class ProdOccupazioneConsumo(Base):
+    """Dati di occupazione e consumo mensili per struttura (tab "Occupazione e Consumo").
+
+    Contiene SOLO i valori inseriti a mano: per le voci manuali (utenze, pasticceria…) il dato
+    stesso, per le voci automatiche (camere, arrivi, colazioni…) una correzione che sostituisce
+    il valore calcolato a query-time — cancellare la riga ripristina il calcolo automatico.
+    Elenco voci in VOCI di produzione_occupazione.py (non in tabella).
+    """
+
+    __tablename__ = "prod_occupazione_consumi"
+
+    id             = Column(Integer, primary_key=True)
+    struttura_code = Column(String(20), nullable=False)
+    anno           = Column(Integer, nullable=False)
+    mese           = Column(Integer, nullable=False)
+    voce_code      = Column(String(50), nullable=False)
+    valore         = Column(Numeric(14, 2), nullable=False)
+    modificato_da  = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at     = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("struttura_code", "anno", "mese", "voce_code", name="uq_prod_occupazione_consumo"),
+    )

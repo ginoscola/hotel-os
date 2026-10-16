@@ -7,6 +7,7 @@ import TabTipoOspite from './produzione/TabTipoOspite'
 import TabReportMensile from './produzione/TabReportMensile'
 import TabConteggioPasti from './produzione/TabConteggioPasti'
 import TabRicaviCamere from './produzione/TabRicaviCamere'
+import TabOccupazioneConsumi from './produzione/TabOccupazioneConsumi'
 import TabTest from './produzione/TabTest'
 import { isAdmin, LS_TAB, LS_LORDO } from '../utils/produzioneHelpers'
 import { PageHeader, Tabs, ToggleIva } from '../components/ui'
@@ -20,12 +21,14 @@ const TABS_BASE = [
   { id: 'prod-mensile', label: 'Report mensile' },
   { id: 'prod-conteggio-pasti', label: 'Conteggio pasti' },
   { id: 'prod-ricavi-camere', label: 'Ricavi camere' },
+  { id: 'prod-occupazione', label: 'Occupazione e Consumo' },
 ]
 const TABS_ADMIN = [...TABS_BASE, { id: 'prod-test', label: 'Dati di test' }]
 
 // Tutte le tab di questo modulo mostrano il toggle IVA globale, tranne quelle che non
-// mostrano importi (Import/Dati di test) o mostrano un conteggio, non un ricavo (Conteggio pasti)
-const TAB_SENZA_TOGGLE_IVA = new Set(['prod-import', 'prod-test', 'prod-conteggio-pasti'])
+// mostrano importi (Import/Dati di test) o mostrano quantità, non ricavi (Conteggio pasti,
+// Occupazione e Consumo)
+const TAB_SENZA_TOGGLE_IVA = new Set(['prod-import', 'prod-test', 'prod-conteggio-pasti', 'prod-occupazione'])
 
 export default function StatisticheProduzione() {
   const tabsDisponibili = isAdmin() ? TABS_ADMIN : TABS_BASE
@@ -61,6 +64,7 @@ export default function StatisticheProduzione() {
       {tab === 'prod-mensile' && <TabReportMensile lordo={lordo} key={refreshKey} />}
       {tab === 'prod-conteggio-pasti' && <TabConteggioPasti key={refreshKey} />}
       {tab === 'prod-ricavi-camere' && <TabRicaviCamere lordo={lordo} key={refreshKey} />}
+      {tab === 'prod-occupazione' && <TabOccupazioneConsumi key={refreshKey} />}
       {tab === 'prod-test' && isAdmin() && <TabTest onPulito={() => setRefreshKey(k => k + 1)} />}
     </div>
   )

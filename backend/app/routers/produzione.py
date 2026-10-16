@@ -9,6 +9,7 @@ registro fiscale di Corrispettivi (listaConti.xlsx) — nessun controllo incroci
                           + liste valori distinti per i filtri UI
   produzione_export.py  → export xlsx/csv/pdf
   produzione_ricavi_camere.py → ricavi per camera (maturato) × categoria|trattamento
+  produzione_occupazione.py → occupazione e consumo mensili (auto + manuali)
 
 Endpoint:
   POST   /produzione/import                    → upload StatisticheProduzione.xlsx (admin)
@@ -32,12 +33,16 @@ Endpoint:
 
   GET    /produzione/ricavi-camere         → ricavi per camera × (categoria|trattamento), periodo
   GET    /produzione/ricavi-camere/export  → export xlsx/csv/pdf della tabella ricavi camere
+
+  GET    /produzione/occupazione-consumi   → dati mensili occupazione/consumo per struttura
+  PUT    /produzione/occupazione-consumi   → valore manuale / correzione (admin, null = automatico)
 """
 from fastapi import APIRouter
 
 from app.routers import (
     produzione_export,
     produzione_import,
+    produzione_occupazione,
     produzione_report,
     produzione_ricavi_camere,
 )
@@ -48,3 +53,4 @@ router.include_router(produzione_import.router)
 router.include_router(produzione_report.router)
 router.include_router(produzione_export.router)
 router.include_router(produzione_ricavi_camere.router)
+router.include_router(produzione_occupazione.router)
