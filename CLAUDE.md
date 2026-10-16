@@ -1608,9 +1608,9 @@ salvataggio di una singola settimana non aveva mai funzionato dal 25/05/2026:
 Modulo separato (non più dentro USALI — spostato su richiesta esplicita dopo la prima versione),
 route `/statistiche-produzione`, code modulo `produzione`, in NavBar tra Statistiche (revenue) e
 Budget. `StatisticheProduzione.jsx` è il tab router (Import, Produzione giornaliera, Analisi canali,
-Analisi trattamenti, Analisi tipo ospite, Report mensile, Conteggio pasti, Ricavi camere, Dati di
-test — 9 tab), toggle IVA globale `localStorage('produzione_lordo')` su tutte tranne Import/Conteggio
-pasti/Dati di test. `Usali.jsx` ha 2 tab proprie:
+Analisi trattamenti, Analisi tipo ospite, Report mensile, Conteggio pasti, Ricavi camere, Occupazione
+e Consumo, Dati di test — 10 tab), toggle IVA globale `localStorage('produzione_lordo')` su tutte tranne
+Import/Conteggio pasti/Occupazione e Consumo/Dati di test. `Usali.jsx` ha 2 tab proprie:
 "Conto Economico" (`UsaliContoEconomico.jsx`, invariato) e "Movimenti Attivi" (`UsaliMovimentiAttivi.jsx`,
 vedi sezione dedicata più sotto) — quest'ultima aggiunta dopo la prima separazione dei moduli, legge
 dati aggregati da Produzione/Corrispettivi.
@@ -1843,6 +1843,30 @@ come `escluso_pensione`), `_categorie_attive()` di `produzione_report` e `_rispo
 - `GET /produzione/ricavi-camere?hotel_code=DPH|CLB|INT|GRUPPO&data_da=&data_a=&includi_zero=`
 - `GET /produzione/ricavi-camere/export?...&vista=categoria|trattamento&lordo=&formato=xlsx|csv|pdf`
   (sotto-path per non collidere con la rotta catch-all `/produzione/export/{dimensione}`).
+
+### Tab "Occupazione e Consumo" (`produzione/TabOccupazioneConsumi.jsx`, ottobre 2026, v3.23.0)
+Dati mensili di occupazione/consumo per struttura, stesso schema della maschera "Dati di Occupazione
+o Consumo" del gestionale contabile (Reparto | Dato | valore), qui come voci × 12 mesi + totale.
+Strutture DPH (= **Du Parc + Mare Mosso, struttura unica**, reparto "Ristorante Mare Mosso"), CLB, INT
+(reparto "Ristorante"), BON (solo Ristorante presenze + utenze, tutto manuale).
+Elenco voci **fisso nel codice** (`voci_struttura()` in `routers/produzione_occupazione.py`), non in tabella.
+- **Automatiche** (calcolate a query-time, mai salvate): Camere Vendibili = `hotel_seasons.total_rooms`
+  × giorni di apertura nel mese (scelta dell'utente: 43 per DPH → 1.333 a maggio, il gestionale ne
+  conta 44 → 1.364: correggere a mano o cambiare la stagione); Camere Occupate / Clienti Presenze =
+  `daily_revenue` via `produzione_mensile()` di `usali_contabile_kpi` (snapshot più recente);
+  Arrivi Camere / Arrivi Clienti = righe / Σ`pax` di `prenotazioni_cancellate` con `cancellata=false`
+  per mese di `arrivo` (import Welcome "Prenotazioni non disdette": aggiornati quanto l'ultimo
+  import); Colazione = quota colazione + colazione extra, Ristorante = pranzi + cene (`_conta_pasti()`
+  di Conteggio pasti, solo righe `conta_come_pasto`) — **solo ospiti hotel**, i clienti esterni del
+  Mare Mosso non hanno conteggio persone. Dato mancante → `None` ("—"), mai zero inventato.
+- **Manuali**: Altri Reparti Operativi, Pasticceria, Utenze (kWh, m³ acqua, Smc gas), tutto BON.
+- Tabella `prod_occupazione_consumi` (`prod007_2026`, UNIQUE struttura/anno/mese/voce_code): solo valori
+  inseriti a mano. Su una voce automatica è una **correzione** che sostituisce il calcolo (viola
+  `colors.accent` a schermo); `PUT` con `valore=null` la cancella e ripristina l'automatico.
+- `GET /produzione/occupazione-consumi?struttura=&anno=` → `voci[{voce_code, reparto, dato, tipo
+  auto|manuale, mesi[{mese, automatico, manuale, valore}], totale}]`; `PUT /produzione/occupazione-consumi`
+  (admin) `{struttura_code, anno, mese, voce_code, valore|null}`. Admin: ogni cella è un input (valore
+  automatico come placeholder grigio, salvataggio all'uscita dal campo/Invio); viewer: sola lettura.
 
 ## Modulo USALI — Conto Economico
 
