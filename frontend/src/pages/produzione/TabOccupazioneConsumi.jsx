@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import { NOMI, isAdmin } from '../../utils/produzioneHelpers'
 import { formatN, mostraErrore } from '../../utils/format'
-import { Badge, Input, Loading, NavAnno, SegmentedControl, Table, Td, Th, useAvvisi } from '../../components/ui'
+import { Badge, Input, Loading, Messaggio, NavAnno, SegmentedControl, Table, Td, Th, useAvvisi } from '../../components/ui'
 import { colors } from '../../styles/tokens.js'
 
 // Du Parc e Mare Mosso sono una struttura sola (DPH), come nel Conto Economico USALI
@@ -58,15 +58,20 @@ export default function TabOccupazioneConsumi() {
   })
   const [dati, setDati] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [errore, setErrore] = useState(null)
 
   const carica = useCallback(async () => {
     setLoading(true)
+    setErrore(null)
     try {
       const { data } = await api.get('/produzione/occupazione-consumi', { params: { struttura, anno } })
       setDati(data)
-    } catch (e) { avvisi.errore(mostraErrore(e)) }
+    } catch (e) {
+      setDati(null)
+      setErrore(mostraErrore(e))
+    }
     finally { setLoading(false) }
-  }, [struttura, anno]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [struttura, anno])
 
   useEffect(() => { carica() }, [carica])
 
@@ -90,14 +95,19 @@ export default function TabOccupazioneConsumi() {
         <NavAnno anno={anno} onChange={setAnno} />
         <SegmentedControl value={struttura} onChange={cambiaStruttura} options={OPZIONI} />
       </div>
-      <p className="ui-text-muted" style={{ marginTop: 0, marginBottom: 16 }}>
-        <Badge tono="info">auto</Badge> = calcolato da Revenue, prenotazioni Welcome e conteggio pasti
-        {admin && <> (in grigio; scrivi un numero per correggerlo — in <span style={{ color: colors.accent }}>viola</span> — svuota il campo per tornare al calcolo)</>}.
-        {' '}Le altre voci si inseriscono a mano.
-        {struttura !== 'BON' && <> Presenze ristorante = solo ospiti dell'hotel (pranzi e cene dal conteggio pasti){struttura === 'DPH' && ', senza i clienti esterni del Mare Mosso'}.</>}
-      </p>
+      <div className="ui-text-muted" style={{ marginBottom: 16, whiteSpace: 'normal', maxWidth: 900, lineHeight: 1.6 }}>
+        <div>
+          <Badge tono="info">auto</Badge> calcolato in automatico
+          {admin && <> — valore in grigio: scrivi un numero per correggerlo (<span style={{ color: colors.accent }}>viola</span>), svuota il campo per tornare al calcolo</>}.
+          {' '}Le altre voci si inseriscono a mano.
+        </div>
+        {struttura !== 'BON' && (
+          <div>Presenze ristorante: solo ospiti dell'hotel{struttura === 'DPH' && ' (esclusi i clienti esterni del Mare Mosso)'}.</div>
+        )}
+      </div>
 
       {loading && !dati && <Loading />}
+      <Messaggio>{errore}</Messaggio>
 
       {dati && (
         <Table>
