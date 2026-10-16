@@ -67,10 +67,7 @@ _VOCI_UTENZE = [
 def voci_struttura(struttura: str) -> list[tuple]:
     if struttura == 'BON':
         return [('ristorante_presenze', 'Ristorante', 'Clienti Presenze', None)] + _VOCI_UTENZE
-    voci = _VOCI_HOTEL + _VOCI_UTENZE
-    if struttura == 'DPH':
-        voci = [(c, 'Ristorante Mare Mosso' if r == 'Ristorante' else r, d, s) for c, r, d, s in voci]
-    return voci
+    return _VOCI_HOTEL + _VOCI_UTENZE
 
 
 def _camere_vendibili(db: Session, struttura: str, anno: int) -> dict[int, Optional[int]]:

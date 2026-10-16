@@ -98,8 +98,7 @@ def test_voci_automatiche_dph(client):
     r = client.get("/produzione/occupazione-consumi", params={'struttura': 'DPH', 'anno': 2026})
     assert r.status_code == 200
     d = r.json()
-    # Du Parc + Maremosso come struttura unica: reparto ristorante = Mare Mosso
-    assert _voce(d, 'ristorante_presenze')['reparto'] == 'Ristorante Mare Mosso'
+    assert _voce(d, 'ristorante_presenze')['reparto'] == 'Ristorante'
     # Camere vendibili = 43 camere × giorni di apertura
     vend = _voce(d, 'camere_vendibili')
     assert _mese(vend, 5)['valore'] == 43 * 31

@@ -1847,8 +1847,8 @@ come `escluso_pensione`), `_categorie_attive()` di `produzione_report` e `_rispo
 ### Tab "Occupazione e Consumo" (`produzione/TabOccupazioneConsumi.jsx`, ottobre 2026, v3.23.0)
 Dati mensili di occupazione/consumo per struttura, stesso schema della maschera "Dati di Occupazione
 o Consumo" del gestionale contabile (Reparto | Dato | valore), qui come voci × 12 mesi + totale.
-Strutture DPH (= **Du Parc + Mare Mosso, struttura unica**, reparto "Ristorante Mare Mosso"), CLB, INT
-(reparto "Ristorante"), BON (solo Ristorante presenze + utenze, tutto manuale).
+Strutture DPH (= **Du Parc + Mare Mosso, struttura unica**), CLB, INT (reparto "Ristorante" per
+tutte, anche DPH — scelta dell'utente), BON (solo Ristorante presenze + utenze, tutto manuale).
 Elenco voci **fisso nel codice** (`voci_struttura()` in `routers/produzione_occupazione.py`), non in tabella.
 - **Automatiche** (calcolate a query-time, mai salvate): Camere Vendibili = `hotel_seasons.total_rooms`
   × giorni di apertura nel mese (scelta dell'utente: 43 per DPH → 1.333 a maggio, il gestionale ne
