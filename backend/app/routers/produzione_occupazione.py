@@ -12,7 +12,7 @@ Voci automatiche, calcolate a query-time (mai salvate, salvo correzione manuale)
 - Colazione → conteggio pasti (quota colazione + colazione extra)
 - Ristorante → conteggio pasti pranzo + cena (solo ospiti hotel: i clienti esterni del
   Mare Mosso non hanno un conteggio persone, solo l'incasso)
-Voci manuali: utenze, altri reparti, tutto BON.
+Voci manuali: utenze, tutto BON.
 
 Una riga in prod_occupazione_consumi su una voce automatica è una correzione che sostituisce il
 calcolo; valore=null nel PUT la cancella e ripristina il valore automatico.
@@ -47,7 +47,6 @@ STRUTTURE = STRUTTURE_HOTEL + ['BON']
 
 # (voce_code, reparto, dato, sorgente automatica | None = manuale). Ordine = ordine a schermo.
 _VOCI_HOTEL = [
-    ('altri_reparti_presenze', 'Altri Reparti Operativi', 'Clienti Presenze', None),
     ('camere_arrivi', 'Camere', 'Arrivi Camere', 'arrivi_camere'),
     ('camere_arrivi_clienti', 'Camere', 'Arrivi Clienti', 'arrivi_clienti'),
     ('camere_occupate', 'Camere', 'Camere Occupate', 'camere_occupate'),
