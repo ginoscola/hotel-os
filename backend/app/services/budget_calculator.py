@@ -20,6 +20,8 @@ Divisioni per zero → None (usa _safe_div, mai eccezione).
 
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Optional
@@ -75,7 +77,9 @@ def calcola_kpi_budget(
 
     # Camere vendute derivate dall'occupazione
     if occupancy_pct is not None and ra is not None:
-        rs = round(float(occupancy_pct) / 100.0 * ra)
+        # Mezzo arrotondato per eccesso (150,5 → 151) come Math.round() del frontend:
+        # round() di Python arrotonda al pari (150,5 → 150) e la tab mostrerebbe 1 camera in più
+        rs = math.floor(float(occupancy_pct) / 100.0 * ra + 0.5)
     else:
         rs = None
 

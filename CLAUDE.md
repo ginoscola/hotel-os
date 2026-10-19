@@ -1571,9 +1571,10 @@ L'importer salta la riga `TOTALE` e le righe senza occupazione/ADR/camere vendut
 una settimana senza occupazione né ADR). Se si rinomina una colonna dell'export, verificare che resti un
 alias dell'importer (`test_export_budget_reimport_identico`). Il CSV (`;`, virgola decimale) non è
 reimportabile: l'import accetta solo xlsx.
-⚠️ `calcola_kpi_budget()` usa `round()` di Python (arrotonda al pari: 150,5 → 150), il frontend
-`Math.round()` (150,5 → 151): sulle settimane con camere vendute esattamente a ,5 la tab mostra 1 camera in
-più di quanto salvato/esportato. Differenza preesistente, non corretta.
+⚠️ Camere vendute budget = occupancy × disponibili arrotondato **con il mezzo per eccesso** (150,5 → 151):
+`calcola_kpi_budget()` usa `math.floor(x + 0.5)`, uguale a `Math.round()` della tab. Fino alla v3.24.0 usava
+`round()` di Python (arrotonda al pari, 150,5 → 150) e la tab mostrava 1 camera in più di quanto salvato/
+esportato; corretto in v3.24.1 (nessuna riga in DB era a ,5, nessun ricalcolo necessario). Mai `round()` qui.
 ⚠️ **`daily_revenue.hotel_id` era NULL su tutti gli upload dal 15/06/2026** (bug reale, trovato qui):
 `_upsert_daily_revenue` in `upload.py` non valorizzava mai `hotel_id` (le righe precedenti erano state
 riempite da una migrazione), e `_actual_settimanale()` filtrava proprio su `hotel_id` → Confronto Actual vs

@@ -129,6 +129,10 @@ class TestBudgetCalculator:
         assert kpi.rooms_sold    is None
         assert kpi.revenue_rooms is None
 
+    def test_rooms_sold_mezzo_per_eccesso(self):
+        """50% di 301 = 150,5 → 151, come Math.round() del frontend (non 150 di round())."""
+        assert calcola_kpi_budget(50.0, 100.0, 0.0, 0.0, 301).rooms_sold == 151
+
     def test_inc_somma_a_100(self):
         """Le tre incidenze sommano a 100%."""
         kpi = calcola_kpi_budget(60.0, 100.0, 40.0, 10.0, 100)
