@@ -165,6 +165,10 @@ def importa_budget_excel(
             if col_idx < len(riga):
                 row_dict[campo] = riga[col_idx]
 
+        # Riga TOTALE dell'export della tab Inserimento: non è una settimana
+        if str(row_dict.get('week_start') or '').strip().upper() == 'TOTALE':
+            continue
+
         # week_start obbligatorio
         ws_val = _to_date(row_dict.get('week_start'))
         if ws_val is None:
@@ -175,11 +179,19 @@ def importa_budget_excel(
             })
             continue
 
+        occupancy = _to_float(row_dict.get('occupancy'))
+        adr = _to_float(row_dict.get('adr'))
+        camere = _to_int(row_dict.get('camere_vendute'))
+        # Settimana senza dati (es. riga vuota dell'export): saltata come fa la tab Inserimento,
+        # che non salva una settimana senza occupazione né ADR
+        if occupancy is None and adr is None and camere is None:
+            continue
+
         righe_ok.append({
             'week_start': ws_val,
-            'camere_vendute': _to_int(row_dict.get('camere_vendute')),
-            'occupancy': _to_float(row_dict.get('occupancy')),
-            'adr': _to_float(row_dict.get('adr')),
+            'camere_vendute': camere,
+            'occupancy': occupancy,
+            'adr': adr,
             'adr_fnb': _to_float(row_dict.get('adr_fnb')),
             'adr_extra': _to_float(row_dict.get('adr_extra')),
             'note': str(row_dict['note']).strip() if row_dict.get('note') else None,

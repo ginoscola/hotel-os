@@ -1562,6 +1562,18 @@ camera venduta = revenue/rooms_sold della settimana); camere vendute e revenue r
 scalate). Settimane senza consuntivo (es. CLB 2027 apre il 22/05, nel 2026 chiuso) restano vuote e sono
 elencate nella risposta; già compilate saltate salvo `sovrascrivi`. Budget 2027 v1 di DPH/CLB/INT compilato
 così il 07/10/2026 (note riga "Da consuntivo 2026 (sett. …)").
+**Esporta tab Inserimento** (v3.24.0, ottobre 2026): `GET /budget/{hotel}/{anno}/export?version=&formato=xlsx|csv|pdf`
+(`ExportMenu` nella barra della tab). Tutte le settimane di stagione (anche senza budget) + riga TOTALE (KPI
+sui totali, stessa logica della riga TOTALE a schermo), dati **salvati** in DB. L'**xlsx è reimportabile** con
+"Importa da Excel": intestazioni scelte tra gli alias di `budget_importer._MAPPING` (`Settimana` = data del
+sabato, `Occupancy%`, `ADR`, `ADR F&B`, `ADR Extra`, `Note`; le altre colonne sono informative e ignorate).
+L'importer salta la riga `TOTALE` e le righe senza occupazione/ADR/camere vendute (come la tab, che non salva
+una settimana senza occupazione né ADR). Se si rinomina una colonna dell'export, verificare che resti un
+alias dell'importer (`test_export_budget_reimport_identico`). Il CSV (`;`, virgola decimale) non è
+reimportabile: l'import accetta solo xlsx.
+⚠️ `calcola_kpi_budget()` usa `round()` di Python (arrotonda al pari: 150,5 → 150), il frontend
+`Math.round()` (150,5 → 151): sulle settimane con camere vendute esattamente a ,5 la tab mostra 1 camera in
+più di quanto salvato/esportato. Differenza preesistente, non corretta.
 ⚠️ **`daily_revenue.hotel_id` era NULL su tutti gli upload dal 15/06/2026** (bug reale, trovato qui):
 `_upsert_daily_revenue` in `upload.py` non valorizzava mai `hotel_id` (le righe precedenti erano state
 riempite da una migrazione), e `_actual_settimanale()` filtrava proprio su `hotel_id` → Confronto Actual vs

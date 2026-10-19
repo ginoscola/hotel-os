@@ -6,6 +6,7 @@ import {
 import api from '../api/client.js'
 import { formatData, formatEuro, formatPerc, formatN, mostraErrore } from '../utils/format.js'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
+import { ExportMenu } from '../components/ExportMenu.jsx'
 import {
   Badge, Button, Card, Field, FileButton, HotelTag, Input, KpiTile, Loading, Messaggio, Modal,
   PageHeader, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
@@ -323,6 +324,9 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
         <Button variant="secondary" onClick={precompilaAnnoPrecedente} disabled={precompilando}>
           {precompilando ? 'Riempimento…' : `Riempi con dati ${anno - 1}`}
         </Button>
+        <div style={{ marginLeft: 'auto' }} title="Il file Excel si può modificare e reimportare con «Importa da Excel»">
+          <ExportMenu url={`/budget/${hotel}/${anno}/export?version=${version}`} nome={`Budget_${hotel}_${anno}_${version}`} />
+        </div>
       </div>
 
       <Messaggio tipo="err" onChiudi={() => setErrore(null)}>{errore}</Messaggio>

@@ -11,6 +11,7 @@ Struttura endpoint:
     GET  /budget/{hotel_code}/{season_year}/confronto     → actual vs budget settimanale
     GET  /budget/{hotel_code}/{season_year}/confronto/mensile  → confronto aggregato per mese
     GET  /budget/{hotel_code}/{season_year}/proiezione    → proiezione fine stagione
+    GET  /budget/{hotel_code}/{season_year}/export        → export tab Inserimento (xlsx reimportabile)
     GET  /budget/{hotel_code}/{season_year}/settimane-mancanti → settimane senza budget
     GET  /budget/{hotel_code}/{season_year}/config        → config hotel/anno
     PUT  /budget/{hotel_code}/{season_year}/config        → salva config
@@ -22,12 +23,16 @@ Struttura endpoint:
 
 from __future__ import annotations
 
+import csv
+import io
 from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from openpyxl.styles import Font
 from pydantic import BaseModel
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
@@ -38,6 +43,10 @@ from app.models.revenue import BudgetConfig, BudgetEntry, DailyRevenue, Hotel, H
 from app.services.budget_calculator import KPIBudget, calcola_kpi_budget, calcola_mese_contabile
 from app.services.budget_importer import importa_budget_excel
 from app.services.weekly_aggregator import settimana_di
+from app.routers.export import (
+    _FMT_INT, _auto_width, _costruisci_pdf, _pv, _risposta, _scrivi_intestazione, _to_buf,
+)
+from app.utils.locale_it import MESI_IT
 
 router = APIRouter(prefix="/budget", tags=["budget"], dependencies=[Depends(richiedi_utente_attivo)])
 
@@ -1104,6 +1113,155 @@ def precompila_anno_precedente(
         'settimane_saltate': saltate,
         'settimane_senza_dati': senza_dati,
     }
+
+
+# ---------------------------------------------------------------------------
+# Export tab Inserimento (reimportabile da import-excel)
+# ---------------------------------------------------------------------------
+
+# Intestazioni riconosciute da budget_importer._MAPPING: Settimana/Occupancy%/ADR/ADR F&B/
+# ADR Extra/Note vengono rilette dall'import; le altre colonne sono solo informative.
+_INT_EXPORT_BUDGET = [
+    "Settimana", "Mese", "Cam. Disponibili", "Occupancy%", "ADR", "ADR F&B", "ADR Extra",
+    "Cam. Vendute", "Inc. F&B %", "RevPAR", "TRevPAR", "Rev. Totale", "Note",
+]
+
+
+def _righe_export_budget(hotel: Hotel, season_year: int, version: str, db: Session) -> list:
+    """Righe della tab Inserimento: tutte le settimane di stagione (anche senza budget) + TOTALE.
+
+    Ogni riga è una lista allineata a _INT_EXPORT_BUDGET; la settimana è una date
+    (sabato), la TOTALE ha 'TOTALE' al suo posto. KPI del totale sui totali, mai medie.
+    """
+    entries = {
+        e.week_start: e for e in db.query(BudgetEntry).filter(
+            BudgetEntry.hotel_id == hotel.id,
+            BudgetEntry.season_year == season_year,
+            BudgetEntry.version == version,
+        )
+    }
+    stagione = (
+        db.query(HotelSeason)
+        .filter(HotelSeason.hotel_id == hotel.id, HotelSeason.season_year == season_year)
+        .first()
+    )
+    settimane = set(entries)
+    if stagione:
+        ws = stagione.open_date
+        while ws.weekday() != 5:  # sabato
+            ws -= timedelta(days=1)
+        while ws <= stagione.close_date:
+            settimane.add(ws)
+            ws += timedelta(days=7)
+
+    f = lambda v: float(v) if v is not None else None  # noqa: E731
+    righe = []
+    t = {'ra': 0, 'rs': 0, 'rooms': 0.0, 'fnb': 0.0, 'extra': 0.0, 'tot': 0.0}
+    for ws in sorted(settimane):
+        e = entries.get(ws)
+        mese, anno = calcola_mese_contabile(ws, ws + timedelta(days=6))
+        ra = e.rooms_available_budget if e and e.rooms_available_budget is not None \
+            else _rooms_available_settimana(hotel, season_year, ws, db)
+        t['ra'] += ra or 0
+        if e is None:
+            righe.append([ws, f"{MESI_IT[mese - 1].capitalize()} {anno}", ra] + [None] * 10)
+            continue
+        if e.rooms_sold_budget is not None and e.revenue_total_budget is not None:
+            t['rs'] += e.rooms_sold_budget
+            t['rooms'] += float(e.revenue_rooms_budget)
+            t['fnb'] += float(e.revenue_fnb_budget)
+            t['extra'] += float(e.revenue_extra_budget)
+            t['tot'] += float(e.revenue_total_budget)
+        righe.append([
+            ws, f"{MESI_IT[mese - 1].capitalize()} {anno}", ra,
+            f(e.occupancy_budget), f(e.adr_budget), f(e.adr_fnb_budget), f(e.adr_extra_budget),
+            e.rooms_sold_budget, f(e.inc_fnb_budget), f(e.revpar_budget), f(e.trevpar_budget),
+            f(e.revenue_total_budget), e.notes,
+        ])
+
+    sd = lambda n, d: n / d if d else None  # noqa: E731
+    righe.append([
+        "TOTALE", None, t['ra'] or None,
+        sd(t['rs'] * 100, t['ra']), sd(t['rooms'], t['rs']), sd(t['fnb'], t['rs']),
+        sd(t['extra'], t['rs']), t['rs'] or None, sd(t['fnb'] * 100, t['tot']),
+        sd(t['rooms'], t['ra']), sd(t['tot'], t['ra']), t['tot'] or None, None,
+    ])
+    return righe
+
+
+# Formato per colonna: None = testo, 'data', 'int', 'perc', 'euro'
+_FMT_COL_BUDGET = [
+    'data', None, 'int', 'perc', 'euro', 'euro', 'euro', 'int', 'perc', 'euro', 'euro', 'euro', None,
+]
+
+
+def _xlsx_budget(righe: list) -> io.BytesIO:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Budget"
+    _scrivi_intestazione(ws, _INT_EXPORT_BUDGET)
+    fmt_excel = {'data': 'DD/MM/YYYY', 'int': _FMT_INT, 'perc': '0.00', 'euro': '#,##0.00'}
+    for i, riga in enumerate(righe, start=2):
+        totale = riga[0] == "TOTALE"
+        for j, (val, tipo) in enumerate(zip(riga, _FMT_COL_BUDGET), start=1):
+            cell = ws.cell(row=i, column=j, value=val)
+            if tipo in fmt_excel and val is not None:
+                cell.number_format = fmt_excel[tipo]
+            if totale:
+                cell.font = Font(bold=True)
+    _auto_width(ws)
+    ws.column_dimensions['A'].width = 12
+    return _to_buf(wb)
+
+
+def _csv_budget(righe: list) -> io.BytesIO:
+    out = io.StringIO()
+    w = csv.writer(out, delimiter=';')
+    w.writerow(_INT_EXPORT_BUDGET)
+    for riga in righe:
+        w.writerow([
+            v.strftime('%d/%m/%Y') if isinstance(v, date)
+            else ('' if v is None else (f"{v:.2f}".replace('.', ',') if isinstance(v, float) else v))
+            for v in riga
+        ])
+    return io.BytesIO(out.getvalue().encode('utf-8-sig'))
+
+
+def _pdf_budget(righe: list, titolo: str) -> io.BytesIO:
+    def cella(v, tipo):
+        if v is None:
+            return "—" if tipo else ""
+        if tipo == 'data':
+            return v.strftime('%d/%m/%Y') if isinstance(v, date) else v
+        if tipo == 'int':
+            return f"{v:,}".replace(',', '.')
+        if tipo == 'perc':
+            return _pv(v, 1, "%")
+        if tipo == 'euro':
+            return _pv(v, 2, "€")
+        return str(v)[:40]
+    dati = [[cella(v, t) for v, t in zip(r, _FMT_COL_BUDGET)] for r in righe]
+    stili = [("FONTNAME", (0, len(dati)), (-1, len(dati)), "Helvetica-Bold")]
+    return _costruisci_pdf(titolo, _INT_EXPORT_BUDGET, dati, extra_stili=stili)
+
+
+@router.get("/{hotel_code}/{season_year}/export")
+def export_budget(
+    hotel_code: str,
+    season_year: int,
+    version: str = Query('v1'),
+    formato: str = Query('xlsx', pattern='^(xlsx|csv|pdf)$'),
+    db: Session = Depends(get_db),
+):
+    """Export della tab Inserimento. L'xlsx si può reimportare con import-excel
+    (stesse intestazioni; la riga TOTALE e le settimane vuote vengono ignorate)."""
+    hotel = _hotel_o_404(hotel_code, db)
+    righe = _righe_export_budget(hotel, season_year, version, db)
+    titolo = f"Budget {hotel.name} {season_year} — versione {version}"
+    return _risposta(
+        formato, f"Budget_{hotel.code}_{season_year}_{version}",
+        _xlsx_budget, _csv_budget, lambda r: _pdf_budget(r, titolo), righe,
+    )
 
 
 # ---------------------------------------------------------------------------

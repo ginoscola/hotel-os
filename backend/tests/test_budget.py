@@ -460,3 +460,45 @@ def test_precompila_non_sovrascrive_senza_flag(client, test_engine):
 def test_precompila_senza_stagione_404(client):
     resp = client.post("/budget/CLB/2027/precompila-anno-precedente")
     assert resp.status_code == 404
+
+
+# ===========================================================================
+# TEST EXPORT TAB INSERIMENTO (reimportabile)
+# ===========================================================================
+
+def test_export_budget_formati_e_totale(client):
+    client.put("/budget/DPH/2026/2026-06-06", json={'occupancy': 60.0, 'adr': 100.0, 'adr_fnb': 20.0})
+    client.put("/budget/DPH/2026/2026-06-13", json={'occupancy': 100.0, 'adr': 200.0})
+    for formato in ('xlsx', 'csv', 'pdf'):
+        resp = client.get(f"/budget/DPH/2026/export?version=v1&formato={formato}")
+        assert resp.status_code == 200, formato
+        assert f'Budget_DPH_2026_v1.{formato}' in resp.headers['content-disposition']
+
+    import io
+    import openpyxl
+    resp = client.get("/budget/DPH/2026/export?version=v1&formato=xlsx")
+    righe = list(openpyxl.load_workbook(io.BytesIO(resp.content)).active.iter_rows(values_only=True))
+    # Stagione 01/05–19/09: settimane dal 25/04 (sabato) al 19/09 → 22 + intestazione + TOTALE
+    assert len(righe) == 1 + 22 + 1
+    tot = righe[-1]
+    assert tot[0] == 'TOTALE'
+    # Settimane piene (7gg × 43 = 301): 181 + 301 camere vendute
+    assert tot[7] == 482
+    assert tot[4] == pytest.approx((181 * 100 + 301 * 200) / 482)  # ADR sui totali
+
+
+def test_export_budget_reimport_identico(client):
+    client.put("/budget/DPH/2026/2026-06-06", json={'occupancy': 55.5, 'adr': 123.45,
+                                                    'adr_fnb': 30.0, 'adr_extra': 5.5,
+                                                    'notes': 'prova'})
+    xlsx = client.get("/budget/DPH/2026/export?version=v1&formato=xlsx").content
+    resp = client.post("/budget/DPH/2026/import-excel?version=v2",
+                       files={'file': ('b.xlsx', xlsx)})
+    d = resp.json()
+    # Solo la settimana compilata: TOTALE e settimane vuote ignorate senza errori
+    assert d['n_righe_salvate'] == 1
+    assert d['righe_non_parsate'] == []
+    v1 = client.get("/budget/DPH/2026/2026-06-06?version=v1").json()
+    v2 = client.get("/budget/DPH/2026/2026-06-06?version=v2").json()
+    for campo in ('occupancy', 'adr', 'adr_fnb', 'adr_extra', 'camere_vendute', 'revenue_total', 'notes'):
+        assert v2[campo] == v1[campo], campo
