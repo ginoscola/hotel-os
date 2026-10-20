@@ -44,7 +44,7 @@ from app.services.budget_calculator import KPIBudget, calcola_kpi_budget, calcol
 from app.services.budget_importer import importa_budget_excel
 from app.services.weekly_aggregator import settimana_di
 from app.routers.export import (
-    _FMT_INT, _auto_width, _costruisci_pdf, _pv, _risposta, _scrivi_intestazione, _to_buf,
+    _FMT_INT, _costruisci_pdf, _pv, _risposta, _scrivi_intestazione, _to_buf,
 )
 from app.utils.locale_it import MESI_IT
 
@@ -1196,21 +1196,57 @@ _FMT_COL_BUDGET = [
 
 
 def _xlsx_budget(righe: list) -> io.BytesIO:
+    """Valori fissi per settimana/mese/camere disponibili e per i 4 input; formule Excel per
+    tutto ciò che la tab calcola, così modificando un input in Excel riga e TOTALE si
+    ricalcolano. L'import legge solo le colonne fisse, quindi resta reimportabile anche
+    senza aprire il file (openpyxl non salva il risultato delle formule)."""
     wb = openpyxl.Workbook()
+    wb.calculation.fullCalcOnLoad = True
     ws = wb.active
     ws.title = "Budget"
     _scrivi_intestazione(ws, _INT_EXPORT_BUDGET)
     fmt_excel = {'data': 'DD/MM/YYYY', 'int': _FMT_INT, 'perc': '0.00', 'euro': '#,##0.00'}
+    primo, ultimo = 2, len(righe)  # righe dati: 2..ultimo (l'ultima della lista è TOTALE)
+    rng = lambda c: f"{c}{primo}:{c}{ultimo}"  # noqa: E731
+
     for i, riga in enumerate(righe, start=2):
-        totale = riga[0] == "TOTALE"
-        for j, (val, tipo) in enumerate(zip(riga, _FMT_COL_BUDGET), start=1):
-            cell = ws.cell(row=i, column=j, value=val)
-            if tipo in fmt_excel and val is not None:
+        if riga[0] == "TOTALE":
+            # KPI sui totali, mai medie delle settimane (stessa logica della riga TOTALE a schermo).
+            # SUMPRODUCT tratta come 0 le celle "" delle settimane non compilate.
+            valori = {
+                1: "TOTALE",
+                3: f"=SUM({rng('C')})",
+                4: f'=IF(C{i}=0,"",H{i}/C{i}*100)',
+                5: f'=IF(H{i}=0,"",SUMPRODUCT({rng("H")},{rng("E")})/H{i})',
+                6: f'=IF(H{i}=0,"",SUMPRODUCT({rng("H")},{rng("F")})/H{i})',
+                7: f'=IF(H{i}=0,"",SUMPRODUCT({rng("H")},{rng("G")})/H{i})',
+                8: f"=SUM({rng('H')})",
+                9: f'=IF(L{i}=0,"",SUMPRODUCT({rng("H")},{rng("F")})/L{i}*100)',
+                10: f'=IF(C{i}=0,"",SUMPRODUCT({rng("H")},{rng("E")})/C{i})',
+                11: f'=IF(C{i}=0,"",L{i}/C{i})',
+                12: f"=SUM({rng('L')})",
+            }
+        else:
+            # Come la tab: camere vendute e KPI solo con occupazione E ADR compilati.
+            # ROUND di Excel arrotonda il mezzo per eccesso, come calcola_kpi_budget().
+            valori = {j: v for j, v in enumerate(riga, start=1) if j in (1, 2, 3, 4, 5, 6, 7, 13)}
+            valori.update({
+                8: f'=IF(OR(C{i}="",D{i}="",E{i}=""),"",ROUND(D{i}/100*C{i},0))',
+                12: f'=IF(H{i}="","",H{i}*(E{i}+N(F{i})+N(G{i})))',
+                9: f'=IF(OR(L{i}="",L{i}=0),"",H{i}*N(F{i})/L{i}*100)',
+                10: f'=IF(OR(L{i}="",C{i}=0),"",H{i}*E{i}/C{i})',
+                11: f'=IF(OR(L{i}="",C{i}=0),"",L{i}/C{i})',
+            })
+        for j, tipo in enumerate(_FMT_COL_BUDGET, start=1):
+            cell = ws.cell(row=i, column=j, value=valori.get(j))
+            if tipo in fmt_excel:
                 cell.number_format = fmt_excel[tipo]
-            if totale:
+            if riga[0] == "TOTALE":
                 cell.font = Font(bold=True)
-    _auto_width(ws)
-    ws.column_dimensions['A'].width = 12
+
+    # Larghezze fisse: _auto_width misurerebbe il testo delle formule
+    for col, w in zip("ABCDEFGHIJKLM", (12, 10, 16, 12, 11, 11, 11, 14, 11, 11, 11, 14, 30)):
+        ws.column_dimensions[col].width = w
     return _to_buf(wb)
 
 

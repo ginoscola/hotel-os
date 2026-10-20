@@ -1567,6 +1567,12 @@ così il 07/10/2026 (note riga "Da consuntivo 2026 (sett. …)").
 sui totali, stessa logica della riga TOTALE a schermo), dati **salvati** in DB. L'**xlsx è reimportabile** con
 "Importa da Excel": intestazioni scelte tra gli alias di `budget_importer._MAPPING` (`Settimana` = data del
 sabato, `Occupancy%`, `ADR`, `ADR F&B`, `ADR Extra`, `Note`; le altre colonne sono informative e ignorate).
+Nell'xlsx (v3.24.2) Settimana/Mese/Cam. Disponibili e i 4 input sono valori, il resto sono **formule
+Excel** (camere vendute `ROUND(occ/100×disp)` — mezzo per eccesso come l'app —, Inc. F&B %, RevPAR,
+TRevPAR, Rev. Totale; riga TOTALE con `SUM`/`SUMPRODUCT`, KPI sui totali): modificando un input in Excel
+riga e totale si ricalcolano. Come la tab, camere vendute e KPI solo con occupazione **e** ADR compilati.
+openpyxl non salva il risultato delle formule (`fullCalcOnLoad`, le calcola Excel all'apertura): l'importer
+legge solo le colonne fisse, quindi il file resta reimportabile anche senza essere aperto. CSV/PDF: valori.
 L'importer salta la riga `TOTALE` e le righe senza occupazione/ADR/camere vendute (come la tab, che non salva
 una settimana senza occupazione né ADR). Se si rinomina una colonna dell'export, verificare che resti un
 alias dell'importer (`test_export_budget_reimport_identico`). Il CSV (`;`, virgola decimale) non è

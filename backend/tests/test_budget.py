@@ -484,11 +484,16 @@ def test_export_budget_formati_e_totale(client):
     righe = list(openpyxl.load_workbook(io.BytesIO(resp.content)).active.iter_rows(values_only=True))
     # Stagione 01/05–19/09: settimane dal 25/04 (sabato) al 19/09 → 22 + intestazione + TOTALE
     assert len(righe) == 1 + 22 + 1
+    # Input come valori, campi calcolati come formule (si ricalcolano modificando gli input in Excel)
+    sett = next(r for r in righe if r[0] is not None and str(r[0]).startswith('2026-06-06'))
+    assert sett[3] == 60.0 and sett[4] == 100.0
+    assert sett[7].startswith('=') and 'ROUND(' in sett[7]
+    assert all(str(v).startswith('=') for v in sett[8:12])
     tot = righe[-1]
     assert tot[0] == 'TOTALE'
-    # Settimane piene (7gg × 43 = 301): 181 + 301 camere vendute
-    assert tot[7] == 482
-    assert tot[4] == pytest.approx((181 * 100 + 301 * 200) / 482)  # ADR sui totali
+    n = len(righe) - 1  # ultima riga dati
+    assert tot[7] == f'=SUM(H2:H{n})'
+    assert tot[4] == f'=IF(H{n + 1}=0,"",SUMPRODUCT(H2:H{n},E2:E{n})/H{n + 1})'  # ADR sui totali
 
 
 def test_export_budget_reimport_identico(client):
