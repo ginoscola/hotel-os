@@ -862,7 +862,8 @@ def proiezione_fine_stagione(
     pct_completata = sett_completate / len(entries) * 100 if entries else 0
 
     scost_rev = proj_tot['revenue_total'] - bud_tot['revenue_total']
-    if abs(sd(scost_rev, bud_tot['revenue_total']) or 0) < 5:
+    # sd() restituisce una frazione: soglia 5% = 0.05
+    if abs(sd(scost_rev, bud_tot['revenue_total']) or 0) < 0.05:
         trend = 'in_linea'
     elif scost_rev > 0:
         trend = 'sopra_budget'

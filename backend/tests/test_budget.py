@@ -316,6 +316,24 @@ def test_proiezione_mix_actual_budget(client, test_engine):
     assert d['stagione_proiezione']['revenue_rooms'] == pytest.approx(400 * 7 + sett2_rev_rooms, rel=1e-3)
 
 
+def test_proiezione_trend_soglia_5_per_cento(client, test_engine):
+    """Trend: scostamento oltre ±5% → sopra/sotto budget, non 'in_linea' (soglia 0.05, non 5)."""
+    client.put("/budget/DPH/2026/2026-06-06", json={'occupancy': 70.0, 'adr': 80.0})
+    with test_engine.connect() as conn:
+        dph_id = conn.execute(text("SELECT id FROM hotels WHERE code='DPH'")).scalar()
+        for i in range(7):
+            giorno = date(2026, 6, 6) + timedelta(days=i)
+            conn.execute(text("""
+                INSERT INTO daily_revenue
+                  (hotel_code, hotel_id, data, rooms_sold, rooms_available, pax,
+                   revenue_rooms, revenue_fnb, revenue_extra, revenue_total, snapshot_date)
+                VALUES ('DPH', :hid, :data, 5, 43, 10, 400, 0, 0, 400, '2026-06-01')
+            """), {'hid': dph_id, 'data': giorno})
+        conn.commit()
+    d = client.get("/budget/DPH/2026/proiezione?version=v1").json()
+    assert d['trend'] == 'sotto_budget'
+
+
 # ===========================================================================
 # TEST AGGREGAZIONE MENSILE
 # ===========================================================================

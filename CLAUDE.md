@@ -1549,6 +1549,8 @@ denominatore (il totale prenotato quel mese, cancellato o no).
 **Mese contabile**: mese con più giorni nella settimana (≥4, nessuna parità possibile).
 **Versioning**: v1 = ufficiale; v2+ copiate da source_version, completamente indipendenti.
 **Proiezione**: settimane con actual da `daily_revenue` (snapshot più recente); senza actual → stima budget. Trend: 'sopra/sotto_budget/in_linea' (soglia 5%).
+⚠️ Fino alla v3.24.3 la soglia del trend era confrontata con `5` invece di `0.05` (`sd()` dà una frazione):
+il giudizio risultava quasi sempre "in linea". Corretto in v3.24.4 (`test_proiezione_trend_soglia_5_per_cento`).
 
 Endpoint chiave: `PUT /budget/{hotel}/{year}/{week_start}`, `GET /budget/{hotel}/{year}/confronto[/mensile]`, `GET /budget/{hotel}/{year}/proiezione`, `POST /budget/{hotel}/{year}/import-excel`, `GET /budget/gruppo/{year}/confronto|proiezione`.
 Frontend: 4 tab (Inserimento / Confronto Actual vs Budget / Proiezione / Gruppo).
