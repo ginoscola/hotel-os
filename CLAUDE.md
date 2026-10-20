@@ -1571,6 +1571,20 @@ con `/budget/{hotel_code}/{season_year}`):
   salvataggio): `peso_moltiplicativo`, `finestra_settimane`, `tetto_coefficiente`, `peso_anni`,
   `tolleranza_giorni` — `leggi_parametri()`/`valida_parametri()` in `pickup_forecast.py` (default se riga
   assente o corrotta). `GET|PUT /parametri` (PUT parziale: le chiavi non inviate restano).
+- **Controllo dell'algoritmo** (v3.27.0, `GET /budget-previsione/controllo?anno=`, prima card della pagina
+  Admin): `controllo_previsione()` in `pickup_forecast.py`, nessuna tabella — tutto ricalcolato dalle
+  snapshot. Per ogni settimana chiusa rifà la previsione **senza correttivo** alla snapshot di 2/4/8
+  settimane prima (`ANTICIPI_CONTROLLO`, la più vicina entro la tolleranza) via `_prevedi()` (stessa
+  funzione della proiezione) e la confronta col finale: errore medio, scostamento (> 0 = sovrastima),
+  vendite previste/reali, **correttivo suggerito = Σ vendite reali / Σ vendite previste − 1** (per distanza
+  e complessivo; `None` sotto `MIN_SETTIMANE_SUGGERIMENTO` = 3). "Applica alla stagione" scrive il
+  complessivo come correttivo mese 0. Ritmo: OTB per mese solare alla snapshot corrente vs anno precedente
+  alla snapshot più vicina a −364gg (`StoricoAnno.otb_mese`/`finale_mese`) — informativo, già incorporato
+  dall'algoritmo, non da trasformare in correttivo. Utile solo da giugno 2027 (precisione) / marzo 2027
+  (ritmo): sul 2026 manca il 2025 come storico.
+- **Spiegazione** `components/SpiegazionePrevisione.jsx` (pulsante "ⓘ Come funziona la previsione?" +
+  `Modal`, con i parametri in uso letti da `/budget-previsione/parametri`): nella tab Proiezione e in
+  Admin. **Se cambia l'algoritmo, aggiornare anche quel testo.**
 Prova sul 2026 (settimane vicine dello stesso anno come proxy dell'anno precedente, quindi ottimistica):
 errore sul ricavo di stagione 1–2,5% già da marzo, contro 40–70% del solo OTB; un tetto al coefficiente
 (×4) peggiorava l'inizio stagione (DPH vende molto sotto data, coefficienti ×9 a 20 settimane normali).

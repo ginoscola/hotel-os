@@ -7,6 +7,7 @@ import api from '../api/client.js'
 import { formatData, formatEuro, formatPerc, formatN, mostraErrore } from '../utils/format.js'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import { ExportMenu } from '../components/ExportMenu.jsx'
+import SpiegazionePrevisione from '../components/SpiegazionePrevisione.jsx'
 import {
   Badge, Button, Card, Field, FileButton, HotelTag, Input, KpiTile, Loading, Messaggio, Modal,
   PageHeader, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
@@ -714,6 +715,7 @@ function TabProiezione({ hotel, anno, version }) {
       </Card>
 
       <div className="ui-text-muted" style={{ marginBottom: 12 }}>
+        <div style={{ float: 'right', marginLeft: 12 }}><SpiegazionePrevisione /></div>
         {dati.snapshot_otb
           ? <>Prenotato al {formatData(dati.snapshot_otb)}. </>
           : <>Nessun dato Revenue per il {anno}: tutte le settimane usano il budget. </>}

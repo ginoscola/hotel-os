@@ -435,6 +435,79 @@ def test_correttivi_mese_prevale_su_stagione(client, test_engine):
     assert g['righe'][0]['correttivo_pct'] == 10
 
 
+def _storico_controllo(conn):
+    """3 settimane di giugno: 2025 OTB 1000 € a 28gg → finale 2000 €; 2026 OTB 1000 € a 28gg →
+    finale 1800 €. L'algoritmo prevede 2000 € (vendite attese 1000) contro 1800 reali (800)."""
+    for k in range(3):
+        g25 = date(2025, 6, 7) + timedelta(days=7 * k)
+        g26 = date(2026, 6, 6) + timedelta(days=7 * k)
+        _riga_revenue(conn, g25, g25 - timedelta(days=28), 10, 1000)
+        _riga_revenue(conn, g25, '2025-07-07', 20, 2000)
+        _riga_revenue(conn, g26, g26 - timedelta(days=28), 10, 1000)
+        _riga_revenue(conn, g26, '2026-07-06', 18, 1800)
+    conn.commit()
+
+
+def test_controllo_previsione_suggerisce_correttivo(test_engine, TestSession):
+    from app.services.pickup_forecast import controllo_previsione
+    with test_engine.connect() as conn:
+        _storico_controllo(conn)
+    db = TestSession()
+    try:
+        c = controllo_previsione(db, 'DPH', 2026, oggi=date(2026, 7, 10))
+        assert c['snapshot'] == date(2026, 7, 6)
+        assert len(c['settimane']) == 3
+        a28 = next(a for a in c['per_anticipo'] if a['anticipo_giorni'] == 28)
+        assert a28['n_settimane'] == 3
+        assert a28['pickup_previsto'] == pytest.approx(3000)
+        assert a28['pickup_reale'] == pytest.approx(2400)
+        assert a28['suggerito_pct'] == -20
+        assert a28['scostamento_pct'] == pytest.approx(11.1)     # sovrastima
+        assert a28['errore_medio_pct'] == pytest.approx(11.1)
+        assert next(a for a in c['per_anticipo'] if a['anticipo_giorni'] == 14)['n_settimane'] == 0
+        assert c['complessivo']['suggerito_pct'] == -20
+
+        # ritmo: giugno 2026 alla snapshot 06/07 (5400 €) vs 2025 al 07/07 (6000 €)
+        giugno = next(r for r in c['ritmo'] if r['mese'] == 6)
+        assert giugno['otb'] == pytest.approx(5400)
+        assert giugno['otb_anno_prec'] == pytest.approx(6000)
+        assert giugno['delta_pct'] == pytest.approx(-10.0)
+
+        # peso zero su un anno senza dati: nessuna divisione per zero, stesso risultato
+        c = controllo_previsione(db, 'DPH', 2026, oggi=date(2026, 7, 10),
+                                 parametri={'peso_anni': [1, 0]})
+        assert c['complessivo']['suggerito_pct'] == -20
+    finally:
+        db.close()
+
+
+def test_controllo_pochi_dati_niente_suggerimento(test_engine, TestSession):
+    from app.services.pickup_forecast import controllo_previsione
+    with test_engine.connect() as conn:
+        _storico_pickup(conn)     # una sola settimana con storico, non ancora chiusa
+        _riga_revenue(conn, date(2026, 7, 4), '2026-07-13', 20, 2000)
+        conn.commit()
+    db = TestSession()
+    try:
+        c = controllo_previsione(db, 'DPH', 2026, oggi=date(2026, 7, 20))
+        assert c['complessivo']['n_settimane'] == 1
+        assert c['complessivo']['suggerito_pct'] is None
+    finally:
+        db.close()
+
+
+def test_controllo_endpoint(client, test_engine):
+    with test_engine.connect() as conn:
+        _storico_controllo(conn)
+    d = client.get("/budget-previsione/controllo?anno=2026").json()
+    assert d['anticipi_giorni'] == [14, 28, 56]
+    dph = d['hotel'][0]
+    assert dph['hotel_code'] == 'DPH'
+    assert dph['snapshot'] == '2026-07-06'
+    assert dph['complessivo']['suggerito_pct'] == -20
+    assert dph['correttivo_stagione'] is None
+
+
 def test_correttivo_fuori_range_400(client):
     r = client.put("/budget-previsione/correttivi", json={
         'hotel_code': 'DPH', 'season_year': 2026, 'mese': 0, 'correttivo_pct': -95})

@@ -8,6 +8,8 @@ Endpoint:
   GET /budget-previsione/correttivi?anno=      → griglia hotel × mesi di stagione
   PUT /budget-previsione/correttivi  (admin)   {hotel_code, season_year, mese, correttivo_pct|null, note}
                                                  mese 0 = stagione; correttivo_pct null = cancella
+  GET /budget-previsione/controllo?anno=       → per hotel: precisione a ritroso sulle settimane
+                                                 chiuse + correttivo suggerito + ritmo vs anno prec.
 """
 
 import json
@@ -22,7 +24,8 @@ from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
 from app.models.revenue import AppConfig, BudgetPrevisioneCorrettivo, Hotel, HotelSeason
 from app.services.pickup_forecast import (
-    CHIAVE_CONFIG, PARAMETRI_ALGORITMO, PARAMETRI_DEFAULT, leggi_parametri, valida_parametri,
+    ANTICIPI_CONTROLLO, CHIAVE_CONFIG, MIN_SETTIMANE_SUGGERIMENTO, PARAMETRI_ALGORITMO,
+    PARAMETRI_DEFAULT, controllo_previsione, leggi_correttivi, leggi_parametri, valida_parametri,
 )
 
 router = APIRouter(prefix="/budget-previsione", tags=["budget"])
@@ -64,13 +67,42 @@ def _mesi_stagione(stagioni: list[HotelSeason]) -> list[int]:
     return sorted(mesi) or [5, 6, 7, 8, 9]
 
 
-@router.get("/correttivi")
-def get_correttivi(anno: int = Query(...), db: Session = Depends(get_db), _=Depends(richiedi_utente_attivo)):
+def _hotel_stagione(db: Session, anno: int) -> tuple[list[Hotel], list[HotelSeason]]:
+    """Hotel con una stagione nell'anno (tutti, se nessuna stagione è configurata)."""
     stagioni = db.query(HotelSeason).filter(HotelSeason.season_year == anno).all()
     hotel_ids = {s.hotel_id for s in stagioni}
     hotels = db.query(Hotel).order_by(Hotel.code).all()
     if hotel_ids:
         hotels = [h for h in hotels if h.id in hotel_ids]
+    return hotels, stagioni
+
+
+@router.get("/controllo")
+def get_controllo(anno: int = Query(...), db: Session = Depends(get_db), _=Depends(richiedi_utente_attivo)):
+    hotels, _stagioni = _hotel_stagione(db, anno)
+    parametri = leggi_parametri(db)
+    risultati = []
+    for h in hotels:
+        c = controllo_previsione(db, h.code, anno, parametri=parametri)
+        risultati.append({
+            'hotel_code': h.code,
+            'hotel_name': h.name,
+            'correttivo_stagione': leggi_correttivi(db, h.code, anno).get(None),
+            **c,
+            'snapshot': c['snapshot'].isoformat() if c['snapshot'] else None,
+            'snapshot_anno_prec': c['snapshot_anno_prec'].isoformat() if c.get('snapshot_anno_prec') else None,
+        })
+    return {
+        'anno': anno,
+        'anticipi_giorni': list(ANTICIPI_CONTROLLO),
+        'min_settimane_suggerimento': MIN_SETTIMANE_SUGGERIMENTO,
+        'hotel': risultati,
+    }
+
+
+@router.get("/correttivi")
+def get_correttivi(anno: int = Query(...), db: Session = Depends(get_db), _=Depends(richiedi_utente_attivo)):
+    hotels, stagioni = _hotel_stagione(db, anno)
     righe = db.query(BudgetPrevisioneCorrettivo).filter(BudgetPrevisioneCorrettivo.season_year == anno).all()
     return {
         'anno': anno,

@@ -126,6 +126,8 @@ class StoricoAnno:
     otb: dict = field(default_factory=lambda: defaultdict(lambda: defaultdict(_vuoto)))
     finale: dict = field(default_factory=lambda: defaultdict(_vuoto))
     ultima_data: dict = field(default_factory=dict)  # settimana → ultima data con righe
+    otb_mese: dict = field(default_factory=lambda: defaultdict(lambda: defaultdict(_vuoto)))
+    finale_mese: dict = field(default_factory=lambda: defaultdict(_vuoto))
     snapshot: list = field(default_factory=list)      # snapshot ordinate
 
 
@@ -151,6 +153,7 @@ def carica_storico(db: Session, hotel_code: str, anni: list[int]) -> dict[int, S
         st = storico.setdefault(r.data.year, StoricoAnno())
         ws = settimana_di(r.data)
         _somma(st.otb[r.snapshot_date][ws], r)
+        _somma(st.otb_mese[r.snapshot_date][r.data.month], r)
         prev = ultima_per_data.get(r.data)
         if prev is None or r.snapshot_date > prev.snapshot_date:
             ultima_per_data[r.data] = r
@@ -158,6 +161,7 @@ def carica_storico(db: Session, hotel_code: str, anni: list[int]) -> dict[int, S
         st = storico[d.year]
         ws = settimana_di(d)
         _somma(st.finale[ws], r)
+        _somma(st.finale_mese[d.month], r)
         if d > st.ultima_data.get(ws, date.min):
             st.ultima_data[ws] = d
     for st in storico.values():
@@ -219,6 +223,43 @@ def correttivo_settimana(ws: date, correttivi: dict) -> float:
     return float(correttivi.get(None) or 0)
 
 
+def _anni_precedenti(season_year: int, p: dict) -> list[int]:
+    return [season_year - i for i in range(1, len(p['peso_anni']) + 1)]
+
+
+def _snapshot_corrente(corrente: Optional[StoricoAnno], oggi: date) -> Optional[date]:
+    if not corrente:
+        return None
+    valide = [s for s in corrente.snapshot if s <= oggi]
+    return valide[-1] if valide else None
+
+
+def _prevedi(storico: dict, season_year: int, ws: date, snapshot: date, p: dict,
+             correttivo: float = 0.0) -> Optional[tuple[dict, int]]:
+    """Previsione della settimana ws con i dati noti alla snapshot indicata (anche passata, per il
+    controllo a ritroso). (valori, n settimane di riferimento) oppure None se manca lo storico."""
+    otb = storico[season_year].otb[snapshot][ws]
+    anticipo = max((ws - snapshot).days, 0)
+    stime = []
+    for a, peso in zip(_anni_precedenti(season_year, p), p['peso_anni']):
+        if a not in storico or not peso:
+            continue
+        s = _stima_anno(storico[a], ws - timedelta(days=364 * (season_year - a)), anticipo, otb, p)
+        if s is not None:
+            stime.append((peso, s))
+    if not stime:
+        return None
+    tot_peso = sum(w for w, _ in stime)
+    valori = {'rooms_available': otb['rooms_available']}
+    for c in CAMPI_PREVISTI:
+        prev = sum(w * s[c] for w, s in stime) / tot_peso
+        valori[c] = max(otb[c] + (prev - otb[c]) * (1 + correttivo / 100), 0.0)
+    if otb['rooms_available']:
+        valori['rooms_sold'] = min(valori['rooms_sold'], otb['rooms_available'])
+    valori['revenue_total'] = valori['revenue_rooms'] + valori['revenue_fnb'] + valori['revenue_extra']
+    return valori, sum(s['_n_riferimento'] for _, s in stime)
+
+
 def previsione_stagione(
     db: Session,
     hotel_code: str,
@@ -239,16 +280,9 @@ def previsione_stagione(
     """
     p = {**PARAMETRI_DEFAULT, **(parametri or {})}
     oggi = oggi or date.today()
-    anni_prec = [season_year - i for i in range(1, len(p['peso_anni']) + 1)]
-    storico = carica_storico(db, hotel_code, [season_year] + anni_prec)
+    storico = carica_storico(db, hotel_code, [season_year] + _anni_precedenti(season_year, p))
     corrente = storico.get(season_year)
-    snapshot = None
-    if corrente:
-        valide = [s for s in corrente.snapshot if s <= oggi]
-        snapshot = valide[-1] if valide else None
-
-    anni_storico = [a for a in anni_prec if a in storico]
-    pesi = {a: w for a, w in zip(anni_prec, p['peso_anni'])}
+    snapshot = _snapshot_corrente(corrente, oggi)
 
     risultato = {}
     for ws in settimane:
@@ -265,35 +299,130 @@ def previsione_stagione(
             voce['valori'] = dict(corrente.finale[ws])
             continue
 
-        anticipo = max((ws - snapshot).days, 0)
-        voce['anticipo_giorni'] = anticipo
+        voce['anticipo_giorni'] = max((ws - snapshot).days, 0)
         in_corso = ws <= snapshot
-        stime = []
-        for a in anni_storico:
-            s = _stima_anno(storico[a], ws - timedelta(days=364 * (season_year - a)), anticipo, otb, p)
-            if s is not None:
-                stime.append((pesi[a], s))
-        if not stime:
+        corr = correttivo_settimana(ws, p['correttivi'])
+        stima = _prevedi(storico, season_year, ws, snapshot, p, corr)
+        if stima is None:
             if in_corso:
                 voce['tipo'] = 'otb'
                 voce['valori'] = otb
             continue
-
-        tot_peso = sum(w for w, _ in stime)
-        corr = correttivo_settimana(ws, p['correttivi'])
-        valori = {'rooms_available': otb['rooms_available']}
-        for c in CAMPI_PREVISTI:
-            prev = sum(w * s[c] for w, s in stime) / tot_peso
-            valori[c] = otb[c] + (prev - otb[c]) * (1 + corr / 100)
-        for c in CAMPI_PREVISTI:
-            valori[c] = max(valori[c], 0.0)
-        if otb['rooms_available']:
-            valori['rooms_sold'] = min(valori['rooms_sold'], otb['rooms_available'])
-        valori['revenue_total'] = valori['revenue_rooms'] + valori['revenue_fnb'] + valori['revenue_extra']
+        valori, n_rif = stima
         voce.update(
             tipo='in_corso' if in_corso else 'previsione',
             valori=valori,
-            n_riferimento=sum(s['_n_riferimento'] for _, s in stime),
+            n_riferimento=n_rif,
             correttivo_pct=corr,
         )
+    anni_storico = [a for a in _anni_precedenti(season_year, p) if a in storico]
     return {'snapshot': snapshot, 'anni_storico': anni_storico, 'settimane': risultato}
+
+
+# ---------------------------------------------------------------------------
+# Controllo dell'algoritmo (Admin): precisione a ritroso e ritmo vs anno precedente
+# ---------------------------------------------------------------------------
+
+ANTICIPI_CONTROLLO = (14, 28, 56)   # 2, 4, 8 settimane prima dell'arrivo
+MIN_SETTIMANE_SUGGERIMENTO = 3
+
+
+def _riepilogo_errori(righe: list[dict]) -> dict:
+    """righe: {'otb', 'previsione', 'finale'} sul ricavo totale di una settimana."""
+    n = len(righe)
+    if not n:
+        return {'n_settimane': 0, 'errore_medio_pct': None, 'scostamento_pct': None,
+                'pickup_previsto': 0.0, 'pickup_reale': 0.0, 'suggerito_pct': None}
+    fin = sum(r['finale'] for r in righe)
+    prev = sum(r['previsione'] for r in righe)
+    pk_prev = sum(r['previsione'] - r['otb'] for r in righe)
+    pk_real = sum(r['finale'] - r['otb'] for r in righe)
+    errori = [abs(r['previsione'] - r['finale']) / r['finale'] * 100 for r in righe if r['finale']]
+    suggerito = None
+    if n >= MIN_SETTIMANE_SUGGERIMENTO and pk_prev > 0:
+        suggerito = max(-90.0, min(200.0, round((pk_real / pk_prev - 1) * 100)))
+    return {
+        'n_settimane': n,
+        'errore_medio_pct': round(statistics.mean(errori), 1) if errori else None,
+        # positivo = la previsione era più alta del finale (sovrastima)
+        'scostamento_pct': round((prev - fin) / fin * 100, 1) if fin else None,
+        'pickup_previsto': pk_prev,
+        'pickup_reale': pk_real,
+        'suggerito_pct': suggerito,
+    }
+
+
+def controllo_previsione(
+    db: Session,
+    hotel_code: str,
+    season_year: int,
+    oggi: Optional[date] = None,
+    parametri: Optional[dict] = None,
+) -> dict:
+    """
+    Precisione: per ogni settimana chiusa della stagione rifà la previsione (senza correttivo) alla
+    snapshot di 2/4/8 settimane prima e la confronta col finale. Correttivo suggerito =
+    Σ vendite reali / Σ vendite previste − 1 su tutte le distanze, solo con almeno
+    MIN_SETTIMANE_SUGGERIMENTO settimane. Ritmo: OTB dei mesi alla snapshot corrente contro l'OTB
+    dell'anno precedente alla stessa data (−364 giorni). Tutto ricalcolato dalle snapshot.
+    """
+    p = {**PARAMETRI_DEFAULT, **(parametri or {})}
+    oggi = oggi or date.today()
+    anni_prec = _anni_precedenti(season_year, p)
+    storico = carica_storico(db, hotel_code, [season_year] + anni_prec)
+    corrente = storico.get(season_year)
+    snapshot = _snapshot_corrente(corrente, oggi)
+    anni_storico = [a for a in anni_prec if a in storico]
+    vuoto = {'snapshot': snapshot, 'anni_storico': anni_storico, 'settimane': [],
+             'per_anticipo': [], 'complessivo': _riepilogo_errori([]), 'ritmo': []}
+    if snapshot is None:
+        return vuoto
+
+    # --- precisione a ritroso
+    per_anticipo = {a: [] for a in ANTICIPI_CONTROLLO}
+    settimane = []
+    for ws in sorted(corrente.finale):
+        if corrente.ultima_data.get(ws, ws) >= snapshot:
+            continue   # non ancora chiusa
+        finale = corrente.finale[ws]['revenue_total']
+        voce = {'week_start': ws.isoformat(), 'finale': finale, 'previsioni': []}
+        for anticipo in ANTICIPI_CONTROLLO:
+            s = _snapshot_vicina(corrente, ws - timedelta(days=anticipo), p['tolleranza_giorni'])
+            if s is None or ws not in corrente.otb[s]:
+                continue
+            stima = _prevedi(storico, season_year, ws, s, p)
+            if stima is None:
+                continue
+            riga = {'otb': corrente.otb[s][ws]['revenue_total'],
+                    'previsione': stima[0]['revenue_total'], 'finale': finale}
+            per_anticipo[anticipo].append(riga)
+            voce['previsioni'].append({'anticipo_giorni': anticipo, 'snapshot': s.isoformat(),
+                                       'otb': riga['otb'], 'previsione': riga['previsione']})
+        if voce['previsioni']:
+            settimane.append(voce)
+
+    # --- ritmo: OTB per mese oggi vs anno precedente alla stessa data
+    ritmo = []
+    prec = storico.get(season_year - 1)
+    s_prec = _snapshot_vicina(prec, snapshot - timedelta(days=364), p['tolleranza_giorni']) if prec else None
+    for mese in sorted(corrente.otb_mese[snapshot]):
+        oggi_m = corrente.otb_mese[snapshot][mese]['revenue_total']
+        prec_m = prec.otb_mese[s_prec][mese]['revenue_total'] if s_prec else None
+        fin_prec = prec.finale_mese[mese]['revenue_total'] if prec and mese in prec.finale_mese else None
+        ritmo.append({
+            'mese': mese,
+            'otb': oggi_m,
+            'otb_anno_prec': prec_m,
+            'delta_pct': round((oggi_m - prec_m) / prec_m * 100, 1) if prec_m else None,
+            'finale_anno_prec': fin_prec,
+        })
+
+    return {
+        'snapshot': snapshot,
+        'snapshot_anno_prec': s_prec,
+        'anni_storico': anni_storico,
+        'settimane': settimane,
+        'per_anticipo': [{'anticipo_giorni': a, **_riepilogo_errori(r)} for a, r in per_anticipo.items()],
+        'complessivo': _riepilogo_errori([r for rs in per_anticipo.values() for r in rs]),
+        'ritmo': ritmo,
+    }
