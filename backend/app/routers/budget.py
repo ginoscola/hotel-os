@@ -42,6 +42,7 @@ from app.database import get_db
 from app.models.revenue import BudgetConfig, BudgetEntry, DailyRevenue, Hotel, HotelSeason
 from app.services.budget_calculator import KPIBudget, calcola_kpi_budget, calcola_mese_contabile
 from app.services.budget_importer import importa_budget_excel
+from app.services.pickup_forecast import previsione_stagione
 from app.services.weekly_aggregator import settimana_di
 from app.routers.export import (
     _FMT_INT, _costruisci_pdf, _pv, _risposta, _scrivi_intestazione, _to_buf,
@@ -469,48 +470,26 @@ def proiezione_gruppo(
     version: str = Query('v1'),
     db: Session = Depends(get_db),
 ):
-    """Proiezione fine stagione per il gruppo."""
-    hotels = db.query(Hotel).all()
-    budget_gruppo = {'revenue_total': 0.0, 'rooms_sold': 0, 'revenue_rooms': 0.0,
-                     'revenue_fnb': 0.0, 'revenue_extra': 0.0}
-    proiezione_gruppo = {k: 0.0 for k in budget_gruppo}
+    """Proiezione fine stagione per il gruppo (stessa logica per hotel di /{hotel}/proiezione)."""
     risultati_hotel = []
-
-    for hotel in hotels:
-        entries = (
-            db.query(BudgetEntry)
-            .filter(
-                BudgetEntry.hotel_id == hotel.id,
-                BudgetEntry.season_year == season_year,
-                BudgetEntry.version == version,
-            )
-            .order_by(BudgetEntry.week_start)
-            .all()
-        )
-        if not entries:
+    for hotel in db.query(Hotel).order_by(Hotel.code).all():
+        p = _proiezione_hotel(hotel, season_year, version, db)
+        if p is None:
             continue
-        actual_map = _actual_settimanale(hotel, season_year, version, db)
-        bud = 0.0; proj = 0.0; n_comp = 0
-        for e in entries:
-            bud += float(e.revenue_total_budget or 0)
-            a = actual_map.get(e.week_start)
-            proj += a['revenue_total'] if a else float(e.revenue_total_budget or 0)
-            if a:
-                n_comp += 1
-        def sd(n, d): return n / d if d else None
+        bud = p['stagione_budget_totale']['revenue_total']
+        proj = p['stagione_proiezione']['revenue_total']
         risultati_hotel.append({
             'hotel_code': hotel.code,
             'hotel_name': hotel.name,
             'budget_totale': bud,
             'proiezione': proj,
+            'otb': p['stagione_otb']['revenue_total'],
             'scostamento': proj - bud,
-            'scostamento_pct': sd(proj - bud, bud),
-            'settimane_completate': n_comp,
-            'settimane_totali': len(entries),
+            'scostamento_pct': (proj - bud) / bud if bud else None,
+            'settimane_completate': p['settimane_completate'],
+            'settimane_totali': p['settimane_totali'],
+            'snapshot_otb': p['snapshot_otb'],
         })
-        for k in budget_gruppo:
-            budget_gruppo[k] += float(getattr(entries[0], f'{k}_budget', 0) or 0) * len(entries)
-        proiezione_gruppo['revenue_total'] += proj
 
     return {
         'season_year': season_year,
@@ -804,17 +783,13 @@ def confronto_mensile(
     }
 
 
-@router.get("/{hotel_code}/{season_year}/proiezione")
-def proiezione_fine_stagione(
-    hotel_code: str,
-    season_year: int,
-    version: str = Query('v1'),
-    db: Session = Depends(get_db),
-):
+def _proiezione_hotel(hotel: Hotel, season_year: int, version: str, db: Session,
+                      oggi: Optional[date] = None) -> Optional[dict]:
     """
-    Proiezione fine stagione: settimane con actual → usa actual; senza → usa budget.
+    Proiezione fine stagione di un hotel, una riga per settimana di budget:
+    consuntivo per le settimane chiuse, previsione pickup (services/pickup_forecast.py) per quelle
+    in corso/future, budget dove non c'è né OTB né storico. None se non c'è budget.
     """
-    hotel = _hotel_o_404(hotel_code, db)
     entries = (
         db.query(BudgetEntry)
         .filter(
@@ -826,40 +801,51 @@ def proiezione_fine_stagione(
         .all()
     )
     if not entries:
-        raise HTTPException(status_code=404, detail="Nessun budget inserito")
+        return None
 
-    actual_map = _actual_settimanale(hotel, season_year, version, db)
+    prev = previsione_stagione(db, hotel.code, season_year, [e.week_start for e in entries], oggi=oggi)
 
     campi = ['rooms_sold', 'rooms_available', 'revenue_rooms', 'revenue_fnb',
              'revenue_extra', 'revenue_total']
     bud_tot  = {k: 0.0 for k in campi}
     act_parz = {k: 0.0 for k in campi}
+    otb_tot  = {k: 0.0 for k in campi}
     proj_tot = {k: 0.0 for k in campi}
     sett_completate = 0
 
     dettaglio = []
     for e in entries:
         b = _entry_to_budget_dict(e)
-        a = actual_map.get(e.week_start)
+        p = prev['settimane'][e.week_start]
+        tipo = p['tipo']
+        if tipo == 'senza_dati':
+            tipo = 'budget'
+            valori = b
+        else:
+            valori = p['valori']
         for k in campi:
             bud_tot[k]  += b.get(k) or 0
-            proj_tot[k] += (a.get(k) if a else b.get(k)) or 0
-            if a:
-                act_parz[k] += a.get(k) or 0
-        if a:
+            proj_tot[k] += valori.get(k) or 0
+            otb_tot[k]  += (p['otb'] or {}).get(k) or 0
+            if tipo == 'consuntivo':
+                act_parz[k] += valori.get(k) or 0
+        if tipo == 'consuntivo':
             sett_completate += 1
-        tipo = 'completata' if a else 'proiettata'
         dettaglio.append({
             'week_start': e.week_start.isoformat(),
             'week_end': (e.week_start + timedelta(days=6)).isoformat(),
             'tipo': tipo,
             'budget': b,
-            'actual_o_proiezione': a if a else b,
+            'otb': p['otb'],
+            'actual_o_proiezione': valori,
+            'anticipo_giorni': p['anticipo_giorni'],
+            'n_riferimento': p['n_riferimento'],
+            'correttivo_pct': p['correttivo_pct'],
         })
 
     def sd(n, d): return n / d if d else None
     scost = {k: sd(proj_tot[k] - bud_tot[k], bud_tot[k]) for k in campi}
-    pct_completata = sett_completate / len(entries) * 100 if entries else 0
+    pct_completata = sett_completate / len(entries) * 100
 
     scost_rev = proj_tot['revenue_total'] - bud_tot['revenue_total']
     # sd() restituisce una frazione: soglia 5% = 0.05
@@ -874,8 +860,11 @@ def proiezione_fine_stagione(
         'hotel_code': hotel.code,
         'season_year': season_year,
         'version': version,
+        'snapshot_otb': prev['snapshot'].isoformat() if prev['snapshot'] else None,
+        'anni_storico': prev['anni_storico'],
         'stagione_budget_totale': bud_tot,
         'stagione_actual_parziale': act_parz,
+        'stagione_otb': otb_tot,
         'stagione_proiezione': proj_tot,
         'scostamento_proiezione': scost,
         'settimane_completate': sett_completate,
@@ -884,6 +873,24 @@ def proiezione_fine_stagione(
         'trend': trend,
         'dettaglio': dettaglio,
     }
+
+
+@router.get("/{hotel_code}/{season_year}/proiezione")
+def proiezione_fine_stagione(
+    hotel_code: str,
+    season_year: int,
+    version: str = Query('v1'),
+    db: Session = Depends(get_db),
+):
+    """
+    Proiezione fine stagione: consuntivo per le settimane chiuse, previsione pickup per quelle
+    in corso/future (OTB + vendite attese dallo storico degli anni precedenti), budget se mancano
+    OTB o storico.
+    """
+    p = _proiezione_hotel(_hotel_o_404(hotel_code, db), season_year, version, db)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Nessun budget inserito")
+    return p
 
 
 @router.get("/{hotel_code}/{season_year}/settimane-mancanti")

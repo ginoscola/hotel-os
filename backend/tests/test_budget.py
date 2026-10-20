@@ -288,31 +288,31 @@ def test_confronto_con_actual(client, test_engine):
 # TEST PROIEZIONE
 # ===========================================================================
 
-def test_proiezione_mix_actual_budget(client, test_engine):
-    """Sett. 1 con actual, sett. 2 senza → proiezione usa actual + budget."""
+def _riga_revenue(conn, data, snapshot, rooms_sold, revenue_rooms, hotel='DPH'):
+    hid = conn.execute(text("SELECT id FROM hotels WHERE code=:c"), {'c': hotel}).scalar()
+    conn.execute(text("""
+        INSERT INTO daily_revenue
+          (hotel_code, hotel_id, data, rooms_sold, rooms_available, pax,
+           revenue_rooms, revenue_fnb, revenue_extra, revenue_total, snapshot_date)
+        VALUES (:h, :hid, :data, :rs, 43, 10, :rr, 0, 0, :rr, :snap)
+    """), {'h': hotel, 'hid': hid, 'data': data, 'rs': rooms_sold, 'rr': revenue_rooms, 'snap': snapshot})
+
+
+def test_proiezione_mix_consuntivo_budget(client, test_engine):
+    """Sett. 1 chiusa prima della snapshot → consuntivo; sett. 2 senza OTB né storico → budget."""
     client.put("/budget/DPH/2026/2026-06-06", json={'occupancy': 70.0, 'adr': 80.0})
     client.put("/budget/DPH/2026/2026-06-13", json={'occupancy': 60.0, 'adr': 70.0})
-    # Leggi il budget_revenue_rooms della sett2 per il confronto
-    sett2_bud = client.get("/budget/DPH/2026/2026-06-13?version=v1").json()
-    sett2_rev_rooms = sett2_bud['revenue_rooms']
+    sett2_rev_rooms = client.get("/budget/DPH/2026/2026-06-13?version=v1").json()['revenue_rooms']
 
     with test_engine.connect() as conn:
-        dph_id = conn.execute(text("SELECT id FROM hotels WHERE code='DPH'")).scalar()
         for i in range(7):
-            giorno = date(2026, 6, 6) + timedelta(days=i)
-            conn.execute(text("""
-                INSERT INTO daily_revenue
-                  (hotel_code, hotel_id, data, rooms_sold, rooms_available, pax,
-                   revenue_rooms, revenue_fnb, revenue_extra, revenue_total, snapshot_date)
-                VALUES ('DPH', :hid, :data, 5, 43, 10, 400, 0, 0, 400, '2026-06-01')
-            """), {'hid': dph_id, 'data': giorno})
+            _riga_revenue(conn, date(2026, 6, 6) + timedelta(days=i), '2026-06-13', 5, 400)
         conn.commit()
-    resp = client.get("/budget/DPH/2026/proiezione?version=v1")
-    d = resp.json()
+    d = client.get("/budget/DPH/2026/proiezione?version=v1").json()
     assert d['settimane_completate'] == 1
     assert d['settimane_totali']     == 2
     assert d['pct_stagione_completata'] == pytest.approx(50.0)
-    # proiezione = actual sett1 (400*7) + budget sett2
+    assert [r['tipo'] for r in d['dettaglio']] == ['consuntivo', 'budget']
     assert d['stagione_proiezione']['revenue_rooms'] == pytest.approx(400 * 7 + sett2_rev_rooms, rel=1e-3)
 
 
@@ -320,18 +320,83 @@ def test_proiezione_trend_soglia_5_per_cento(client, test_engine):
     """Trend: scostamento oltre ±5% → sopra/sotto budget, non 'in_linea' (soglia 0.05, non 5)."""
     client.put("/budget/DPH/2026/2026-06-06", json={'occupancy': 70.0, 'adr': 80.0})
     with test_engine.connect() as conn:
-        dph_id = conn.execute(text("SELECT id FROM hotels WHERE code='DPH'")).scalar()
         for i in range(7):
-            giorno = date(2026, 6, 6) + timedelta(days=i)
-            conn.execute(text("""
-                INSERT INTO daily_revenue
-                  (hotel_code, hotel_id, data, rooms_sold, rooms_available, pax,
-                   revenue_rooms, revenue_fnb, revenue_extra, revenue_total, snapshot_date)
-                VALUES ('DPH', :hid, :data, 5, 43, 10, 400, 0, 0, 400, '2026-06-01')
-            """), {'hid': dph_id, 'data': giorno})
+            _riga_revenue(conn, date(2026, 6, 6) + timedelta(days=i), '2026-06-13', 5, 400)
         conn.commit()
     d = client.get("/budget/DPH/2026/proiezione?version=v1").json()
     assert d['trend'] == 'sotto_budget'
+
+
+def _storico_pickup(conn):
+    """2025: sett. 05/07 con OTB 1000 € a 28 giorni e finale 2000 €. 2026: sett. 04/07 con OTB 1500 €
+    a 28 giorni (snapshot 06/06), sett. 30/05 già chiusa, sett. 01/08 senza storico."""
+    _riga_revenue(conn, date(2025, 7, 5), '2025-06-07', 10, 1000)
+    _riga_revenue(conn, date(2025, 7, 5), '2025-07-14', 20, 2000)
+    _riga_revenue(conn, date(2026, 5, 30), '2026-06-06', 30, 3000)
+    _riga_revenue(conn, date(2026, 7, 4), '2026-06-06', 15, 1500)
+    _riga_revenue(conn, date(2026, 8, 1), '2026-06-06', 5, 500)
+    conn.commit()
+
+
+def test_previsione_pickup_media_moltiplicativo_additivo(test_engine, TestSession):
+    from app.services.pickup_forecast import previsione_stagione
+    with test_engine.connect() as conn:
+        _storico_pickup(conn)
+    db = TestSession()
+    try:
+        sett = [date(2026, 5, 30), date(2026, 7, 4), date(2026, 8, 1)]
+        r = previsione_stagione(db, 'DPH', 2026, sett, oggi=date(2026, 6, 10))
+        assert r['snapshot'] == date(2026, 6, 6)
+        assert r['anni_storico'] == [2025]
+        s = r['settimane']
+        assert s[date(2026, 5, 30)]['tipo'] == 'consuntivo'
+        assert s[date(2026, 5, 30)]['valori']['revenue_rooms'] == pytest.approx(3000)
+        prev = s[date(2026, 7, 4)]
+        assert prev['tipo'] == 'previsione'
+        assert prev['anticipo_giorni'] == 28
+        # moltiplicativo 1500×2 = 3000, additivo 1500+1000 = 2500 → media 2750
+        assert prev['valori']['revenue_rooms'] == pytest.approx(2750)
+        assert prev['valori']['revenue_total'] == pytest.approx(2750)
+        # camere: 15×2 = 30, 15+10 = 25 → 27,5
+        assert prev['valori']['rooms_sold'] == pytest.approx(27.5)
+        assert s[date(2026, 8, 1)]['tipo'] == 'senza_dati'
+
+        # correttivo −20% solo sul pickup (1250 € → 1000 €), l'OTB resta intero
+        r = previsione_stagione(db, 'DPH', 2026, sett, oggi=date(2026, 6, 10),
+                                parametri={'correttivi': {7: -20}})
+        assert r['settimane'][date(2026, 7, 4)]['valori']['revenue_rooms'] == pytest.approx(2500)
+        assert r['settimane'][date(2026, 7, 4)]['correttivo_pct'] == -20
+    finally:
+        db.close()
+
+
+def test_previsione_camere_non_superano_disponibili(test_engine, TestSession):
+    from app.services.pickup_forecast import previsione_stagione
+    with test_engine.connect() as conn:
+        _riga_revenue(conn, date(2025, 7, 5), '2025-06-07', 10, 1000)
+        _riga_revenue(conn, date(2025, 7, 5), '2025-07-14', 40, 4000)
+        _riga_revenue(conn, date(2026, 7, 4), '2026-06-06', 30, 3000)
+        conn.commit()
+    db = TestSession()
+    try:
+        r = previsione_stagione(db, 'DPH', 2026, [date(2026, 7, 4)], oggi=date(2026, 6, 10))
+        assert r['settimane'][date(2026, 7, 4)]['valori']['rooms_sold'] == 43
+    finally:
+        db.close()
+
+
+def test_proiezione_endpoint_usa_previsione(client, test_engine):
+    """Settimana futura con storico → tipo 'previsione', proiezione = previsione pickup."""
+    client.put("/budget/DPH/2026/2026-07-04", json={'occupancy': 70.0, 'adr': 80.0})
+    with test_engine.connect() as conn:
+        _storico_pickup(conn)
+    d = client.get("/budget/DPH/2026/proiezione?version=v1").json()
+    r = d['dettaglio'][0]
+    assert r['tipo'] == 'previsione'
+    assert r['otb']['revenue_rooms'] == pytest.approx(1500)
+    assert d['stagione_proiezione']['revenue_rooms'] == pytest.approx(2750)
+    assert d['stagione_otb']['revenue_rooms'] == pytest.approx(1500)
+    assert d['snapshot_otb'] == '2026-06-06'
 
 
 # ===========================================================================

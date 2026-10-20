@@ -1548,7 +1548,23 @@ denominatore (il totale prenotato quel mese, cancellato o no).
 `rooms_sold_budget = round(occupancy/100 * rooms_available)`. KPI derivati calcolati in `budget_calculator.py`.
 **Mese contabile**: mese con più giorni nella settimana (≥4, nessuna parità possibile).
 **Versioning**: v1 = ufficiale; v2+ copiate da source_version, completamente indipendenti.
-**Proiezione**: settimane con actual da `daily_revenue` (snapshot più recente); senza actual → stima budget. Trend: 'sopra/sotto_budget/in_linea' (soglia 5%).
+**Proiezione** (v3.25.0, `_proiezione_hotel()` in `budget.py`, usata anche da `/gruppo/{anno}/proiezione`):
+per ogni settimana di budget, rispetto all'ultima snapshot Revenue ≤ oggi dell'anno di budget:
+`consuntivo` (tutti i giorni prima della snapshot) → dati Revenue; `in_corso`/`previsione` → **previsione
+pickup** (`services/pickup_forecast.py::previsione_stagione`); `otb` (in corso senza storico) → prenotato;
+`budget` (nessuna snapshot o nessuno storico) → budget. Trend: 'sopra/sotto_budget/in_linea' (soglia 5%).
+Previsione pickup: per la settimana W a D giorni dall'arrivo, settimane di riferimento = W − 364gg·k (anni
+precedenti) ±2 settimane; per ognuna OTB alla snapshot con lo stesso anticipo (la più vicina entro 4gg) e
+valore finale; previsione = 50% OTB × (ΣFinale/ΣOTB) + 50% (OTB + media(Finale−OTB)), anni pesati 2:1.
+Previsti a parte camere vendute e ricavi camere/F&B/extra; camere ≤ disponibili. Il correttivo % (per mese o
+stagione) agisce solo sul pickup previsto, mai sull'OTB. Parametri in `PARAMETRI_DEFAULT` (in arrivo da Admin).
+Prova sul 2026 (settimane vicine dello stesso anno come proxy dell'anno precedente, quindi ottimistica):
+errore sul ricavo di stagione 1–2,5% già da marzo, contro 40–70% del solo OTB; un tetto al coefficiente
+(×4) peggiorava l'inizio stagione (DPH vende molto sotto data, coefficienti ×9 a 20 settimane normali).
+Imparare il coefficiente solo dalle settimane già chiuse della stagione in corso sbaglia molto (maggio/giugno
+non somigliano ad agosto): serve lo storico degli anni precedenti, quindi dal 2027 (primi dati 2026).
+⚠️ Fino alla v3.24.x la proiezione contava come "completata" ogni settimana con righe in `daily_revenue`,
+comprese quelle future (ogni snapshot PlanningForecast copre l'intera stagione): proiezione = prenotato.
 ⚠️ Fino alla v3.24.3 la soglia del trend era confrontata con `5` invece di `0.05` (`sd()` dà una frazione):
 il giudizio risultava quasi sempre "in linea". Corretto in v3.24.4 (`test_proiezione_trend_soglia_5_per_cento`).
 

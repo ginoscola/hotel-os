@@ -628,7 +628,23 @@ const TREND = {
   sotto_budget: { label: 'SOTTO BUDGET', colore: colors.danger,  tono: 'err' },
   in_linea:     { label: 'IN LINEA',     colore: colors.info,    tono: 'info' },
 }
-const TONO_TIPO_SETTIMANA = { completata: 'ok', proiettata: 'neutral', in_corso: 'info' }
+// Fonte del valore di ogni settimana (vedi _proiezione_hotel in budget.py)
+const FONTE_SETTIMANA = {
+  consuntivo: { label: 'Consuntivo', tono: 'ok' },
+  in_corso:   { label: 'In corso',   tono: 'info' },
+  previsione: { label: 'Previsione', tono: 'info' },
+  otb:        { label: 'OTB',        tono: 'neutral' },
+  budget:     { label: 'Budget',     tono: 'neutral' },
+}
+const titoloFonte = (r) => {
+  if (r.tipo === 'previsione' || r.tipo === 'in_corso') {
+    const corr = r.correttivo_pct ? `, correttivo ${r.correttivo_pct > 0 ? '+' : ''}${r.correttivo_pct}%` : ''
+    return `OTB + vendite attese dallo storico: ${r.anticipo_giorni} giorni all'arrivo, ${r.n_riferimento} settimane di riferimento${corr}`
+  }
+  if (r.tipo === 'otb') return 'Settimana in corso senza storico: prenotato attuale'
+  if (r.tipo === 'budget') return 'Nessun OTB o storico disponibile: si usa il budget'
+  return 'Dati Revenue definitivi'
+}
 
 function TabProiezione({ hotel, anno, version }) {
   const [dati, setDati] = useState(null)
@@ -668,6 +684,12 @@ function TabProiezione({ hotel, anno, version }) {
             </div>
           </div>
           <div>
+            <div className="ui-text-muted">OTB attuale (prenotato)</div>
+            <div className="ui-num" style={{ fontWeight: 700, fontSize: 'var(--fs-xl)' }}>
+              {formatEuro(dati.stagione_otb?.revenue_total)}
+            </div>
+          </div>
+          <div>
             <div className="ui-text-muted">Scostamento</div>
             <div className="ui-num" style={{ fontWeight: 700, fontSize: 'var(--fs-xl)', color: trend.colore }}>
               {scostRev > 0 ? '+' : ''}{formatEuro(scostRev)}
@@ -682,7 +704,7 @@ function TabProiezione({ hotel, anno, version }) {
         {/* Barra avanzamento */}
         <div style={{ marginTop: 16 }}>
           <div className="ui-text-muted" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span>{dati.settimane_completate} settimane completate su {dati.settimane_totali}</span>
+            <span>{dati.settimane_completate} settimane chiuse su {dati.settimane_totali}</span>
             <span className="ui-num">{pct.toFixed(0)}%</span>
           </div>
           <div style={{ background: colors.border, borderRadius: 4, height: 10, overflow: 'hidden' }}>
@@ -690,6 +712,15 @@ function TabProiezione({ hotel, anno, version }) {
           </div>
         </div>
       </Card>
+
+      <div className="ui-text-muted" style={{ marginBottom: 12 }}>
+        {dati.snapshot_otb
+          ? <>Prenotato al {formatData(dati.snapshot_otb)}. </>
+          : <>Nessun dato Revenue per il {anno}: tutte le settimane usano il budget. </>}
+        {dati.anni_storico?.length
+          ? <>Settimane future: prenotato + vendite attese in base all'andamento del {dati.anni_storico.join(' e ')} alla stessa distanza dall'arrivo.</>
+          : dati.snapshot_otb && <>Nessuno storico degli anni precedenti: le settimane future usano il budget.</>}
+      </div>
 
       {/* KPI budget → proiezione */}
       <div className="ui-kpi-row">
@@ -703,10 +734,11 @@ function TabProiezione({ hotel, anno, version }) {
         <thead>
           <tr>
             <Th>Settimana</Th>
-            <Th>Tipo</Th>
+            <Th>Fonte</Th>
             <Th num>Budget</Th>
-            <Th num>Actual / Proiezione</Th>
-            <Th num>Δ€</Th>
+            <Th num>OTB</Th>
+            <Th num>Consuntivo / Proiezione</Th>
+            <Th num>Δ€ vs budget</Th>
           </tr>
         </thead>
         <tbody>
@@ -715,10 +747,15 @@ function TabProiezione({ hotel, anno, version }) {
             const aRev = r.actual_o_proiezione?.revenue_total
             const delta = (bRev != null && aRev != null) ? aRev - bRev : null
             return (
-              <tr key={i} className={r.tipo === 'completata' ? 'ui-riga-ok' : undefined}>
+              <tr key={i} className={r.tipo === 'consuntivo' ? 'ui-riga-ok' : undefined}>
                 <Td>{labelSettimana(r.week_start)}</Td>
-                <Td><Badge tono={TONO_TIPO_SETTIMANA[r.tipo] ?? 'neutral'}>{r.tipo}</Badge></Td>
+                <Td>
+                  <span title={titoloFonte(r)}>
+                    <Badge tono={FONTE_SETTIMANA[r.tipo]?.tono ?? 'neutral'}>{FONTE_SETTIMANA[r.tipo]?.label ?? r.tipo}</Badge>
+                  </span>
+                </Td>
                 <Td num>{formatEuro(bRev)}</Td>
+                <Td num>{r.tipo === 'consuntivo' || r.otb == null ? '—' : formatEuro(r.otb.revenue_total)}</Td>
                 <Td num>{formatEuro(aRev)}</Td>
                 <Td num style={{ color: coloreSegno(delta) }}>{conSegno(delta, formatEuro)}</Td>
               </tr>
@@ -771,6 +808,7 @@ function TabGruppo({ anno, version }) {
             <Th num>Actual Rev.</Th>
             <Th num>Scostamento €</Th>
             <Th num>Scostamento %</Th>
+            <Th num>OTB</Th>
             <Th num>Proiezione</Th>
           </tr>
         </thead>
@@ -791,6 +829,7 @@ function TabGruppo({ anno, version }) {
                 <Td num>{aRev != null ? formatEuro(aRev) : '—'}</Td>
                 <Td num style={{ color: coloreSegno(sc) }}>{conSegno(sc, formatEuro)}</Td>
                 <Td num style={{ color: coloreSegno(scPct) }}>{conSegno(scPct, v => `${v.toFixed(1)}%`)}</Td>
+                <Td num>{projH?.snapshot_otb ? formatEuro(projH.otb) : '—'}</Td>
                 <Td num>{projH ? formatEuro(projH.proiezione) : '—'}</Td>
               </tr>
             )
