@@ -253,7 +253,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 494 test verdi (08/10/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 559 test verdi (20/10/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -2127,7 +2127,8 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
   sezione/reparto USALI (anno, mese, struttura, voce) con le stesse chiavi del report.
 - Fixture `tests/fixtures/usali/export-1.xlsx` + `pivot-1.csv` (DPH gen–set 2026, 223 conti).
   ⚠️ **Non lasciarli in `uploads/`**: `test_bulk_scan_cartella_uploads` (import massivo Revenue)
-  scansiona tutta la cartella e li conta come coppie in errore.
+  scansiona tutta la cartella e li conta come coppie in errore. Gli export USALI caricati a mano stanno in
+  `uploads/usali_export_originali/` (spostati lì il 20/10/2026: la scansione non legge le sottocartelle).
 
 ## Modulo USALI — Movimenti Attivi
 Seconda tab di `Usali.jsx` (`UsaliMovimentiAttivi.jsx`), accanto a "Conto Economico". Tabella
