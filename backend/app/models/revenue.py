@@ -318,6 +318,29 @@ class BudgetConfig(Base):
     )
 
 
+class BudgetPrevisioneCorrettivo(Base):
+    """Correttivo % sul pickup previsto della proiezione fine stagione (services/pickup_forecast.py).
+
+    Per hotel e stagione; mese 0 = valore di stagione, 1-12 = override del mese (prevale).
+    Agisce solo sulle vendite attese (previsione − OTB), mai sull'OTB. Nessuna riga = 0%.
+    """
+
+    __tablename__ = "budget_previsione_correttivi"
+
+    id = Column(Integer, primary_key=True)
+    hotel_code = Column(String(10), nullable=False)
+    season_year = Column(Integer, nullable=False)
+    mese = Column(Integer, nullable=False, default=0, server_default='0')
+    correttivo_pct = Column(Numeric(6, 2), nullable=False)
+    note = Column(Text, nullable=True)
+    modificato_da = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("hotel_code", "season_year", "mese", name="uq_budget_previsione_correttivo"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Modulo Spese Dipendenti
 # ---------------------------------------------------------------------------

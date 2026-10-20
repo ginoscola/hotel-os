@@ -68,9 +68,10 @@ def pulisci_tabelle(test_engine):
     """Svuota le tabelle rilevanti e reinserisce hotel + stagioni base prima di ogni test."""
     with test_engine.connect() as conn:
         conn.execute(text(
-            "TRUNCATE budget_entries, daily_revenue, hotel_seasons, hotels, imports "
-            "RESTART IDENTITY CASCADE"
+            "TRUNCATE budget_entries, daily_revenue, hotel_seasons, hotels, imports, "
+            "budget_previsione_correttivi RESTART IDENTITY CASCADE"
         ))
+        conn.execute(text("DELETE FROM app_config WHERE key = 'budget_previsione_parametri'"))
         conn.execute(text("""
             INSERT INTO hotels (code, name, default_rooms) VALUES
             ('CLB', 'Club Hotel', 45),
@@ -397,6 +398,67 @@ def test_proiezione_endpoint_usa_previsione(client, test_engine):
     assert d['stagione_proiezione']['revenue_rooms'] == pytest.approx(2750)
     assert d['stagione_otb']['revenue_rooms'] == pytest.approx(1500)
     assert d['snapshot_otb'] == '2026-06-06'
+
+
+def test_correttivi_mese_prevale_su_stagione(client, test_engine):
+    """Correttivo di luglio −20% prevale su quello di stagione +10%; null lo cancella."""
+    client.put("/budget/DPH/2026/2026-07-04", json={'occupancy': 70.0, 'adr': 80.0})
+    with test_engine.connect() as conn:
+        _storico_pickup(conn)
+    def proiezione():
+        return client.get("/budget/DPH/2026/proiezione?version=v1").json()
+
+    assert client.put("/budget-previsione/correttivi", json={
+        'hotel_code': 'DPH', 'season_year': 2026, 'mese': 0, 'correttivo_pct': 10}).status_code == 200
+    # pickup previsto 1250 € → +10% = 1375
+    assert proiezione()['stagione_proiezione']['revenue_rooms'] == pytest.approx(1500 + 1375)
+
+    client.put("/budget-previsione/correttivi", json={
+        'hotel_code': 'DPH', 'season_year': 2026, 'mese': 7, 'correttivo_pct': -20})
+    d = proiezione()
+    assert d['stagione_proiezione']['revenue_rooms'] == pytest.approx(2500)
+    assert d['dettaglio'][0]['correttivo_pct'] == -20
+    assert d['correttivi'] == [{'mese': None, 'correttivo_pct': 10}, {'mese': 7, 'correttivo_pct': -20}]
+
+    client.put("/budget-previsione/correttivi", json={
+        'hotel_code': 'DPH', 'season_year': 2026, 'mese': 7, 'correttivo_pct': None})
+    assert proiezione()['stagione_proiezione']['revenue_rooms'] == pytest.approx(1500 + 1375)
+
+    # altra stagione: nessun effetto
+    client.put("/budget-previsione/correttivi", json={
+        'hotel_code': 'DPH', 'season_year': 2027, 'mese': 0, 'correttivo_pct': -50})
+    assert proiezione()['stagione_proiezione']['revenue_rooms'] == pytest.approx(1500 + 1375)
+
+    g = client.get("/budget-previsione/correttivi?anno=2026").json()
+    assert g['mesi'] == [5, 6, 7, 8, 9]
+    assert [h['code'] for h in g['hotel']] == ['DPH']
+    assert g['righe'][0]['correttivo_pct'] == 10
+
+
+def test_correttivo_fuori_range_400(client):
+    r = client.put("/budget-previsione/correttivi", json={
+        'hotel_code': 'DPH', 'season_year': 2026, 'mese': 0, 'correttivo_pct': -95})
+    assert r.status_code == 400
+
+
+def test_parametri_algoritmo(client, test_engine):
+    """Default, salvataggio (solo moltiplicativo → 3000 €), validazione."""
+    g = client.get("/budget-previsione/parametri").json()
+    assert g['valori']['peso_moltiplicativo'] == 0.5
+    assert g['default']['finestra_settimane'] == 2
+
+    client.put("/budget/DPH/2026/2026-07-04", json={'occupancy': 70.0, 'adr': 80.0})
+    with test_engine.connect() as conn:
+        _storico_pickup(conn)
+    assert client.put("/budget-previsione/parametri", json={'peso_moltiplicativo': 1}).status_code == 200
+    d = client.get("/budget/DPH/2026/proiezione?version=v1").json()
+    assert d['stagione_proiezione']['revenue_rooms'] == pytest.approx(3000)
+    # il salvataggio parziale non perde gli altri valori
+    assert client.get("/budget-previsione/parametri").json()['valori']['finestra_settimane'] == 2
+
+    assert client.put("/budget-previsione/parametri", json={'peso_moltiplicativo': 1.5}).status_code == 400
+    assert client.put("/budget-previsione/parametri", json={'peso_anni': [0, 0]}).status_code == 400
+    assert client.put("/budget-previsione/parametri", json={'tetto_coefficiente': ''}).status_code == 200
 
 
 # ===========================================================================

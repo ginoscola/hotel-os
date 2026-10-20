@@ -18,6 +18,7 @@ errore sul ricavo di stagione 1–2,5% già da marzo, contro il 40–70% dell'OT
 
 from __future__ import annotations
 
+import json
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -26,7 +27,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.revenue import DailyRevenue
+from app.models.revenue import AppConfig, BudgetPrevisioneCorrettivo, DailyRevenue
 from app.services.weekly_aggregator import settimana_di
 
 CAMPI_PREVISTI = ('rooms_sold', 'revenue_rooms', 'revenue_fnb', 'revenue_extra')
@@ -40,6 +41,70 @@ PARAMETRI_DEFAULT = {
     'tolleranza_giorni': 4,       # distanza massima tra anticipo cercato e snapshot storica
     'correttivi': {},             # {mese (int) | None (stagione): % sul pickup}
 }
+
+
+CHIAVE_CONFIG = 'budget_previsione_parametri'
+PARAMETRI_ALGORITMO = ('peso_moltiplicativo', 'finestra_settimane', 'tetto_coefficiente',
+                       'peso_anni', 'tolleranza_giorni')
+
+
+def valida_parametri(p: dict) -> dict:
+    """Controlla e normalizza i parametri dell'algoritmo (solo le chiavi note). ValueError se fuori range."""
+    out = {}
+    for k in PARAMETRI_ALGORITMO:
+        if k not in p:
+            continue
+        v = p[k]
+        if k == 'peso_moltiplicativo':
+            v = float(v)
+            if not 0 <= v <= 1:
+                raise ValueError("Il peso del coefficiente moltiplicativo va da 0 a 1")
+        elif k == 'finestra_settimane':
+            v = int(v)
+            if not 0 <= v <= 6:
+                raise ValueError("Le settimane vicine vanno da 0 a 6")
+        elif k == 'tetto_coefficiente':
+            if v in (None, ''):
+                v = None
+            else:
+                v = float(v)
+                if not 1 < v <= 50:
+                    raise ValueError("Il tetto al coefficiente va da 1 a 50 (vuoto = nessun tetto)")
+        elif k == 'peso_anni':
+            v = [float(x) for x in v]
+            if not 1 <= len(v) <= 5 or any(x < 0 for x in v) or not any(x > 0 for x in v):
+                raise ValueError("Pesi anni: da 1 a 5 valori non negativi, almeno uno maggiore di zero")
+        elif k == 'tolleranza_giorni':
+            v = int(v)
+            if not 0 <= v <= 14:
+                raise ValueError("La tolleranza va da 0 a 14 giorni")
+        out[k] = v
+    return out
+
+
+def leggi_parametri(db: Session) -> dict:
+    """Parametri dell'algoritmo: default + valori salvati da Admin (app_config)."""
+    p = {k: PARAMETRI_DEFAULT[k] for k in PARAMETRI_ALGORITMO}
+    riga = db.query(AppConfig).filter(AppConfig.key == CHIAVE_CONFIG).first()
+    if riga:
+        try:
+            p.update(valida_parametri(json.loads(riga.value)))
+        except (ValueError, TypeError):
+            pass  # config corrotta: restano i default
+    return p
+
+
+def leggi_correttivi(db: Session, hotel_code: str, season_year: int) -> dict:
+    """{mese: %} per hotel/stagione; la chiave None è il valore di stagione (mese 0 in tabella)."""
+    righe = db.query(BudgetPrevisioneCorrettivo).filter(
+        BudgetPrevisioneCorrettivo.hotel_code == hotel_code,
+        BudgetPrevisioneCorrettivo.season_year == season_year,
+    ).all()
+    return {(r.mese or None): float(r.correttivo_pct) for r in righe}
+
+
+def parametri_hotel(db: Session, hotel_code: str, season_year: int) -> dict:
+    return {**leggi_parametri(db), 'correttivi': leggi_correttivi(db, hotel_code, season_year)}
 
 
 def _vuoto() -> dict:

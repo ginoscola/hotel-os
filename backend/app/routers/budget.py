@@ -42,7 +42,7 @@ from app.database import get_db
 from app.models.revenue import BudgetConfig, BudgetEntry, DailyRevenue, Hotel, HotelSeason
 from app.services.budget_calculator import KPIBudget, calcola_kpi_budget, calcola_mese_contabile
 from app.services.budget_importer import importa_budget_excel
-from app.services.pickup_forecast import previsione_stagione
+from app.services.pickup_forecast import parametri_hotel, previsione_stagione
 from app.services.weekly_aggregator import settimana_di
 from app.routers.export import (
     _FMT_INT, _costruisci_pdf, _pv, _risposta, _scrivi_intestazione, _to_buf,
@@ -803,7 +803,9 @@ def _proiezione_hotel(hotel: Hotel, season_year: int, version: str, db: Session,
     if not entries:
         return None
 
-    prev = previsione_stagione(db, hotel.code, season_year, [e.week_start for e in entries], oggi=oggi)
+    parametri = parametri_hotel(db, hotel.code, season_year)
+    prev = previsione_stagione(db, hotel.code, season_year, [e.week_start for e in entries],
+                               oggi=oggi, parametri=parametri)
 
     campi = ['rooms_sold', 'rooms_available', 'revenue_rooms', 'revenue_fnb',
              'revenue_extra', 'revenue_total']
@@ -862,6 +864,9 @@ def _proiezione_hotel(hotel: Hotel, season_year: int, version: str, db: Session,
         'version': version,
         'snapshot_otb': prev['snapshot'].isoformat() if prev['snapshot'] else None,
         'anni_storico': prev['anni_storico'],
+        # correttivi non nulli, per mostrarli in testa alla tab (mese None = stagione)
+        'correttivi': [{'mese': m, 'correttivo_pct': v}
+                       for m, v in sorted(parametri['correttivi'].items(), key=lambda x: x[0] or 0) if v],
         'stagione_budget_totale': bud_tot,
         'stagione_actual_parziale': act_parz,
         'stagione_otb': otb_tot,

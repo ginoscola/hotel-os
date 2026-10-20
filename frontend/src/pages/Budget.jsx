@@ -720,6 +720,13 @@ function TabProiezione({ hotel, anno, version }) {
         {dati.anni_storico?.length
           ? <>Settimane future: prenotato + vendite attese in base all'andamento del {dati.anni_storico.join(' e ')} alla stessa distanza dall'arrivo.</>
           : dati.snapshot_otb && <>Nessuno storico degli anni precedenti: le settimane future usano il budget.</>}
+        {dati.correttivi?.length > 0 && (
+          <div style={{ color: colors.accent, marginTop: 4 }}>
+            Correttivi sulle vendite attese:{' '}
+            {dati.correttivi.map(c => `${c.mese ? MESI_IT[c.mese - 1] : 'stagione'} ${c.correttivo_pct > 0 ? '+' : ''}${c.correttivo_pct}%`).join(', ')}
+            {' '}(Admin → Budget → Previsione fine stagione)
+          </div>
+        )}
       </div>
 
       {/* KPI budget → proiezione */}

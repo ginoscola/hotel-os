@@ -6,6 +6,7 @@ import AdminBackup from './admin/AdminBackup.jsx'
 import AdminCruscottoSoglie from './admin/AdminCruscottoSoglie.jsx'
 import AdminUiKit from './admin/AdminUiKit.jsx'
 import AdminUsaliCategorieKpi from './admin/AdminUsaliCategorieKpi.jsx'
+import AdminBudgetPrevisione from './admin/AdminBudgetPrevisione.jsx'
 import api from '../api/client.js'
 import {
   Badge, Button, Card, Checkbox, Field, Input, KpiTile, Loading, Messaggio, PageHeader, SegmentedControl, Select,
@@ -35,6 +36,12 @@ const SEZIONI = [
     voci: [
       { id: 'revenue-import', label: 'Import massivo' },
       { id: 'revenue-test',   label: 'Dati di test' },
+    ],
+  },
+  {
+    gruppo: 'Budget',
+    voci: [
+      { id: 'budget-previsione', label: 'Previsione fine stagione' },
     ],
   },
   {
@@ -181,6 +188,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'home-soglie')   return <AdminCruscottoSoglie />
   if (sezione === 'revenue-import') return <RevenueImportMassivo />
   if (sezione === 'revenue-test')  return <RevenueDatiTest />
+  if (sezione === 'budget-previsione') return <AdminBudgetPrevisione />
   if (sezione === 'dip-cc')           return <DipCentriDiCosto />
   if (sezione === 'dip-colori')       return <DipColoriCC />
   if (sezione === 'dip-test')         return <DipDatiTest />
