@@ -1594,6 +1594,12 @@ TRUNCATE di `hotels`.
 mezzanotte del sabato diventa venerdì 22:00Z, quindi le chiavi erano venerdì e non combaciavano con i
 `week_start` (sabato) del DB; un valore digitato a mano sarebbe stato salvato con `week_start` di venerdì.
 Fix: data formattata in ora locale. Mai `toISOString()` per ricavare una data da un `Date` locale.
+⚠️ **Le celle della tab Inserimento salvavano il valore senza l'ultimo tasto** (bug reale, v3.24.3): il
+salvataggio ritardato (`setTimeout` 500ms in `handleCellChange`) chiamava `salvaSettimana` del render in
+cui era stato creato, quindi leggeva `localEdit` senza l'ultima modifica — "70" salvato come 7, 70→70,1 con
+la freccetta salvato 70; a schermo sembrava giusto finché non si ricaricava la pagina. Fix: `editRef`/
+`settimaneRef` con i valori correnti, letti da `salvaSettimana`. Mai leggere stato React dentro un
+`setTimeout` di debounce: usare un ref o passare il valore.
 Riga **TOTALE** in fondo alla tab Inserimento (v3.18.2): somme di stagione e KPI sui totali (occupancy =
 Σcamere vendute/Σcamere disponibili, ADR/F&B/Extra per camera = Σrevenue/Σcamere vendute, RevPAR/TrevPAR su
 Σdisponibili). Le camere disponibili includono anche le settimane ancora senza budget (contano 0 vendute):

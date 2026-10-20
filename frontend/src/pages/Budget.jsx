@@ -125,6 +125,11 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
   const [loading, setLoading] = useState(false)
   const [errore, setErrore] = useState(null)
   const debRef = useRef({})
+  // Ultimi valori digitati, letti dal salvataggio ritardato: lo stato `localEdit` catturato dal
+  // setTimeout è quello del render precedente, senza l'ultimo tasto (scrivendo "70" salvava "7")
+  const editRef = useRef({})
+  const settimaneRef = useRef([])
+  settimaneRef.current = settimane
   const avvisi = useAvvisi()
   const conferma = useConferma()
   const [precompilando, setPrecompilando] = useState(false)
@@ -141,6 +146,7 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
       setSettimane(respBudget.data || [])
       setStagione(respStag.data)
       setVersioni(respVers.data.versions.length ? respVers.data.versions : ['v1'])
+      editRef.current = {}
       setLocalEdit({})
     } catch (e) {
       setErrore(mostraErrore(e))
@@ -172,18 +178,19 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
   }, [stagione, settimane])
 
   function handleCellChange(ws, campo, val) {
-    setLocalEdit(prev => ({
-      ...prev,
-      [ws]: { ...(prev[ws] || {}), [campo]: val },
-    }))
+    editRef.current = {
+      ...editRef.current,
+      [ws]: { ...(editRef.current[ws] || {}), [campo]: val },
+    }
+    setLocalEdit(editRef.current)
     // Debounce salvataggio
     clearTimeout(debRef.current[ws])
     debRef.current[ws] = setTimeout(() => salvaSettimana(ws), 500)
   }
 
   async function salvaSettimana(ws) {
-    const entry = settimane.find(s => s.week_start === ws) || {}
-    const edit = localEdit[ws] || {}
+    const entry = settimaneRef.current.find(s => s.week_start === ws) || {}
+    const edit = editRef.current[ws] || {}
     const merged = { ...entry, ...edit }
     const occupancy = parseFloat(String((merged.occupancy) || '').replace(',', '.')) || null
     const adr      = parseFloat(String(merged.adr || '').replace(',', '.')) || null
