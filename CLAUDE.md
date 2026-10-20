@@ -144,6 +144,7 @@ Eliminata anche la vecchia `pages/Admin.jsx` (pre-v2.0, non più collegata a nes
 sue sezioni esistono in `AdminUnificato.jsx`, tranne "prefissi struttura", che chiamava un indirizzo
 inesistente e non aveva mai funzionato.
 **USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura)
+**Budget**: `budget-previsione` (AdminBudgetPrevisione — correttivi e parametri della proiezione fine stagione)
 **Statistiche Produzione**: `prod-categorie` (ProdCategorie), `prod-mapping` (ProdMappingDettagli — mapping testo Welcome→categoria)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
 Dati test: flag `is_test`; `GET|DELETE /admin/test-stats|test-data`, `GET|DELETE /dipendenti/admin/test-stats|test-data`.
@@ -1557,7 +1558,19 @@ Previsione pickup: per la settimana W a D giorni dall'arrivo, settimane di rifer
 precedenti) ±2 settimane; per ognuna OTB alla snapshot con lo stesso anticipo (la più vicina entro 4gg) e
 valore finale; previsione = 50% OTB × (ΣFinale/ΣOTB) + 50% (OTB + media(Finale−OTB)), anni pesati 2:1.
 Previsti a parte camere vendute e ricavi camere/F&B/extra; camere ≤ disponibili. Il correttivo % (per mese o
-stagione) agisce solo sul pickup previsto, mai sull'OTB. Parametri in `PARAMETRI_DEFAULT` (in arrivo da Admin).
+stagione) agisce solo sul pickup previsto, mai sull'OTB.
+**Regolazione da Admin** (v3.26.0, `?s=budget-previsione` → `pages/admin/AdminBudgetPrevisione.jsx`,
+router `budget_previsione.py` con prefix **`/budget-previsione`**, separato da `/budget` per non collidere
+con `/budget/{hotel_code}/{season_year}`):
+- **Correttivi** tabella `budget_previsione_correttivi` (`budgetprev001_2026`): per hotel × stagione × mese,
+  **mese 0 = stagione** (non NULL, così la UNIQUE funziona), mese prevale su stagione (mese = prevalente
+  nella settimana), da −90% a +200%. `GET /correttivi?anno=` (griglia hotel con stagione × mesi di
+  stagione), `PUT /correttivi` (`correttivo_pct: null` = cancella). Nella tab Proiezione la risposta
+  espone `correttivi` (non nulli) e ogni riga `correttivo_pct`; mostrati in viola `colors.accent`.
+- **Parametri algoritmo** in `app_config['budget_previsione_parametri']` (JSON, creato al primo
+  salvataggio): `peso_moltiplicativo`, `finestra_settimane`, `tetto_coefficiente`, `peso_anni`,
+  `tolleranza_giorni` — `leggi_parametri()`/`valida_parametri()` in `pickup_forecast.py` (default se riga
+  assente o corrotta). `GET|PUT /parametri` (PUT parziale: le chiavi non inviate restano).
 Prova sul 2026 (settimane vicine dello stesso anno come proxy dell'anno precedente, quindi ottimistica):
 errore sul ricavo di stagione 1–2,5% già da marzo, contro 40–70% del solo OTB; un tetto al coefficiente
 (×4) peggiorava l'inizio stagione (DPH vende molto sotto data, coefficienti ×9 a 20 settimane normali).
