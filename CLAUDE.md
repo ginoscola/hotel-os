@@ -143,7 +143,7 @@ nel backend (404, verificato anche nello storico git). Correzione scelta per non
 Eliminata anche la vecchia `pages/Admin.jsx` (pre-v2.0, non più collegata a nessuna rotta): tutte le
 sue sezioni esistono in `AdminUnificato.jsx`, tranne "prefissi struttura", che chiamava un indirizzo
 inesistente e non aveva mai funzionato.
-**USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura), `usali-fnb` (peso cena/pranzo e reparti cedolini → punto vendita della scheda Food & Beverage)
+**USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura), `usali-fnb` (reparti cedolini → punto vendita della scheda Food & Beverage)
 **Budget**: `budget-previsione` (AdminBudgetPrevisione — correttivi e parametri della proiezione fine stagione)
 **Statistiche Produzione**: `prod-categorie` (ProdCategorie), `prod-mapping` (ProdMappingDettagli — mapping testo Welcome→categoria)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
@@ -2133,11 +2133,12 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
 ## Modulo USALI — Food & Beverage (ottobre 2026, v3.28.0)
 Quarta scheda di `Usali.jsx` (`pages/usaliFnb/`): analisi per **punto vendita** — DPH: Colazione,
 Ristorante Mare Mosso (sotto-righe Ospiti Du Parc / Clienti esterni), Bar; CLB/INT: Colazione,
-Ristorante (Pranzo / Cena), Bar; BON: punto unico (la contabilità BON divide Bar/Ristorante in modo
+Ristorante (riga unica), Bar; BON: punto unico (la contabilità BON divide Bar/Ristorante in modo
 incoerente); Gruppo = totale per struttura. Sotto-schede Riepilogo (+ export xlsx), Andamento
 mensile, Coperti, Materia prima, **Costo pasto** (v3.29.0, `CostoPastoFnb.jsx` + `GET /usali/fnb/
 costo-pasto?anno=&mese_da=&mese_a=`: sempre DPH/CLB/INT insieme, colazione delle tre strutture +
-ristorante medio/pranzo/cena CLB e INT + Mare Mosso solo con i coperti Menu; per pasto materia prima,
+pasto del ristorante CLB e INT (con pranzi/cene e pranzi/cene su presenze solo informativi) + Mare
+Mosso solo con i coperti Menu; per pasto materia prima,
 personale, altri, costo pieno, ricavo medio e margine — `ricavo_coperto_cc`/`margine_coperto` sugli
 stessi mesi del costo, non sull'intero periodo come `ricavo_coperto`; righe da `costo_pasto()` in
 `usali_fnb.py`, che riusa le righe del riepilogo). Logica in `services/usali_fnb.py`, router `routers/usali_fnb.py`
@@ -2158,11 +2159,14 @@ stessi mesi del costo, non sull'intero periodo come `ricavo_coperto`; righe da `
   **totali** dal gestionale Menu (ospiti DPH compresi, ~tutte cene) inseriti per mese, esterni =
   Menu − pranzi/cene ospiti (negativo → avviso, nessuna stima); BON = **scontrini** del mese.
   Tabella `usali_fnb_coperti` (`usalifnb001_2026`, struttura MMS|BON, anno, mese, valore)
-**Pranzo/cena e ospiti/esterni**: ricavi e coperti veri, **costi stimati** (badge "stima"),
-ripartiti sui coperti pesati — una cena vale `peso_cena` pranzi (default 1,5, `app_config
-['usali_fnb_parametri']`, Admin `?s=usali-fnb` → `AdminUsaliFnb.jsx`; salvati solo gli abbinamenti
-CC diversi dal default). Peso 1 = costo per coperto uguale; dividere per ricavi renderebbe uguale il
-food cost % — per questo il dato vero resta sul Ristorante intero.
+**Pranzo e cena NON separati** (v3.29.1, dopo una prima versione con sotto-righe e "peso cena"
+configurabile, tolti): per il gruppo un pasto costa uguale a pranzo e a cena, e il prezzo diverso
+(quota pranzo ~8 €, cena ~21 € in Welcome) serve solo a rendere conveniente la pensione completa —
+un margine "del pranzo" non avrebbe significato. Il ristorante hotel è una riga unica; `pranzi`/
+`cene`/`pranzi_perc`/`cene_perc` in `_somma()` solo informativi. **Ospiti/esterni Mare Mosso**:
+ricavi e coperti veri, costi **stimati** (badge "stima") ripartiti per numero di coperti (stesso
+costo per pasto). `app_config['usali_fnb_parametri']` contiene solo `cc_punto` (Admin `?s=usali-fnb`
+→ `AdminUsaliFnb.jsx`, salvati solo gli abbinamenti CC diversi dal default).
 **Regola dei rapporti** (`_somma()`): numeratore e denominatore sommati sui soli mesi in cui esistono
 entrambi — costi solo nei mesi con contabilità importata, per-coperto solo nei mesi con coperti e
 costi. Coperti non sommati nel totale struttura (colazioni + cene non si sommano).

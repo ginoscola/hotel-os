@@ -11,8 +11,11 @@ Fonti, scelte con l'utente (ottobre 2026):
 - coperti → pasti di Produzione (solo voci `conta_come_pasto`), coperti MMS dal gestionale Menu e
   scontrini BON inseriti a mano per mese (`usali_fnb_coperti`)
 
-La contabilità non separa pranzo e cena (né ospiti ed esterni del Mare Mosso): i costi di quelle
-sotto-righe sono una STIMA, ripartita sui coperti pesati (una cena vale `peso_cena` pranzi).
+Pranzo e cena NON sono separati: per il gruppo un pasto costa uguale a pranzo e a cena, e la
+differenza di prezzo serve solo a rendere conveniente la pensione completa (scelta dell'utente,
+ottobre 2026) — il ristorante hotel resta una riga unica, con il numero di pranzi e cene solo
+informativo. Il Mare Mosso è diviso tra ospiti Du Parc e clienti esterni (ricavi da fonti diverse):
+i costi di quelle sotto-righe sono una STIMA, ripartita per numero di coperti.
 
 Regola dei rapporti: mai medie di KPI mensili. Ogni rapporto di periodo somma numeratore e
 denominatore sui soli mesi in cui entrambi esistono (es. costo per coperto: mesi con contabilità
@@ -41,12 +44,10 @@ NOME_STRUTTURA = {'DPH': 'Du Parc + Mare Mosso', 'CLB': 'Club Hotel', 'INT': 'In
 PUNTI_HOTEL = ['colazione', 'ristorante', 'bar', 'altro']
 NOME_PUNTO = {'colazione': 'Colazione', 'ristorante': 'Ristorante', 'bar': 'Bar',
               'altro': 'Altro F&B', 'unico': 'Buona Onda'}
-NOME_SUB = {'pranzo': 'Pranzo', 'cena': 'Cena', 'ospiti': 'Ospiti Du Parc',
-            'esterni': 'Clienti esterni'}
+NOME_SUB = {'ospiti': 'Ospiti Du Parc', 'esterni': 'Clienti esterni'}
 PUNTI_CEDOLINI = ('colazione', 'ristorante', 'bar')
 
 CHIAVE_CONFIG = 'usali_fnb_parametri'
-PESO_CENA_DEFAULT = 1.5
 
 S_RICAVI = 'Ricavi Operativi'
 S_COSTI_OP = 'Costi Operativi'
@@ -59,11 +60,7 @@ def punti_struttura(struttura: str) -> list[str]:
 
 
 def sub_struttura(struttura: str) -> list[str]:
-    if struttura == 'DPH':
-        return ['ospiti', 'esterni']
-    if struttura in ('CLB', 'INT'):
-        return ['pranzo', 'cena']
-    return []
+    return ['ospiti', 'esterni'] if struttura == 'DPH' else []
 
 
 def nome_punto(struttura: str, punto: str) -> str:
@@ -88,7 +85,7 @@ def punto_default_cc(code: str) -> str:
 
 
 def leggi_parametri(db: Session) -> dict:
-    p = {'peso_cena': PESO_CENA_DEFAULT, 'cc_punto': {}}
+    p = {'cc_punto': {}}
     riga = db.query(AppConfig).filter(AppConfig.key == CHIAVE_CONFIG).first()
     if riga:
         try:
@@ -101,11 +98,6 @@ def leggi_parametri(db: Session) -> dict:
 
 def valida_parametri(body: dict) -> dict:
     out = {}
-    if 'peso_cena' in body:
-        peso = float(body['peso_cena'])
-        if not 0.1 <= peso <= 10:
-            raise ValueError('Il peso della cena deve essere tra 0,1 e 10')
-        out['peso_cena'] = round(peso, 2)
     if 'cc_punto' in body:
         mappa = body['cc_punto'] or {}
         if not isinstance(mappa, dict):
@@ -346,7 +338,7 @@ def carica_dati(db: Session, struttura: str, anno: int, parametri: dict) -> dict
 
 # ── Calcolo (puro) ───────────────────────────────────────────────────────────
 
-def _mese_punti(struttura: str, md: dict, peso_cena: float):
+def _mese_punti(struttura: str, md: dict):
     """Valori di un mese per ogni riga (punto o sotto-riga) + avvisi del mese.
     Ritorna {chiave: {ricavi, ricavi_contabili, food, beverage, personale, personale_contabile,
     altri, coperti, presenze, costi_ok, stima}} — chiave = punto o 'punto.sub'."""
@@ -389,26 +381,25 @@ def _mese_punti(struttura: str, md: dict, peso_cena: float):
                 avvisi.append(f"coperti Menu ({menu}) inferiori ai pasti degli ospiti Du Parc ({ospiti_cop})")
                 esterni_cop = None
         sub['ospiti'] = {'ricavi': rp.get(('ristorante', 'ospiti'), 0.0), 'coperti': ospiti_cop or None,
-                         'peso': pr + ce * peso_cena}
-        sub['esterni'] = {'ricavi': md['ricavi_esterni'], 'coperti': esterni_cop,
-                          'peso': None if esterni_cop is None else esterni_cop * peso_cena}
+                         'peso': ospiti_cop}
+        sub['esterni'] = {'ricavi': md['ricavi_esterni'], 'coperti': esterni_cop, 'peso': esterni_cop}
         rist['coperti'] = menu   # adesione solo sulla riga ospiti: il totale Menu comprende gli esterni
+        rist['ricavi'] = sub['ospiti']['ricavi'] + sub['esterni']['ricavi']
     else:
+        # Ristorante hotel: riga unica, pranzi e cene solo informativi (stesso costo per pasto)
         pr, ce = pasti.get('pranzo', 0), pasti.get('cena', 0)
-        sub['pranzo'] = {'ricavi': rp.get(('ristorante', 'pranzo'), 0.0), 'coperti': pr or None, 'peso': pr}
-        sub['cena'] = {'ricavi': rp.get(('ristorante', 'cena'), 0.0), 'coperti': ce or None,
-                       'peso': ce * peso_cena}
         rist['coperti'] = (pr + ce) or None
-        rist['presenze'] = md['presenze']
-    rist['ricavi'] = sum(s['ricavi'] for s in sub.values()) + rp.get(('ristorante', None), 0.0)
+        rist['pranzi'], rist['cene'] = pr, ce
+        rist['presenze_pasti'] = md['presenze']
+        rist['ricavi'] = sum(v for (p, _), v in rp.items() if p == 'ristorante')
 
-    # Ripartizione stimata dei costi del ristorante sulle sotto-righe (coperti pesati)
+    # Ripartizione stimata dei costi del Mare Mosso tra ospiti ed esterni, per numero di coperti
     pesi = [s['peso'] for s in sub.values()]
     ripartibile = importato and all(w is not None for w in pesi) and sum(pesi) > 0
     for nome, s in sub.items():
         quota = s['peso'] / sum(pesi) if ripartibile else None
         rec = {'ricavi': s['ricavi'], 'ricavi_contabili': None, 'coperti': s['coperti'],
-               'presenze': md['presenze'] if nome in ('cena', 'pranzo', 'ospiti') else None,
+               'presenze': md['presenze'] if nome == 'ospiti' else None,
                'costi_ok': ripartibile, 'stima': True}
         for k in ('food', 'beverage', 'altri', 'personale', 'personale_contabile'):
             rec[k] = rist[k] * quota if ripartibile else 0.0
@@ -442,6 +433,11 @@ def _somma(serie: list[dict]) -> dict:
     ric_cc = S('ricavi', entrambi)
     ades = lambda r: con_coperti(r) and r['presenze']  # noqa: E731
     cop_p, pres_p = S('coperti', ades), S('presenze', ades)
+    # Ristorante hotel: pranzi e cene informativi, ciascuno sulle presenze degli stessi mesi
+    con_pasti = lambda r: 'pranzi' in r  # noqa: E731
+    pres_pasti = sum(r['presenze_pasti'] or 0 for r in serie if con_pasti(r) and r['presenze_pasti'])
+    pranzi_p = sum(r['pranzi'] for r in serie if con_pasti(r) and r['presenze_pasti'])
+    cene_p = sum(r['cene'] for r in serie if con_pasti(r) and r['presenze_pasti'])
 
     def div(a, b, f=1):
         return round(a / b * f, 2) if b else None
@@ -475,17 +471,21 @@ def _somma(serie: list[dict]) -> dict:
         'ricavo_coperto_cc': div(ric_cc, cop_cc),
         'margine_coperto': div(ric_cc - costi_cc, cop_cc),
         'adesione_perc': div(cop_p, pres_p, 100),
+        'pranzi': sum(r['pranzi'] for r in serie if con_pasti(r)) if any(map(con_pasti, serie)) else None,
+        'cene': sum(r['cene'] for r in serie if con_pasti(r)) if any(map(con_pasti, serie)) else None,
+        'pranzi_perc': div(pranzi_p, pres_pasti, 100),
+        'cene_perc': div(cene_p, pres_pasti, 100),
     }
 
 
-def costruisci_report(dati: dict, mese_da: int, mese_a: int, peso_cena: float) -> dict:
+def costruisci_report(dati: dict, mese_da: int, mese_a: int) -> dict:
     """Righe del riepilogo (punti, sotto-righe, totale struttura) con KPI di periodo e mensili."""
     struttura = dati['struttura']
     mesi = list(range(mese_da, mese_a + 1))
     per_mese = {}
     avvisi = []
     for m in mesi:
-        valori, avv = _mese_punti(struttura, dati['mesi'][m], peso_cena)
+        valori, avv = _mese_punti(struttura, dati['mesi'][m])
         per_mese[m] = valori
         avvisi += [f"{NOME_STRUTTURA[struttura]}, mese {m}: {a}" for a in avv]
 
@@ -606,8 +606,7 @@ def materia_prima(dati: dict, mese_da: int, mese_a: int) -> dict:
 # Righe della vista "Costo pasto": (struttura, chiave riga nel report, pasto)
 RIGHE_COSTO_PASTO = [
     ('DPH', 'colazione', 'colazione'), ('CLB', 'colazione', 'colazione'), ('INT', 'colazione', 'colazione'),
-    ('CLB', 'ristorante', 'ristorante'), ('CLB', 'ristorante.pranzo', 'pranzo'), ('CLB', 'ristorante.cena', 'cena'),
-    ('INT', 'ristorante', 'ristorante'), ('INT', 'ristorante.pranzo', 'pranzo'), ('INT', 'ristorante.cena', 'cena'),
+    ('CLB', 'ristorante', 'ristorante'), ('INT', 'ristorante', 'ristorante'),
     ('DPH', 'ristorante', 'ristorante'), ('DPH', 'ristorante.ospiti', 'ospiti'),
     ('DPH', 'ristorante.esterni', 'esterni'),
 ]

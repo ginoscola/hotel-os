@@ -5,7 +5,7 @@
   GET /usali/fnb/costo-pasto?anno=&mese_da=&mese_a=   → costo per colazione / pranzo / cena
   GET /usali/fnb/coperti?anno=          → coperti MMS (Menu) e scontrini BON per mese
   PUT /usali/fnb/coperti                → {struttura_code, anno, mese, valore|null} (admin)
-  GET|PUT /usali/fnb/parametri          → peso cena/pranzo + centro di costo → punto vendita
+  GET|PUT /usali/fnb/parametri          → reparto dei cedolini → punto vendita
   GET /usali/fnb/report/export          → xlsx del riepilogo (stessi parametri di /report)
 """
 import io
@@ -35,14 +35,13 @@ def _verifica(struttura: str, mese_da: int, mese_a: int, gruppo: bool = True):
 
 def calcola_report(db: Session, struttura: str, anno: int, mese_da: int, mese_a: int) -> dict:
     parametri = fnb.leggi_parametri(db)
-    peso = parametri['peso_cena']
     if struttura == 'GRUPPO':
-        reports = [fnb.costruisci_report(fnb.carica_dati(db, s, anno, parametri), mese_da, mese_a, peso)
+        reports = [fnb.costruisci_report(fnb.carica_dati(db, s, anno, parametri), mese_da, mese_a)
                    for s in fnb.STRUTTURE]
         out = fnb.report_gruppo(reports, mese_da, mese_a)
     else:
-        out = fnb.costruisci_report(fnb.carica_dati(db, struttura, anno, parametri), mese_da, mese_a, peso)
-    out.update({'anno': anno, 'mese_da': mese_da, 'mese_a': mese_a, 'peso_cena': peso})
+        out = fnb.costruisci_report(fnb.carica_dati(db, struttura, anno, parametri), mese_da, mese_a)
+    out.update({'anno': anno, 'mese_da': mese_da, 'mese_a': mese_a})
     return out
 
 
@@ -108,9 +107,8 @@ def export_report_fnb(
                 ws.cell(n, c).fill = fill_tot if r['tipo'] == 'totale' else fill_punto
                 ws.cell(n, c).font = Font(bold=True, color="FFFFFF" if r['tipo'] == 'totale' else "000000")
     ws.append([])
-    ws.append([f"Costi = acquisti registrati in contabilità; costi di pranzo/cena e ospiti/esterni stimati "
-               f"con una cena = {rep['peso_cena']} pranzi. Personale dai cedolini. Rapporti solo sui mesi "
-               "con contabilità importata."])
+    ws.append(["Costi = acquisti registrati in contabilità; costi di ospiti/esterni del Mare Mosso stimati "
+               "per numero di coperti. Personale dai cedolini. Rapporti solo sui mesi con contabilità importata."])
     for a in rep['avvisi']:
         ws.append([f"⚠ {a}"])
     ws.column_dimensions['A'].width = 34
@@ -134,15 +132,13 @@ def costo_pasto_fnb(
     mese_da: int = Query(1, ge=1, le=12), mese_a: int = Query(12, ge=1, le=12),
     db: Session = Depends(get_db), _=Depends(richiedi_utente_attivo),
 ):
-    """Costo per colazione (DPH/CLB/INT) e per pasto del ristorante (pranzo/cena CLB e INT,
-    Mare Mosso ospiti/esterni), dalle stesse righe del riepilogo."""
+    """Costo per colazione (DPH/CLB/INT) e per pasto del ristorante (CLB e INT, pranzo o cena
+    allo stesso costo; Mare Mosso ospiti/esterni), dalle stesse righe del riepilogo."""
     _verifica('GRUPPO', mese_da, mese_a)
     parametri = fnb.leggi_parametri(db)
-    reports = {s: fnb.costruisci_report(fnb.carica_dati(db, s, anno, parametri), mese_da, mese_a,
-                                        parametri['peso_cena'])
+    reports = {s: fnb.costruisci_report(fnb.carica_dati(db, s, anno, parametri), mese_da, mese_a)
                for s in ('DPH', 'CLB', 'INT')}
-    return {'anno': anno, 'mese_da': mese_da, 'mese_a': mese_a, 'peso_cena': parametri['peso_cena'],
-            'righe': fnb.costo_pasto(reports)}
+    return {'anno': anno, 'mese_da': mese_da, 'mese_a': mese_a, 'righe': fnb.costo_pasto(reports)}
 
 
 @router.get("/materia-prima")
@@ -220,7 +216,7 @@ def _parametri_out(db: Session) -> dict:
     centri = [{**c, 'punto': p['cc_punto'].get(c['code']) or fnb.punto_default_cc(c['code']),
                'punto_default': fnb.punto_default_cc(c['code'])}
               for c in fnb.centri_fnb(db)]
-    return {'peso_cena': p['peso_cena'], 'peso_cena_default': fnb.PESO_CENA_DEFAULT, 'centri': centri}
+    return {'centri': centri}
 
 
 @router.get("/parametri")

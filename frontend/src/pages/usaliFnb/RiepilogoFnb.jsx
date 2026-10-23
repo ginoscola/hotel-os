@@ -1,5 +1,5 @@
 // Riepilogo F&B per punto vendita: KPI di periodo (sempre sui totali, mai medie dei mesi).
-// Le sotto-righe pranzo/cena e ospiti/esterni hanno ricavi e coperti veri, costi stimati.
+// Ristorante hotel in riga unica (pranzo e cena stesso costo); Mare Mosso: ospiti/esterni con costi stimati.
 import { useState } from 'react'
 import { formatEuroIntero, formatPerc, mostraErrore } from '../../utils/format.js'
 import { Badge, Button, Card, KpiTile, Messaggio, Table, Td, Th, useAvvisi } from '../../components/ui'
@@ -77,7 +77,7 @@ export default function RiepilogoFnb({ report }) {
                     {r.label}
                     {r.stima_costi && (
                       <span style={{ marginLeft: 6 }}>
-                        <Badge tono="info" title="Costi stimati: la contabilità non separa questa voce, ripartiti sui coperti pesati">stima</Badge>
+                        <Badge tono="info" title="Costi stimati: la contabilità non separa ospiti ed esterni, ripartiti per numero di coperti">stima</Badge>
                       </span>
                     )}
                   </Td>
@@ -93,9 +93,9 @@ export default function RiepilogoFnb({ report }) {
           Costi = acquisti registrati in contabilità (nessuna variazione di magazzino): sul singolo mese
           le percentuali oscillano, sulla stagione sono affidabili. Rapporti calcolati solo sui mesi con
           contabilità importata{senzaContab.length > 0 && <> (esclusi: {senzaContab.map(m => MESI_BREVI[m - 1]).join(', ')})</>}.
-          Costi di pranzo/cena e ospiti/esterni stimati con una cena = {String(report.peso_cena).replace('.', ',')} pranzi
-          (Admin → USALI → Food & Beverage). Coperti = pasti addebitati in Welcome, non serviti;
-          per Buona Onda sono gli scontrini.
+          Ristorante hotel: pranzo e cena hanno lo stesso costo, quindi non sono separati. Mare Mosso:
+          costi di ospiti ed esterni stimati per numero di coperti. Coperti = pasti addebitati in
+          Welcome, non serviti; per Buona Onda sono gli scontrini.
         </div>
       </Card>
     </div>

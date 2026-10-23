@@ -22,7 +22,7 @@ export const COLONNE = [
   ['ricavo_coperto', 'Ricavo / cop.', euro2, false, 'Ricavo medio per coperto'],
   ['mp_coperto', 'Mat. prima / cop.', euro2, false, 'Materia prima per coperto'],
   ['costo_coperto', 'Costo / cop.', euro2, false, 'Costo pieno per coperto (materia prima + personale + altri)'],
-  ['adesione_perc', 'Adesione', perc, false, 'Pasti / presenze degli ospiti hotel'],
+  ['adesione_perc', 'Adesione', perc, false, 'Pasti / presenze degli ospiti hotel (colazione; per il Mare Mosso solo ospiti Du Parc)'],
 ]
 
 // KPI selezionabili nell'andamento mensile

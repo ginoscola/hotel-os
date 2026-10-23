@@ -50,29 +50,23 @@ def _riga(rep, rid):
 
 # ── Calcolo puro ─────────────────────────────────────────────────────────────
 
-def test_ristorante_pranzo_cena_ripartiti_con_peso():
+def test_ristorante_hotel_riga_unica_pranzi_cene_informativi():
     dati = _dati('CLB', {6: _mese(
-        contabile={'ristorante': _cont(food=900.0, beverage=100.0, altri=200.0)},
+        contabile={'ristorante': _cont(food=900.0, beverage=100.0, altri=200.0, ricavi=4000.0)},
         personale={'ristorante': 1000.0},
         ricavi_prod={('ristorante', 'pranzo'): 1000.0, ('ristorante', 'cena'): 3000.0,
                      ('ristorante', None): 100.0},
         pasti={'pranzo': 100, 'cena': 100}, presenze=400,
     )})
-    rep = fnb.costruisci_report(dati, 6, 6, peso_cena=1.5)
+    rep = fnb.costruisci_report(dati, 6, 6)
+    assert [r['id'] for r in rep['righe'] if r['punto'] == 'ristorante'] == ['CLB.ristorante']
     rist = _riga(rep, 'CLB.ristorante')['periodo']
     assert rist['ricavi'] == 4100.0          # pranzo + cena + voci non smistate
     assert rist['materia_prima'] == 1000.0
     assert rist['coperti'] == 200
-    assert rist['costo_coperto'] == 11.0     # (1000 + 1000 + 200) / 200
-    pranzo = _riga(rep, 'CLB.ristorante.pranzo')
-    cena = _riga(rep, 'CLB.ristorante.cena')
-    assert pranzo['stima_costi'] and cena['stima_costi']
-    # pesi 100 : 150 → 40% / 60%
-    assert pranzo['periodo']['materia_prima'] == 400.0
-    assert cena['periodo']['materia_prima'] == 600.0
-    assert cena['periodo']['personale'] == 600.0
-    assert pranzo['periodo']['ricavo_coperto'] == 10.0   # dato vero, non stimato
-    assert cena['periodo']['adesione_perc'] == 25.0      # 100 cene / 400 presenze
+    assert rist['costo_coperto'] == 11.0     # (1000 + 1000 + 200) / 200, uguale per pranzo e cena
+    assert (rist['pranzi'], rist['cene']) == (100, 100)
+    assert (rist['pranzi_perc'], rist['cene_perc']) == (25.0, 25.0)
 
 
 def test_kpi_di_periodo_sui_totali_non_media_dei_mesi():
@@ -82,7 +76,7 @@ def test_kpi_di_periodo_sui_totali_non_media_dei_mesi():
         7: _mese(contabile={'colazione': _cont(food=900.0)}, ricavi_prod={('colazione', None): 3000.0},
                  pasti={'colazione': 300}),
     })
-    p = _riga(fnb.costruisci_report(dati, 6, 7, 1.5), 'CLB.colazione')['periodo']
+    p = _riga(fnb.costruisci_report(dati, 6, 7), 'CLB.colazione')['periodo']
     assert p['food_perc'] == 25.0            # 1000/4000, non media di 10% e 30%
     assert p['mp_coperto'] == 2.5            # 1000/400
 
@@ -93,7 +87,7 @@ def test_mesi_senza_contabilita_esclusi_dai_rapporti():
                  pasti={'colazione': 100}),
         7: _mese(importato=False, ricavi_prod={('colazione', None): 5000.0}, pasti={'colazione': 500}),
     })
-    rep = fnb.costruisci_report(dati, 6, 7, 1.5)
+    rep = fnb.costruisci_report(dati, 6, 7)
     p = _riga(rep, 'CLB.colazione')['periodo']
     assert p['ricavi'] == 6000.0             # i ricavi contano sempre
     assert p['food_perc'] == 30.0            # solo giugno, unico mese con costi
@@ -111,7 +105,7 @@ def test_costo_per_pasto_scomposto_e_margine():
                  ricavi_prod={('colazione', None): 1000.0}, pasti={'colazione': 100}),
         7: _mese(importato=False, ricavi_prod={('colazione', None): 3000.0}, pasti={'colazione': 300}),
     })
-    p = _riga(fnb.costruisci_report(dati, 6, 7, 1.5), 'CLB.colazione')['periodo']
+    p = _riga(fnb.costruisci_report(dati, 6, 7), 'CLB.colazione')['periodo']
     assert (p['mp_coperto'], p['personale_coperto'], p['altri_coperto']) == (2.0, 2.5, 0.5)
     assert p['costo_coperto'] == 5.0
     assert p['ricavo_coperto'] == 10.0          # su tutti i mesi con coperti
@@ -125,14 +119,14 @@ def test_mare_mosso_esterni_da_coperti_menu():
         ricavi_prod={('ristorante', 'ospiti'): 2000.0}, pasti={'pranzo': 20, 'cena': 80},
         esterni=3000.0, menu=300,
     )})
-    rep = fnb.costruisci_report(dati, 8, 8, peso_cena=1.0)
+    rep = fnb.costruisci_report(dati, 8, 8)
     assert _riga(rep, 'DPH.ristorante')['periodo']['coperti'] == 300
     ospiti = _riga(rep, 'DPH.ristorante.ospiti')['periodo']
     esterni = _riga(rep, 'DPH.ristorante.esterni')['periodo']
     assert ospiti['coperti'] == 100 and esterni['coperti'] == 200
     assert esterni['ricavi'] == 3000.0
     assert round(ospiti['materia_prima'] + esterni['materia_prima'], 2) == 1000.0
-    assert round(esterni['materia_prima'], 2) == 666.67
+    assert round(esterni['materia_prima'], 2) == 666.67   # 200 su 300 coperti
     assert rep['avvisi'] == []
 
 
@@ -141,7 +135,7 @@ def test_mare_mosso_senza_coperti_menu_nessuna_stima():
         contabile={'ristorante': _cont(food=1000.0)},
         ricavi_prod={('ristorante', 'ospiti'): 2000.0}, pasti={'cena': 80}, esterni=3000.0,
     )})
-    rep = fnb.costruisci_report(dati, 8, 8, 1.5)
+    rep = fnb.costruisci_report(dati, 8, 8)
     assert _riga(rep, 'DPH.ristorante')['periodo']['materia_prima'] == 1000.0
     assert _riga(rep, 'DPH.ristorante.esterni')['periodo']['materia_prima'] is None
     assert any('coperti Menu non inseriti' in a for a in rep['avvisi'])
@@ -150,7 +144,7 @@ def test_mare_mosso_senza_coperti_menu_nessuna_stima():
 def test_mare_mosso_menu_inferiore_agli_ospiti_segnalato():
     dati = _dati('DPH', {8: _mese(ricavi_prod={('ristorante', 'ospiti'): 2000.0},
                                   pasti={'cena': 80}, esterni=100.0, menu=50)})
-    rep = fnb.costruisci_report(dati, 8, 8, 1.5)
+    rep = fnb.costruisci_report(dati, 8, 8)
     assert _riga(rep, 'DPH.ristorante.esterni')['periodo']['coperti'] is None
     assert any('inferiori ai pasti' in a for a in rep['avvisi'])
 
@@ -159,7 +153,7 @@ def test_bon_scontrini_e_avviso_contabilita_incompleta():
     dati = _dati('BON', {
         7: _mese(contabile={'unico': _cont(food=500.0, ricavi=0.0)}, bon=10000.0, scontrini=1000),
     })
-    rep = fnb.costruisci_report(dati, 7, 7, 1.5)
+    rep = fnb.costruisci_report(dati, 7, 7)
     p = _riga(rep, 'BON.unico')['periodo']
     assert p['ricavo_coperto'] == 10.0 and p['mp_coperto'] == 0.5
     assert any('contabilità probabilmente incompleta' in a for a in rep['avvisi'])
@@ -168,9 +162,9 @@ def test_bon_scontrini_e_avviso_contabilita_incompleta():
 def test_totale_struttura_e_gruppo_sommano_le_basi():
     a = fnb.costruisci_report(_dati('CLB', {6: _mese(
         contabile={'colazione': _cont(food=100.0), 'bar': _cont(beverage=50.0)},
-        ricavi_prod={('colazione', None): 1000.0, ('bar', None): 500.0})}), 6, 6, 1.5)
+        ricavi_prod={('colazione', None): 1000.0, ('bar', None): 500.0})}), 6, 6)
     b = fnb.costruisci_report(_dati('INT', {6: _mese(
-        contabile={'colazione': _cont(food=300.0)}, ricavi_prod={('colazione', None): 500.0})}), 6, 6, 1.5)
+        contabile={'colazione': _cont(food=300.0)}, ricavi_prod={('colazione', None): 500.0})}), 6, 6)
     assert a['righe'][0]['periodo']['materia_prima'] == 150.0
     assert a['righe'][0]['periodo']['coperti'] is None
     g = fnb.report_gruppo([a, b], 6, 6)
@@ -196,9 +190,7 @@ def test_classificazioni():
 
 
 def test_valida_parametri():
-    assert fnb.valida_parametri({'peso_cena': '2'}) == {'peso_cena': 2.0}
-    with pytest.raises(ValueError):
-        fnb.valida_parametri({'peso_cena': 0})
+    assert fnb.valida_parametri({'cc_punto': {'CLB_BAR': 'ristorante'}}) == {'cc_punto': {'CLB_BAR': 'ristorante'}}
     with pytest.raises(ValueError):
         fnb.valida_parametri({'cc_punto': {'CLB_BAR': 'cucina'}})
 
@@ -255,13 +247,11 @@ def test_coperti_valori_non_validi(client, body):
     assert client.put("/usali/fnb/coperti", json=body).status_code == 400
 
 
-def test_parametri_default_e_salvataggio(client):
-    p = client.get("/usali/fnb/parametri").json()
-    assert p['peso_cena'] == fnb.PESO_CENA_DEFAULT
-    r = client.put("/usali/fnb/parametri", json={'peso_cena': 2, 'cc_punto': {'CLB_PASTICCERIA': 'ristorante'}})
-    assert r.status_code == 200 and r.json()['peso_cena'] == 2.0
-    assert client.put("/usali/fnb/parametri", json={'peso_cena': 99}).status_code == 400
-    assert client.get("/usali/fnb/parametri").json()['peso_cena'] == 2.0
+def test_parametri_salvataggio(client):
+    assert 'centri' in client.get("/usali/fnb/parametri").json()
+    r = client.put("/usali/fnb/parametri", json={'cc_punto': {'CLB_PASTICCERIA': 'ristorante'}})
+    assert r.status_code == 200
+    assert client.put("/usali/fnb/parametri", json={'cc_punto': {'CLB_BAR': 'cucina'}}).status_code == 400
 
 
 def test_report_struttura_non_valida(client):
@@ -286,4 +276,5 @@ def test_costo_pasto_endpoint(client):
     assert r.status_code == 200
     ids = [x['id'] for x in r.json()['righe']]
     assert ids[:3] == ['DPH.colazione', 'CLB.colazione', 'INT.colazione']
-    assert 'CLB.ristorante.cena' in ids and 'DPH.ristorante.esterni' in ids
+    assert 'CLB.ristorante' in ids and 'DPH.ristorante.esterni' in ids
+    assert not any(i.endswith(('.pranzo', '.cena')) for i in ids)

@@ -1,17 +1,18 @@
-// Costo per pasto: colazione di Du Parc, Club e International; pranzo e cena di Club e
-// International (stimati: la contabilità ha un unico Ristorante) e Mare Mosso quando ci sono i
-// coperti Menu. Costo pieno = materia prima + personale (cedolini) + altri costi F&B, per pasto.
+// Costo per pasto: colazione di Du Parc, Club e International; pasto del ristorante di Club e
+// International (stesso costo a pranzo e a cena: non separati, pranzi e cene solo informativi) e
+// Mare Mosso quando ci sono i coperti Menu. Costo pieno = materia prima + personale (cedolini) +
+// altri costi F&B, per pasto.
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import api from '../../api/client.js'
-import { formatEuro, formatN, mostraErrore } from '../../utils/format.js'
+import { formatEuro, formatN, formatPerc, mostraErrore } from '../../utils/format.js'
 import { Badge, Card, Loading, Messaggio, Table, Td, Th } from '../../components/ui'
 import { colors, coloreSerie } from '../../styles/tokens.js'
 import { MESI_BREVI } from '../usaliContabile/helpers.jsx'
 
 const NOME = { DPH: 'Du Parc', CLB: 'Club Hotel', INT: 'International' }
 const NOME_PASTO = {
-  colazione: 'Colazione', ristorante: 'Ristorante (medio)', pranzo: 'Pranzo', cena: 'Cena',
+  colazione: 'Colazione', ristorante: 'Pasto (pranzo o cena)',
   ospiti: 'Ospiti Du Parc', esterni: 'Clienti esterni',
 }
 const COMPONENTI = [
@@ -24,7 +25,7 @@ const legendaNeutra = (valore) => <span style={{ color: colors.text }}>{valore}<
 const euro = v => (v == null ? '—' : formatEuro(v))
 
 function etichetta(r, conStruttura) {
-  const pasto = r.struttura === 'DPH' && r.pasto === 'ristorante' ? 'Mare Mosso (medio)' : NOME_PASTO[r.pasto]
+  const pasto = r.struttura === 'DPH' && r.pasto === 'ristorante' ? 'Mare Mosso (totale)' : NOME_PASTO[r.pasto]
   return conStruttura ? `${NOME[r.struttura]} — ${pasto}` : NOME[r.struttura]
 }
 
@@ -33,7 +34,11 @@ function Margine({ v }) {
   return <span style={{ color: v < 0 ? colors.danger : colors.success }}>{formatEuro(v)}</span>
 }
 
-function Sezione({ titolo, righe, conStruttura, nota }) {
+const perc = v => (v == null ? '—' : formatPerc(v))
+const num = v => (v == null ? '—' : formatN(v))
+
+function Sezione({ titolo, righe, conStruttura, nota, conPasti = false }) {
+  const classeRiga = (r) => (r.struttura === 'DPH' && r.pasto === 'ristorante' ? 'ui-riga-subtotale' : undefined)
   const grafico = righe
     .filter(r => r.periodo.costo_coperto != null)
     .map(r => ({ nome: etichetta(r, conStruttura), ...r.periodo }))
@@ -68,13 +73,19 @@ function Sezione({ titolo, righe, conStruttura, nota }) {
             <Th num tot>Costo pieno</Th>
             <Th num gruppo title="Ricavo medio sugli stessi mesi del costo">Ricavo medio</Th>
             <Th num>Margine</Th>
+            {conPasti && <>
+              <Th num gruppo>di cui pranzi</Th>
+              <Th num>di cui cene</Th>
+              <Th num title="Pranzi addebitati / presenze ospiti">Pranzi / presenze</Th>
+              <Th num title="Cene addebitate / presenze ospiti">Cene / presenze</Th>
+            </>}
           </tr>
         </thead>
         <tbody>
           {righe.map(r => {
             const p = r.periodo
             return (
-              <tr key={r.id} className={r.pasto === 'ristorante' ? 'ui-riga-subtotale' : undefined}>
+              <tr key={r.id} className={classeRiga(r)}>
                 <Td style={{ whiteSpace: 'nowrap', paddingLeft: r.stima_costi ? 24 : 8 }}>
                   {etichetta(r, conStruttura)}
                   {r.stima_costi && <span style={{ marginLeft: 6 }}><Badge tono="info">stima</Badge></span>}
@@ -86,6 +97,12 @@ function Sezione({ titolo, righe, conStruttura, nota }) {
                 <Td num tot><strong>{euro(p.costo_coperto)}</strong></Td>
                 <Td num gruppo>{euro(p.ricavo_coperto_cc)}</Td>
                 <Td num><Margine v={p.margine_coperto} /></Td>
+                {conPasti && <>
+                  <Td num gruppo>{num(p.pranzi)}</Td>
+                  <Td num>{num(p.cene)}</Td>
+                  <Td num>{perc(p.pranzi_perc)}</Td>
+                  <Td num>{perc(p.cene_perc)}</Td>
+                </>}
               </tr>
             )
           })}
@@ -103,7 +120,7 @@ function Sezione({ titolo, righe, conStruttura, nota }) {
         </thead>
         <tbody>
           {righe.map(r => (
-            <tr key={r.id} className={r.pasto === 'ristorante' ? 'ui-riga-subtotale' : undefined}>
+            <tr key={r.id} className={classeRiga(r)}>
               <Td style={{ whiteSpace: 'nowrap', paddingLeft: r.stima_costi ? 24 : 8 }}>{etichetta(r, conStruttura)}</Td>
               {r.mesi.map(m => <Td key={m.mese} num>{euro(m.costo_coperto)}</Td>)}
               <Td num tot>{euro(r.periodo.costo_coperto)}</Td>
@@ -132,7 +149,6 @@ export default function CostoPastoFnb({ anno, meseDa, meseA }) {
   if (errore) return <Messaggio>{errore}</Messaggio>
   if (!dati) return <Loading />
 
-  const peso = String(dati.peso_cena).replace('.', ',')
   const colazioni = dati.righe.filter(r => r.gruppo === 'colazione')
   const ristoranti = dati.righe.filter(r => r.gruppo === 'ristorante' && r.struttura !== 'DPH')
   const mareMosso = dati.righe.filter(r => r.struttura === 'DPH' && r.gruppo === 'ristorante')
@@ -142,11 +158,11 @@ export default function CostoPastoFnb({ anno, meseDa, meseA }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Sezione titolo="Costo colazione" righe={colazioni} conStruttura={false}
         nota="Personale dei reparti Colazioni e Pasticceria (abbinamento modificabile in Admin → USALI → Food & Beverage). Pasti = colazioni addebitate in Welcome (trattamento + extra)." />
-      <Sezione titolo="Costo pranzo e cena" righe={ristoranti} conStruttura
-        nota={`Il costo medio del ristorante è un dato vero; pranzo e cena sono stimati (la contabilità ha un unico Ristorante) contando una cena come ${peso} pranzi — con peso 1 coincidono col medio. Pasti = quote pranzo/cena addebitate in Welcome, non i pasti serviti.`} />
+      <Sezione titolo="Costo pasto ristorante" righe={ristoranti} conStruttura conPasti
+        nota="Pranzo e cena hanno lo stesso costo: la differenza di prezzo serve solo a rendere conveniente la pensione completa, quindi costo e margine sono per pasto, senza distinzione. Pranzi e cene sono indicati solo a titolo informativo. Pasti = quote pranzo/cena addebitate in Welcome, non i pasti serviti." />
       {mmsDisponibile ? (
         <Sezione titolo="Costo pasto Mare Mosso" righe={mareMosso} conStruttura
-          nota="Pasti = coperti del gestionale Menu; ospiti ed esterni sono stimati sui coperti pesati." />
+          nota="Pasti = coperti del gestionale Menu; ospiti ed esterni hanno lo stesso costo per pasto (costi ripartiti per numero di coperti)." />
       ) : (
         <Messaggio tipo="info">
           Mare Mosso: per il costo per pasto servono i coperti del gestionale Menu, da inserire nella
