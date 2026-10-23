@@ -96,7 +96,7 @@ Credenziali default: admin / admin2024.
 - `api/client.js`: allega Bearer, gestisce 401 → redirect `/login?sessione_scaduta=1`
 
 ## Architettura modulare
-Moduli: `revenue` (/dashboard/gruppo), `produzione` (/statistiche-produzione — Statistiche Produzione, vedi sezione dedicata), `budget` (/budget), `usali` (/usali — Conto Economico + Movimenti Attivi, vedi sezione dedicata), `dipendenti` (/dipendenti), `corrispettivi` (/corrispettivi), `forecast` (/forecast).
+Moduli: `revenue` (/dashboard/gruppo), `produzione` (/statistiche-produzione — Statistiche Produzione, vedi sezione dedicata), `budget` (/budget), `usali` (/usali — Conto Economico, Movimenti Attivi, CE contabile, Food & Beverage, vedi sezioni dedicate), `dipendenti` (/dipendenti), `corrispettivi` (/corrispettivi), `forecast` (/forecast).
 Tabelle: `modules` (code PK, name, icon, route, ordine, attivo, colore), `module_permissions` (module_code, ruolo, puo_vedere, puo_modificare, puo_importare).
 NavBar L1: tab moduli da `GET /modules/`; L2: sotto-nav del modulo attivo.
 Permessi: al login → `localStorage['moduli_permessi']`; ProtectedRoute verifica `puo_vedere`.
@@ -143,7 +143,7 @@ nel backend (404, verificato anche nello storico git). Correzione scelta per non
 Eliminata anche la vecchia `pages/Admin.jsx` (pre-v2.0, non più collegata a nessuna rotta): tutte le
 sue sezioni esistono in `AdminUnificato.jsx`, tranne "prefissi struttura", che chiamava un indirizzo
 inesistente e non aveva mai funzionato.
-**USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura)
+**USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura), `usali-fnb` (peso cena/pranzo e reparti cedolini → punto vendita della scheda Food & Beverage)
 **Budget**: `budget-previsione` (AdminBudgetPrevisione — correttivi e parametri della proiezione fine stagione)
 **Statistiche Produzione**: `prod-categorie` (ProdCategorie), `prod-mapping` (ProdMappingDettagli — mapping testo Welcome→categoria)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
@@ -253,7 +253,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 559 test verdi (20/10/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 577 test verdi (23/10/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -2129,6 +2129,41 @@ interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 
   ⚠️ **Non lasciarli in `uploads/`**: `test_bulk_scan_cartella_uploads` (import massivo Revenue)
   scansiona tutta la cartella e li conta come coppie in errore. Gli export USALI caricati a mano stanno in
   `uploads/usali_export_originali/` (spostati lì il 20/10/2026: la scansione non legge le sottocartelle).
+
+## Modulo USALI — Food & Beverage (ottobre 2026, v3.28.0)
+Quarta scheda di `Usali.jsx` (`pages/usaliFnb/`): analisi per **punto vendita** — DPH: Colazione,
+Ristorante Mare Mosso (sotto-righe Ospiti Du Parc / Clienti esterni), Bar; CLB/INT: Colazione,
+Ristorante (Pranzo / Cena), Bar; BON: punto unico (la contabilità BON divide Bar/Ristorante in modo
+incoerente); Gruppo = totale per struttura. Sotto-schede Riepilogo (+ export xlsx), Andamento
+mensile, Coperti, Materia prima. Logica in `services/usali_fnb.py`, router `routers/usali_fnb.py`
+(prefix `/usali/fnb`: `GET /report`, `GET /report/export`, `GET /materia-prima`, `GET|PUT /coperti`,
+`GET|PUT /parametri`). Sola lettura sugli altri moduli: CE e CE contabile non toccati.
+**Fonti (scelte con l'utente)**:
+- costi materia prima/altri → contabilità (`usali_riga`, Costi Operativi > Food & Beverage, punto
+  dal sottoreparto: `punto_contabile()`), food/beverage dalle categorie KPI (`categoria_di()`); conti
+  F&B senza categoria vanno in "Altri costi" e sono elencati in Materia prima (sottostimano il food cost)
+- personale → **cedolini** (`_carica_cedolini()`: reparti figli di `*_FNB`, MMS = DPH), come il CE;
+  il personale contabile è solo confronto. Reparto → punto: default dal suffisso del codice
+  (`punto_default_cc()`: COLAZIONI/PASTICCERIA → colazione, BAR → bar, resto e tutti gli `MMS_*` →
+  ristorante), modificabile in Admin
+- ricavi → Produzione (`_carica_produzione()`, imponibile; per DPH anche righe reparto 'Maremosso' di
+  ogni struttura, stessa regola di Movimenti Attivi), clienti esterni MMS e BON da corrispettivi
+  manuali (lordo/1,10); ricavi F&B contabili solo come confronto
+- coperti → pasti `conta_come_pasto` di Produzione (colazione = trattamento + extra); MMS = coperti
+  **totali** dal gestionale Menu (ospiti DPH compresi, ~tutte cene) inseriti per mese, esterni =
+  Menu − pranzi/cene ospiti (negativo → avviso, nessuna stima); BON = **scontrini** del mese.
+  Tabella `usali_fnb_coperti` (`usalifnb001_2026`, struttura MMS|BON, anno, mese, valore)
+**Pranzo/cena e ospiti/esterni**: ricavi e coperti veri, **costi stimati** (badge "stima"),
+ripartiti sui coperti pesati — una cena vale `peso_cena` pranzi (default 1,5, `app_config
+['usali_fnb_parametri']`, Admin `?s=usali-fnb` → `AdminUsaliFnb.jsx`; salvati solo gli abbinamenti
+CC diversi dal default). Peso 1 = costo per coperto uguale; dividere per ricavi renderebbe uguale il
+food cost % — per questo il dato vero resta sul Ristorante intero.
+**Regola dei rapporti** (`_somma()`): numeratore e denominatore sommati sui soli mesi in cui esistono
+entrambi — costi solo nei mesi con contabilità importata, per-coperto solo nei mesi con coperti e
+costi. Coperti non sommati nel totale struttura (colazioni + cene non si sommano).
+**Avvisi** in pagina: mese con ricavi F&B contabili < 50% dei gestionali (trovati: BON luglio e
+settembre a 0, CLB e INT **giugno a 0 con tutto il pacchetto pensione su Camere**), coperti MMS o
+scontrini BON mancanti. I costi sono acquisti, non consumi (nessuna rimanenza in contabilità).
 
 ## Modulo USALI — Movimenti Attivi
 Seconda tab di `Usali.jsx` (`UsaliMovimentiAttivi.jsx`), accanto a "Conto Economico". Tabella

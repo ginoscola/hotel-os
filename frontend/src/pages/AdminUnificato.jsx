@@ -7,6 +7,7 @@ import AdminCruscottoSoglie from './admin/AdminCruscottoSoglie.jsx'
 import AdminUiKit from './admin/AdminUiKit.jsx'
 import AdminUsaliCategorieKpi from './admin/AdminUsaliCategorieKpi.jsx'
 import AdminBudgetPrevisione from './admin/AdminBudgetPrevisione.jsx'
+import AdminUsaliFnb from './admin/AdminUsaliFnb.jsx'
 import api from '../api/client.js'
 import {
   Badge, Button, Card, Checkbox, Field, Input, KpiTile, Loading, Messaggio, PageHeader, SegmentedControl, Select,
@@ -68,6 +69,7 @@ const SEZIONI = [
       { id: 'usali-cc',  label: 'Mappatura costi lavoro' },
       { id: 'usali-movimenti', label: 'Righe Movimenti Attivi' },
       { id: 'usali-categorie-kpi', label: 'Categorie KPI (contabile)' },
+      { id: 'usali-fnb', label: 'Food & Beverage' },
     ],
   },
   {
@@ -200,6 +202,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'usali-cc')             return <UsaliCCMapping />
   if (sezione === 'usali-movimenti')       return <UsaliMovimentiRighe />
   if (sezione === 'usali-categorie-kpi')   return <AdminUsaliCategorieKpi />
+  if (sezione === 'usali-fnb')             return <AdminUsaliFnb />
   if (sezione === 'prod-categorie')       return <ProdCategorie />
   if (sezione === 'prod-mapping')         return <ProdMappingDettagli />
   if (sezione === 'sistema-debug')        return <SistemaDebug />

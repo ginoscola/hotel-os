@@ -52,3 +52,20 @@ class UsaliVoceManuali(Base):
         UniqueConstraint('struttura_code', 'anno', 'mese', 'voce_code',
                          name='uq_usali_struttura_anno_mese_voce'),
     )
+
+
+class UsaliFnbCoperti(Base):
+    """Coperti mensili inseriti a mano per la scheda Food & Beverage: MMS = coperti totali dal
+    gestionale Menu (ospiti Du Parc compresi, ~tutte cene), BON = numero di scontrini."""
+    __tablename__ = "usali_fnb_coperti"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    struttura_code = Column(String(10), nullable=False)   # 'MMS' | 'BON'
+    anno           = Column(Integer, nullable=False)
+    mese           = Column(Integer, nullable=False)
+    valore         = Column(Integer, nullable=False)
+    updated_at     = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('struttura_code', 'anno', 'mese', name='uq_usali_fnb_coperti'),
+    )
