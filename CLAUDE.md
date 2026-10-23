@@ -338,6 +338,8 @@ contrasto con l'app reale) è stato eliminato.
   Produzione (trend mensile), Riepilogo Fatturati (3 viste a più serie), USALI F&B Costo pasto.
   **Non** dove la somma non ha senso (Budget vs Actual, Ricavi vs GOP, percentuali, serie di confronto).
 - **Colori grafici revenue**: `COLORI_REVENUE` (camere/fnb/extra) in `tokens.js`, uguali ovunque.
+  **Materia prima**: `COLORI_MATERIA_PRIMA` (cibo blu scuro `#1e40af`, bevande azzurro `#38bdf8`),
+  scelti dall'utente per distinguerle dal verde del personale (`coloreSerie(1)`) nei grafici di costo F&B.
   **Serie di confronto** (periodo/anno precedente) nei grafici a linee: stesso colore della serie
   principale + `{...STILE_CONFRONTO}` (tratteggiata, semitrasparente) — non un colore diverso.
 - `components/NavigazioneSnapshot.jsx`: barra ← Prec. / Succ. → + i due confronti mutuamente

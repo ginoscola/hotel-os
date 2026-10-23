@@ -8,7 +8,7 @@ import api from '../../api/client.js'
 import TooltipConTotale from '../../components/TooltipConTotale.jsx'
 import { formatEuro, formatN, formatPerc, mostraErrore } from '../../utils/format.js'
 import { Badge, Card, KpiTile, Loading, Messaggio, Table, Td, Th } from '../../components/ui'
-import { colors, coloreSerie } from '../../styles/tokens.js'
+import { colors, coloreSerie, COLORI_MATERIA_PRIMA } from '../../styles/tokens.js'
 import { MESI_BREVI } from '../usaliContabile/helpers.jsx'
 
 const NOME = { DPH: 'Du Parc', CLB: 'Club Hotel', INT: 'International' }
@@ -18,8 +18,8 @@ const NOME_PASTO = {
 }
 // Componenti del costo pieno per pasto (si sommano: barre impilate + tooltip con totale)
 const COMPONENTI = [
-  ['food_coperto', 'Cibo', coloreSerie(0)],
-  ['beverage_coperto', 'Bevande', coloreSerie(3)],
+  ['food_coperto', 'Cibo', COLORI_MATERIA_PRIMA.cibo],
+  ['beverage_coperto', 'Bevande', COLORI_MATERIA_PRIMA.bevande],
   ['personale_coperto', 'Personale', coloreSerie(1)],
   ['altri_coperto', 'Altri costi', coloreSerie(2)],
 ]

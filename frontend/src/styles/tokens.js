@@ -75,6 +75,13 @@ export const COLORI_REVENUE = {
   extra: PALETTE_CATEGORICA[2],
 }
 
+// Materia prima (cibo / bevande) nei grafici di costo F&B: due blu ben distinti tra loro e dal
+// verde del personale (PALETTE_CATEGORICA[1]) — scelta dell'utente, ottobre 2026.
+export const COLORI_MATERIA_PRIMA = {
+  cibo: '#1e40af',     // blu scuro
+  bevande: '#38bdf8',  // azzurro
+}
+
 // Convenzione per le serie di CONFRONTO (periodo/anno precedente) nei grafici a linee:
 // stesso colore della serie principale, tratteggiata e semitrasparente.
 // Uso: <Line ... stroke={c} {...STILE_CONFRONTO} />
