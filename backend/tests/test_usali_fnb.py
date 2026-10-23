@@ -113,6 +113,35 @@ def test_costo_per_pasto_scomposto_e_margine():
     assert p['margine_coperto'] == 5.0
 
 
+def test_costi_dei_mesi_senza_vendite_nel_costo_per_pasto():
+    dati = _dati('CLB', {
+        4: _mese(contabile={'colazione': _cont(food=100.0)}),     # acquisti prima dell'apertura
+        6: _mese(contabile={'colazione': _cont(food=300.0)}, ricavi_prod={('colazione', None): 1000.0},
+                 pasti={'colazione': 100}),
+        7: _mese(contabile={'colazione': _cont(food=900.0)}, ricavi_prod={('colazione', None): 500.0}),
+    })
+    p = _riga(fnb.costruisci_report(dati, 4, 7), 'CLB.colazione')['periodo']
+    # aprile (nessuna vendita) entra, luglio (vendite senza pasti = dato mancante) no
+    assert p['mp_coperto'] == 4.0
+    assert p['margine_coperto'] == 6.0
+
+
+def test_mare_mosso_costi_avvio_ripartiti_sulle_quote_di_periodo():
+    dati = _dati('DPH', {
+        4: _mese(contabile={'ristorante': _cont(food=400.0)}),
+        8: _mese(contabile={'ristorante': _cont(food=1200.0, ricavi=5000.0)},
+                 ricavi_prod={('ristorante', 'ospiti'): 2000.0}, pasti={'cena': 100},
+                 esterni=3000.0, menu=400),
+    })
+    rep = fnb.costruisci_report(dati, 4, 8)
+    rist = _riga(rep, 'DPH.ristorante')['periodo']
+    ospiti = _riga(rep, 'DPH.ristorante.ospiti')['periodo']
+    esterni = _riga(rep, 'DPH.ristorante.esterni')['periodo']
+    assert rist['materia_prima'] == 1600.0 and rist['mp_coperto'] == 4.0
+    assert round(ospiti['materia_prima'] + esterni['materia_prima'], 2) == 1600.0
+    assert ospiti['mp_coperto'] == 4.0 and esterni['mp_coperto'] == 4.0
+
+
 def test_mare_mosso_esterni_da_coperti_menu():
     dati = _dati('DPH', {8: _mese(
         contabile={'ristorante': _cont(food=1000.0, ricavi=5000.0)},

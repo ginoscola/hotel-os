@@ -253,7 +253,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 579 test verdi (23/10/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 581 test verdi (23/10/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -2175,8 +2175,15 @@ ricavi e coperti veri, costi **stimati** (badge "stima") ripartiti per numero di
 costo per pasto). `app_config['usali_fnb_parametri']` contiene solo `cc_punto` (Admin `?s=usali-fnb`
 → `AdminUsaliFnb.jsx`, salvati solo gli abbinamenti CC diversi dal default).
 **Regola dei rapporti** (`_somma()`): numeratore e denominatore sommati sui soli mesi in cui esistono
-entrambi — costi solo nei mesi con contabilità importata, per-coperto solo nei mesi con coperti e
-costi. Coperti non sommati nel totale struttura (colazioni + cene non si sommano).
+entrambi — costi solo nei mesi con contabilità importata. Per-coperto: mesi con costi E (coperti
+oppure **nessuna vendita**) — i costi di avvio/chiusura stagione (acquisti, attrezzature, personale
+di marzo-aprile) entrano nel costo per pasto (v3.29.4, prima esclusi per errore: DPH colazione
+10,04 → 10,93 €, Mare Mosso 25,96 → 29,29 €); esclusi solo i mesi con vendite ma senza pasti (dato
+mancante). Per le sotto-righe ospiti/esterni i costi dei mesi senza vendite sono ripartiti con le
+quote di coperti dell'intero periodo (`costruisci_report`), così la somma torna col ristorante.
+Mare Mosso in Costo pasto: riquadri coperti / **scontrino medio** (ricavi IVA esclusa / coperti) /
+costo / margine; lo scontrino ospiti/esterni è indicativo (ospiti = sole quote pranzo/cena Welcome,
+ma i loro ricavi comprendono anche l'alla carta addebitato in camera). Coperti non sommati nel totale struttura (colazioni + cene non si sommano).
 **Avvisi** in pagina: mese con ricavi F&B contabili < 50% dei gestionali (trovati: BON luglio e
 settembre a 0, CLB e INT **giugno a 0 con tutto il pacchetto pensione su Camere**), coperti MMS o
 scontrini BON mancanti. I costi sono acquisti, non consumi (nessuna rimanenza in contabilità).

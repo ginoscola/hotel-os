@@ -400,7 +400,10 @@ def _mese_punti(struttura: str, md: dict):
         quota = s['peso'] / sum(pesi) if ripartibile else None
         rec = {'ricavi': s['ricavi'], 'ricavi_contabili': None, 'coperti': s['coperti'],
                'presenze': md['presenze'] if nome == 'ospiti' else None,
-               'costi_ok': ripartibile, 'stima': True}
+               'costi_ok': ripartibile, 'stima': True,
+               '_peso': s['peso'] if ripartibile else None,
+               # mese con costi ma senza vendite (avvio/chiusura): ripartito poi sulle quote di periodo
+               '_senza_vendite': importato and not ripartibile and abs(rist['ricavi']) < 0.005}
         for k in ('food', 'beverage', 'altri', 'personale', 'personale_contabile'):
             rec[k] = rist[k] * quota if ripartibile else 0.0
         out[f'ristorante.{nome}'] = rec
@@ -414,6 +417,9 @@ def _somma(serie: list[dict]) -> dict:
 
     con_costi = lambda r: r['costi_ok']                                  # noqa: E731
     con_coperti = lambda r: r['coperti'] is not None and r['coperti'] > 0  # noqa: E731
+    # Mese senza vendite né pasti (avvio/chiusura stagione): i suoi costi entrano nel costo per
+    # pasto di periodo. Restano esclusi solo i mesi CON vendite ma senza pasti (dato mancante).
+    senza_vendite = lambda r: not con_coperti(r) and abs(r['ricavi'] or 0) < 0.005  # noqa: E731
     ricavi = S('ricavi')
     ric_c = S('ricavi', con_costi)
     food, bev = S('food', con_costi), S('beverage', con_costi)
@@ -424,7 +430,7 @@ def _somma(serie: list[dict]) -> dict:
 
     cop = S('coperti', con_coperti)
     ric_cop = S('ricavi', con_coperti)
-    entrambi = lambda r: con_costi(r) and con_coperti(r)  # noqa: E731
+    entrambi = lambda r: con_costi(r) and (con_coperti(r) or senza_vendite(r))  # noqa: E731
     cop_cc = S('coperti', entrambi)
     mp_cc = S('food', entrambi) + S('beverage', entrambi)
     pers_cc = S('personale', entrambi)
@@ -488,6 +494,21 @@ def costruisci_report(dati: dict, mese_da: int, mese_a: int) -> dict:
         valori, avv = _mese_punti(struttura, dati['mesi'][m])
         per_mese[m] = valori
         avvisi += [f"{NOME_STRUTTURA[struttura]}, mese {m}: {a}" for a in avv]
+
+    # Sotto-righe (ospiti/esterni): i costi dei mesi senza vendite vanno ripartiti con le quote di
+    # coperti dell'intero periodo, così la somma delle sotto-righe torna col ristorante
+    subs = sub_struttura(struttura)
+    if subs:
+        pesi = {s: sum(per_mese[m][f'ristorante.{s}']['_peso'] or 0 for m in mesi) for s in subs}
+        tot_pesi = sum(pesi.values())
+        for m in mesi:
+            rist = per_mese[m]['ristorante']
+            for s in subs:
+                rec = per_mese[m][f'ristorante.{s}']
+                if rec['_senza_vendite'] and tot_pesi > 0:
+                    for k in ('food', 'beverage', 'altri', 'personale', 'personale_contabile'):
+                        rec[k] = rist[k] * pesi[s] / tot_pesi
+                    rec['costi_ok'] = True
 
     chiavi = []
     for p in punti_struttura(struttura):
