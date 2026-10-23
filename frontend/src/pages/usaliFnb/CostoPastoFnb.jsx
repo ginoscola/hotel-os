@@ -25,6 +25,17 @@ const COMPONENTI = [
 ]
 
 const legendaNeutra = (valore) => <span style={{ color: colors.text }}>{valore}</span>
+const euro = v => (v == null ? '—' : formatEuro(v))
+
+function etichetta(r, conStruttura) {
+  const pasto = r.struttura === 'DPH' && r.pasto === 'ristorante' ? 'Mare Mosso (totale)' : NOME_PASTO[r.pasto]
+  return conStruttura ? `${NOME[r.struttura]} — ${pasto}` : NOME[r.struttura]
+}
+
+function Margine({ v }) {
+  if (v == null) return '—'
+  return <span style={{ color: v < 0 ? colors.danger : colors.success }}>{formatEuro(v)}</span>
+}
 
 const perc = v => (v == null ? '—' : formatPerc(v))
 const num = v => (v == null ? '—' : formatN(v))
