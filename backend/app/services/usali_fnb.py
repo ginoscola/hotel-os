@@ -437,7 +437,9 @@ def _somma(serie: list[dict]) -> dict:
     cop_cc = S('coperti', entrambi)
     mp_cc = S('food', entrambi) + S('beverage', entrambi)
     pers_cc = S('personale', entrambi)
-    costi_cc = mp_cc + pers_cc + S('altri', entrambi)
+    altri_cc = S('altri', entrambi)
+    costi_cc = mp_cc + pers_cc + altri_cc
+    ric_cc = S('ricavi', entrambi)
     ades = lambda r: con_coperti(r) and r['presenze']  # noqa: E731
     cop_p, pres_p = S('coperti', ades), S('presenze', ades)
 
@@ -467,7 +469,11 @@ def _somma(serie: list[dict]) -> dict:
         'ricavo_coperto': div(ric_cop, cop),
         'mp_coperto': div(mp_cc, cop_cc),
         'personale_coperto': div(pers_cc, cop_cc),
+        'altri_coperto': div(altri_cc, cop_cc),
         'costo_coperto': div(costi_cc, cop_cc),
+        # stessi mesi del costo per coperto (con costi E coperti), non dell'intero periodo
+        'ricavo_coperto_cc': div(ric_cc, cop_cc),
+        'margine_coperto': div(ric_cc - costi_cc, cop_cc),
         'adesione_perc': div(cop_p, pres_p, 100),
     }
 
@@ -595,3 +601,29 @@ def materia_prima(dati: dict, mese_da: int, mese_a: int) -> dict:
     non_cat.sort(key=lambda r: -r['totale'])
     return {'conti': conti, 'non_categorizzati': non_cat,
             'totale_non_categorizzati': round(sum(r['totale'] for r in non_cat), 2)}
+
+
+# Righe della vista "Costo pasto": (struttura, chiave riga nel report, pasto)
+RIGHE_COSTO_PASTO = [
+    ('DPH', 'colazione', 'colazione'), ('CLB', 'colazione', 'colazione'), ('INT', 'colazione', 'colazione'),
+    ('CLB', 'ristorante', 'ristorante'), ('CLB', 'ristorante.pranzo', 'pranzo'), ('CLB', 'ristorante.cena', 'cena'),
+    ('INT', 'ristorante', 'ristorante'), ('INT', 'ristorante.pranzo', 'pranzo'), ('INT', 'ristorante.cena', 'cena'),
+    ('DPH', 'ristorante', 'ristorante'), ('DPH', 'ristorante.ospiti', 'ospiti'),
+    ('DPH', 'ristorante.esterni', 'esterni'),
+]
+
+
+def costo_pasto(reports: dict) -> list[dict]:
+    """Righe del costo per pasto dalle righe del riepilogo di DPH/CLB/INT ({struttura: report})."""
+    out = []
+    for struttura, chiave, pasto in RIGHE_COSTO_PASTO:
+        riga = next((r for r in reports[struttura]['righe'] if r['id'] == f'{struttura}.{chiave}'), None)
+        if riga is None:
+            continue
+        out.append({
+            'id': riga['id'], 'struttura': struttura, 'pasto': pasto,
+            'gruppo': 'colazione' if pasto == 'colazione' else 'ristorante',
+            'label': riga['label'], 'stima_costi': riga['stima_costi'],
+            'periodo': riga['periodo'], 'mesi': riga['mesi'],
+        })
+    return out

@@ -104,6 +104,21 @@ def test_mesi_senza_contabilita_esclusi_dai_rapporti():
     assert luglio['food'] is None and luglio['food_perc'] is None
 
 
+def test_costo_per_pasto_scomposto_e_margine():
+    dati = _dati('CLB', {
+        6: _mese(contabile={'colazione': _cont(food=200.0, altri=50.0, ricavi=900.0)},
+                 personale={'colazione': 250.0},
+                 ricavi_prod={('colazione', None): 1000.0}, pasti={'colazione': 100}),
+        7: _mese(importato=False, ricavi_prod={('colazione', None): 3000.0}, pasti={'colazione': 300}),
+    })
+    p = _riga(fnb.costruisci_report(dati, 6, 7, 1.5), 'CLB.colazione')['periodo']
+    assert (p['mp_coperto'], p['personale_coperto'], p['altri_coperto']) == (2.0, 2.5, 0.5)
+    assert p['costo_coperto'] == 5.0
+    assert p['ricavo_coperto'] == 10.0          # su tutti i mesi con coperti
+    assert p['ricavo_coperto_cc'] == 10.0       # sui soli mesi con costi
+    assert p['margine_coperto'] == 5.0
+
+
 def test_mare_mosso_esterni_da_coperti_menu():
     dati = _dati('DPH', {8: _mese(
         contabile={'ristorante': _cont(food=1000.0, ricavi=5000.0)},
@@ -264,3 +279,11 @@ def test_export_xlsx(client):
     ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
     assert ws.cell(3, 1).value == 'Punto vendita'
     assert ws.cell(4, 1).value == 'Totale Club Hotel'
+
+
+def test_costo_pasto_endpoint(client):
+    r = client.get("/usali/fnb/costo-pasto", params={'anno': 1901, 'mese_da': 5, 'mese_a': 9})
+    assert r.status_code == 200
+    ids = [x['id'] for x in r.json()['righe']]
+    assert ids[:3] == ['DPH.colazione', 'CLB.colazione', 'INT.colazione']
+    assert 'CLB.ristorante.cena' in ids and 'DPH.ristorante.esterni' in ids

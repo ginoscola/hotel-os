@@ -2,6 +2,7 @@
 
   GET /usali/fnb/report?struttura=DPH|CLB|INT|BON|GRUPPO&anno=&mese_da=&mese_a=
   GET /usali/fnb/materia-prima?struttura=&anno=&mese_da=&mese_a=
+  GET /usali/fnb/costo-pasto?anno=&mese_da=&mese_a=   → costo per colazione / pranzo / cena
   GET /usali/fnb/coperti?anno=          → coperti MMS (Menu) e scontrini BON per mese
   PUT /usali/fnb/coperti                → {struttura_code, anno, mese, valore|null} (admin)
   GET|PUT /usali/fnb/parametri          → peso cena/pranzo + centro di costo → punto vendita
@@ -125,6 +126,23 @@ def export_report_fnb(
         buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{nome}"'},
     )
+
+
+@router.get("/costo-pasto")
+def costo_pasto_fnb(
+    anno: int,
+    mese_da: int = Query(1, ge=1, le=12), mese_a: int = Query(12, ge=1, le=12),
+    db: Session = Depends(get_db), _=Depends(richiedi_utente_attivo),
+):
+    """Costo per colazione (DPH/CLB/INT) e per pasto del ristorante (pranzo/cena CLB e INT,
+    Mare Mosso ospiti/esterni), dalle stesse righe del riepilogo."""
+    _verifica('GRUPPO', mese_da, mese_a)
+    parametri = fnb.leggi_parametri(db)
+    reports = {s: fnb.costruisci_report(fnb.carica_dati(db, s, anno, parametri), mese_da, mese_a,
+                                        parametri['peso_cena'])
+               for s in ('DPH', 'CLB', 'INT')}
+    return {'anno': anno, 'mese_da': mese_da, 'mese_a': mese_a, 'peso_cena': parametri['peso_cena'],
+            'righe': fnb.costo_pasto(reports)}
 
 
 @router.get("/materia-prima")

@@ -10,6 +10,7 @@ import RiepilogoFnb from './RiepilogoFnb.jsx'
 import AndamentoFnb from './AndamentoFnb.jsx'
 import CopertiFnb from './CopertiFnb.jsx'
 import MateriaPrimaFnb from './MateriaPrimaFnb.jsx'
+import CostoPastoFnb from './CostoPastoFnb.jsx'
 
 const LS_VISTA = 'usali_fnb_vista'
 const LS_STRUTTURA = 'usali_fnb_struttura'
@@ -27,6 +28,7 @@ const VISTE = [
   { id: 'andamento', label: 'Andamento mensile' },
   { id: 'coperti', label: 'Coperti' },
   { id: 'materia-prima', label: 'Materia prima' },
+  { id: 'costo-pasto', label: 'Costo pasto' },
 ]
 
 export default function UsaliFnb() {
@@ -63,7 +65,8 @@ export default function UsaliFnb() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        {vista !== 'coperti' && (
+        {/* Coperti e Costo pasto mostrano sempre tutte le strutture */}
+        {vista !== 'coperti' && vista !== 'costo-pasto' && (
           <SegmentedControl label="Struttura" options={OPZIONI_STRUTTURA} value={struttura} onChange={cambiaStruttura} />
         )}
         {/* Non <Field>: è un <label>, un clic sull'etichetta premerebbe il pulsante ◀ */}
@@ -101,6 +104,7 @@ export default function UsaliFnb() {
       {vista === 'materia-prima' && (
         <MateriaPrimaFnb struttura={struttura} anno={anno} meseDa={meseDa} meseA={meseA} />
       )}
+      {vista === 'costo-pasto' && <CostoPastoFnb anno={anno} meseDa={meseDa} meseA={meseA} />}
     </div>
   )
 }

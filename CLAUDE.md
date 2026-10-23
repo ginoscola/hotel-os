@@ -253,7 +253,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 577 test verdi (23/10/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 579 test verdi (23/10/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -2135,8 +2135,13 @@ Quarta scheda di `Usali.jsx` (`pages/usaliFnb/`): analisi per **punto vendita** 
 Ristorante Mare Mosso (sotto-righe Ospiti Du Parc / Clienti esterni), Bar; CLB/INT: Colazione,
 Ristorante (Pranzo / Cena), Bar; BON: punto unico (la contabilità BON divide Bar/Ristorante in modo
 incoerente); Gruppo = totale per struttura. Sotto-schede Riepilogo (+ export xlsx), Andamento
-mensile, Coperti, Materia prima. Logica in `services/usali_fnb.py`, router `routers/usali_fnb.py`
-(prefix `/usali/fnb`: `GET /report`, `GET /report/export`, `GET /materia-prima`, `GET|PUT /coperti`,
+mensile, Coperti, Materia prima, **Costo pasto** (v3.29.0, `CostoPastoFnb.jsx` + `GET /usali/fnb/
+costo-pasto?anno=&mese_da=&mese_a=`: sempre DPH/CLB/INT insieme, colazione delle tre strutture +
+ristorante medio/pranzo/cena CLB e INT + Mare Mosso solo con i coperti Menu; per pasto materia prima,
+personale, altri, costo pieno, ricavo medio e margine — `ricavo_coperto_cc`/`margine_coperto` sugli
+stessi mesi del costo, non sull'intero periodo come `ricavo_coperto`; righe da `costo_pasto()` in
+`usali_fnb.py`, che riusa le righe del riepilogo). Logica in `services/usali_fnb.py`, router `routers/usali_fnb.py`
+(prefix `/usali/fnb`: `GET /report`, `GET /report/export`, `GET /materia-prima`, `GET /costo-pasto`, `GET|PUT /coperti`,
 `GET|PUT /parametri`). Sola lettura sugli altri moduli: CE e CE contabile non toccati.
 **Fonti (scelte con l'utente)**:
 - costi materia prima/altri → contabilità (`usali_riga`, Costi Operativi > Food & Beverage, punto

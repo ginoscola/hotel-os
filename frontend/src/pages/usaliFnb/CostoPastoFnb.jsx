@@ -1,0 +1,163 @@
+// Costo per pasto: colazione di Du Parc, Club e International; pranzo e cena di Club e
+// International (stimati: la contabilità ha un unico Ristorante) e Mare Mosso quando ci sono i
+// coperti Menu. Costo pieno = materia prima + personale (cedolini) + altri costi F&B, per pasto.
+import { useEffect, useState } from 'react'
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import api from '../../api/client.js'
+import { formatEuro, formatN, mostraErrore } from '../../utils/format.js'
+import { Badge, Card, Loading, Messaggio, Table, Td, Th } from '../../components/ui'
+import { colors, coloreSerie } from '../../styles/tokens.js'
+import { MESI_BREVI } from '../usaliContabile/helpers.jsx'
+
+const NOME = { DPH: 'Du Parc', CLB: 'Club Hotel', INT: 'International' }
+const NOME_PASTO = {
+  colazione: 'Colazione', ristorante: 'Ristorante (medio)', pranzo: 'Pranzo', cena: 'Cena',
+  ospiti: 'Ospiti Du Parc', esterni: 'Clienti esterni',
+}
+const COMPONENTI = [
+  ['mp_coperto', 'Materia prima', coloreSerie(0)],
+  ['personale_coperto', 'Personale', coloreSerie(1)],
+  ['altri_coperto', 'Altri costi', coloreSerie(2)],
+]
+
+const legendaNeutra = (valore) => <span style={{ color: colors.text }}>{valore}</span>
+const euro = v => (v == null ? '—' : formatEuro(v))
+
+function etichetta(r, conStruttura) {
+  const pasto = r.struttura === 'DPH' && r.pasto === 'ristorante' ? 'Mare Mosso (medio)' : NOME_PASTO[r.pasto]
+  return conStruttura ? `${NOME[r.struttura]} — ${pasto}` : NOME[r.struttura]
+}
+
+function Margine({ v }) {
+  if (v == null) return '—'
+  return <span style={{ color: v < 0 ? colors.danger : colors.success }}>{formatEuro(v)}</span>
+}
+
+function Sezione({ titolo, righe, conStruttura, nota }) {
+  const grafico = righe
+    .filter(r => r.periodo.costo_coperto != null)
+    .map(r => ({ nome: etichetta(r, conStruttura), ...r.periodo }))
+  const mesi = righe[0]?.mesi.map(m => m.mese) || []
+
+  return (
+    <Card title={titolo}>
+      {grafico.length > 0 && (
+        <ResponsiveContainer width="100%" height={Math.max(160, grafico.length * 44 + 60)}>
+          <BarChart data={grafico} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 12, fill: colors.textMuted }} tickFormatter={v => `${v} €`} />
+            <YAxis type="category" dataKey="nome" width={conStruttura ? 220 : 110}
+              tick={{ fontSize: 12, fill: colors.text }} />
+            <Tooltip formatter={(v, n) => [euro(v), n]} />
+            <Legend formatter={legendaNeutra} />
+            {COMPONENTI.map(([k, label, colore]) => (
+              <Bar key={k} dataKey={k} name={label} stackId="costo" fill={colore} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+
+      <Table compact>
+        <thead>
+          <tr>
+            <Th>{conStruttura ? 'Pasto' : 'Struttura'}</Th>
+            <Th num>Pasti</Th>
+            <Th num gruppo>Materia prima</Th>
+            <Th num>Personale</Th>
+            <Th num>Altri costi</Th>
+            <Th num tot>Costo pieno</Th>
+            <Th num gruppo title="Ricavo medio sugli stessi mesi del costo">Ricavo medio</Th>
+            <Th num>Margine</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {righe.map(r => {
+            const p = r.periodo
+            return (
+              <tr key={r.id} className={r.pasto === 'ristorante' ? 'ui-riga-subtotale' : undefined}>
+                <Td style={{ whiteSpace: 'nowrap', paddingLeft: r.stima_costi ? 24 : 8 }}>
+                  {etichetta(r, conStruttura)}
+                  {r.stima_costi && <span style={{ marginLeft: 6 }}><Badge tono="info">stima</Badge></span>}
+                </Td>
+                <Td num>{p.coperti == null ? '—' : formatN(p.coperti)}</Td>
+                <Td num gruppo>{euro(p.mp_coperto)}</Td>
+                <Td num>{euro(p.personale_coperto)}</Td>
+                <Td num>{euro(p.altri_coperto)}</Td>
+                <Td num tot><strong>{euro(p.costo_coperto)}</strong></Td>
+                <Td num gruppo>{euro(p.ricavo_coperto_cc)}</Td>
+                <Td num><Margine v={p.margine_coperto} /></Td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </Table>
+
+      <div style={{ marginTop: 16, fontWeight: 600, fontSize: 13 }}>Costo pieno per pasto, mese per mese</div>
+      <Table compact>
+        <thead>
+          <tr>
+            <Th>{conStruttura ? 'Pasto' : 'Struttura'}</Th>
+            {mesi.map(m => <Th key={m} num>{MESI_BREVI[m - 1]}</Th>)}
+            <Th num tot>Periodo</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {righe.map(r => (
+            <tr key={r.id} className={r.pasto === 'ristorante' ? 'ui-riga-subtotale' : undefined}>
+              <Td style={{ whiteSpace: 'nowrap', paddingLeft: r.stima_costi ? 24 : 8 }}>{etichetta(r, conStruttura)}</Td>
+              {r.mesi.map(m => <Td key={m.mese} num>{euro(m.costo_coperto)}</Td>)}
+              <Td num tot>{euro(r.periodo.costo_coperto)}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+      {nota && <div style={{ marginTop: 8, fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>{nota}</div>}
+    </Card>
+  )
+}
+
+export default function CostoPastoFnb({ anno, meseDa, meseA }) {
+  const [dati, setDati] = useState(null)
+  const [errore, setErrore] = useState(null)
+
+  useEffect(() => {
+    let annullato = false
+    setErrore(null)
+    api.get('/usali/fnb/costo-pasto', { params: { anno, mese_da: meseDa, mese_a: meseA } })
+      .then(r => { if (!annullato) setDati(r.data) })
+      .catch(e => { if (!annullato) { setDati(null); setErrore(mostraErrore(e)) } })
+    return () => { annullato = true }
+  }, [anno, meseDa, meseA])
+
+  if (errore) return <Messaggio>{errore}</Messaggio>
+  if (!dati) return <Loading />
+
+  const peso = String(dati.peso_cena).replace('.', ',')
+  const colazioni = dati.righe.filter(r => r.gruppo === 'colazione')
+  const ristoranti = dati.righe.filter(r => r.gruppo === 'ristorante' && r.struttura !== 'DPH')
+  const mareMosso = dati.righe.filter(r => r.struttura === 'DPH' && r.gruppo === 'ristorante')
+  const mmsDisponibile = mareMosso.some(r => r.periodo.coperti != null)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Sezione titolo="Costo colazione" righe={colazioni} conStruttura={false}
+        nota="Personale dei reparti Colazioni e Pasticceria (abbinamento modificabile in Admin → USALI → Food & Beverage). Pasti = colazioni addebitate in Welcome (trattamento + extra)." />
+      <Sezione titolo="Costo pranzo e cena" righe={ristoranti} conStruttura
+        nota={`Il costo medio del ristorante è un dato vero; pranzo e cena sono stimati (la contabilità ha un unico Ristorante) contando una cena come ${peso} pranzi — con peso 1 coincidono col medio. Pasti = quote pranzo/cena addebitate in Welcome, non i pasti serviti.`} />
+      {mmsDisponibile ? (
+        <Sezione titolo="Costo pasto Mare Mosso" righe={mareMosso} conStruttura
+          nota="Pasti = coperti del gestionale Menu; ospiti ed esterni sono stimati sui coperti pesati." />
+      ) : (
+        <Messaggio tipo="info">
+          Mare Mosso: per il costo per pasto servono i coperti del gestionale Menu, da inserire nella
+          sotto-scheda Coperti.
+        </Messaggio>
+      )}
+      <div style={{ fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
+        Costo pieno = (materia prima + personale + altri costi F&B) / pasti, sui soli mesi con
+        contabilità importata. I costi sono acquisti: comprendono i rifornimenti prima dell'apertura e
+        non tengono conto della merce rimasta in magazzino.
+      </div>
+    </div>
+  )
+}
