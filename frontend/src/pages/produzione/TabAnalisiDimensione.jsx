@@ -6,6 +6,7 @@ import {
 import api from '../../api/client'
 import { formatEuro, formatPerc } from '../../utils/format'
 import { ExportMenu } from '../../components/ExportMenu.jsx'
+import TooltipConTotale from '../../components/TooltipConTotale.jsx'
 import {
   STRUTTURE_HOTEL, meseNome, primoGiorno, ultimoGiorno, campoValore, meseAnnoPrecedente, OPZIONI_STRUTTURA,
 } from '../../utils/produzioneHelpers'
@@ -146,7 +147,7 @@ export default function TabAnalisiDimensione({ dimensione, campo, titolo, lordo 
               <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
               <XAxis dataKey="mese" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatEuro(v).replace(',00', '')} />
-              <Tooltip formatter={(v) => formatEuro(v)} />
+              <Tooltip content={<TooltipConTotale />} />
               <Legend wrapperStyle={{ fontSize: 'var(--fs-xs)' }} />
               {serieChiavi.map((s, idx) => (
                 <Bar key={s} dataKey={s} stackId="a" fill={coloreSerie(idx)} radius={[2, 2, 0, 0]} />

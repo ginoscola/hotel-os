@@ -330,6 +330,13 @@ contrasto con l'app reale) è stato eliminato.
   sfondo tenue — usato anche da `HotelTag`), riga `ui-riga-errore` (differenza da verificare).
 - `KpiTile` accetta anche `confronto`/`confrontoLabel`/`delta` (ha sostituito il vecchio `KPICard`,
   eliminato); `<div className="ui-kpi-grid">` = griglia regolare di KPI.
+- **Tooltip con totale** (`components/TooltipConTotale.jsx`, ottobre 2026, regola chiesta
+  dall'utente): ogni grafico le cui serie **si sommano** (barre impilate, o affiancate che compongono
+  un totale) usa `<Tooltip content={<TooltipConTotale />} />` — voci nel colore della serie + riga
+  **Totale** in grassetto (`formatter` default euro, `labelFormatter`, `etichettaTotale`). Oggi in:
+  Dashboard Hotel (ricavi giornalieri), Dashboard Gruppo (contributo per hotel), Statistiche
+  Produzione (trend mensile), Riepilogo Fatturati (3 viste a più serie), USALI F&B Costo pasto.
+  **Non** dove la somma non ha senso (Budget vs Actual, Ricavi vs GOP, percentuali, serie di confronto).
 - **Colori grafici revenue**: `COLORI_REVENUE` (camere/fnb/extra) in `tokens.js`, uguali ovunque.
   **Serie di confronto** (periodo/anno precedente) nei grafici a linee: stesso colore della serie
   principale + `{...STILE_CONFRONTO}` (tratteggiata, semitrasparente) — non un colore diverso.

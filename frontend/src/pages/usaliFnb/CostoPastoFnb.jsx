@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import api from '../../api/client.js'
+import TooltipConTotale from '../../components/TooltipConTotale.jsx'
 import { formatEuro, formatN, formatPerc, mostraErrore } from '../../utils/format.js'
 import { Badge, Card, Loading, Messaggio, Table, Td, Th } from '../../components/ui'
 import { colors, coloreSerie } from '../../styles/tokens.js'
@@ -22,38 +23,6 @@ const COMPONENTI = [
 ]
 
 const legendaNeutra = (valore) => <span style={{ color: colors.text }}>{valore}</span>
-
-// Tooltip delle barre: le tre componenti + il costo pieno totale
-function TooltipCosto({ active, payload, label }) {
-  if (!active || !payload?.length) return null
-  const p = payload[0].payload
-  return (
-    <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 6,
-      padding: '8px 10px', fontSize: 12, boxShadow: '0 2px 8px rgba(15,23,42,.12)' }}>
-      <div style={{ fontWeight: 600, marginBottom: 4, color: colors.text }}>{label}</div>
-      {COMPONENTI.map(([k, nome, colore]) => (
-        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, color: colore }}>
-          <span>{nome}</span><span className="ui-num">{euro(p[k])}</span>
-        </div>
-      ))}
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4, paddingTop: 4,
-        borderTop: `1px solid ${colors.border}`, fontWeight: 600, color: colors.text }}>
-        <span>Totale</span><span className="ui-num">{euro(p.costo_coperto)}</span>
-      </div>
-    </div>
-  )
-}
-const euro = v => (v == null ? '—' : formatEuro(v))
-
-function etichetta(r, conStruttura) {
-  const pasto = r.struttura === 'DPH' && r.pasto === 'ristorante' ? 'Mare Mosso (totale)' : NOME_PASTO[r.pasto]
-  return conStruttura ? `${NOME[r.struttura]} — ${pasto}` : NOME[r.struttura]
-}
-
-function Margine({ v }) {
-  if (v == null) return '—'
-  return <span style={{ color: v < 0 ? colors.danger : colors.success }}>{formatEuro(v)}</span>
-}
 
 const perc = v => (v == null ? '—' : formatPerc(v))
 const num = v => (v == null ? '—' : formatN(v))
@@ -74,7 +43,7 @@ function Sezione({ titolo, righe, conStruttura, nota, conPasti = false }) {
             <XAxis type="number" tick={{ fontSize: 12, fill: colors.textMuted }} tickFormatter={v => `${v} €`} />
             <YAxis type="category" dataKey="nome" width={conStruttura ? 220 : 110}
               tick={{ fontSize: 12, fill: colors.text }} />
-            <Tooltip content={<TooltipCosto />} cursor={{ fill: colors.surfaceAlt }} />
+            <Tooltip content={<TooltipConTotale />} cursor={{ fill: colors.surfaceAlt }} />
             <Legend formatter={legendaNeutra} />
             {COMPONENTI.map(([k, label, colore]) => (
               <Bar key={k} dataKey={k} name={label} stackId="costo" fill={colore} />

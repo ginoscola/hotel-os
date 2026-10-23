@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import api from '../api/client'
 import { ExportMenu } from '../components/ExportMenu'
+import TooltipConTotale from '../components/TooltipConTotale.jsx'
 import { formatEuro, mostraErrore } from '../utils/format'
 import { STRUTTURE_HOTEL, STRUTTURE_MANUALI, NOMI, NOME_CAT } from '../utils/corrispettiviHelpers'
 import {
@@ -422,7 +423,7 @@ export default function TabFatturati({ lordo }) {
                 {vistaGrafico === 'struttura' && raggruppaPer === 'struttura' ? (
                   <ReTooltip formatter={(v, _n, props) => [formatEuro(v), NOMI[props.payload?.struttura] || props.payload?.struttura]} />
                 ) : (
-                  <ReTooltip formatter={(v, name) => [formatEuro(v), name]} />
+                  <ReTooltip content={<TooltipConTotale />} />
                 )}
                 {vistaGrafico === 'struttura' && raggruppaPer === 'struttura' ? (
                   <Bar dataKey="valore" radius={[3, 3, 0, 0]}>

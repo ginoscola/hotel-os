@@ -7,6 +7,7 @@ import api from '../api/client.js'
 import { ExportMenu } from '../components/ExportMenu.jsx'
 import NavigazioneSnapshot from '../components/NavigazioneSnapshot.jsx'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
+import TooltipConTotale from '../components/TooltipConTotale.jsx'
 import { formatEuro, formatEuroK, formatPerc, formatN, formatData, addDays, calcolaDelta, mostraErrore } from '../utils/format.js'
 import {
   Card, Dot, KpiTile, Loading, Messaggio, NavMese, PageHeader, SegmentedControl, StatoVuoto, Table, Td, Th,
@@ -435,7 +436,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis type="number" domain={[0, 'auto']} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 13 }} />
-              <Tooltip formatter={v => formatEuro(v)} />
+              <Tooltip content={<TooltipConTotale />} />
               <Legend />
               <ReferenceLine x={0} stroke={colors.textSubtle} strokeWidth={1} />
               <Bar dataKey="revenue_rooms" name="Camere" stackId="r" fill={COLORI_REVENUE.camere} />

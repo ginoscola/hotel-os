@@ -9,6 +9,7 @@ import api from '../api/client.js'
 import { ExportMenu } from '../components/ExportMenu.jsx'
 import NavigazioneSnapshot from '../components/NavigazioneSnapshot.jsx'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
+import TooltipConTotale from '../components/TooltipConTotale.jsx'
 import { useSnapshotConfronto } from '../hooks/useSnapshotConfronto.js'
 import {
   formatEuro, formatPerc, formatN, formatData, addDays, calcolaDelta, mostraErrore,
@@ -614,7 +615,7 @@ function ContenutoDashboard({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="data" tickFormatter={tickFormatterSabato} interval={0} tick={{ fontSize: 10 }} />
               <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} width={40} />
-              <Tooltip labelFormatter={labelDataTooltip} formatter={v => formatEuro(v)} />
+              <Tooltip content={<TooltipConTotale labelFormatter={labelDataTooltip} />} />
               <Legend />
               {pastReferenceArea(giorniMerged, 'data', null, currentSnap?.snapshot_date)}
               {areaRif(false)}

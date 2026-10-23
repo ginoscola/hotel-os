@@ -7,8 +7,16 @@ import {
   Table, Th, Td, Modal, useConferma, useAvvisi, KpiTile, FileButton,
   ThOrdinabile, Paginazione, Textarea, Checkbox, DropZone, Drawer, NavAnno, SezioneApribile,
 } from '../../components/ui'
-import { colors, COLORI_STRUTTURA, fontSize } from '../../styles/tokens.js'
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import TooltipConTotale from '../../components/TooltipConTotale.jsx'
+import { colors, COLORI_REVENUE, COLORI_STRUTTURA, fontSize } from '../../styles/tokens.js'
 import { formatEuro } from '../../utils/format.js'
+
+const DEMO_IMPILATO = [
+  { mese: 'Giu', camere: 42000, fnb: 18000, extra: 3000 },
+  { mese: 'Lug', camere: 61000, fnb: 25000, extra: 4500 },
+  { mese: 'Ago', camere: 78000, fnb: 31000, extra: 6000 },
+]
 
 function Blocco({ titolo, children, nota }) {
   return (
@@ -239,6 +247,25 @@ export default function AdminUiKit() {
         </Table>
         <Paginazione pagina={pag} perPagina={20} totale={87} onChange={setPag} />
         <Paginazione pagina={pag} perPagina={20} totale={87} onChange={setPag} estremi />
+      </Card>
+
+      <Card title="Grafico con parti che si sommano (TooltipConTotale)" style={{ marginBottom: 20 }}>
+        <p className="ui-text-muted" style={{ marginTop: 0 }}>
+          Barre impilate o affiancate che compongono un totale: il tooltip mostra ogni voce nel suo
+          colore e la riga Totale. Non usarlo dove la somma non ha senso (Budget vs Actual, Ricavi vs GOP).
+        </p>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={DEMO_IMPILATO}>
+            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
+            <XAxis dataKey="mese" tick={{ fontSize: 12, fill: colors.textMuted }} />
+            <YAxis tickFormatter={v => `${v / 1000}k`} width={44} tick={{ fontSize: 12, fill: colors.textMuted }} />
+            <Tooltip content={<TooltipConTotale />} cursor={{ fill: colors.surfaceAlt }} />
+            <Legend />
+            <Bar dataKey="camere" name="Camere" stackId="r" fill={COLORI_REVENUE.camere} />
+            <Bar dataKey="fnb" name="F&B" stackId="r" fill={COLORI_REVENUE.fnb} />
+            <Bar dataKey="extra" name="Extra" stackId="r" fill={COLORI_REVENUE.extra} />
+          </BarChart>
+        </ResponsiveContainer>
       </Card>
 
       <Card title="Log in stile console (classe ui-console)" style={{ marginBottom: 20 }}>
