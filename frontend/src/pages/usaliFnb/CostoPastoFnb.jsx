@@ -182,7 +182,7 @@ export default function CostoPastoFnb({ anno, meseDa, meseA }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Sezione titolo="Costo colazione" righe={colazioni} conStruttura={false}
         nota="Personale dei reparti Colazioni e Pasticceria (abbinamento modificabile in Admin → USALI → Food & Beverage). Pasti = colazioni addebitate in Welcome (trattamento + extra)." />
-      <Sezione titolo="Costo pasto ristorante" righe={ristoranti} conStruttura conPasti
+      <Sezione titolo="Costo pasto ristoranti hotel" righe={ristoranti} conStruttura conPasti
         nota="Pranzo e cena hanno lo stesso costo: la differenza di prezzo serve solo a rendere conveniente la pensione completa, quindi costo e margine sono per pasto, senza distinzione. Pranzi e cene sono indicati solo a titolo informativo. Pasti = quote pranzo/cena addebitate in Welcome, non i pasti serviti." />
       {mmsDisponibile ? (
         <Sezione titolo="Costo pasto Mare Mosso" righe={mareMosso} conStruttura
