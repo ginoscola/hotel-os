@@ -470,6 +470,8 @@ def _somma(serie: list[dict]) -> dict:
         'coperti': cop if any(con_coperti(r) for r in serie) else None,
         'ricavo_coperto': div(ric_cop, cop),
         'mp_coperto': div(mp_cc, cop_cc),
+        'food_coperto': div(S('food', entrambi), cop_cc),
+        'beverage_coperto': div(S('beverage', entrambi), cop_cc),
         'personale_coperto': div(pers_cc, cop_cc),
         'altri_coperto': div(altri_cc, cop_cc),
         'costo_coperto': div(costi_cc, cop_cc),

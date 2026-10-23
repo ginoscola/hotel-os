@@ -65,6 +65,7 @@ def test_ristorante_hotel_riga_unica_pranzi_cene_informativi():
     assert rist['materia_prima'] == 1000.0
     assert rist['coperti'] == 200
     assert rist['costo_coperto'] == 11.0     # (1000 + 1000 + 200) / 200, uguale per pranzo e cena
+    assert (rist['food_coperto'], rist['beverage_coperto']) == (4.5, 0.5)
     assert (rist['pranzi'], rist['cene']) == (100, 100)
     assert (rist['pranzi_perc'], rist['cene_perc']) == (25.0, 25.0)
 

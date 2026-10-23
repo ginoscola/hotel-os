@@ -2146,7 +2146,7 @@ mensile, Coperti, Materia prima, **Costo pasto** (v3.29.0, `CostoPastoFnb.jsx` +
 costo-pasto?anno=&mese_da=&mese_a=`: sempre DPH/CLB/INT insieme, colazione delle tre strutture +
 pasto del ristorante CLB e INT (con pranzi/cene e pranzi/cene su presenze solo informativi) + Mare
 Mosso solo con i coperti Menu; per pasto materia prima,
-personale, altri, costo pieno, ricavo medio e margine — `ricavo_coperto_cc`/`margine_coperto` sugli
+cibo e bevande (`food_coperto`/`beverage_coperto`, v3.29.5), personale, altri, costo pieno, ricavo medio e margine — `ricavo_coperto_cc`/`margine_coperto` sugli
 stessi mesi del costo, non sull'intero periodo come `ricavo_coperto`; righe da `costo_pasto()` in
 `usali_fnb.py`, che riusa le righe del riepilogo). Logica in `services/usali_fnb.py`, router `routers/usali_fnb.py`
 (prefix `/usali/fnb`: `GET /report`, `GET /report/export`, `GET /materia-prima`, `GET /costo-pasto`, `GET|PUT /coperti`,

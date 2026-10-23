@@ -16,8 +16,10 @@ const NOME_PASTO = {
   colazione: 'Colazione', ristorante: 'Pasto (pranzo o cena)',
   ospiti: 'Ospiti Du Parc', esterni: 'Clienti esterni',
 }
+// Componenti del costo pieno per pasto (si sommano: barre impilate + tooltip con totale)
 const COMPONENTI = [
-  ['mp_coperto', 'Materia prima', coloreSerie(0)],
+  ['food_coperto', 'Cibo', coloreSerie(0)],
+  ['beverage_coperto', 'Bevande', coloreSerie(3)],
   ['personale_coperto', 'Personale', coloreSerie(1)],
   ['altri_coperto', 'Altri costi', coloreSerie(2)],
 ]
@@ -58,8 +60,10 @@ function Sezione({ titolo, righe, conStruttura, nota, conPasti = false, etichett
           <tr>
             <Th>{conStruttura ? 'Pasto' : 'Struttura'}</Th>
             <Th num>Pasti</Th>
-            <Th num gruppo>Materia prima</Th>
-            <Th num>Personale</Th>
+            <Th num gruppo>Cibo</Th>
+            <Th num>Bevande</Th>
+            <Th num title="Cibo + bevande">Materia prima</Th>
+            <Th num gruppo>Personale</Th>
             <Th num>Altri costi</Th>
             <Th num tot>Costo pieno</Th>
             <Th num gruppo title="Ricavo medio per pasto, sugli stessi mesi del costo">{etichettaRicavo}</Th>
@@ -82,8 +86,10 @@ function Sezione({ titolo, righe, conStruttura, nota, conPasti = false, etichett
                   {r.stima_costi && <span style={{ marginLeft: 6 }}><Badge tono="info">stima</Badge></span>}
                 </Td>
                 <Td num>{p.coperti == null ? '—' : formatN(p.coperti)}</Td>
-                <Td num gruppo>{euro(p.mp_coperto)}</Td>
-                <Td num>{euro(p.personale_coperto)}</Td>
+                <Td num gruppo>{euro(p.food_coperto)}</Td>
+                <Td num>{euro(p.beverage_coperto)}</Td>
+                <Td num>{euro(p.mp_coperto)}</Td>
+                <Td num gruppo>{euro(p.personale_coperto)}</Td>
                 <Td num>{euro(p.altri_coperto)}</Td>
                 <Td num tot><strong>{euro(p.costo_coperto)}</strong></Td>
                 <Td num gruppo>{euro(p.ricavo_coperto_cc)}</Td>
