@@ -2430,6 +2430,35 @@ esistenti, mai query duplicate sulle loro tabelle.
 ### Diario sessioni
 - **27/10/2026** — aggiunta la specifica `prompt_hotelos_tesoreria.md` e questa sezione. Nessun
   codice scritto. Prossimo passo: strategia della Fase 1 da presentare e far approvare.
+- **27/10/2026 (2)** — **Strategia Fase 1 presentata, NON ancora approvata** (utente uscito prima di
+  rispondere). Nessun codice scritto. Riassunto della proposta:
+  - Backend: `models/tesoreria.py` (6 tabelle), migrazione `tes001_2026` (tabelle + seed conti/saldi/
+    categorie/regole + modulo + permessi viewer=false), `services/tesoreria_parser.py` (TSV latin-1,
+    impronta, controparte), `services/tesoreria_classificatore.py` (puro), `services/tesoreria_saldi.py`
+    (saldo a data avanti/indietro + verifica tra saldi noti), router aggregatore `tesoreria.py` +
+    `tesoreria_import|movimenti|config|report.py`, test con fixture anonimizzate.
+  - Regole (estensione del modello `usali_categoria_kpi`): campo descrizione|controparte, operatore
+    inizia|contiene, valori (OR), condizione aggiuntiva facoltativa (AND con secondo elenco OR), segno
+    entrata|uscita|entrambi, priorità; "Da classificare" = ripiego, non una regola.
+  - Impronta: conto + data contabile + data valuta + importo + descrizione + indice di occorrenza;
+    proposto di NON includere il campo Note (la banca potrebbe aggiungerlo dopo). UNIQUE(conto, impronta).
+  - Eliminazione import: cancella i movimenti che quell'import ha inserito per primo (avviso esplicito).
+  - Contanti: `riepilogo_cassa()` di `corrispettivi_cassa.py` chiamata come funzione (`saldo_corrente`
+    dell'anno corrente, data = fine dell'ultimo mese con dati).
+  - Frontend: `Tesoreria.jsx` con tab Posizione / Consuntivo / Movimenti / Import; Admin gruppo
+    "Tesoreria" (Conti, Categorie, Regole + ricalcolo, Soglie avvisi); NavBar prefisso + subnav `[]`;
+    versione 4.0.0.
+  - Ordine blocchi (verifica utente tra uno e l'altro): A modelli/migrazione/parser/classificatore/saldi
+    + test → B endpoint import/movimenti/config → C posizione/consuntivo → D frontend + CLAUDE.md + commit.
+  - Rischi segnalati: nessun estratto conto reale ancora disponibile; override per-utente di
+    `puo_vedere` darebbe 403 dal backend a un viewer abilitato; ACL `uploads/tesoreria`.
+  **Domande in attesa di risposta (riprendere da qui):**
+  1. Visibilità solo admin confermata?
+  2. Il saldo noto al 27/10 è a fine giornata (include i movimenti del 27) e per data contabile?
+  3. Da che data verranno importati gli estratti conto (serve il 2025 per il confronto anno precedente)?
+  4. Fido scaduto: escluderlo dalla disponibilità con avviso, o conteggiarlo finché non lo si toglie?
+  5. KPI entrate/uscite del Consuntivo senza le categorie `escludi_da_operativo` (mostrate a parte)?
+  6. Un estratto conto reale per conto in `uploads/tesoreria_campioni/` (fuori git) per verificare il parser.
 
 ---
 
