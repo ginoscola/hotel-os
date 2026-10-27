@@ -37,3 +37,6 @@ uploads/
 
 # ── Log ──
 *.log
+
+# Specifica modulo Tesoreria: solo locale, da cancellare a progetto ultimato
+prompt_hotelos_tesoreria.md

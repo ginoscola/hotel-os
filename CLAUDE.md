@@ -3,6 +3,10 @@
 > **Prima di scrivere codice**: presentare strategia, file coinvolti, rischi. Attendere conferma.
 > **Aggiornare questo file** a ogni sessione con modifiche significative (endpoint, modelli, logica business).
 > **Dopo ogni modifica testata e funzionante**: committare i file coinvolti e fare `git push origin main` per tenere GitHub aggiornato.
+> **🚧 Lavoro in corso su più sessioni — Modulo Tesoreria**: a inizio sessione leggere la sezione
+> "Modulo Tesoreria (in sviluppo)" più sotto (stato fasi + diario) e la specifica completa
+> `prompt_hotelos_tesoreria.md` nella root. Una fase per sessione, **autorizzazione esplicita
+> dell'utente prima di scrivere codice** di ogni fase, e in caso di dubbi chiedere sempre.
 > **Versionamento** (`frontend/src/version.js`): PATCH x.x.+1 = fix/tweaks; MINOR x.+1.0 = nuova funzionalità/sezione; MAJOR +1.0.0 = nuovo modulo o redesign architetturale. Aggiornare APP_VERSION e APP_VERSION_DATE a ogni commit.
 
 ## Progetto e stack
@@ -2368,6 +2372,64 @@ hotelos-backup.service` — stesso servizio del notturno, quindi utente `gino`. 
 `/etc/sudoers.d/hotelos`: `hotelos ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block
 hotelos-backup.service` (senza, l'endpoint risponde 500 con messaggio esplicito). Corretto anche il ping
 al Raspberry: `-W 2` (timeout Linux) al posto di `-t 2` (flag Mac, su Linux è il TTL).
+
+---
+
+## Modulo Tesoreria (in sviluppo — progetto a più fasi e più sessioni)
+Flusso di cassa di KM di Mare S.r.l.: posizione di cassa di oggi, consuntivo (dove sono andati i
+soldi), previsione dei mesi futuri con il fido come soglia. Modulo `tesoreria`, route `/tesoreria`.
+**Specifica completa**: `prompt_hotelos_tesoreria.md` nella root del repo (requisiti, formati file,
+regole di classificazione, convenzioni). È la fonte dei requisiti: questa sezione registra solo
+**stato, decisioni e collegamenti**, non ripete la specifica.
+⚠️ La specifica è **solo sul server, fuori da git** (in `.gitignore`: contiene numeri di conto e
+saldi), e verrà cancellata a progetto ultimato — quindi tutto ciò che deve restare (decisioni,
+formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non lasciato solo lì.
+
+### Regole di lavoro (chieste dall'utente, valgono per tutte le fasi)
+- **Una fase per sessione.** Mai iniziare la fase successiva senza l'ok esplicito dell'utente: tra
+  una fase e l'altra usa il modulo con dati reali e riporta correzioni.
+- **Prima di scrivere codice** (anche all'interno della stessa fase, se si apre un blocco nuovo):
+  presentare strategia, file coinvolti, rischi e **attendere autorizzazione**.
+- **In caso di dubbi chiedere sempre**, non decidere da soli (formati file, regole, casi limite).
+- A fine fase: test verdi, aggiornare questa sezione (fatto / manca / decisioni), commit e push,
+  versione in `frontend/src/version.js` (Fase 1 = **MAJOR**, nuovo modulo; fasi successive = MINOR).
+- **Come riprendere dopo una disconnessione**: 1) leggere "Stato delle fasi" e l'ultima voce del
+  "Diario" qui sotto; 2) `git log --oneline -15` per vedere gli ultimi commit; 3) rileggere la parte
+  della specifica relativa alla fase in corso; 4) riepilogare all'utente dove eravamo e chiedere
+  conferma prima di proseguire.
+
+### Stato delle fasi
+| Fase | Contenuto | Stato |
+|---|---|---|
+| 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ⏳ da iniziare — prossimo passo: presentare la strategia |
+| 2 | Scadenzario Passcom e abbinamento con la banca | ⬜ non iniziata |
+| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
+| 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
+| 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
+Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
+
+### Decisioni prese
+(nessuna ancora — annotare qui ogni scelta concordata con l'utente, con data)
+
+### Punti aperti da chiarire con l'utente
+- Visibilità: la specifica propone `viewer` senza accesso e tutti gli endpoint `richiedi_admin` —
+  confermare nella strategia della Fase 1.
+- ACL `uploads/tesoreria` per l'utente `hotelos`: preparare i comandi `setfacl` (li lancia l'utente,
+  come per `uploads/usali_contabile`).
+- Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
+  e confronto con gli incassi in banca 2026).
+
+### Collegamenti con altri moduli
+Elenco obbligatorio (se cambia l'altro modulo, controllare qui). Lettura **solo** tramite funzioni
+esistenti, mai query duplicate sulle loro tabelle.
+(nessuno ancora — punti di partenza previsti: "Cassa reale" `riepilogo_cassa()` in
+`corrispettivi_cassa.py` per la Fase 1; pattern import anteprima/conferma di
+`routers/usali_contabile.py`; regole su nomi conto di `usali_categoria_kpi` come modello per
+`tesoreria_regole`)
+
+### Diario sessioni
+- **27/10/2026** — aggiunta la specifica `prompt_hotelos_tesoreria.md` e questa sezione. Nessun
+  codice scritto. Prossimo passo: strategia della Fase 1 da presentare e far approvare.
 
 ---
 
