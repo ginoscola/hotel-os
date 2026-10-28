@@ -2672,9 +2672,12 @@ Effetto accettato: per qualche giorno dopo una ricarica la liquidità risulta pi
   filtro non pagate per data → paga dall'home banking → spunta a mano "pagata".
 - **Ruolo di HotelOS: controllo incrociato con la banca.** Obiettivo da proporre nella strategia:
   elenchi "segnate non pagate ma con pagamento in banca" e "segnate pagate ma senza pagamento in
-  banca", abbinando per fornitore + importo + data. Fonte delle scadenze: export dello scadenzario
-  GoProfit **se esiste** (da verificare con un campione in `uploads/tesoreria_campioni/`), altrimenti
-  Passcom (già analizzato, sopra). Oggi il controllo si fa a mano: Movimenti → ricerca per nome.
+  banca", abbinando per fornitore + importo + data. **GoProfit non esporta nulla** (verificato
+  dall'utente il 28/10/2026): fonte delle scadenze = **Passcom** (già analizzato, sopra) → il controllo
+  confronta le scadenze dello studio con la banca (aperte per lo studio ma pagate in banca = da
+  segnalare allo studio; scadute senza pagamento = arretrati veri), non le spunte di GoProfit. Per
+  quelle: vista per fornitore con pagamenti e totali mensili (oggi: Movimenti → ricerca per nome).
+  Con la Fase 5 (ZIP AdE mensile) anche "fatture ricevute vs pagamenti" per le non ancora registrate.
 - Collegamento automatico allo SDI tramite intermediario: escluso per ora (credenziali fiscali).
 
 ### Fase 3 — indicazioni già raccolte per il calendario fiscale (28/10/2026)
