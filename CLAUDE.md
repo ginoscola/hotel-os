@@ -2409,7 +2409,15 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
 
 ### Decisioni prese
-(nessuna ancora — annotare qui ogni scelta concordata con l'utente, con data)
+- **28/10/2026 — Formato import banca: solo XML CBI** (`CBIBdyBkToCstmrStmtReq`, namespace
+  `urn:CBI:xsd:CBIDlyStmtReqLogMsg.00.01.02`), uguale per 095081 e 217746. Nessun parser `.xls`.
+  Conto dall'IBAN, saldi da `OPBD`/`CLBD` di ogni `Stmt` (giorno), antiduplicato su `AcctSvcrRef`.
+- **28/10/2026 — Visibilità: default solo admin, ma configurabile** ad altri ruoli/persone dal pannello
+  permessi esistente. Quindi gli endpoint NON usano `richiedi_admin` fisso: proposta di una dipendenza
+  per permesso di modulo (vedere/modificare/importare), stessa logica di `lista_moduli()` in
+  `routers/modules.py` (admin sempre tutto; ruolo da `module_permissions`; override per utente solo su
+  `puo_vedere`) — da estrarre in funzione condivisa, non duplicare. Seed viewer: tutto `false`.
+- L'utente caricherà anche gli XML 2025 di entrambi i conti (confronto anno precedente).
 
 ### Punti aperti da chiarire con l'utente
 - Visibilità: la specifica propone `viewer` senza accesso e tutti gli endpoint `richiedi_admin` —
@@ -2459,6 +2467,25 @@ esistenti, mai query duplicate sulle loro tabelle.
   4. Fido scaduto: escluderlo dalla disponibilità con avviso, o conteggiarlo finché non lo si toglie?
   5. KPI entrate/uscite del Consuntivo senza le categorie `escludi_da_operativo` (mostrate a parte)?
   6. Un estratto conto reale per conto in `uploads/tesoreria_campioni/` (fuori git) per verificare il parser.
+- **28/10/2026** — l'utente ha caricato in `uploads/tesoreria_campioni/banca_conto_principale/` tre
+  export del conto 095081 (xls "semplificato" = formato della specifica, xls "gestionale" con colonne
+  Dare/Avere/Causale separate, `export.xml` CBI). Analizzati: stessi 93 movimenti (solo 01–28/10/2026,
+  non tutto il 2026). **Proposto l'XML CBI** come formato principale (IBAN → conto automatico, saldo
+  apertura/chiusura giornaliero `OPBD`/`CLBD` → verifica saldi automatica, riferimento univoco
+  `AcctSvcrRef` per l'antiduplicato, codice causale ABI `BkTxCd`, importi/date ISO). Unico dato in
+  meno: numero assegno ("Vs assegno n." vuoto). Domanda 2 risolta dai dati: 347.086,84 = saldo di
+  chiusura del 27/10 (= apertura del 28/10). In attesa della scelta dell'utente sul formato.
+- **28/10/2026 (2)** — il periodo ott. lo aveva scelto l'utente (la banca esporta anche l'anno intero).
+  Riesportato l'XML di ottobre (`export ottobre.xml`, 40 min dopo): identico a parte `CreDtTm` →
+  `AcctSvcrRef` stabile tra esportazioni (da riverificare con un periodo sovrapposto diverso).
+  Conto POS (`banca_conto_pos/export 2026 POS.xml`): stesso formato CBI, IBAN …217746, 285 movimenti
+  02/01–02/10/2026, 105 giorni tutti quadrati e continui, saldo finale 3.325,31 (= seed), minimo
+  −39.574,23 (fido in uso). Il fido **non** è nel file (`CLAV` = `CLBD`): resta un dato del conto.
+  Causali POS: Incassi Internazionali Numia (09//15), Incassi PagoBancomat (09//02), giroconti
+  "Bonifico a favore di *KM DI MARE SRL GC POS" (26//10, −830.000 € nel 2026), interessi trimestrali.
+  ⚠️ **Regola giroconti: confrontare solo la controparte estratta, mai il testo intero**: ogni
+  bonifico in uscita del conto principale contiene "Intestazione ordinante: KM DI MARE SRL" nelle info
+  aggiuntive — una regola "contiene KM DI MARE" sulla descrizione li classificherebbe tutti giroconti.
 
 ---
 
