@@ -2435,6 +2435,20 @@ Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
   (causale ABI 68//00) → proporre una regola/categoria "Storni bancari". Giroconti: 66 movimenti, somma
   0,00 € tra i due conti (le due gambe si compensano). Mutuo 036/307528: erogazione 140.000 € il
   23/07/2026 (+ "Spese erogazione mutuo" −1.050 € finite in Banca), rate dal 20/08/2026 (~1.460–1.480 €).
+- **28/10/2026 — File facoltativi** in `altro/`:
+  - `piano ammortamento mutuo.xls`: **vero .xls BIFF** (non testo: serve `xlrd`, oggi non installato —
+    nuova dipendenza da approvare in Fase 3, oppure conversione a mano in xlsx). Foglio
+    `reportRateMutuoXls`: Nr. rata, Scadenza gg/mm/aaaa, Capitale, Interessi, Importo, Cap. residuo,
+    Note ("Pagata il …"); numeri come **testo italiano** ("1.454,67"). 120 rate 20/08/2026–20/07/2036,
+    tasso evidentemente **variabile** (interessi oscillano) → il piano va ricaricato quando cambia.
+    "Importo" esclude le spese rata 1,50 € (banca addebita Importo + 1,50).
+  - Carte: PDF con layout diversi, **nessun import previsto** (saldo manuale, come da specifica).
+    Carta BCC (Numia, 2 carte nominative): chiusura il 28, addebito il 26 del mese dopo
+    (271,62 € il 26/10 ✓ in banca). AMEX Oro Business: chiusura il 6, addebito ~27 dello stesso mese
+    (3.042,39 € il 27/10 ✓ in banca, SDD "AMERICAN EXPRESS"). Servono per i giorni di addebito
+    configurabili per carta in Fase 3.
+  - Prepagata TASCA (Mastercard Prepaid Business): PDF lista movimenti, disponibilità 501,16 € al
+    30/09/2026 → saldo manuale.
 - **28/10/2026 — Scadenzario Passcom analizzato** (`passcom_scadenzario/011_stp000001-tutte.xml` e
   `011_stp000002-da pagare.xml`, filtro scadenze 2026): **i due file sono identici** (cambia solo
   `Created`) → il filtro "tutte" non ha avuto effetto; colonne "Data pag"/"Stato" presenti
