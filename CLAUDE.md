@@ -2418,6 +2418,12 @@ Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
   `routers/modules.py` (admin sempre tutto; ruolo da `module_permissions`; override per utente solo su
   `puo_vedere`) — da estrarre in funzione condivisa, non duplicare. Seed viewer: tutto `false`.
 - L'utente caricherà anche gli XML 2025 di entrambi i conti (confronto anno precedente).
+- **28/10/2026 — Fido scaduto**: dopo `data scadenza fido` il fido NON entra più in "Disponibilità con
+  fido" + avviso rosso "fido scaduto, aggiornare se rinnovato" (avviso arancione già 60 gg prima).
+- **28/10/2026 — Consuntivo**: Entrate/Uscite/Netto operativo escludono le categorie
+  `escludi_da_operativo` (giroconti, erogazione mutuo), mostrate in una riga a parte "Movimenti non
+  operativi"; con "tutti i conti" giroconti sempre esclusi; saldi inizio/fine = saldi reali banca;
+  rate del mutuo restano uscite operative.
 
 ### Punti aperti da chiarire con l'utente
 - Visibilità: la specifica propone `viewer` senza accesso e tutti gli endpoint `richiedi_admin` —
