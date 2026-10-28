@@ -44,11 +44,19 @@ def saldo_a_data(giorno: date, saldi: dict, movimenti: list) -> Optional[Decimal
 
 
 def verifica_saldi(saldi: dict, movimenti: list) -> list:
-    """Coppie di saldi noti consecutivi che non tornano con i movimenti in mezzo."""
+    """Coppie di saldi noti consecutivi che non tornano con i movimenti in mezzo.
+    Un solo passaggio sui movimenti ordinati (anni di estratti conto = migliaia di righe)."""
     date_ordinate = sorted(saldi)
+    ordinati = sorted(movimenti, key=lambda m: m[0])
+    i = 0
+    while i < len(ordinati) and date_ordinate and ordinati[i][0] <= date_ordinate[0]:
+        i += 1
     errori = []
     for da, a in zip(date_ordinate, date_ordinate[1:]):
-        mov = _somma(movimenti, da, a)
+        mov = Decimal("0.00")
+        while i < len(ordinati) and ordinati[i][0] <= a:
+            mov += ordinati[i][1]
+            i += 1
         if saldi[a] - saldi[da] != mov:
             errori.append(Discrepanza(da, a, saldi[da], saldi[a], mov))
     return errori

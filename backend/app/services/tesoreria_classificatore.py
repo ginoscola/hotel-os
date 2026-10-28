@@ -30,7 +30,7 @@ class RegolaClassificazione:
                    segno=r.segno, priorita=r.priorita)
 
 
-def _corrisponde(regola: RegolaClassificazione, descrizione: str, controparte: str, importo: Decimal) -> bool:
+def corrisponde(regola: RegolaClassificazione, descrizione: str, controparte: str, importo: Decimal) -> bool:
     if regola.segno == "entrata" and importo <= 0:
         return False
     if regola.segno == "uscita" and importo >= 0:
@@ -52,6 +52,6 @@ def _corrisponde(regola: RegolaClassificazione, descrizione: str, controparte: s
 def classifica(descrizione: str, controparte: str, importo: Decimal, regole: list) -> Optional[int]:
     """Categoria della prima regola che corrisponde. `regole` già filtrate (attive) e ordinate."""
     for regola in regole:
-        if _corrisponde(regola, descrizione, controparte, importo):
+        if corrisponde(regola, descrizione, controparte, importo):
             return regola.categoria_id
     return None

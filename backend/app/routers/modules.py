@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
 from app.models.revenue import Module, ModulePermission, UserModulePermission
+from app.permessi import permessi_modulo
 
 router = APIRouter(prefix="/modules", tags=["modules"])
 
@@ -81,25 +82,18 @@ def lista_moduli(utente=Depends(richiedi_utente_attivo), db: Session = Depends(g
         o.module_code: o
         for o in db.query(UserModulePermission).filter(UserModulePermission.user_id == utente.id).all()
     }
+    ruoli = {
+        p.module_code: p
+        for p in db.query(ModulePermission).filter(ModulePermission.ruolo == utente.ruolo).all()
+    }
     result = []
     for m in moduli:
-        # Gli admin vedono e modificano sempre tutto
-        if utente.ruolo == 'admin':
-            puo_vedere = True
-            puo_modificare = True
-            puo_importare = True
-        else:
-            perm_ruolo = db.query(ModulePermission).filter(
-                ModulePermission.module_code == m.code,
-                ModulePermission.ruolo == utente.ruolo,
-            ).first()
-            # Override per-utente su puo_vedere; modificare/importare sempre dal ruolo
-            if m.code in overrides:
-                puo_vedere = overrides[m.code].puo_vedere
-            else:
-                puo_vedere = perm_ruolo.puo_vedere if perm_ruolo else False
-            puo_modificare = perm_ruolo.puo_modificare if perm_ruolo else False
-            puo_importare = perm_ruolo.puo_importare if perm_ruolo else False
+        # Admin sempre tutto; override per-utente solo su puo_vedere (vedi app/permessi.py)
+        permessi = permessi_modulo(db, utente, m, override=overrides.get(m.code),
+                                   perm_ruolo=ruoli.get(m.code))
+        puo_vedere = permessi["puo_vedere"]
+        puo_modificare = permessi["puo_modificare"]
+        puo_importare = permessi["puo_importare"]
         result.append(ModuleSchema(
             code=m.code,
             name=m.name,

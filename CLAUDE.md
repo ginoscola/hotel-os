@@ -104,6 +104,12 @@ Moduli: `revenue` (/dashboard/gruppo), `produzione` (/statistiche-produzione —
 Tabelle: `modules` (code PK, name, icon, route, ordine, attivo, colore), `module_permissions` (module_code, ruolo, puo_vedere, puo_modificare, puo_importare).
 NavBar L1: tab moduli da `GET /modules/`; L2: sotto-nav del modulo attivo.
 Permessi: al login → `localStorage['moduli_permessi']`; ProtectedRoute verifica `puo_vedere`.
+**Permessi lato backend per modulo** (`app/permessi.py`, ottobre 2026): `permessi_modulo(db, utente,
+modulo)` è l'unica implementazione delle regole (admin sempre tutto; modulo disattivato = niente per
+i non admin; ruolo da `module_permissions`; override per utente solo su `puo_vedere`), usata sia da
+`lista_moduli()` (NavBar) sia dalla dipendenza `richiedi_permesso(code, 'vedere'|'modificare'|
+'importare')` → 403. Modificare/importare richiedono anche vedere. Oggi la usa solo Tesoreria; gli
+altri moduli restano su `richiedi_admin`/`richiedi_utente_attivo`.
 **Aggiungere modulo**: riga in `modules` → righe `module_permissions` → pagina JSX → `<Route moduleCode="">` in App.jsx. Appare automaticamente in NavBar (tab L1 + link).
 ⚠️ **Ma il tab NON risulta evidenziato come attivo se la sua route non è aggiunta anche in
 `rilevaModuloAttivo()`** (`NavBar.jsx`): quella funzione decide quale tab colorare come "attivo"
@@ -2401,7 +2407,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 ### Stato delle fasi
 | Fase | Contenuto | Stato |
 |---|---|---|
-| 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ⏳ in corso — ✅ blocco A (28/10/2026); prossimo: blocco B, endpoint (serve ok) |
+| 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ⏳ in corso — ✅ blocco A, ✅ blocco B (28/10/2026); prossimo: blocco C, posizione e consuntivo (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ⬜ non iniziata |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
@@ -2536,11 +2542,48 @@ Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
   classificare"** (storno F23 11,05 €), giroconti 66 movimenti a somma 0, affitti 23 (tutti veri).
 - Versione: nessun bump finché il modulo non è visibile; la Fase 1 chiuderà con **4.0.0**.
 
+### Blocco B — fatto (28/10/2026)
+Router `routers/tesoreria.py` (aggregatore, prefix `/tesoreria`) + `tesoreria_shared.py` (permessi
+`puo_vedere`/`puo_modificare`/`puo_importare` = `richiedi_permesso('tesoreria', …)`, `storage_dir()`
+da env `TESORERIA_DIR`, `regole_attive()`, `categoria_automatica()`, `ricalcola_categorie()`,
+`movimento_json()`), `tesoreria_import.py`, `tesoreria_movimenti.py`, `tesoreria_config.py`.
+- **Import** (`puo_importare`): `POST /import/anteprima` (multipart `file`; conto dall'IBAN, 400 se
+  IBAN sconosciuto o conto senza `ha_import`; nuovi/già presenti per impronta, `saldi_cambiati`,
+  `discrepanze` = `verifica_saldi()` sul conto **intero** come sarà dopo l'import, `per_categoria`
+  dei nuovi, `gia_importato` per sha256; file in `{dir}/_anteprima/{token}/` 24h), `POST
+  /import/conferma` (`{token, note?}`; 409 stesso file sullo stesso conto; inserisce solo i nuovi,
+  scrive i saldi del file — **la banca prevale anche su un saldo manuale** della stessa data —;
+  file in `{dir}/banca/{anno}/{id}_{nome}`), `GET /import` (`n_collegati` = movimenti che
+  sparirebbero), `GET /import/{id}/file`, `DELETE /import/{id}?conferma=true` (movimenti con
+  quell'`import_id` = inseriti per primi da lui, saldi con quell'`import_id`, file).
+  ⚠️ Eliminando un import si perdono anche i movimenti che un import successivo conteneva ma aveva
+  trovato già presenti (non vengono "riassegnati"): ricaricare il file successivo per riaverli.
+- **Movimenti**: `GET /movimenti` (conto, date, categoria — `da_classificare` include i NULL —,
+  segno, `q` su descrizione/controparte/note/importo, solo_manuali, straordinario, ordinamento in
+  whitelist, paginazione, totali entrate/uscite/netto), `PUT /movimenti/{id}` (`categoria_id` →
+  manuale; `automatica: true` → torna alle regole; `straordinario`; `note`), `GET
+  /movimenti/{id}/proposta-regola` (controparte "inizia" se c'è, altrimenti prime 3 parole della
+  descrizione; segno del movimento; priorità = regola che oggi lo classifica − 1). `filtra_movimenti()`
+  riusabile dal Drawer del consuntivo.
+- **Config** (`puo_modificare` in scrittura): conti (`GET` con `ultimo_saldo`, `POST`, `PUT`; IBAN
+  obbligatorio se `ha_import`, codice/IBAN univoci; nessuna cancellazione, solo `attivo`), saldi
+  (`GET`, `POST` upsert manuale — 409 se per quella data c'è il saldo da estratto —, `DELETE` solo
+  manuali), categorie (CRUD; `da_classificare` protetta; elimina solo se non usata, altrimenti
+  disattivare; categoria disattivata = sue regole ignorate), regole (CRUD con `ricalcola: true`
+  facoltativo, `POST /regole/prova` = effetto senza salvare: corrispondenti, quanti cambierebbero e da
+  quali categorie, esempi), `POST /ricalcola`. Le categorie manuali non cambiano mai.
+- `corrisponde()` del classificatore ora pubblica (usata da proposta e prova regola).
+- `verifica_saldi()` riscritta in un solo passaggio sui movimenti (prima O(saldi × movimenti)).
+- Test `test_tesoreria_api.py` (24): import/antiduplicato/sovrapposizione/discrepanze/eliminazione,
+  movimenti, config, permessi (viewer 403, abilitato in sola lettura, override per utente, modulo
+  disattivato). Suite completa: 668 verdi.
+- Prova sui 4 XML reali via endpoint (DB di test, svuotato dopo): 6.733 movimenti, 641 saldi,
+  0 discrepanze, reimport rifiutato, ricalcolo 0 cambi, 1 da classificare; anteprima+conferma del
+  file più grande (3.349 mov.) < 2,5 s ciascuna.
+- ⚠️ Cartella `uploads/tesoreria` con ACL per `hotelos` (comandi dati all'utente il 28/10/2026, come
+  `uploads/usali_contabile`): senza, la conferma import fallisce con PermissionError.
+
 ### Punti aperti da chiarire con l'utente
-- Visibilità: la specifica propone `viewer` senza accesso e tutti gli endpoint `richiedi_admin` —
-  confermare nella strategia della Fase 1.
-- ACL `uploads/tesoreria` per l'utente `hotelos`: preparare i comandi `setfacl` (li lancia l'utente,
-  come per `uploads/usali_contabile`).
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
 
@@ -2604,6 +2647,9 @@ esistenti, mai query duplicate sulle loro tabelle.
   bonifico in uscita del conto principale contiene "Intestazione ordinante: KM DI MARE SRL" nelle info
   aggiuntive — una regola "contiene KM DI MARE" sulla descrizione li classificherebbe tutti giroconti.
 
+- **28/10/2026 (3)** — blocco B fatto (endpoint import/movimenti/config + permessi per modulo in
+  `app/permessi.py`), prova sui 4 XML reali via endpoint ok. Prossimo: blocco C (posizione attuale,
+  consuntivo, avvisi di freschezza con soglie in `app_config`) — serve l'ok dell'utente.
 ---
 
 ## Principi di progettazione
