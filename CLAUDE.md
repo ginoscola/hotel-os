@@ -2664,6 +2664,19 @@ ricariche dal conto principale ("Ricarica carta prepagata TASCA", 500–1.000 �
 in automatico alla disponibilità: le spese con la carta non sono note, il valore sarebbe gonfiato.
 Effetto accettato: per qualche giorno dopo una ricarica la liquidità risulta più bassa del vero.
 
+### Fase 2 — indicazioni già raccolte (28/10/2026)
+- **GoProfit resta lo strumento operativo per i pagamenti ai fornitori** (decisione dell'utente):
+  scarica le fatture dallo SDI in automatico, quindi è più aggiornato di qualunque fonte di HotelOS
+  (Passcom = ritardo dello studio; ZIP AdE = richiesta manuale con fino a 5 giorni di attesa,
+  accettabile solo una volta al mese). Flusso attuale dell'utente in GoProfit: lista scadenze →
+  filtro non pagate per data → paga dall'home banking → spunta a mano "pagata".
+- **Ruolo di HotelOS: controllo incrociato con la banca.** Obiettivo da proporre nella strategia:
+  elenchi "segnate non pagate ma con pagamento in banca" e "segnate pagate ma senza pagamento in
+  banca", abbinando per fornitore + importo + data. Fonte delle scadenze: export dello scadenzario
+  GoProfit **se esiste** (da verificare con un campione in `uploads/tesoreria_campioni/`), altrimenti
+  Passcom (già analizzato, sopra). Oggi il controllo si fa a mano: Movimenti → ricerca per nome.
+- Collegamento automatico allo SDI tramite intermediario: escluso per ora (credenziali fiscali).
+
 ### Fase 3 — indicazioni già raccolte per il calendario fiscale (28/10/2026)
 - **IVA trimestrale** (confermato dall'utente). Scadenze attese: 16/5 (1° trim.), 20/8 (2° trim.),
   16/11 (3° trim.), 4° trimestre con la dichiarazione annuale (16/3), acconto 27/12 — da verificare
