@@ -2650,6 +2650,7 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **28/10/2026 (3)** — blocco B fatto (endpoint import/movimenti/config + permessi per modulo in
   `app/permessi.py`), prova sui 4 XML reali via endpoint ok. Prossimo: blocco C (posizione attuale,
   consuntivo, avvisi di freschezza con soglie in `app_config`) — serve l'ok dell'utente.
+
 ---
 
 ## Principi di progettazione
