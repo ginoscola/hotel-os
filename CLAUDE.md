@@ -2664,6 +2664,21 @@ ricariche dal conto principale ("Ricarica carta prepagata TASCA", 500–1.000 �
 in automatico alla disponibilità: le spese con la carta non sono note, il valore sarebbe gonfiato.
 Effetto accettato: per qualche giorno dopo una ricarica la liquidità risulta più bassa del vero.
 
+### Fase 3 — indicazioni già raccolte per il calendario fiscale (28/10/2026)
+- **IVA trimestrale** (confermato dall'utente). Scadenze attese: 16/5 (1° trim.), 20/8 (2° trim.),
+  16/11 (3° trim.), 4° trimestre con la dichiarazione annuale (16/3), acconto 27/12 — da verificare
+  con lo studio nella strategia (anche la maggiorazione dell'1% sui trimestrali).
+- L'utente vuole stime migliori di "stesso mese dell'anno prima" prima dei valori dello studio.
+  Fonti proposte per tipo di imposta (da presentare nella strategia della Fase 3):
+  ritenute e contributi dipendenti → cedolini del modulo Dipendenti del mese prima (anticipa la 4b);
+  IVA → vendite da Corrispettivi meno acquisti dalla contabilità (Conto Economico contabile), poi
+  dalle fatture XML in Fase 5; IRES/IRAP → utile dell'anno dalla contabilità × aliquote, saldo di
+  giugno e acconti giugno/novembre (stima grezza: imponibile ≠ utile); tassa di soggiorno →
+  incassata in Corrispettivi; IMU/TARI → anno prima. Valore dello studio = "confermato" (vince).
+- Limite: in banca ogni F24 è una cifra unica ("Delega Unificata"), senza ripartizione per tributo.
+- Da chiedere allo studio: metodo acconti (40/60 o 50/50 ISA), aliquota IRAP regionale, IRES/IRAP
+  2025 dovute e acconti 2026 versati, eventuale IMU.
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
