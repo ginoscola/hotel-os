@@ -14,3 +14,11 @@ def formatta_data_it(d: Optional[date]) -> Optional[str]:
     if d is None:
         return None
     return f"{d.day} {MESI_IT[d.month - 1]} {d.year}"
+
+
+def formatta_euro_it(valore) -> Optional[str]:
+    """Formatta un importo come '-1.234,56 €' (punto per le migliaia, virgola per i decimali)."""
+    if valore is None:
+        return None
+    testo = f"{float(valore):,.2f}"
+    return testo.replace(",", "\x00").replace(".", ",").replace("\x00", ".") + " €"

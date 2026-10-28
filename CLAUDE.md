@@ -293,7 +293,7 @@ recepisce cambi di permessi avvenuti dopo l'avvio. Soluzione: killare il process
 da zero (non basta salvare un file per far scattare il reload).
 
 ## Localizzazione
-`MESI_IT`, `GIORNI_IT`, `formatta_data_it()` definiti SOLO in `locale_it.py`. Non ridefinire nei router.
+`MESI_IT`, `GIORNI_IT`, `formatta_data_it()`, `formatta_euro_it()` ("-1.234,56 €", per testi generati dal backend) definiti SOLO in `locale_it.py`. Non ridefinire nei router.
 UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % (mai €).
 
 ## Utility frontend (format.js)
@@ -2407,7 +2407,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 ### Stato delle fasi
 | Fase | Contenuto | Stato |
 |---|---|---|
-| 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ⏳ in corso — ✅ blocco A, ✅ blocco B (28/10/2026); prossimo: blocco C, posizione e consuntivo (serve ok) |
+| 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ⏳ in corso — ✅ blocchi A, B, C (28/10/2026); prossimo: blocco D, frontend + attivazione modulo + 4.0.0 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ⬜ non iniziata |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
@@ -2583,6 +2583,41 @@ da env `TESORERIA_DIR`, `regole_attive()`, `categoria_automatica()`, `ricalcola_
 - ⚠️ Cartella `uploads/tesoreria` con ACL per `hotelos` (comandi dati all'utente il 28/10/2026, come
   `uploads/usali_contabile`): senza, la conferma import fallisce con PermissionError.
 
+### Blocco C — fatto (28/10/2026)
+`routers/tesoreria_report.py` + calcoli puri in `services/tesoreria_report.py` (`stato_fido()`,
+`anno_prima()` — 29/02 → 28/02 —, `mesi_tra()`, `aggrega()`, `valida_soglie()`).
+- **Soglie avvisi** in `app_config['tesoreria_soglie_avvisi']` (JSON, creato al primo salvataggio;
+  default `giorni_estratto` 7, `giorni_saldo_carta` 35, `giorni_preavviso_fido` 60, interi 1–365):
+  `GET|PUT /tesoreria/soglie` (PUT parziale).
+- **`GET /tesoreria/posizione?giorno=`** (default oggi, solo conti attivi): conti bancari =
+  `saldo_a_data()`; carte/prepagata = ultimo saldo manuale ≤ giorno (nessun movimento); tipo `cassa`
+  sommato ai contanti. Voci: saldo banche, contanti (= Cassa reale + conti cassa, con data e mese di
+  riferimento), prepagate, carte da addebitare (negativo), liquidità netta, fidi conteggiati,
+  disponibilità con fido. Fido conteggiato **fino al giorno di scadenza compreso**. Avvisi ordinati
+  rosso → arancione → info: estratto (età dell'**ultimo caricamento**, `created_at` dell'import, non
+  la data dell'ultimo movimento — il conto POS fuori stagione resta settimane senza movimenti e
+  l'XML non ha giorni senza movimenti), discrepanze `verifica_saldi()` (rosso), saldo manuale
+  carte/prepagate vecchio o mancante, fido in scadenza/scaduto, contanti non disponibili, movimenti
+  da classificare (info).
+- **Contanti**: `_contanti()` chiama `riepilogo_cassa(anno, is_test=False, db, _=None)` di
+  `corrispettivi_cassa.py` (anno corrente; se non ha né mesi né saldo iniziale dell'anno, l'anno
+  prima); data di riferimento = fine dell'ultimo mese con dati (o oggi se è il mese in corso).
+  Sul DB reale al 28/10/2026: 24.471,89 € a settembre 2026.
+- **`GET /tesoreria/consuntivo?data_da&data_a&conto_id`** (solo conti `tipo='conto'`; senza
+  `conto_id` tutti gli attivi): KPI entrate/uscite/netto operativo/non operativi/saldo inizio (fine
+  del giorno prima)/saldo fine, ognuno con anno precedente e Δ/Δ%; tabella per categoria (operative
+  prima, poi non operative); mensile del netto operativo con anno precedente; `giroconti_esclusi`
+  (solo con tutti i conti, categoria codice `giroconti`); `quadratura` (variazione saldi = netto
+  operativo + non operativi + giroconti esclusi); `ap_completo` (primo saldo noto ≤ inizio del
+  periodo dell'anno prima: il primo saldo è la chiusura del giorno prima del primo movimento).
+- Test: `test_tesoreria_report.py` (puri, 10) + 10 in `test_tesoreria_api.py`. Suite: 688 verdi.
+- Prova sui 4 XML reali (DB di test, svuotato): 01/01–28/10/2026 tutti i conti → entrate
+  1.927.246 €, uscite −1.821.524 €, netto operativo +105.722 € (2025: +119.313 €), non operativi
+  +140.000 € (mutuo), giroconti 32 movimenti a somma 0, **quadratura ok**; conto principale da solo
+  quadra anche lui (giroconti +969.000 € tra i non operativi). Saldo banche al 28/10: 354.715,59 €.
+  Da verificare con l'utente: tassa di soggiorno 2025 solo 7.490 € (2026: 39.944 €) e compensi
+  marchio 2026 a zero (2025: 44.247 €) — regole o tempi di pagamento?
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
@@ -2590,10 +2625,10 @@ da env `TESORERIA_DIR`, `regole_attive()`, `categoria_automatica()`, `ricalcola_
 ### Collegamenti con altri moduli
 Elenco obbligatorio (se cambia l'altro modulo, controllare qui). Lettura **solo** tramite funzioni
 esistenti, mai query duplicate sulle loro tabelle.
-(nessuno ancora — punti di partenza previsti: "Cassa reale" `riepilogo_cassa()` in
-`corrispettivi_cassa.py` per la Fase 1; pattern import anteprima/conferma di
-`routers/usali_contabile.py`; regole su nomi conto di `usali_categoria_kpi` come modello per
-`tesoreria_regole`)
+- **Corrispettivi → Cassa**: `riepilogo_cassa()` (`routers/corrispettivi_cassa.py`) chiamata da
+  `_contanti()` in `routers/tesoreria_report.py` (posizione attuale). Usa `saldo_corrente`,
+  `mesi[-1].mese`, `saldo_iniziale.data`: se cambiano nome o significato, aggiornare `_contanti()`.
+- **Moduli/permessi**: `app/permessi.py` (condiviso con `lista_moduli()`).
 
 ### Diario sessioni
 - **27/10/2026** — aggiunta la specifica `prompt_hotelos_tesoreria.md` e questa sezione. Nessun
@@ -2650,6 +2685,9 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **28/10/2026 (3)** — blocco B fatto (endpoint import/movimenti/config + permessi per modulo in
   `app/permessi.py`), prova sui 4 XML reali via endpoint ok. Prossimo: blocco C (posizione attuale,
   consuntivo, avvisi di freschezza con soglie in `app_config`) — serve l'ok dell'utente.
+- **28/10/2026 (4)** — blocco C fatto (posizione, consuntivo, soglie), prova sui dati reali con
+  quadratura ok. Prossimo: blocco D (frontend `Tesoreria.jsx`, Admin, attivazione modulo, 4.0.0) —
+  serve l'ok dell'utente.
 
 ---
 

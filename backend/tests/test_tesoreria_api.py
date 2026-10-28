@@ -42,6 +42,8 @@ PRINCIPALE = _leggi("estratto_principale.xml")
 POS = _leggi("estratto_pos.xml")
 # Stesso conto senza il giorno 05/03 (primo <Stmt> del file): periodo sovrapposto, file diverso
 PRINCIPALE_SENZA_05 = re.sub(rb"<ns5:Stmt>.*?</ns5:Stmt>", b"", PRINCIPALE, count=1, flags=re.S)
+# Stesso estratto un anno prima (riferimenti banca diversi): confronto anno precedente
+PRINCIPALE_2025 = PRINCIPALE.replace(b"2026-03", b"2025-03").replace(b"AcctSvcrRef>9", b"AcctSvcrRef>7")
 
 
 def _migrazione():
@@ -96,7 +98,7 @@ def pulisci_e_semina(test_engine):
         conn.execute(text(
             "TRUNCATE tesoreria_movimenti, tesoreria_saldi, tesoreria_import, tesoreria_regole, "
             "tesoreria_categorie, tesoreria_conti, user_module_permissions, module_permissions, modules, "
-            "users RESTART IDENTITY CASCADE"
+            "users, cassa_movimenti, app_config RESTART IDENTITY CASCADE"
         ))
         conn.execute(text(
             "INSERT INTO modules (code, name, ordine, attivo) VALUES ('tesoreria', 'TESORERIA', 30, true)"
@@ -432,3 +434,132 @@ def test_modulo_disattivato_solo_admin(client, test_engine):
     assert client.get("/tesoreria/movimenti").status_code == 403
     utente_corrente["u"] = ADMIN
     assert client.get("/tesoreria/movimenti").status_code == 200
+
+
+# ── Posizione attuale ───────────────────────────────────────────────────────────
+
+def _posizione(client, giorno):
+    r = client.get("/tesoreria/posizione", params={"giorno": giorno})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _cassa(test_engine, importo, data="2026-01-01"):
+    with test_engine.begin() as conn:
+        conn.execute(text("INSERT INTO cassa_movimenti (tipo, data, importo, is_test) "
+                          "VALUES ('saldo_iniziale', :d, :i, false)"), {"d": data, "i": importo})
+
+
+def test_posizione_voci_e_disponibilita(client, test_engine):
+    _importa(client)
+    _importa(client, POS, "pos.xml")
+    _cassa(test_engine, 1000)
+    client.post("/tesoreria/saldi", json={"conto_id": 3, "data": "2026-03-01", "saldo": 500})
+    p = _posizione(client, "2026-03-06")
+    assert p["saldo_banche"] == 9682.41                       # 9.820,61 + (−138,20)
+    assert (p["contanti"], p["contanti_data_riferimento"]) == (1000.0, "2026-01-01")
+    assert p["carte_da_addebitare"] == -500.0
+    assert p["liquidita_netta"] == 10182.41
+    assert (p["fidi"], p["disponibilita_con_fido"]) == (130000.0, 140182.41)
+    pos = next(c for c in p["conti"] if c["codice"] == "POS")
+    assert (pos["saldo"], pos["data_ultimo_saldo"], pos["fido_conteggiato"]) == (-138.2, "2026-03-04", True)
+    assert [a for a in p["avvisi"] if a["livello"] != "info"] == []
+
+
+def test_posizione_saldo_banca_a_data_intermedia(client):
+    _importa(client)
+    assert _posizione(client, "2026-03-04")["saldo_banche"] == 10820.61   # nessun movimento il 04/03
+
+
+def test_posizione_fido_in_scadenza_e_scaduto(client):
+    _importa(client, POS, "pos.xml")
+    p = _posizione(client, "2027-08-15")
+    assert p["fidi"] == 130000.0
+    assert any(a["tipo"] == "fido" and a["livello"] == "arancione" for a in p["avvisi"])
+    p = _posizione(client, "2027-10-01")
+    assert p["fidi"] == 0.0 and p["disponibilita_con_fido"] == p["liquidita_netta"]
+    assert any(a["tipo"] == "fido" and a["livello"] == "rosso" for a in p["avvisi"])
+    assert p["avvisi"][0]["livello"] == "rosso"
+
+
+def test_posizione_avvisi_freschezza(client, test_engine):
+    client.post("/tesoreria/saldi", json={"conto_id": 3, "data": "2026-01-01", "saldo": 100})
+    p = _posizione(client, "2026-03-06")
+    tipi = {(a["tipo"], a["conto_id"]) for a in p["avvisi"]}
+    assert ("estratto", 1) in tipi and ("estratto", 2) in tipi           # nessun estratto caricato
+    assert ("saldo_manuale", 3) in tipi                                   # 64 giorni > 35
+    assert ("contanti", None) in tipi                                     # Cassa senza dati
+    client.put("/tesoreria/soglie", json={"giorni_saldo_carta": 90})
+    assert ("saldo_manuale", 3) not in {(a["tipo"], a["conto_id"]) for a in _posizione(client, "2026-03-06")["avvisi"]}
+
+
+def test_posizione_segnala_discrepanza(client, test_engine):
+    _importa(client)
+    with test_engine.begin() as conn:
+        conn.execute(text("DELETE FROM tesoreria_movimenti WHERE descrizione = 'Vs assegno n.'"))
+    rossi = [a for a in _posizione(client, "2026-03-06")["avvisi"] if a["tipo"] == "discrepanza"]
+    assert len(rossi) == 1 and "-1.000,00 €" in rossi[0]["messaggio"]
+
+
+def test_soglie(client):
+    assert client.get("/tesoreria/soglie").json()["giorni_estratto"] == 7
+    r = client.put("/tesoreria/soglie", json={"giorni_estratto": 10})
+    assert r.json() == {"giorni_estratto": 10, "giorni_saldo_carta": 35, "giorni_preavviso_fido": 60}
+    assert client.put("/tesoreria/soglie", json={"giorni_estratto": 0}).status_code == 400
+    assert client.get("/tesoreria/soglie").json()["giorni_estratto"] == 10
+
+
+# ── Consuntivo ──────────────────────────────────────────────────────────────────
+
+def _consuntivo(client, **params):
+    r = client.get("/tesoreria/consuntivo", params={"data_da": "2026-03-01", "data_a": "2026-03-31", **params})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_consuntivo_tutti_i_conti_senza_giroconti(client):
+    _importa(client)
+    _importa(client, POS, "pos.xml")
+    c = _consuntivo(client)
+    k = c["kpi"]
+    assert (k["entrate"]["valore"], k["uscite"]["valore"], k["netto_operativo"]["valore"]) == \
+        (3700.0, -4517.59, -817.59)
+    assert (k["saldo_inizio"]["valore"], k["saldo_fine"]["valore"]) == (10500.0, 9682.41)
+    assert c["giroconti_esclusi"] == {"n": 2, "entrate": 3000.0, "uscite": -3000.0, "netto": 0.0}
+    assert c["quadratura"]["ok"]
+    assert "giroconti" not in {r["codice"] for r in c["categorie"]}
+    assert c["mensile"] == [{"anno": 2026, "mese": 3, "etichetta": "mar 2026", "entrate": 3700.0,
+                             "uscite": -4517.59, "netto_operativo": -817.59, "netto_operativo_ap": 0.0}]
+    assert c["ap_completo"] is False and k["entrate"]["anno_precedente"] == 0.0
+
+
+def test_consuntivo_singolo_conto_giroconti_non_operativi(client):
+    _importa(client)
+    c = _consuntivo(client, conto_id=1)
+    righe = {r["codice"]: r for r in c["categorie"]}
+    assert righe["giroconti"]["operativa"] is False and righe["giroconti"]["netto"] == 3000.0
+    assert c["kpi"]["non_operativi"]["valore"] == 3000.0
+    assert c["kpi"]["netto_operativo"]["valore"] == -3179.39
+    assert c["quadratura"]["ok"] and c["giroconti_esclusi"]["n"] == 0
+    # operative prima, non operative in fondo
+    assert [r["operativa"] for r in c["categorie"]] == sorted((r["operativa"] for r in c["categorie"]), reverse=True)
+
+
+def test_consuntivo_anno_precedente(client):
+    _importa(client, PRINCIPALE_2025, "2025.xml")
+    _importa(client)
+    c = _consuntivo(client, conto_id=1)
+    assert c["ap_completo"] is True
+    k = c["kpi"]
+    assert k["netto_operativo"]["anno_precedente"] == -3179.39 and k["netto_operativo"]["delta"] == 0.0
+    assert k["saldo_fine"]["anno_precedente"] == 9820.61
+    assert c["mensile"][0]["netto_operativo_ap"] == -3179.39
+    banca = next(r for r in c["categorie"] if r["codice"] == "banca")
+    assert (banca["netto"], banca["netto_ap"], banca["delta_pct"]) == (-0.5, -0.5, 0.0)
+
+
+def test_consuntivo_periodo_e_conto_non_validi(client):
+    r = client.get("/tesoreria/consuntivo", params={"data_da": "2026-03-31", "data_a": "2026-03-01"})
+    assert r.status_code == 400
+    assert client.get("/tesoreria/consuntivo", params={"data_da": "2026-03-01", "data_a": "2026-03-31",
+                                                       "conto_id": 3}).status_code == 404
