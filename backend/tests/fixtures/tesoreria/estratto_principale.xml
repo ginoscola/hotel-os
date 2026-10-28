@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ns4:CBIBdyBkToCstmrStmtReq xmlns="urn:CBI:xsd:CBIHdrTrt.001.07" xmlns:ns4="urn:CBI:xsd:CBIBdyBkToCstmrStmtReq.00.01.02" xmlns:ns5="urn:CBI:xsd:CBIDlyStmtReqLogMsg.00.01.02" xmlns:ns6="urn:CBI:xsd:CBIBkToCstmrStmtReqLogMsg.00.01.02">
+    <ns4:PhyMsgInf>
+        <ns4:PhyMsgTpCd>INF-STMT-01</ns4:PhyMsgTpCd>
+        <ns4:NbOfLogMsg>1</ns4:NbOfLogMsg>
+    </ns4:PhyMsgInf>
+    <ns4:CBIEnvelBkToCstmrStmtReqLogMsg>
+        <ns4:CBIBkToCstmrStmtReqLogMsg>
+            <ns6:CBIDlyStmtReqLogMsg>
+                <ns5:GrpHdr>
+                    <ns5:MsgId>1</ns5:MsgId>
+                    <ns5:CreDtTm>2026-03-06T09:00:00.000+01:00</ns5:CreDtTm>
+                </ns5:GrpHdr>
+                <ns5:Stmt>
+                    <ns5:Id>1</ns5:Id>
+                    <ns5:Acct><ns5:Id><ns5:IBAN>IT00X0000000000000000111111</ns5:IBAN></ns5:Id></ns5:Acct>
+                    <ns5:Bal>
+                        <ns5:Tp><ns5:CdOrPrtry><ns5:Cd>CLBD</ns5:Cd></ns5:CdOrPrtry></ns5:Tp>
+                        <ns5:Amt Ccy="EUR">9820.61</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Dt><ns5:Dt>2026-03-05+01:00</ns5:Dt></ns5:Dt>
+                    </ns5:Bal>
+                    <ns5:Bal>
+                        <ns5:Tp><ns5:CdOrPrtry><ns5:Cd>OPBD</ns5:Cd></ns5:CdOrPrtry></ns5:Tp>
+                        <ns5:Amt Ccy="EUR">10820.61</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Dt><ns5:Dt>2026-03-05+01:00</ns5:Dt></ns5:Dt>
+                    </ns5:Bal>
+                    <ns5:Bal>
+                        <ns5:Tp><ns5:CdOrPrtry><ns5:Cd>CLAV</ns5:Cd></ns5:CdOrPrtry></ns5:Tp>
+                        <ns5:Amt Ccy="EUR">9820.61</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Dt><ns5:Dt>2026-03-05+01:00</ns5:Dt></ns5:Dt>
+                    </ns5:Bal>
+                    <ns5:Ntry>
+                        <ns5:NtryRef>0</ns5:NtryRef>
+                        <ns5:Amt Ccy="EUR">1000.00</ns5:Amt>
+                        <ns5:CdtDbtInd>DBIT</ns5:CdtDbtInd>
+                        <ns5:Sts>BOOK</ns5:Sts>
+                        <ns5:BookgDt><ns5:Dt>2026-03-05+01:00</ns5:Dt></ns5:BookgDt>
+                        <ns5:ValDt><ns5:Dt>2026-03-03+01:00</ns5:Dt></ns5:ValDt>
+                        <ns5:AcctSvcrRef>900000000000007</ns5:AcctSvcrRef>
+                        <ns5:BkTxCd><ns5:Prtry><ns5:Cd>13//00</ns5:Cd><ns5:Issr>CBI</ns5:Issr></ns5:Prtry></ns5:BkTxCd>
+                        <ns5:NtryDtls><ns5:TxDtls><ns5:AddtlTxInf>Vs assegno n. </ns5:AddtlTxInf></ns5:TxDtls></ns5:NtryDtls>
+                    </ns5:Ntry>
+                </ns5:Stmt>
+                <ns5:Stmt>
+                    <ns5:Id>1</ns5:Id>
+                    <ns5:Acct><ns5:Id><ns5:IBAN>IT00X0000000000000000111111</ns5:IBAN></ns5:Id></ns5:Acct>
+                    <ns5:Bal>
+                        <ns5:Tp><ns5:CdOrPrtry><ns5:Cd>CLBD</ns5:Cd></ns5:CdOrPrtry></ns5:Tp>
+                        <ns5:Amt Ccy="EUR">10820.61</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Dt><ns5:Dt>2026-03-03+01:00</ns5:Dt></ns5:Dt>
+                    </ns5:Bal>
+                    <ns5:Bal>
+                        <ns5:Tp><ns5:CdOrPrtry><ns5:Cd>OPBD</ns5:Cd></ns5:CdOrPrtry></ns5:Tp>
+                        <ns5:Amt Ccy="EUR">9299.50</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Dt><ns5:Dt>2026-03-03+01:00</ns5:Dt></ns5:Dt>
+                    </ns5:Bal>
+                    <ns5:Bal>
+                        <ns5:Tp><ns5:CdOrPrtry><ns5:Cd>CLAV</ns5:Cd></ns5:CdOrPrtry></ns5:Tp>
+                        <ns5:Amt Ccy="EUR">10820.61</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Dt><ns5:Dt>2026-03-03+01:00</ns5:Dt></ns5:Dt>
+                    </ns5:Bal>
+                    <ns5:Ntry>
+                        <ns5:NtryRef>0</ns5:NtryRef>
+                        <ns5:Amt Ccy="EUR">3000.00</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Sts>BOOK</ns5:Sts>
+                        <ns5:BookgDt><ns5:Dt>2026-03-03+01:00</ns5:Dt></ns5:BookgDt>
+                        <ns5:ValDt><ns5:Dt>2026-03-03+01:00</ns5:Dt></ns5:ValDt>
+                        <ns5:AcctSvcrRef>900000000000005</ns5:AcctSvcrRef>
+                        <ns5:BkTxCd><ns5:Prtry><ns5:Cd>48//00</ns5:Cd><ns5:Issr>CBI</ns5:Issr></ns5:Prtry></ns5:BkTxCd>
+                        <ns5:NtryDtls><ns5:TxDtls><ns5:AddtlTxInf>Bonifico a vs favore *KM DI MARE SRL GC POS Info aggiuntive: Data ordine: 03/03/2026 Ragione sociale ordinante: KM DI MARE SRL Indirizzo ordinante: VIA FINTA 2 ID_BONIFICO: 0002IT</ns5:AddtlTxInf></ns5:TxDtls></ns5:NtryDtls>
+                    </ns5:Ntry>
+                    <ns5:Ntry>
+                        <ns5:NtryRef>1</ns5:NtryRef>
+                        <ns5:Amt Ccy="EUR">1478.89</ns5:Amt>
+                        <ns5:CdtDbtInd>DBIT</ns5:CdtDbtInd>
+                        <ns5:Sts>BOOK</ns5:Sts>
+                        <ns5:BookgDt><ns5:Dt>2026-03-03+01:00</ns5:Dt></ns5:BookgDt>
+                        <ns5:ValDt><ns5:Dt>2026-03-03+01:00</ns5:Dt></ns5:ValDt>
+                        <ns5:AcctSvcrRef>900000000000006</ns5:AcctSvcrRef>
+                        <ns5:BkTxCd><ns5:Prtry><ns5:Cd>45//15</ns5:Cd><ns5:Issr>CBI</ns5:Issr></ns5:Prtry></ns5:BkTxCd>
+                        <ns5:NtryDtls><ns5:TxDtls><ns5:AddtlTxInf>Addebito rata mutuo *000/000000/003 Scad.:03/03/2026 Cap.: 937,95 Int.: 539,44 Spese: 1,50</ns5:AddtlTxInf></ns5:TxDtls></ns5:NtryDtls>
+                    </ns5:Ntry>
+                </ns5:Stmt>
+                <ns5:Stmt>
+                    <ns5:Id>1</ns5:Id>
+                    <ns5:Acct><ns5:Id><ns5:IBAN>IT00X0000000000000000111111</ns5:IBAN></ns5:Id></ns5:Acct>
+                    <ns5:Bal>
+                        <ns5:Tp><ns5:CdOrPrtry><ns5:Cd>CLBD</ns5:Cd></ns5:CdOrPrtry></ns5:Tp>
+                        <ns5:Amt Ccy="EUR">9299.50</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Dt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:Dt>
+                    </ns5:Bal>
+                    <ns5:Bal>
+                        <ns5:Tp><ns5:CdOrPrtry><ns5:Cd>OPBD</ns5:Cd></ns5:CdOrPrtry></ns5:Tp>
+                        <ns5:Amt Ccy="EUR">10000.00</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Dt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:Dt>
+                    </ns5:Bal>
+                    <ns5:Bal>
+                        <ns5:Tp><ns5:CdOrPrtry><ns5:Cd>CLAV</ns5:Cd></ns5:CdOrPrtry></ns5:Tp>
+                        <ns5:Amt Ccy="EUR">9299.50</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Dt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:Dt>
+                    </ns5:Bal>
+                    <ns5:Ntry>
+                        <ns5:NtryRef>0</ns5:NtryRef>
+                        <ns5:Amt Ccy="EUR">500.00</ns5:Amt>
+                        <ns5:CdtDbtInd>CRDT</ns5:CdtDbtInd>
+                        <ns5:Sts>BOOK</ns5:Sts>
+                        <ns5:BookgDt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:BookgDt>
+                        <ns5:ValDt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:ValDt>
+                        <ns5:AcctSvcrRef>900000000000001</ns5:AcctSvcrRef>
+                        <ns5:BkTxCd><ns5:Prtry><ns5:Cd>48//00</ns5:Cd><ns5:Issr>CBI</ns5:Issr></ns5:Prtry></ns5:BkTxCd>
+                        <ns5:NtryDtls><ns5:TxDtls><ns5:AddtlTxInf>Bonifico a vs favore *MARIO ROSSI Caparra per soggiorno presso Club Hotel dal 12/07/2026 al 19/07/2026 Info aggiuntive: Data ordine: 01/03/2026 Localita ordinante: 00100 ROMA RM IT Ragione sociale ordinante: MARIO ROSSI Indirizzo ordinante: VIA FINTA 1 ID_BONIFICO: 0000000000000000000000000001IT</ns5:AddtlTxInf></ns5:TxDtls></ns5:NtryDtls>
+                    </ns5:Ntry>
+                    <ns5:Ntry>
+                        <ns5:NtryRef>1</ns5:NtryRef>
+                        <ns5:Amt Ccy="EUR">0.25</ns5:Amt>
+                        <ns5:CdtDbtInd>DBIT</ns5:CdtDbtInd>
+                        <ns5:Sts>BOOK</ns5:Sts>
+                        <ns5:BookgDt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:BookgDt>
+                        <ns5:ValDt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:ValDt>
+                        <ns5:AcctSvcrRef>900000000000002</ns5:AcctSvcrRef>
+                        <ns5:BkTxCd><ns5:Prtry><ns5:Cd>16//37</ns5:Cd><ns5:Issr>CBI</ns5:Issr></ns5:Prtry></ns5:BkTxCd>
+                        <ns5:NtryDtls><ns5:TxDtls><ns5:AddtlTxInf>Commissioni su bonifico tramite in</ns5:AddtlTxInf></ns5:TxDtls></ns5:NtryDtls>
+                    </ns5:Ntry>
+                    <ns5:Ntry>
+                        <ns5:NtryRef>2</ns5:NtryRef>
+                        <ns5:Amt Ccy="EUR">0.25</ns5:Amt>
+                        <ns5:CdtDbtInd>DBIT</ns5:CdtDbtInd>
+                        <ns5:Sts>BOOK</ns5:Sts>
+                        <ns5:BookgDt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:BookgDt>
+                        <ns5:ValDt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:ValDt>
+                        <ns5:AcctSvcrRef>900000000000003</ns5:AcctSvcrRef>
+                        <ns5:BkTxCd><ns5:Prtry><ns5:Cd>16//37</ns5:Cd><ns5:Issr>CBI</ns5:Issr></ns5:Prtry></ns5:BkTxCd>
+                        <ns5:NtryDtls><ns5:TxDtls><ns5:AddtlTxInf>Commissioni su bonifico tramite in</ns5:AddtlTxInf></ns5:TxDtls></ns5:NtryDtls>
+                    </ns5:Ntry>
+                    <ns5:Ntry>
+                        <ns5:NtryRef>3</ns5:NtryRef>
+                        <ns5:Amt Ccy="EUR">1200.00</ns5:Amt>
+                        <ns5:CdtDbtInd>DBIT</ns5:CdtDbtInd>
+                        <ns5:Sts>BOOK</ns5:Sts>
+                        <ns5:BookgDt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:BookgDt>
+                        <ns5:ValDt><ns5:Dt>2026-03-02+01:00</ns5:Dt></ns5:ValDt>
+                        <ns5:AcctSvcrRef>900000000000004</ns5:AcctSvcrRef>
+                        <ns5:BkTxCd><ns5:Prtry><ns5:Cd>26//11</ns5:Cd><ns5:Issr>CBI</ns5:Issr></ns5:Prtry></ns5:BkTxCd>
+                        <ns5:NtryDtls><ns5:TxDtls><ns5:AddtlTxInf>Bonifico tramite Internet Banking *FORNITORE ALFA SRL saldo ft 12 Info aggiuntive: Data ordine: 02/03/2026 Intestazione ordinante: KM DI MARE SRL Localita ordinante: CATTOLICA</ns5:AddtlTxInf></ns5:TxDtls></ns5:NtryDtls>
+                    </ns5:Ntry>
+                </ns5:Stmt>
+            </ns6:CBIDlyStmtReqLogMsg>
+        </ns4:CBIBkToCstmrStmtReqLogMsg>
+    </ns4:CBIEnvelBkToCstmrStmtReqLogMsg>
+</ns4:CBIBdyBkToCstmrStmtReq>

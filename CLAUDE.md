@@ -2401,7 +2401,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 ### Stato delle fasi
 | Fase | Contenuto | Stato |
 |---|---|---|
-| 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ⏳ da iniziare — prossimo passo: presentare la strategia |
+| 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ⏳ in corso — ✅ blocco A (28/10/2026); prossimo: blocco B, endpoint (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ⬜ non iniziata |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
@@ -2499,6 +2499,42 @@ Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
   futuro con lettori deterministici `pdfplumber` (uno per layout) + controllo di quadratura sui
   totali dell'estratto, **mai un passaggio AI/Claude** (dati riservati, risultato non deterministico,
   costo). Da collocare in Fase 3 (uscite certe con data di addebito) o come funzione a sé dopo.
+
+- **28/10/2026 — Storni bancari**: ognuno nella categoria del movimento che annulla (regole
+  "Storno scritture" + Storno comm → Banca, + EMOLUMENTI/STIPENDIO → Personale, + CAPARRA → Bonifici
+  da clienti, + nome hotel/PAGOBANCOMAT/NUMIA → Incassi POS); gli altri restano da classificare.
+  **Spese erogazione mutuo** → "Mutuo – rate e spese" (uscita operativa), regola prima di "Spese" →
+  Banca. Aggiunto "Pagamento interessi" → Banca.
+- **28/10/2026 — Regole sul nome con operatore `inizia`** sulla controparte (giroconti, affitti), non
+  `contiene` come nella specifica: la banca attacca la causale libera al nome del beneficiario
+  ("ERICE SNC DI FORLANI LETSaldo FT 1", troncato a 24 caratteri se lungo, altrimenti attaccato),
+  e con `contiene` finivano negli affitti bonifici la cui causale nomina un hotel (quota WTG 3.300 €,
+  subingresso licenza al Comune, storno conto a un ospite). Bonifici istantanei: nome dopo "BEN".
+
+### Blocco A — fatto (28/10/2026)
+- `app/models/tesoreria.py` (registrato in `app/models/__init__.py`): `TesoreriaConto` (IBAN univoco,
+  fido + `fido_scadenza`, `ha_import`), `TesoreriaImport`, `TesoreriaSaldo` (UNIQUE conto+data, saldo
+  a fine giornata per data contabile, `origine` import|manuale), `TesoreriaCategoria`, `TesoreriaRegola`
+  (campo descrizione|controparte, operatore inizia|contiene, `valori` OR + `valori_anche` facoltativo
+  in AND, segno, priorità), `TesoreriaMovimento` (UNIQUE conto+`impronta`, `import_id` CASCADE =
+  import che l'ha inserito per primo, `categoria_manuale`, `straordinario`).
+- Migrazione `tes001_2026`: tabelle + seed (5 conti, 23 categorie, 29 regole) + modulo `tesoreria`
+  **attivo=false** (da attivare nel blocco D, quando esiste la pagina) + permessi (viewer tutto false).
+  Le costanti `CONTI`/`CATEGORIE`/`REGOLE` della migrazione sono lette dai test: restano costanti.
+  Applicata al DB reale il 28/10/2026 (verificati anche downgrade e nuovo upgrade).
+- `services/tesoreria_parser.py` → `parse_estratto_cbi(bytes)`: blocchi bloccanti (`ErroreImportTesoreria`)
+  su IBAN multiplo, stato ≠ BOOK, data contabile ≠ giorno, giorno che non quadra, saldo non continuo,
+  riferimenti ripetuti. Saldi = chiusura di ogni giorno + apertura del primo giorno come saldo del
+  giorno prima. Impronta `R:{AcctSvcrRef}` o `H:{sha256}` (dati + occorrenza). `estrai_controparte()`.
+  ⚠️ ElementTree: `iter()` non accetta il namespace jolly `{*}`, usare `findall('.//{*}…')`.
+- `services/tesoreria_classificatore.py` → `classifica(descrizione, controparte, importo, regole)`.
+- `services/tesoreria_saldi.py` → `saldo_a_data()`, `verifica_saldi()` (`Discrepanza.differenza`).
+- Test: `test_tesoreria_parser.py`, `test_tesoreria_classificatore.py` (usa le regole della migrazione),
+  `test_tesoreria_saldi.py`; fixture finte `tests/fixtures/tesoreria/estratto_principale.xml` e
+  `estratto_pos.xml`. Suite completa: 644 verdi.
+- Prova sui file reali (senza DB): 4 XML, 6.733 movimenti, 0 discrepanze di saldo, **1 solo "Da
+  classificare"** (storno F23 11,05 €), giroconti 66 movimenti a somma 0, affitti 23 (tutti veri).
+- Versione: nessun bump finché il modulo non è visibile; la Fase 1 chiuderà con **4.0.0**.
 
 ### Punti aperti da chiarire con l'utente
 - Visibilità: la specifica propone `viewer` senza accesso e tutti gli endpoint `richiedi_admin` —
