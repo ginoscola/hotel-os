@@ -595,3 +595,40 @@ def test_posizione_carta_addebito_mancante(client):
     client.post("/tesoreria/saldi", json={"conto_id": 3, "data": "2026-02-28", "saldo": "1200.00"})
     avviso = next(a for a in _posizione(client, "2026-04-09")["avvisi"] if a["conto_id"] == 3)
     assert "non risulta ancora addebitato" in avviso["messaggio"] and "1.200,00 €" in avviso["messaggio"]
+
+
+# ── Export ──────────────────────────────────────────────────────────────────────
+
+def test_export_movimenti_con_filtri(client):
+    import io
+    import openpyxl
+    _importa(client)
+    r = client.get("/tesoreria/movimenti/export", params={"formato": "xlsx", "segno": "uscita"})
+    assert r.status_code == 200
+    ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
+    righe = list(ws.iter_rows(values_only=True))
+    assert righe[0][:6] == ("Data contabile", "Data valuta", "Conto", "Controparte", "Descrizione", "Importo")
+    assert len(righe) == 1 + 5                      # 5 uscite nella fixture
+    assert righe[1][0] == "05/03/2026" and righe[1][5] == -1000.0   # ordine per data decrescente
+    csv = client.get("/tesoreria/movimenti/export", params={"formato": "csv", "q": "1478"}).content.decode("utf-8-sig")
+    assert "-1478,89" in csv and csv.count("\n") == 2
+    pdf = client.get("/tesoreria/movimenti/export", params={"formato": "pdf"})
+    assert pdf.content[:4] == b"%PDF"
+
+
+def test_export_consuntivo(client):
+    import io
+    import openpyxl
+    _importa(client)
+    _importa(client, POS, "pos.xml")
+    r = client.get("/tesoreria/consuntivo/export",
+                   params={"data_da": "2026-03-01", "data_a": "2026-03-31", "formato": "xlsx"})
+    assert r.status_code == 200
+    righe = list(openpyxl.load_workbook(io.BytesIO(r.content)).active.iter_rows(values_only=True))
+    per_voce = {riga[0]: riga for riga in righe}
+    assert per_voce["TOTALE OPERATIVO"][2:5] == (3700.0, -4517.59, -817.59)
+    assert per_voce["Saldo fine periodo"][4] == 9682.41
+    assert per_voce["mar 2026"][4] == -817.59
+    pdf = client.get("/tesoreria/consuntivo/export",
+                     params={"data_da": "2026-03-01", "data_a": "2026-03-31", "formato": "pdf"})
+    assert pdf.content[:4] == b"%PDF"

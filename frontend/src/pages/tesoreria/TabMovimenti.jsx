@@ -2,12 +2,13 @@
 // vince sulle regole), dettaglio con note/straordinario e "crea regola da questo movimento".
 import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../../api/client.js'
+import { ExportMenu } from '../../components/ExportMenu.jsx'
 import { formatData, formatEuro, mostraErrore } from '../../utils/format.js'
 import {
   Button, Checkbox, Field, Input, Loading, Messaggio, Modal, Paginazione, Select, StatoVuoto, Table, Td, Textarea, Th,
   ThOrdinabile, useAvvisi,
 } from '../../components/ui'
-import { BadgeCategoria, Importo, ModaleRegola, SelectCategoria } from './helpers.jsx'
+import { BadgeCategoria, Importo, ModaleRegola, SelectCategoria, queryString } from './helpers.jsx'
 
 const PER_PAGINA = 50
 
@@ -169,10 +170,15 @@ export default function TabMovimenti({ conti, categorie, permessi, filtroInizial
       <Messaggio>{errore}</Messaggio>
       {!dati ? <Loading /> : (
         <>
-          <p className="ui-text-muted">
-            {dati.totale} movimenti — entrate {formatEuro(dati.entrate)}, uscite {formatEuro(dati.uscite)},
-            netto {formatEuro(dati.netto)}
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <p className="ui-text-muted">
+              {dati.totale} movimenti — entrate {formatEuro(dati.entrate)}, uscite {formatEuro(dati.uscite)},
+              netto {formatEuro(dati.netto)}
+            </p>
+            <ExportMenu nome="tesoreria_movimenti" url={`/tesoreria/movimenti/export?${queryString({
+              ...filtri, q, ordina_per: ordine.per, direzione: ordine.direzione,
+            })}`} />
+          </div>
           {dati.righe.length === 0 ? <StatoVuoto>Nessun movimento con questi filtri.</StatoVuoto> : (
             <Table compact>
               <thead>

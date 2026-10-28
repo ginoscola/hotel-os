@@ -5,12 +5,13 @@ import {
   Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import api from '../../api/client.js'
+import { ExportMenu } from '../../components/ExportMenu.jsx'
 import { STILE_CONFRONTO, colors } from '../../styles/tokens.js'
 import { formatData, formatEuro, formatEuroIntero, mostraErrore } from '../../utils/format.js'
 import {
   Button, Card, Checkbox, Drawer, Field, Input, KpiTile, Loading, Messaggio, Paginazione, Select, StatoVuoto, Table, Td, Th,
 } from '../../components/ui'
-import { BadgeCategoria, Importo, isoLocale, oggiISO } from './helpers.jsx'
+import { BadgeCategoria, Importo, isoLocale, oggiISO, queryString } from './helpers.jsx'
 
 const LS_CONTO = 'tesoreria_consuntivo_conto'
 const LS_AP_COLONNE = 'tesoreria_consuntivo_ap_colonne'
@@ -187,7 +188,10 @@ export default function TabConsuntivo({ conti }) {
             )}
           </Card>
 
-          <Card title="Per categoria">
+          <Card title="Per categoria" actions={
+            <ExportMenu url={`/tesoreria/consuntivo/export?${queryString(filtri)}`}
+              nome={`tesoreria_consuntivo_${filtri.data_da}_${filtri.data_a}`} />
+          }>
             <Table compact>
               <thead>
                 <tr>

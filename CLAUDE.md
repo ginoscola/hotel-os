@@ -2645,6 +2645,14 @@ da env `TESORERIA_DIR`, `regole_attive()`, `categoria_automatica()`, `ricalcola_
 - Nessun componente nuovo in `components/ui` (Libreria UI invariata).
 - ⚠️ Dopo il deploy serve il riavvio del backend (endpoint nuovi) e `npm run build` (fatto).
 
+### Export Movimenti e Consuntivo (28/10/2026, v4.2.0)
+`GET /tesoreria/movimenti/export` (stessi filtri e ordinamento dell'elenco, tutte le righe, max 50.000;
+nel pdf descrizioni troncate a 90 caratteri) e `GET /tesoreria/consuntivo/export` (chiama
+`consuntivo()`: categorie operative → TOTALE OPERATIVO → non operative, RIEPILOGO dei KPI con anno
+precedente e Δ, netto operativo per mese), `formato=xlsx|csv|pdf`, con `ExportMenu` nelle due schede.
+Celle con `cella_importo()`/`cella_data()` di `tesoreria_shared.py`: numeri veri nell'xlsx, "1234,56"
+nel csv (Excel italiano lo legge come numero), "1.234,56" nel pdf; date gg/mm/aaaa.
+
 ### Carte di credito: azzeramento automatico (28/10/2026, v4.1.0)
 Scelta dell'utente: ogni mese si inserisce **solo il totale dell'estratto** di ogni carta (AMEX
 «Importo dovuto», data di chiusura il 6; BCC «Saldo attuale», chiusura il 28) come saldo manuale.
@@ -2706,6 +2714,8 @@ esistenti, mai query duplicate sulle loro tabelle.
   `_contanti()` in `routers/tesoreria_report.py` (posizione attuale). Usa `saldo_corrente`,
   `mesi[-1].mese`, `saldo_iniziale.data`: se cambiano nome o significato, aggiornare `_contanti()`.
 - **Moduli/permessi**: `app/permessi.py` (condiviso con `lista_moduli()`).
+- **Corrispettivi → export**: `_risposta_tabella()` di `routers/corrispettivi_documenti.py` (xlsx/csv/pdf
+  da intestazioni + righe) usata dagli export di Movimenti e Consuntivo.
 
 ### Diario sessioni
 - **27/10/2026** — aggiunta la specifica `prompt_hotelos_tesoreria.md` e questa sezione. Nessun

@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,10 @@ from app.models.tesoreria import (
     TesoreriaCategoria, TesoreriaConto, TesoreriaImport, TesoreriaMovimento, TesoreriaSaldo,
 )
 from app.routers.corrispettivi_cassa import riepilogo_cassa
-from app.routers.tesoreria_shared import euro, id_ripiego, puo_modificare, puo_vedere
+from app.routers.corrispettivi_documenti import _risposta_tabella
+from app.routers.tesoreria_shared import (
+    cella_data, cella_importo, euro, id_ripiego, puo_modificare, puo_vedere,
+)
 from app.services.tesoreria_report import (
     CHIAVE_SOGLIE, FINESTRA_ADDEBITO_CARTA, SOGLIE_DEFAULT, ZERO, aggrega, anno_prima, giorno_prima, mesi_tra, stato_fido,
     stato_carta, ultimo_giorno_mese, valida_soglie,
@@ -371,3 +374,55 @@ def consuntivo(data_da: date, data_a: date, conto_id: Optional[int] = None,
         "categorie": righe,
         "mensile": mensile,
     }
+
+
+@router.get("/consuntivo/export")
+def export_consuntivo(data_da: date, data_a: date, conto_id: Optional[int] = None,
+                      formato: str = Query("xlsx", pattern="^(xlsx|csv|pdf)$"),
+                      db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    """Una tabella: categorie (operative, totale, non operative), riepilogo KPI con anno precedente,
+    netto operativo per mese. Stessi numeri della pagina (riusa `consuntivo()`)."""
+    c = consuntivo(data_da=data_da, data_a=data_a, conto_id=conto_id, db=db, _=None)
+    imp = lambda v: cella_importo(v, formato)   # noqa: E731
+    vuota = [""] * 7
+    intestazioni = ["Voce", "Movimenti", "Entrate", "Uscite", "Netto", "Anno precedente", "Δ"]
+
+    def riga_cat(r):
+        return [r["nome"], r["n"], imp(r["entrate"] or None), imp(r["uscite"] or None), imp(r["netto"]),
+                imp(r["netto_ap"]), imp(r["delta"])]
+
+    def riga_kpi(nome, k, colonna_valore=4):
+        riga = [nome, "", "", "", "", imp(k["anno_precedente"]), imp(k["delta"])]
+        riga[colonna_valore] = imp(k["valore"])
+        return riga
+
+    k = c["kpi"]
+    righe = [riga_cat(r) for r in c["categorie"] if r["operativa"]]
+    righe.append(["TOTALE OPERATIVO", "", imp(k["entrate"]["valore"]), imp(k["uscite"]["valore"]),
+                  imp(k["netto_operativo"]["valore"]), imp(k["netto_operativo"]["anno_precedente"]),
+                  imp(k["netto_operativo"]["delta"])])
+    non_operative = [r for r in c["categorie"] if not r["operativa"]]
+    if non_operative:
+        righe.append(["Movimenti non operativi"] + vuota[1:])
+        righe += [riga_cat(r) for r in non_operative]
+    righe.append(vuota)
+    righe.append(["RIEPILOGO"] + vuota[1:])
+    righe.append(riga_kpi("Entrate operative", k["entrate"]))
+    righe.append(riga_kpi("Uscite operative", k["uscite"]))
+    righe.append(riga_kpi("Netto operativo", k["netto_operativo"]))
+    righe.append(riga_kpi("Movimenti non operativi", k["non_operativi"]))
+    righe.append(riga_kpi("Saldo inizio periodo", k["saldo_inizio"]))
+    righe.append(riga_kpi("Saldo fine periodo", k["saldo_fine"]))
+    if c["giroconti_esclusi"]["n"]:
+        righe.append([f"Giroconti tra i conti esclusi ({c['giroconti_esclusi']['n']})", "", "", "",
+                      imp(c["giroconti_esclusi"]["netto"]), "", ""])
+    righe.append(vuota)
+    righe.append(["NETTO OPERATIVO PER MESE", "", "Entrate", "Uscite", "Netto", "Anno precedente", "Δ"])
+    for m in c["mensile"]:
+        righe.append([m["etichetta"], "", imp(m["entrate"]), imp(m["uscite"]), imp(m["netto_operativo"]),
+                      imp(m["netto_operativo_ap"]), imp(m["netto_operativo"] - m["netto_operativo_ap"])])
+
+    conto = c["conti"][0]["nome"] if conto_id and c["conti"] else "tutti i conti"
+    titolo = f"Tesoreria — consuntivo dal {cella_data(data_da)} al {cella_data(data_a)} ({conto})"
+    return _risposta_tabella(formato, f"tesoreria_consuntivo_{data_da.isoformat()}_{data_a.isoformat()}",
+                             titolo, intestazioni, righe)

@@ -12,6 +12,13 @@ import {
 
 export const MODULO = 'tesoreria'
 
+/** Query string dei parametri non vuoti (per gli URL di export). */
+export function queryString(params) {
+  const q = new URLSearchParams()
+  Object.entries(params).forEach(([k, v]) => { if (v !== '' && v != null && v !== false) q.set(k, v) })
+  return q.toString()
+}
+
 /** Permessi dell'utente sul modulo (admin sempre tutto, come il backend). */
 export function permessiTesoreria() {
   if (isAdmin()) return { puo_vedere: true, puo_modificare: true, puo_importare: true }

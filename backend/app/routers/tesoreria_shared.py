@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.models.tesoreria import TesoreriaCategoria, TesoreriaMovimento, TesoreriaRegola
 from app.permessi import richiedi_permesso
 from app.services.tesoreria_classificatore import RegolaClassificazione, classifica
+from app.utils.locale_it import formatta_euro_it
 
 MODULO = "tesoreria"
 CATEGORIA_RIPIEGO = "da_classificare"
@@ -101,3 +102,20 @@ def movimento_json(m: TesoreriaMovimento, categorie: dict) -> dict:
 
 def mappa_categorie(db: Session) -> dict:
     return {c.id: c for c in db.query(TesoreriaCategoria).all()}
+
+
+# ── Export (xlsx/csv/pdf con _risposta_tabella di Corrispettivi) ───────────────
+
+def cella_importo(valore, formato: str):
+    """Numero vero nell'xlsx; testo in formato italiano in csv ("1234,56", leggibile da Excel) e pdf
+    ("1.234,56")."""
+    if valore is None:
+        return ""
+    if formato == "xlsx":
+        return round(float(valore), 2)
+    testo = formatta_euro_it(valore).removesuffix(" €")
+    return testo.replace(".", "") if formato == "csv" else testo
+
+
+def cella_data(valore) -> str:
+    return valore.strftime("%d/%m/%Y") if valore else ""
