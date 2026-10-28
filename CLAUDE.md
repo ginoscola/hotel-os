@@ -2653,6 +2653,8 @@ corrente); calcoli puri in `services/tesoreria_report.py` (`serie_saldi`, `minim
 1. **Andamento del saldo**: somma dei conti correnti a fine giornata dal 1/1 a oggi (o 31/12), anno vs anno
    prima (stesso giorno; 29/02 saltato). Saldo tenuto fino al saldo noto successivo; prima del primo
    saldo un conto vale 0 se è nato a zero (POS aperto il 14/04/2025), altrimenti il giorno è mancante.
+   Eccezione voluta a `STILE_CONFRONTO` (richiesta dell'utente, v4.4.1): l'anno precedente ha un **colore
+   diverso** (`coloreSerie(1)`), sempre tratteggiato, invece dello stesso colore semitrasparente.
 2. **Punto più basso** (anno, anno prima stesso periodo, anno prima intero) e **uso del fido** per conto con
    fido: saldo minimo, giorni sotto zero, utilizzo massimo in € e % del fido.
 3. **Mesi di autonomia** = liquidità netta di oggi (`posizione()`) / consumo medio mensile = −media del

@@ -6,7 +6,7 @@ import {
   CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import api from '../../api/client.js'
-import { STILE_CONFRONTO, colors } from '../../styles/tokens.js'
+import { STILE_CONFRONTO, colors, coloreSerie } from '../../styles/tokens.js'
 import { formatDataIt, formatEuro, formatEuroIntero, formatPerc, mostraErrore } from '../../utils/format.js'
 import {
   Card, KpiTile, Loading, Messaggio, NavAnno, StatoVuoto, Table, Td, Th,
@@ -14,6 +14,8 @@ import {
 import { BadgeCategoria, Importo } from './helpers.jsx'
 
 const COLORE_SALDO = colors.info
+// Anno precedente in un colore diverso (scelta dell'utente), tratteggiato come ogni serie di confronto
+const COLORE_SALDO_AP = coloreSerie(1)
 const legendaNeutra = v => <span style={{ color: colors.text }}>{v}</span>
 
 function DeltaPunti({ v }) {
@@ -100,7 +102,8 @@ function Contenuto({ d }) {
               <Legend formatter={legendaNeutra} />
               <ReferenceLine y={0} stroke={colors.danger} strokeOpacity={0.5} />
               <Line dataKey="saldo" name={String(d.anno)} stroke={COLORE_SALDO} dot={false} strokeWidth={2} connectNulls={false} />
-              <Line dataKey="saldo_ap" name={String(d.anno - 1)} stroke={COLORE_SALDO} dot={false} {...STILE_CONFRONTO} />
+              <Line dataKey="saldo_ap" name={String(d.anno - 1)} stroke={COLORE_SALDO_AP} dot={false}
+                {...STILE_CONFRONTO} strokeOpacity={1} />
             </LineChart>
           </ResponsiveContainer>
         )}
