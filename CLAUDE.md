@@ -2420,6 +2420,62 @@ Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
 - L'utente caricherà anche gli XML 2025 di entrambi i conti (confronto anno precedente).
 - **28/10/2026 — Fido scaduto**: dopo `data scadenza fido` il fido NON entra più in "Disponibilità con
   fido" + avviso rosso "fido scaduto, aggiornare se rinnovato" (avviso arancione già 60 gg prima).
+  Importo e scadenza del fido si impostano da Admin → Tesoreria → Conti (scadenza vuota = sempre
+  conteggiato, nessun avviso). Seed: conto POS 217746, fido 130.000 €, **scadenza 30/09/2027**.
+- **28/10/2026 — Prima del blocco A** l'utente carica uno alla volta gli altri file campione
+  (scadenzario Passcom, fatture XML, altro) in `uploads/tesoreria_campioni/`, da analizzare uno per
+  uno: si parte col codice solo dopo aver chiarito tutti i formati e con ok esplicito.
+- **28/10/2026 — XML banca completi** in `banca_conto_principale/` (`export 2025 conto principale.xml`
+  3.349 mov., `export 2026 conto principale.xml` 2.807 mov. fino al 28/10) e `banca_conto_pos/`
+  (`export 2025 pos.xml` 292 mov. dal 14/04/2025 = apertura conto a saldo 0, `export 2026 POS.xml`).
+  Tutti: ogni giorno quadra, nessun salto, 31/12/2025 → 02/01/2026 continuo su entrambi i conti,
+  `AcctSvcrRef` univoci e mai vuoti, nessun ref ripetuto tra file. **Stabilità `AcctSvcrRef`
+  verificata** anche cambiando periodo (stessi ref dei movimenti di ottobre del primo export).
+  Prova delle regole di seed su 6.733 movimenti: solo **12 "Da classificare"**, tutti "Storno scritture"
+  (causale ABI 68//00) → proporre una regola/categoria "Storni bancari". Giroconti: 66 movimenti, somma
+  0,00 € tra i due conti (le due gambe si compensano). Mutuo 036/307528: erogazione 140.000 € il
+  23/07/2026 (+ "Spese erogazione mutuo" −1.050 € finite in Banca), rate dal 20/08/2026 (~1.460–1.480 €).
+- **28/10/2026 — Scadenzario Passcom analizzato** (`passcom_scadenzario/011_stp000001-tutte.xml` e
+  `011_stp000002-da pagare.xml`, filtro scadenze 2026): **i due file sono identici** (cambia solo
+  `Created`) → il filtro "tutte" non ha avuto effetto; colonne "Data pag"/"Stato" presenti
+  nell'intestazione ma sempre vuote. Formato = specifica (SpreadsheetML, windows-1252, foglio
+  `-Scaddoc`, `ss:Index`, riga Totale 110.590,39 = somma righe ✓, 76 righe DESCRIZIONE TESTATA).
+  Differenze dalla specifica: (1) righe **`*PAREGGIO*`** (col 5, senza tipo doc/numero/protocollo,
+  74 righe): pagamenti/compensazioni registrati a una data di scadenza **diversa** dalle fatture che
+  chiudono (es. Du Parc fattura 12/2025 +50.429 vs pareggio 07/2026 −53.304; MARR luglio-settembre
+  fatture = pareggi) → l'aperto reale si ricava per fornitore, non riga per riga; (2) tipo doc `PG`
+  (pagamenti non abbinati, negativi, tutti 2021-2022) e un `31`; (3) righe di sola col 4 con frammenti
+  di testo (ragione sociale andata a capo: "ICO", " C.", "ia") da ignorare; (4) contiene partite aperte
+  anche di anni vecchi (2011-2024, residui di pochi € a ~2.000 €) pur filtrando 2026; nessuna scadenza
+  2027 (max 30/11/2026). 1.285 righe, 76 fornitori (MARR 999 righe), 7 fornitori con netto negativo.
+  Causa: il campo "Stato rata" era rimasto vuoto (= solo rate da pagare), e Scadenza A = 31/12/2026.
+- **28/10/2026 — Scadenzario rifatto** (file sostituiti): `scadenzario_da_pagare.xml` (stato vuoto,
+  scadenza A 31/12/2027) = identico al precedente, nessuna scadenza 2027 (max 30/11/2026: le fatture
+  fornitori scadono a breve). **Formato di riferimento per la Fase 2**: lo si scarica sempre con le
+  selezioni memorizzate in Passcom. `scadenzario_pagate.xml` (stato **P**): stesso formato ma **col 3 =
+  data pagamento** e **col 4 = stato `P`** (vuote nel file "da pagare"), nessuna riga `*PAREGGIO*`;
+  7.638 righe, totale 6.034.905,34 ✓, scadenze 2021–27/10/2026 (il filtro "Da 01/01/2026" non è stato
+  applicato: contiene tutto lo storico). La data pagamento è quella **registrata dallo studio**, non la
+  data banca (es. Campanelli 830 € = 05/10 in Passcom, 07/10 in banca; solo 4 pagamenti di ottobre già
+  registrati al 28/10) → utile come storico per la Fase 4, ma la verità sui pagamenti resta la banca.
+  ⚠️ **Passcom lavora per anno contabile**: lo scadenzario dell'anno 2026 non mostra le scadenze di
+  documenti registrati nel 2027 (gestite dal commercialista nel bilancio con ratei/risconti). In
+  Fase 2–3: le scadenze oltre l'anno contabile corrente vengono solo dalle stime; a cavallo d'anno
+  (inizio 2027, quando lo studio apre il nuovo anno) può servire caricare **due file per la stessa
+  data** (anno vecchio + anno nuovo) — da verificare con l'utente in quel momento, prevedere nel
+  modello snapshot che una fotografia possa essere composta da più file.
+  Prova (`scadenzario_da_pagare_no-filtri.xml`, nessun filtro data): **identico** al file con
+  scadenza A 31/12/2027 → il filtro data è irrilevante, il limite è solo l'anno contabile.
+- **28/10/2026 — Fatture XML passive (Fase 5), fonte**: GoProfit non ha funzione di export; Passcom
+  (PassHub) non risulta esportarle. Si prova lo **scarico massivo dal portale AdE "Fatture e
+  Corrispettivi"** (richiesta per periodo, fatture ricevute, ZIP disponibile in ~24h), fatto a mano
+  dall'utente. Campione richiesto: un mese (set. o ott. 2026) in `fatture_xml/`, ZIP non decompresso.
+  Accesso risolto dall'utente delegando la S.r.l. al proprio codice fiscale sul portale AdE: può
+  scaricare in autonomia. Percorso: Fatture e Corrispettivi → Consultazione/Richieste → "Richieste di
+  Fatture Elettroniche" → Creazione richiesta guidata (Puntuale, date, **Ricevute**, tipo Tutte) →
+  Genera richiesta → **Invia richiesta** (il "Download richiesta (xml)" è solo il modulo, non le
+  fatture). Richiesta di prova 01/10–28/10/2026 inviata il 28/10/2026, identificativo
+  `2810261047580000000000573682076`, elaborazione **entro 5 giorni** → ZIP da mettere in `fatture_xml/`.
 - **28/10/2026 — Consuntivo**: Entrate/Uscite/Netto operativo escludono le categorie
   `escludi_da_operativo` (giroconti, erogazione mutuo), mostrate in una riga a parte "Movimenti non
   operativi"; con "tutti i conti" giroconti sempre esclusi; saldi inizio/fine = saldi reali banca;
