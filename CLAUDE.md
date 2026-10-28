@@ -2658,6 +2658,11 @@ conto: `carta_stato` (`da_addebitare`/`addebitato`/`nessun_debito`), `carta_impo
 l'estratto successivo". Verificato sul 2026: tutti i 20 addebiti AMEX/BCC riconosciuti dal testo
 (giorno di addebito variabile: 25–30); le ricariche TASCA ("Ricarica carta prepagata TASCA") no.
 Limite accettato: le spese dopo la chiusura entrano solo con l'estratto successivo.
+**Prepagata TASCA: resta manuale** (decisione dell'utente, 28/10/2026): saldo = disponibilità letta
+dall'app o dalla lista movimenti, aggiornata ogni tanto (promemoria dopo `giorni_saldo_carta`). Le
+ricariche dal conto principale ("Ricarica carta prepagata TASCA", 500–1.000 €) **non** vengono sommate
+in automatico alla disponibilità: le spese con la carta non sono note, il valore sarebbe gonfiato.
+Effetto accettato: per qualche giorno dopo una ricarica la liquidità risulta più bassa del vero.
 
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
