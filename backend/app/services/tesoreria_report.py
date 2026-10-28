@@ -125,3 +125,28 @@ def aggrega(movimenti: list, non_operative: set, escluse: set, ripiego: Optional
 
 def giorno_prima(giorno: date) -> date:
     return giorno - timedelta(days=1)
+
+
+# ── Carte di credito: estratto addebitato o no ─────────────────────────────────
+
+FINESTRA_ADDEBITO_CARTA = 45   # giorni dopo la chiusura entro cui cercare l'addebito in banca
+
+
+def stato_carta(chiusura: date, importo_estratto: Decimal, candidati: list, testo_addebito: Optional[str],
+                giorno: date) -> dict:
+    """Saldo di una carta di credito al `giorno` dato l'ultimo estratto (chiusura + importo dovuto).
+
+    L'estratto è pagato se in banca c'è un'uscita di pari importo, dopo la chiusura, entro
+    FINESTRA_ADDEBITO_CARTA giorni e non oltre `giorno`, con `testo_addebito` nella descrizione
+    (se impostato). `candidati` = [(data, importo, descrizione)] dei movimenti bancari.
+    Restituisce {saldo, stato: 'nessun_debito'|'da_addebitare'|'addebitato', data_addebito}.
+    """
+    if not importo_estratto:
+        return {"saldo": ZERO, "stato": "nessun_debito", "data_addebito": None}
+    limite = min(giorno, chiusura + timedelta(days=FINESTRA_ADDEBITO_CARTA))
+    testo = (testo_addebito or "").strip().upper()
+    for data_mov, importo, descrizione in sorted(candidati, key=lambda c: c[0]):
+        if (chiusura < data_mov <= limite and importo == -importo_estratto
+                and (not testo or testo in (descrizione or "").upper())):
+            return {"saldo": ZERO, "stato": "addebitato", "data_addebito": data_mov}
+    return {"saldo": importo_estratto, "stato": "da_addebitare", "data_addebito": None}

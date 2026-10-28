@@ -144,8 +144,9 @@ function SaldiManuali({ conti, puoModificare, onCambio }) {
   return (
     <Card title="Saldi inseriti a mano (carte e prepagate)">
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
-        Carte di credito: lo speso non ancora addebitato in banca, come numero positivo (es. il totale
-        dell'estratto della carta). Prepagate: la disponibilità.
+        Carte di credito: ogni mese il totale dell'estratto (AMEX «Importo dovuto», BCC «Saldo attuale»)
+        con la data di chiusura. Quando la banca lo addebita la carta torna a zero da sola: non serve
+        inserire zeri. Prepagate: la disponibilità, quando si vuole.
       </p>
       {puoModificare && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
@@ -155,8 +156,10 @@ function SaldiManuali({ conti, puoModificare, onCambio }) {
               {manuali.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </Select>
           </Field>
-          <Field label="Al giorno"><Input type="date" value={nuovo.data} onChange={e => setNuovo({ ...nuovo, data: e.target.value })} /></Field>
-          <Field label={contoScelto?.tipo === 'carta_credito' ? 'Speso da addebitare (€)' : 'Saldo (€)'}>
+          <Field label={contoScelto?.tipo === 'carta_credito' ? "Data di chiusura dell'estratto" : 'Al giorno'}>
+            <Input type="date" value={nuovo.data} onChange={e => setNuovo({ ...nuovo, data: e.target.value })} />
+          </Field>
+          <Field label={contoScelto?.tipo === 'carta_credito' ? "Totale dell'estratto (€)" : 'Saldo (€)'}>
             <Input value={nuovo.saldo} inputMode="decimal" style={{ width: 140 }}
               onChange={e => setNuovo({ ...nuovo, saldo: e.target.value })} />
           </Field>

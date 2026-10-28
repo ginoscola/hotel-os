@@ -2645,6 +2645,20 @@ da env `TESORERIA_DIR`, `regole_attive()`, `categoria_automatica()`, `ricalcola_
 - Nessun componente nuovo in `components/ui` (Libreria UI invariata).
 - ⚠️ Dopo il deploy serve il riavvio del backend (endpoint nuovi) e `npm run build` (fatto).
 
+### Carte di credito: azzeramento automatico (28/10/2026, v4.1.0)
+Scelta dell'utente: ogni mese si inserisce **solo il totale dell'estratto** di ogni carta (AMEX
+«Importo dovuto», data di chiusura il 6; BCC «Saldo attuale», chiusura il 28) come saldo manuale.
+Nella Posizione (`stato_carta()` in `services/tesoreria_report.py`, candidati da
+`_addebiti_candidati()`) la carta conta quell'importo finché in un conto bancario non compare
+un'uscita **di pari importo**, **dopo** la chiusura ed entro `FINESTRA_ADDEBITO_CARTA` = 45 giorni,
+con `tesoreria_conti.testo_addebito` nella descrizione (migrazione `tes003_2026`: AMEX "AMERICAN
+EXPRESS", CARTA_BCC "Carta del Credito Cooperativo"; vuoto = solo importo); poi vale zero. Risposta per
+conto: `carta_stato` (`da_addebitare`/`addebitato`/`nessun_debito`), `carta_importo_estratto`,
+`carta_data_addebito`. Avviso dopo `giorni_saldo_carta`: "non risulta ancora addebitato" o "inserire
+l'estratto successivo". Verificato sul 2026: tutti i 20 addebiti AMEX/BCC riconosciuti dal testo
+(giorno di addebito variabile: 25–30); le ricariche TASCA ("Ricarica carta prepagata TASCA") no.
+Limite accettato: le spese dopo la chiusura entrano solo con l'estratto successivo.
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
@@ -2715,6 +2729,8 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **28/10/2026 (4)** — blocco C fatto (posizione, consuntivo, soglie), prova sui dati reali con
   quadratura ok. Prossimo: blocco D (frontend `Tesoreria.jsx`, Admin, attivazione modulo, 4.0.0) —
   serve l'ok dell'utente.
+- **28/10/2026 (6)** — v4.1.0: carte di credito azzerate in automatico all'addebito in banca (l'utente
+  inserisce solo il totale di ogni estratto). XML 2025–2026 dei conti già caricati dall'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

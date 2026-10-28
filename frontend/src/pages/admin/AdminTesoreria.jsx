@@ -63,13 +63,15 @@ export function AdminTesoreriaConti() {
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
         I conti con «Import» ricevono gli estratti conto XML (riconosciuti dall'IBAN); gli altri hanno solo
         saldi inseriti a mano. Il fido conta nella disponibilità fino al giorno di scadenza compreso
-        (scadenza vuota = sempre); dopo, avviso rosso finché non lo si aggiorna.
+        (scadenza vuota = sempre); dopo, avviso rosso finché non lo si aggiorna. Carte di credito: «Testo
+        addebito in banca» è come compare il pagamento dell'estratto nel conto (es. AMERICAN EXPRESS):
+        serve a riconoscerlo e azzerare la carta.
       </p>
       <Table compact>
         <thead>
           <tr>
             <Th>Codice</Th><Th>Nome</Th><Th>Tipo</Th><Th>Banca</Th><Th>IBAN</Th><Th num>Fido (€)</Th>
-            <Th>Scadenza fido</Th><Th center>Import</Th><Th>Colore</Th><Th num>Ordine</Th><Th center>Attivo</Th><Th></Th>
+            <Th>Scadenza fido</Th><Th>Testo addebito in banca</Th><Th center>Import</Th><Th>Colore</Th><Th num>Ordine</Th><Th center>Attivo</Th><Th></Th>
           </tr>
         </thead>
         <tbody>
@@ -89,6 +91,11 @@ export function AdminTesoreriaConti() {
                 <Td><Input value={v.iban || ''} style={{ width: 230 }} onChange={e => set({ iban: e.target.value })} /></Td>
                 <Td num><Input value={v.fido ?? 0} inputMode="decimal" style={{ width: 100 }} onChange={e => set({ fido: e.target.value })} /></Td>
                 <Td><Input type="date" value={v.fido_scadenza || ''} onChange={e => set({ fido_scadenza: e.target.value || null })} /></Td>
+                <Td>
+                  {v.tipo === 'carta_credito'
+                    ? <Input value={v.testo_addebito || ''} style={{ width: 200 }} onChange={e => set({ testo_addebito: e.target.value })} />
+                    : <span className="ui-text-muted">—</span>}
+                </Td>
                 <Td center><Checkbox checked={v.ha_import} onChange={x => set({ ha_import: x })} /></Td>
                 <Td><SceltaColore value={v.colore} onChange={x => set({ colore: x })} /></Td>
                 <Td num><Input type="number" value={v.ordine} style={{ width: 60 }} onChange={e => set({ ordine: e.target.value })} /></Td>

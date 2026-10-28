@@ -78,8 +78,13 @@ export default function TabPosizione({ onVaiA }) {
                 <Td muted>{ETICHETTE_TIPO_CONTO[c.tipo] || c.tipo}</Td>
                 <Td num><Importo v={c.tipo === 'carta_credito' && c.saldo != null ? -c.saldo : c.saldo} /></Td>
                 <Td muted>
-                  {formatData(c.data_ultimo_saldo)}
-                  {c.ha_import ? '' : ' (manuale)'}
+                  {c.carta_stato ? (
+                    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                      estratto {formatData(c.data_ultimo_saldo)} di {formatEuro(c.carta_importo_estratto)}
+                      {c.carta_stato === 'addebitato' && <Badge tono="ok">addebitato il {formatData(c.carta_data_addebito)}</Badge>}
+                      {c.carta_stato === 'da_addebitare' && <Badge tono="warn">da addebitare</Badge>}
+                    </span>
+                  ) : <>{formatData(c.data_ultimo_saldo)}{c.ha_import ? '' : ' (manuale)'}</>}
                 </Td>
                 <Td num>{c.fido ? formatEuro(c.fido) : '—'}</Td>
                 <Td>
@@ -95,8 +100,8 @@ export default function TabPosizione({ onVaiA }) {
           </tbody>
         </Table>
         <p className="ui-text-muted" style={{ marginTop: 8 }}>
-          Banche: ultimo saldo dell'estratto conto più i movimenti successivi. Carte di credito: speso non
-          ancora addebitato (in negativo). Contanti: Corrispettivi → Cassa. Il fido conta fino al giorno di
+          Banche: ultimo saldo dell'estratto conto più i movimenti successivi. Carte di credito: totale
+          dell'ultimo estratto finché la banca non lo addebita (in negativo), poi zero. Contanti: Corrispettivi → Cassa. Il fido conta fino al giorno di
           scadenza compreso.
         </p>
       </Card>

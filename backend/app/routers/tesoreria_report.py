@@ -6,7 +6,7 @@ Collegamento con Corrispettivi: i contanti in cassa sono la "Cassa reale" di gru
 
 import json
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -22,8 +22,8 @@ from app.models.tesoreria import (
 from app.routers.corrispettivi_cassa import riepilogo_cassa
 from app.routers.tesoreria_shared import euro, id_ripiego, puo_modificare, puo_vedere
 from app.services.tesoreria_report import (
-    CHIAVE_SOGLIE, SOGLIE_DEFAULT, ZERO, aggrega, anno_prima, giorno_prima, mesi_tra, stato_fido,
-    ultimo_giorno_mese, valida_soglie,
+    CHIAVE_SOGLIE, FINESTRA_ADDEBITO_CARTA, SOGLIE_DEFAULT, ZERO, aggrega, anno_prima, giorno_prima, mesi_tra, stato_fido,
+    stato_carta, ultimo_giorno_mese, valida_soglie,
 )
 from app.services.tesoreria_saldi import saldo_a_data, verifica_saldi
 from app.utils.locale_it import MESI_IT, formatta_data_it, formatta_euro_it
@@ -107,6 +107,17 @@ def _contanti(db: Session, giorno: date) -> dict:
 
 # ── Posizione attuale ───────────────────────────────────────────────────────────
 
+def _addebiti_candidati(db: Session, chiusura: date, importo: Decimal) -> list:
+    """Uscite bancarie dell'importo dell'estratto della carta, nei giorni successivi alla chiusura."""
+    if not importo:
+        return []
+    return db.query(TesoreriaMovimento.data_contabile, TesoreriaMovimento.importo, TesoreriaMovimento.descrizione) \
+        .join(TesoreriaConto, TesoreriaConto.id == TesoreriaMovimento.conto_id) \
+        .filter(TesoreriaConto.tipo.in_(TIPI_BANCA), TesoreriaMovimento.importo == -importo,
+                TesoreriaMovimento.data_contabile > chiusura,
+                TesoreriaMovimento.data_contabile <= chiusura + timedelta(days=FINESTRA_ADDEBITO_CARTA)).all()
+
+
 @router.get("/posizione")
 def posizione(giorno: Optional[date] = None, db: Session = Depends(get_db), _=Depends(puo_vedere)):
     giorno = giorno or date.today()
@@ -127,10 +138,17 @@ def posizione(giorno: Optional[date] = None, db: Session = Depends(get_db), _=De
     for c in conti:
         noti = {d: s for d, s in saldi[c.id].items() if d <= giorno}
         ultimo_noto = max(noti) if noti else None
+        carta = None
         if c.tipo in TIPI_BANCA:
             saldo = saldo_a_data(giorno, saldi[c.id], movimenti[c.id])
         else:
             saldo = noti[ultimo_noto] if ultimo_noto else None
+        if c.tipo == "carta_credito" and ultimo_noto is not None:
+            # Saldo inserito = totale dell'ultimo estratto alla data di chiusura: torna a zero quando
+            # la banca lo addebita (stesso importo, dopo la chiusura)
+            carta = stato_carta(ultimo_noto, saldo, _addebiti_candidati(db, ultimo_noto, saldo),
+                                c.testo_addebito, giorno)
+            saldo = carta["saldo"]
         fido = stato_fido(c.fido, c.fido_scadenza, giorno, soglie["giorni_preavviso_fido"])
 
         if saldo is not None:
@@ -171,7 +189,17 @@ def posizione(giorno: Optional[date] = None, db: Session = Depends(get_db), _=De
             if ultimo_noto is None:
                 avvisi.append({"livello": "arancione", "tipo": "saldo_manuale", "conto_id": c.id,
                                "messaggio": f"{c.nome}: nessun saldo inserito"})
-            elif (giorno - ultimo_noto).days > soglie["giorni_saldo_carta"]:
+            elif carta and (giorno - ultimo_noto).days > soglie["giorni_saldo_carta"]:
+                if carta["stato"] == "da_addebitare":
+                    messaggio = (f"{c.nome}: l'estratto chiuso il {formatta_data_it(ultimo_noto)} "
+                                 f"({formatta_euro_it(noti[ultimo_noto])}) non risulta ancora addebitato in banca: "
+                                 "caricare l'estratto conto o verificare l'importo")
+                else:
+                    messaggio = (f"{c.nome}: ultimo estratto inserito chiuso il {formatta_data_it(ultimo_noto)}: "
+                                 "inserire il totale dell'estratto successivo")
+                avvisi.append({"livello": "arancione", "tipo": "saldo_manuale", "conto_id": c.id,
+                               "messaggio": messaggio})
+            elif not carta and (giorno - ultimo_noto).days > soglie["giorni_saldo_carta"]:
                 avvisi.append({"livello": "arancione", "tipo": "saldo_manuale", "conto_id": c.id,
                                "messaggio": f"{c.nome}: saldo fermo al {formatta_data_it(ultimo_noto)} "
                                             f"({(giorno - ultimo_noto).days} giorni fa)"})
@@ -190,6 +218,9 @@ def posizione(giorno: Optional[date] = None, db: Session = Depends(get_db), _=De
             "ha_import": c.ha_import, "fido": euro(c.fido),
             "fido_scadenza": c.fido_scadenza.isoformat() if c.fido_scadenza else None,
             "fido_conteggiato": fido["conteggiato"], "fido_giorni_alla_scadenza": fido["giorni_alla_scadenza"],
+            "carta_stato": carta["stato"] if carta else None,
+            "carta_importo_estratto": euro(noti[ultimo_noto]) if carta else None,
+            "carta_data_addebito": carta["data_addebito"].isoformat() if carta and carta["data_addebito"] else None,
         })
 
     cassa = _contanti(db, giorno)

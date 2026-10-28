@@ -71,3 +71,37 @@ def test_formatta_euro_it():
     assert formatta_euro_it(D("-1478.89")) == "-1.478,89 €"
     assert formatta_euro_it(D("130000")) == "130.000,00 €"
     assert formatta_euro_it(None) is None
+
+
+# ── Carte di credito ────────────────────────────────────────────────────────────
+
+from app.services.tesoreria_report import stato_carta  # noqa: E402
+
+CHIUSURA = date(2026, 10, 6)
+ADDEBITO_AMEX = (date(2026, 10, 27), D("-3042.39"), "SDD Core - Richiesta Incasso SEPA 01M4 AMERICAN EXPRESS ITALIA")
+
+
+def test_carta_da_addebitare_prima_del_pagamento():
+    s = stato_carta(CHIUSURA, D("3042.39"), [ADDEBITO_AMEX], "AMERICAN EXPRESS", date(2026, 10, 20))
+    assert (s["saldo"], s["stato"]) == (D("3042.39"), "da_addebitare")
+
+
+def test_carta_addebitata_torna_a_zero():
+    s = stato_carta(CHIUSURA, D("3042.39"), [ADDEBITO_AMEX], "american express", date(2026, 10, 28))
+    assert (s["saldo"], s["stato"], s["data_addebito"]) == (D("0.00"), "addebitato", date(2026, 10, 27))
+
+
+@pytest.mark.parametrize("candidato, testo", [
+    ((date(2026, 10, 27), D("-3042.38"), ADDEBITO_AMEX[2]), "AMERICAN EXPRESS"),     # importo diverso
+    ((date(2026, 10, 5), D("-3042.39"), ADDEBITO_AMEX[2]), "AMERICAN EXPRESS"),      # prima della chiusura
+    ((date(2026, 12, 1), D("-3042.39"), ADDEBITO_AMEX[2]), "AMERICAN EXPRESS"),      # oltre i 45 giorni
+    ((date(2026, 10, 27), D("-3042.39"), "Carta del Credito Cooperativo"), "AMERICAN EXPRESS"),  # altra carta
+])
+def test_carta_addebito_non_riconosciuto(candidato, testo):
+    s = stato_carta(CHIUSURA, D("3042.39"), [candidato], testo, date(2026, 12, 31))
+    assert s["stato"] == "da_addebitare"
+
+
+def test_carta_senza_testo_abbina_solo_importo_e_estratto_a_zero():
+    assert stato_carta(CHIUSURA, D("3042.39"), [ADDEBITO_AMEX], None, date(2026, 10, 28))["stato"] == "addebitato"
+    assert stato_carta(CHIUSURA, D("0"), [], "X", date(2026, 10, 28))["stato"] == "nessun_debito"

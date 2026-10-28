@@ -39,6 +39,8 @@ class TesoreriaConto(Base):
     fido          = Column(Numeric(14, 2), nullable=False, default=0, server_default="0")
     fido_scadenza = Column(Date, nullable=True)                         # NULL = sempre conteggiato
     ha_import     = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Carte di credito: testo dell'addebito nell'estratto conto bancario (riconosce il pagamento)
+    testo_addebito = Column(String(100), nullable=True)
     colore        = Column(String(7), nullable=True)
     ordine        = Column(Integer, nullable=False, default=0, server_default="0")
     attivo        = Column(Boolean, nullable=False, default=True, server_default="true")

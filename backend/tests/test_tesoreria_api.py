@@ -108,10 +108,11 @@ def pulisci_e_semina(test_engine):
             VALUES ('tesoreria', 'admin', true, true, true), ('tesoreria', 'viewer', false, false, false)
         """))
         conn.execute(text("""
-            INSERT INTO tesoreria_conti (codice, nome, tipo, iban, fido, fido_scadenza, ha_import, ordine) VALUES
-            ('PRINC', 'Conto principale', 'conto', :p, 0, NULL, true, 1),
-            ('POS', 'Conto POS', 'conto', :pos, 130000, '2027-09-30', true, 2),
-            ('AMEX', 'American Express', 'carta_credito', NULL, 0, NULL, false, 3)
+            INSERT INTO tesoreria_conti (codice, nome, tipo, iban, fido, fido_scadenza, ha_import, ordine,
+                                         testo_addebito) VALUES
+            ('PRINC', 'Conto principale', 'conto', :p, 0, NULL, true, 1, NULL),
+            ('POS', 'Conto POS', 'conto', :pos, 130000, '2027-09-30', true, 2, NULL),
+            ('AMEX', 'American Express', 'carta_credito', NULL, 0, NULL, false, 3, 'AMERICAN EXPRESS')
         """), {"p": IBAN_PRINCIPALE, "pos": IBAN_POS})
         for ordine, (codice, nome, tipo, escludi, colore) in enumerate(MIGRAZIONE.CATEGORIE, start=1):
             conn.execute(text(
@@ -563,3 +564,34 @@ def test_consuntivo_periodo_e_conto_non_validi(client):
     assert r.status_code == 400
     assert client.get("/tesoreria/consuntivo", params={"data_da": "2026-03-01", "data_a": "2026-03-31",
                                                        "conto_id": 3}).status_code == 404
+
+
+def test_posizione_carta_torna_a_zero_dopo_addebito(client, test_engine):
+    """Si inserisce solo il totale dell'estratto alla chiusura: la carta torna a zero quando la banca
+    addebita lo stesso importo."""
+    _importa(client)
+    client.post("/tesoreria/saldi", json={"conto_id": 3, "data": "2026-02-28", "saldo": "1200.00"})
+    with test_engine.begin() as conn:   # addebito AMEX finto sul conto principale il 04/03
+        conn.execute(text("""
+            INSERT INTO tesoreria_movimenti (conto_id, data_contabile, importo, descrizione, impronta, categoria_manuale,
+                                             straordinario)
+            VALUES (1, '2026-03-04', -1200.00, 'SDD Core - Richiesta Incasso SEPA 01M4 AMERICAN EXPRESS ITALIA',
+                    'R:test-amex', false, false)
+        """))
+    prima = _posizione(client, "2026-03-03")
+    amex = next(c for c in prima["conti"] if c["codice"] == "AMEX")
+    assert prima["carte_da_addebitare"] == -1200.0
+    assert (amex["carta_stato"], amex["carta_importo_estratto"]) == ("da_addebitare", 1200.0)
+    dopo = _posizione(client, "2026-03-06")
+    amex = next(c for c in dopo["conti"] if c["codice"] == "AMEX")
+    assert dopo["carte_da_addebitare"] == 0.0
+    assert (amex["carta_stato"], amex["carta_data_addebito"], amex["saldo"]) == ("addebitato", "2026-03-04", 0.0)
+    # 40 giorni dopo la chiusura: promemoria per l'estratto successivo
+    avviso = next(a for a in _posizione(client, "2026-04-09")["avvisi"] if a["conto_id"] == 3)
+    assert "estratto successivo" in avviso["messaggio"]
+
+
+def test_posizione_carta_addebito_mancante(client):
+    client.post("/tesoreria/saldi", json={"conto_id": 3, "data": "2026-02-28", "saldo": "1200.00"})
+    avviso = next(a for a in _posizione(client, "2026-04-09")["avvisi"] if a["conto_id"] == 3)
+    assert "non risulta ancora addebitato" in avviso["messaggio"] and "1.200,00 €" in avviso["messaggio"]
