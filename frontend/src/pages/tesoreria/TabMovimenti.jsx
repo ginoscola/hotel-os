@@ -185,7 +185,8 @@ export default function TabMovimenti({ conti, categorie, permessi, filtroInizial
                 <tr>
                   <ThOrdinabile campo="data_contabile" ordinaPer={ordine.per} direzione={ordine.direzione} onOrdina={ordina}>Data</ThOrdinabile>
                   <Th>Conto</Th>
-                  <ThOrdinabile campo="controparte" ordinaPer={ordine.per} direzione={ordine.direzione} onOrdina={ordina}>Controparte / descrizione</ThOrdinabile>
+                  <ThOrdinabile campo="controparte" ordinaPer={ordine.per} direzione={ordine.direzione} onOrdina={ordina}>Controparte</ThOrdinabile>
+                  <ThOrdinabile campo="descrizione" ordinaPer={ordine.per} direzione={ordine.direzione} onOrdina={ordina}>Descrizione</ThOrdinabile>
                   <ThOrdinabile campo="importo" num ordinaPer={ordine.per} direzione={ordine.direzione} onOrdina={ordina}>Importo</ThOrdinabile>
                   <Th>Categoria</Th>
                   <Th></Th>
@@ -196,8 +197,8 @@ export default function TabMovimenti({ conti, categorie, permessi, filtroInizial
                   <tr key={m.id} className={m.categoria_manuale ? 'ui-riga-modificata' : undefined}>
                     <Td style={{ whiteSpace: 'nowrap' }}>{formatData(m.data_contabile)}</Td>
                     <Td muted>{conti.find(c => c.id === m.conto_id)?.codice}</Td>
-                    <Td style={{ maxWidth: 480 }}>
-                      {m.controparte && <b>{m.controparte}</b>}
+                    <Td style={{ maxWidth: 220 }}>{m.controparte || <span className="ui-text-muted">—</span>}</Td>
+                    <Td style={{ maxWidth: 420 }}>
                       <div className="ui-text-muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         title={m.descrizione}>{m.descrizione}</div>
                       {(m.note || m.straordinario) && (
