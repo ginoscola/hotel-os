@@ -2495,6 +2495,11 @@ Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
   operativi"; con "tutti i conti" giroconti sempre esclusi; saldi inizio/fine = saldi reali banca;
   rate del mutuo restano uscite operative.
 
+- **28/10/2026 — PDF carte (BCC, AMEX, prepagata)**: niente import in Fase 1 (saldo manuale). Import
+  futuro con lettori deterministici `pdfplumber` (uno per layout) + controllo di quadratura sui
+  totali dell'estratto, **mai un passaggio AI/Claude** (dati riservati, risultato non deterministico,
+  costo). Da collocare in Fase 3 (uscite certe con data di addebito) o come funzione a sé dopo.
+
 ### Punti aperti da chiarire con l'utente
 - Visibilità: la specifica propone `viewer` senza accesso e tutti gli endpoint `richiedi_admin` —
   confermare nella strategia della Fase 1.
