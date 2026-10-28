@@ -8,6 +8,9 @@ import AdminUiKit from './admin/AdminUiKit.jsx'
 import AdminUsaliCategorieKpi from './admin/AdminUsaliCategorieKpi.jsx'
 import AdminBudgetPrevisione from './admin/AdminBudgetPrevisione.jsx'
 import AdminUsaliFnb from './admin/AdminUsaliFnb.jsx'
+import {
+  AdminTesoreriaCategorie, AdminTesoreriaConti, AdminTesoreriaRegole, AdminTesoreriaSoglie,
+} from './admin/AdminTesoreria.jsx'
 import api from '../api/client.js'
 import {
   Badge, Button, Card, Checkbox, Field, Input, KpiTile, Loading, Messaggio, PageHeader, SegmentedControl, Select,
@@ -77,6 +80,15 @@ const SEZIONI = [
     voci: [
       { id: 'prod-categorie', label: 'Categorie' },
       { id: 'prod-mapping',   label: 'Mapping dettagli' },
+    ],
+  },
+  {
+    gruppo: 'Tesoreria',
+    voci: [
+      { id: 'tes-conti',     label: 'Conti e fidi' },
+      { id: 'tes-categorie', label: 'Categorie' },
+      { id: 'tes-regole',    label: 'Regole di classificazione' },
+      { id: 'tes-soglie',    label: 'Soglie avvisi' },
     ],
   },
   {
@@ -205,6 +217,10 @@ function Contenuto({ sezione }) {
   if (sezione === 'usali-fnb')             return <AdminUsaliFnb />
   if (sezione === 'prod-categorie')       return <ProdCategorie />
   if (sezione === 'prod-mapping')         return <ProdMappingDettagli />
+  if (sezione === 'tes-conti')            return <AdminTesoreriaConti />
+  if (sezione === 'tes-categorie')        return <AdminTesoreriaCategorie />
+  if (sezione === 'tes-regole')           return <AdminTesoreriaRegole />
+  if (sezione === 'tes-soglie')           return <AdminTesoreriaSoglie />
   if (sezione === 'sistema-debug')        return <SistemaDebug />
   if (sezione === 'backup')               return <AdminBackup />
   if (sezione === 'ui-kit')               return <AdminUiKit />

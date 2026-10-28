@@ -100,7 +100,7 @@ Credenziali default: admin / admin2024.
 - `api/client.js`: allega Bearer, gestisce 401 → redirect `/login?sessione_scaduta=1`
 
 ## Architettura modulare
-Moduli: `revenue` (/dashboard/gruppo), `produzione` (/statistiche-produzione — Statistiche Produzione, vedi sezione dedicata), `budget` (/budget), `usali` (/usali — Conto Economico, Movimenti Attivi, CE contabile, Food & Beverage, vedi sezioni dedicate), `dipendenti` (/dipendenti), `corrispettivi` (/corrispettivi), `forecast` (/forecast).
+Moduli: `revenue` (/dashboard/gruppo), `produzione` (/statistiche-produzione — Statistiche Produzione, vedi sezione dedicata), `budget` (/budget), `usali` (/usali — Conto Economico, Movimenti Attivi, CE contabile, Food & Beverage, vedi sezioni dedicate), `dipendenti` (/dipendenti), `corrispettivi` (/corrispettivi), `forecast` (/forecast), `tesoreria` (/tesoreria — flusso di cassa, vedi sezione Modulo Tesoreria; endpoint con permessi per modulo di `app/permessi.py`).
 Tabelle: `modules` (code PK, name, icon, route, ordine, attivo, colore), `module_permissions` (module_code, ruolo, puo_vedere, puo_modificare, puo_importare).
 NavBar L1: tab moduli da `GET /modules/`; L2: sotto-nav del modulo attivo.
 Permessi: al login → `localStorage['moduli_permessi']`; ProtectedRoute verifica `puo_vedere`.
@@ -156,6 +156,7 @@ inesistente e non aveva mai funzionato.
 **USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura), `usali-fnb` (reparti cedolini → punto vendita della scheda Food & Beverage)
 **Budget**: `budget-previsione` (AdminBudgetPrevisione — correttivi e parametri della proiezione fine stagione)
 **Statistiche Produzione**: `prod-categorie` (ProdCategorie), `prod-mapping` (ProdMappingDettagli — mapping testo Welcome→categoria)
+**Tesoreria**: `tes-conti`, `tes-categorie`, `tes-regole`, `tes-soglie` (tutti in `pages/admin/AdminTesoreria.jsx`)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
 Dati test: flag `is_test`; `GET|DELETE /admin/test-stats|test-data`, `GET|DELETE /dipendenti/admin/test-stats|test-data`.
 
@@ -2407,7 +2408,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 ### Stato delle fasi
 | Fase | Contenuto | Stato |
 |---|---|---|
-| 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ⏳ in corso — ✅ blocchi A, B, C (28/10/2026); prossimo: blocco D, frontend + attivazione modulo + 4.0.0 (serve ok) |
+| 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ⬜ non iniziata |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
@@ -2618,6 +2619,32 @@ da env `TESORERIA_DIR`, `regole_attive()`, `categoria_automatica()`, `ricalcola_
   Da verificare con l'utente: tassa di soggiorno 2025 solo 7.490 € (2026: 39.944 €) e compensi
   marchio 2026 a zero (2025: 44.247 €) — regole o tempi di pagamento?
 
+### Blocco D — fatto (28/10/2026, v4.0.0)
+- `pages/Tesoreria.jsx` (tab in `localStorage('tesoreria_tab')`): **Posizione** (`TabPosizione`:
+  avvisi come `Messaggio` rosso/arancione/info, KPI, dettaglio per conto, selettore "situazione al";
+  link "vedi" dai movimenti da classificare → tab Movimenti filtrata), **Consuntivo**
+  (`TabConsuntivo`: periodo con scorciatoie Mese precedente / **Da inizio anno = default** / Anno
+  precedente, conto in `localStorage('tesoreria_consuntivo_conto')`, KPI con confronto anno prima,
+  grafico mensile barre + anno precedente `STILE_CONFRONTO` stesso colore, tabella operative →
+  subtotale → non operative, clic categoria → `Drawer` movimenti; avvisi se quadratura non torna o
+  anno precedente parziale), **Movimenti** (`TabMovimenti`: ricerca con debounce 400ms, filtri,
+  `ThOrdinabile`, categoria modificabile in riga → manuale con `ui-riga-modificata`, modale
+  Dettagli con note/straordinario/"Torna alla categoria automatica"/"Crea regola"), **Import e
+  saldi** (`TabImport`: `DropZone` .xml → modale anteprima → conferma, storico con Scarica/Elimina,
+  saldi manuali di carte/prepagate).
+- Nessun `pastReferenceArea` nel grafico del consuntivo: è tutto passato (servirà alla previsione).
+- `pages/tesoreria/helpers.jsx`: `permessiTesoreria()` (admin = tutto, altrimenti
+  `moduli_permessi` del login), `isoLocale()`/`oggiISO()` (mai `toISOString`), `Importo`,
+  `BadgeCategoria`, `useAnagrafiche()`, `SelectCategoria`, **`ModaleRegola`** (condiviso con Admin:
+  prova sui movimenti reali + salva con ricalcolo).
+- Admin gruppo "Tesoreria" (`pages/admin/AdminTesoreria.jsx`): conti (righe con bozza + Salva,
+  ambra se non salvate), categorie (colore swatch + hex), regole (cerca, attiva/disattiva con
+  ricalcolo, modifica, elimina, "Ricalcola tutti i movimenti"), soglie.
+- NavBar: prefisso `/tesoreria` in `rilevaModuloAttivo()`, `tesoreria` tra i moduli senza subnav.
+- Migrazione `tes002_2026`: `modules.attivo = true` (permessi invariati: viewer niente).
+- Nessun componente nuovo in `components/ui` (Libreria UI invariata).
+- ⚠️ Dopo il deploy serve il riavvio del backend (endpoint nuovi) e `npm run build` (fatto).
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
@@ -2688,6 +2715,9 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **28/10/2026 (4)** — blocco C fatto (posizione, consuntivo, soglie), prova sui dati reali con
   quadratura ok. Prossimo: blocco D (frontend `Tesoreria.jsx`, Admin, attivazione modulo, 4.0.0) —
   serve l'ok dell'utente.
+- **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
+  Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
+  (scadenzario Passcom) — serve l'ok dell'utente.
 
 ---
 

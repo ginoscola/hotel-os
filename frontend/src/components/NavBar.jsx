@@ -25,7 +25,7 @@ function getSubnav(modulo, hotels, isAdmin) {
   // Moduli completi ma senza una subnav propria da mostrare qui: hanno già le loro tab interne
   // (es. Forecast, Corrispettivi, Dipendenti, Statistiche Produzione), non serve/non è più corretto
   // il banner "in sviluppo" sotto la NavBar.
-  if (['forecast', 'dipendenti', 'corrispettivi', 'produzione'].includes(modulo.code)) {
+  if (['forecast', 'dipendenti', 'corrispettivi', 'produzione', 'tesoreria'].includes(modulo.code)) {
     return []
   }
 
@@ -44,6 +44,7 @@ function rilevaModuloAttivo(pathname) {
   if (pathname.startsWith('/dipendenti')) return 'dipendenti'
   if (pathname.startsWith('/corrispettivi')) return 'corrispettivi'
   if (pathname.startsWith('/forecast')) return 'forecast'
+  if (pathname.startsWith('/tesoreria')) return 'tesoreria'
   return 'revenue'  // default: /dashboard/*, /import, /admin
 }
 
