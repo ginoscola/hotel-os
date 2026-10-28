@@ -129,8 +129,9 @@ class TesoreriaMovimento(Base):
     data_contabile    = Column(Date, nullable=False)
     data_valuta       = Column(Date, nullable=True)
     importo           = Column(Numeric(14, 2), nullable=False)          # negativo = uscita
-    descrizione       = Column(Text, nullable=False)
-    controparte       = Column(String(200), nullable=True)
+    descrizione       = Column(Text, nullable=False)                    # testo completo della banca
+    controparte       = Column(String(200), nullable=True)              # solo il nome
+    causale           = Column(Text, nullable=True)                     # solo la causale
     causale_abi       = Column(String(10), nullable=True)               # es. '48//00'
     riferimento_banca = Column(String(50), nullable=True)               # AcctSvcrRef
     impronta          = Column(String(80), nullable=False)

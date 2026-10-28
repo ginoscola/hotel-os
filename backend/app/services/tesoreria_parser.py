@@ -39,8 +39,9 @@ class MovimentoBanca:
     data_contabile: date
     data_valuta: Optional[date]
     importo: Decimal                    # negativo = uscita
-    descrizione: str
-    controparte: str
+    descrizione: str                    # testo completo della banca (AddtlTxInf): regole e ricerca
+    controparte: str                    # solo il nome del titolare dell'altro conto ('' se non c'è)
+    causale: str                        # solo la causale / descrizione breve
     causale_abi: Optional[str]
     riferimento: Optional[str]          # AcctSvcrRef
     impronta: str                       # chiave antiduplicato per conto
@@ -135,6 +136,103 @@ def estrai_controparte(descrizione: str, importo: Decimal) -> str:
     return controparte[:LUNGHEZZA_CONTROPARTE]
 
 
+# ── Controparte e causale separate ─────────────────────────────────────────────
+# Il testo completo (AddtlTxInf) ha per molti movimenti delle voci con etichetta ("Nominativo
+# beneficiario: …", "Causale: …", "Ragione sociale ordinante: …"); il campo nome della banca
+# (`RltdPties/*/Nm`, spazi conservati) è a colonne fisse per bonifici in uscita, SDD e Ri.Ba.
+# Verificato sugli estratti 2025–2026 (6.733 movimenti): 3.076 con etichette, 1.380 a colonne fisse,
+# ~2.270 senza controparte (POS, commissioni, F24, bolli…), 10 bonifici istantanei con nome e causale
+# attaccati (resta un'approssimazione).
+
+ETICHETTE = (
+    "Nominativo beneficiario", "Codice causale", "Codice Fiscale/Partita Iva ordinante", "Conto ordinante",
+    "Data contabile", "Data inserimento", "Data valuta", "Dati esito", "Importo", "Iban beneficiario",
+    "Tipo pagamento", "Intestazione ordinante", "Causale", "Esito", "Visto", "Indirizzo ordinante",
+    "Localita ordinante", "Ragione sociale ordinante", "Descrizione aggiuntiva del movimento",
+    "Descrizione estesa del movimento", "ID_BONIFICO", "Data ordine", "Codice Riferimento Operazione",
+    "Indica se trattasi di bonifico per detrazione fiscale", "Indica se trattasi di bonifico instant o ordinario",
+    "Info aggiuntive",
+)
+_RE_ETICHETTA = re.compile(
+    r"(?:^|(?<=\s))(" + "|".join(re.escape(e) for e in sorted(ETICHETTE, key=len, reverse=True)) + r"):\s?"
+)
+LUNGHEZZA_CAUSALE = 300
+NOME_BONIFICO = 24          # bonifici in uscita: nome a 24 caratteri, poi la causale
+CODICI_NOME_FISSO = ("26//11", "26//10", "39//11", "34//00")   # bonifici in uscita, giroconti
+CODICI_SDD = ("31//22", "31//21")
+CODICE_RIBA = "31//48"
+CODICI_SENZA_CONTROPARTE = ("45//15", "45//91", "45//92", "68//00")   # carte, ricariche, storni della banca
+PREFISSI_BONIFICO = ("26/", "34/", "39/", "48/")   # codici ABI dei bonifici (uscita, giroconti, stipendi, entrata)
+_RE_ESTERO = re.compile(r"(?:ORD|BEN)\.:\s*(.+?)(?:\s{2,}(.*))?$")
+_RE_PREFISSI_ENTRATA = re.compile(r"^(?:\*|\d{4}-\d{2}-\d{2}\*|INST \d{1,2}:\d{2}\s)+")
+
+
+def _piatto(testo: Optional[str]) -> str:
+    return re.sub(r"\s+", " ", testo or "").strip()
+
+
+def campi_etichettati(descrizione: str) -> dict:
+    """{etichetta: valore} delle voci 'Etichetta: valore' del testo della banca (prima occorrenza)."""
+    trovate = list(_RE_ETICHETTA.finditer(descrizione or ""))
+    campi = {}
+    for i, m in enumerate(trovate):
+        fine = trovate[i + 1].start() if i + 1 < len(trovate) else len(descrizione)
+        campi.setdefault(m.group(1), _piatto(descrizione[m.end():fine]))
+    return campi
+
+
+def _causale_entrata(testo: str, controparte: str) -> str:
+    """'*2025-01-08*ROSSI MARIO Caparra camera 12' → 'Caparra camera 12' (prefissi e nome tolti)."""
+    testo = _RE_PREFISSI_ENTRATA.sub("", _piatto(testo)).strip()
+    if controparte and testo.upper().startswith(controparte.upper()):
+        testo = testo[len(controparte):].strip()
+    return testo
+
+
+def controparte_e_causale(descrizione: str, nome_banca: Optional[str], causale_abi: Optional[str],
+                          importo: Decimal) -> tuple:
+    """(controparte, causale) separate. `nome_banca` = campo nome della banca con gli spazi originali."""
+    campi = campi_etichettati(descrizione)
+    nome = nome_banca or ""
+    corpo = nome[1:] if nome.startswith("*") else nome
+    testa = _piatto(re.split(r"\sInfo aggiuntive:", descrizione or "")[0])
+    controparte, causale = None, None
+
+    if campi.get("Nominativo beneficiario"):                       # bonifico in uscita con etichette
+        controparte = campi["Nominativo beneficiario"]
+        causale = campi.get("Causale") or _piatto(re.split(r"ID\.BON:", corpo[NOME_BONIFICO:])[0])
+    elif importo > 0 and campi.get("Ragione sociale ordinante"):  # entrata
+        controparte = campi["Ragione sociale ordinante"]
+        origine = (campi.get("Descrizione aggiuntiva del movimento")
+                   or campi.get("Descrizione estesa del movimento") or corpo)
+        causale = _causale_entrata(origine, controparte)
+    elif causale_abi in CODICI_SENZA_CONTROPARTE:
+        controparte, causale = "", testa
+    elif _RE_ISTANTANEO.match(_piatto(corpo)):                     # nome e causale attaccati
+        controparte, causale = _RE_ISTANTANEO.match(_piatto(corpo)).group(1), ""
+    elif _RE_ESTERO.search(corpo):                                  # bonifici esteri '@ OP. … BEN.: NOME  causale'
+        m = _RE_ESTERO.search(corpo)
+        controparte, causale = m.group(1), m.group(2) or ""
+    elif causale_abi in CODICI_NOME_FISSO and nome.startswith("*") and not corpo.startswith("BONIFICI DEL"):
+        controparte = corpo[:NOME_BONIFICO]
+        causale = re.split(r"ID\.BON:", corpo[NOME_BONIFICO:])[0]
+    elif causale_abi in CODICI_SDD and nome:
+        # [documento 36][creditore 31][riferimento]; senza documento: [creditore 31][riferimento]
+        if len(nome.rstrip()) > 67:
+            controparte, causale = nome[36:67], f"SDD {_piatto(nome[:36])}"
+        else:
+            controparte, causale = nome[:31], f"SDD {_piatto(nome[31:])}"
+    elif causale_abi == CODICE_RIBA and nome:
+        controparte, causale = nome[31:55], f"Ri.Ba. scadenza {nome[22:30].strip()}".strip()
+
+    if controparte is None:
+        # ripiego sul testo solo per i bonifici; mutuo, interessi, imposte, spese: nessuna controparte
+        controparte = estrai_controparte(descrizione, importo) if (causale_abi or "")[:3] in PREFISSI_BONIFICO else ""
+    if causale is None:
+        causale = testa
+    return _piatto(controparte)[:LUNGHEZZA_CONTROPARTE], _piatto(causale)[:LUNGHEZZA_CAUSALE]
+
+
 def impronta_movimento(riferimento: Optional[str], data_contabile: date, data_valuta: Optional[date],
                        importo: Decimal, descrizione: str, occorrenza: int) -> str:
     """Chiave antiduplicato: il riferimento della banca se presente, altrimenti un hash dei dati
@@ -212,6 +310,9 @@ def parse_estratto_cbi(contenuto: bytes) -> RisultatoEstratto:
             data_valuta = _data(_testo(e, "{*}ValDt/{*}Dt"))
             descrizione = re.sub(r"\s+", " ", _testo(e, ".//{*}AddtlTxInf") or "").strip()
             riferimento = _testo(e, "{*}AcctSvcrRef") or None
+            causale_abi = _testo(e, "{*}BkTxCd/{*}Prtry/{*}Cd")
+            nome_banca = next((n.text for n in e.findall(".//{*}RltdPties/*/{*}Nm") if n.text), None)
+            controparte, causale = controparte_e_causale(descrizione, nome_banca, causale_abi, importo)
             chiave = (data_contabile, data_valuta, importo, normalizza(descrizione))
             occorrenza = occorrenze[chiave]
             occorrenze[chiave] += 1
@@ -220,8 +321,9 @@ def parse_estratto_cbi(contenuto: bytes) -> RisultatoEstratto:
                 data_valuta=data_valuta,
                 importo=importo,
                 descrizione=descrizione,
-                controparte=estrai_controparte(descrizione, importo),
-                causale_abi=_testo(e, "{*}BkTxCd/{*}Prtry/{*}Cd"),
+                controparte=controparte,
+                causale=causale,
+                causale_abi=causale_abi,
                 riferimento=riferimento,
                 impronta=impronta_movimento(riferimento, data_contabile, data_valuta, importo,
                                             descrizione, occorrenza),

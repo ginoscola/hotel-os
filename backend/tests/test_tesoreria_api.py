@@ -632,3 +632,20 @@ def test_export_consuntivo(client):
     pdf = client.get("/tesoreria/consuntivo/export",
                      params={"data_da": "2026-03-01", "data_a": "2026-03-31", "formato": "pdf"})
     assert pdf.content[:4] == b"%PDF"
+
+
+def test_riprocessa_dai_file_originali(client, test_engine):
+    """Controparte e causale si ricalcolano dai file XML conservati; categorie manuali invariate."""
+    _importa(client)
+    mutuo = _movimenti(client, q="1478")["righe"][0]
+    client.put(f"/tesoreria/movimenti/{mutuo['id']}", json={"categoria_id": _id_categoria(client, "banca")})
+    with test_engine.begin() as conn:
+        conn.execute(text("UPDATE tesoreria_movimenti SET controparte = 'VECCHIO', causale = NULL"))
+    r = client.post("/tesoreria/import/riprocessa")
+    assert r.status_code == 200, r.text
+    esito = r.json()
+    assert (esito["n_movimenti"], esito["n_riletti"], esito["n_aggiornati"], esito["n_senza_file"]) == (7, 7, 7, 0)
+    righe = {m["importo"]: m for m in _movimenti(client)["righe"]}
+    assert righe[500.0]["controparte"] == "MARIO ROSSI"
+    assert righe[-1478.89]["controparte"] is None and righe[-1478.89]["causale"].startswith("Addebito rata mutuo")
+    assert righe[-1478.89]["categoria_codice"] == "banca"          # manuale: non toccata

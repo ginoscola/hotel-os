@@ -4,13 +4,16 @@ import { useCallback, useEffect, useState } from 'react'
 import api from '../../api/client.js'
 import { getPermessiModuli } from '../../components/ProtectedRoute.jsx'
 import { colors } from '../../styles/tokens.js'
-import { formatEuro, mostraErrore } from '../../utils/format.js'
+import { formatData, formatEuro, mostraErrore } from '../../utils/format.js'
 import { isAdmin } from '../../utils/auth.js'
 import {
   Badge, Button, Field, Input, Messaggio, Modal, Select, Table, Td, Textarea, Th, useAvvisi,
 } from '../../components/ui'
 
 export const MODULO = 'tesoreria'
+
+/** Causale del movimento (solo la descrizione breve); testo completo della banca se non disponibile. */
+export const causaleDi = m => (m.causale ?? m.descrizione) || '—'
 
 /** Query string dei parametri non vuoti (per gli URL di export). */
 export function queryString(params) {
@@ -190,12 +193,13 @@ export function ModaleRegola({ iniziale, categorie, onChiudi, onSalvata }) {
           </Messaggio>
           {prova.esempi.length > 0 && (
             <Table compact maxHeight="30vh">
-              <thead><tr><Th>Data</Th><Th>Descrizione</Th><Th num>Importo</Th><Th>Categoria attuale</Th></tr></thead>
+              <thead><tr><Th>Data</Th><Th>Controparte</Th><Th>Descrizione</Th><Th num>Importo</Th><Th>Categoria attuale</Th></tr></thead>
               <tbody>
                 {prova.esempi.map(m => (
                   <tr key={m.id}>
-                    <Td>{m.data_contabile.split('-').reverse().join('/')}</Td>
-                    <Td style={{ maxWidth: 360 }}>{m.descrizione}</Td>
+                    <Td>{formatData(m.data_contabile)}</Td>
+                    <Td>{m.controparte || '—'}</Td>
+                    <Td style={{ maxWidth: 300 }} title={m.descrizione}>{causaleDi(m)}</Td>
                     <Td num><Importo v={m.importo} /></Td>
                     <Td><BadgeCategoria nome={m.categoria_nome} colore={m.categoria_colore} manuale={m.categoria_manuale} /></Td>
                   </tr>

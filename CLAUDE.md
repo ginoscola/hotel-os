@@ -2645,6 +2645,30 @@ da env `TESORERIA_DIR`, `regole_attive()`, `categoria_automatica()`, `ricalcola_
 - Nessun componente nuovo in `components/ui` (Libreria UI invariata).
 - ⚠️ Dopo il deploy serve il riavvio del backend (endpoint nuovi) e `npm run build` (fatto).
 
+### Controparte e causale separate (28/10/2026, v4.3.0)
+Richiesta dell'utente: in Movimenti "Controparte" = solo il titolare dell'altro conto, "Descrizione" =
+solo la causale. Prima la controparte veniva dalla prima riga del testo, dove la banca incolla il nome
+(troncato a 24 caratteri) alla causale ("BAGNI PEPPO SNC DI DELLAsaldo FT 10").
+- `controparte_e_causale(descrizione, nome_banca, causale_abi, importo)` in `tesoreria_parser.py`:
+  voci con etichetta del testo (`campi_etichettati()`: "Nominativo beneficiario"/"Causale" per i
+  bonifici in uscita, "Ragione sociale ordinante"/"Descrizione aggiuntiva del movimento" per le
+  entrate) e campo nome della banca `RltdPties/*/Nm` **con gli spazi originali**, a colonne fisse:
+  bonifici in uscita/giroconti/stipendi (`26//11 26//10 39//11 34//00`) nome nei primi 24 caratteri;
+  SDD (`31//22 31//21`) [documento 36][creditore 31][riferimento] o, senza documento,
+  [creditore 31][riferimento]; Ri.Ba. (`31//48`) [riferimento 22][scadenza 9][creditore 24][indirizzo];
+  esteri "ORD.:/BEN.: nome  causale"; istantanei "BEN nome+causale" attaccati (resta tutto in
+  controparte). Carte, ricariche, storni della banca e ogni codice non di bonifico: nessuna controparte,
+  causale = testo prima di "Info aggiuntive". Sul 2025–2026: 4.456 con nome, 2.277 senza, 3 imprecisi
+  (ITALCAMEL, senza ragione sociale nel file).
+- Colonna `tesoreria_movimenti.causale` (`tes004_2026`). `descrizione` resta il testo completo: regole,
+  ricerca (cerca anche nella causale), "Testo completo della banca" in Dettagli e nell'export xlsx/csv.
+- `riprocessa_movimenti()` + `POST /tesoreria/import/riprocessa` (pulsante "Rileggi i file originali"
+  in Import e saldi): rilegge i file XML conservati, aggiorna controparte/causale per conto + impronta,
+  poi `ricalcola_categorie()`. Usarlo quando si migliora la lettura dei testi: niente reimport.
+  Eseguito sul DB reale il 28/10/2026: 6.693 aggiornati, **0 categorie cambiate** (verificato anche
+  prima, confrontando le categorie dell'import con il nuovo parser con quelle del DB reale).
+- Frontend: `causaleDi(m)` in `helpers.jsx` (causale, se manca il testo completo).
+
 ### Export Movimenti e Consuntivo (28/10/2026, v4.2.0)
 `GET /tesoreria/movimenti/export` (stessi filtri e ordinamento dell'elenco, tutte le righe, max 50.000;
 nel pdf descrizioni troncate a 90 caratteri) e `GET /tesoreria/consuntivo/export` (chiama

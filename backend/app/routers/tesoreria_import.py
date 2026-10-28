@@ -28,7 +28,7 @@ from app.models.revenue import User
 from app.models.tesoreria import TesoreriaConto, TesoreriaImport, TesoreriaMovimento, TesoreriaSaldo
 from app.routers.tesoreria_shared import (
     categoria_automatica, euro, id_ripiego, mappa_categorie, nome_sicuro, puo_importare, puo_vedere,
-    regole_attive, storage_dir,
+    regole_attive, ricalcola_categorie, storage_dir,
 )
 from app.services.tesoreria_parser import ErroreImportTesoreria, parse_estratto_cbi
 from app.services.tesoreria_saldi import verifica_saldi
@@ -221,7 +221,7 @@ def conferma_import(
             {
                 "conto_id": conto.id, "import_id": imp.id,
                 "data_contabile": m.data_contabile, "data_valuta": m.data_valuta, "importo": m.importo,
-                "descrizione": m.descrizione, "controparte": (m.controparte or None),
+                "descrizione": m.descrizione, "controparte": (m.controparte or None), "causale": (m.causale or None),
                 "causale_abi": m.causale_abi, "riferimento_banca": m.riferimento, "impronta": m.impronta,
                 "categoria_id": categoria_automatica(m.descrizione, m.controparte, m.importo, regole, ripiego),
             }
@@ -321,3 +321,43 @@ def elimina_import(
     if percorso:
         Path(percorso).unlink(missing_ok=True)
     return {"import_id": import_id, "movimenti_eliminati": n_mov, "saldi_eliminati": n_saldi}
+
+
+def riprocessa_movimenti(db: Session) -> dict:
+    """Rilegge i file XML originali di tutti gli import e aggiorna controparte e causale dei movimenti
+    già presenti (abbinati per conto + impronta), poi riapplica le regole ai movimenti non corretti a
+    mano. Non fa commit. Serve quando migliora la lettura dei testi della banca: niente reimport."""
+    aggiornati, letti, file_mancanti = 0, set(), []
+    per_conto = defaultdict(dict)                     # conto_id → {impronta: (controparte, causale)}
+    for imp in db.query(TesoreriaImport).order_by(TesoreriaImport.id):
+        if not imp.percorso or not Path(imp.percorso).exists():
+            file_mancanti.append(imp.nome_file)
+            continue
+        risultato = parse_estratto_cbi(Path(imp.percorso).read_bytes())
+        for m in risultato.movimenti:
+            per_conto[imp.conto_id][m.impronta] = (m.controparte or None, m.causale or None)
+    for conto_id, valori in per_conto.items():
+        for mov in db.query(TesoreriaMovimento).filter(TesoreriaMovimento.conto_id == conto_id):
+            nuovi = valori.get(mov.impronta)
+            if nuovi is None:
+                continue
+            letti.add(mov.id)
+            if (mov.controparte, mov.causale) != nuovi:
+                mov.controparte, mov.causale = nuovi
+                aggiornati += 1
+    db.flush()
+    n_totale = db.query(func.count(TesoreriaMovimento.id)).scalar()
+    return {"n_movimenti": n_totale, "n_riletti": len(letti), "n_aggiornati": aggiornati,
+            "n_senza_file": n_totale - len(letti), "file_mancanti": file_mancanti,
+            "ricalcolo": ricalcola_categorie(db)}
+
+
+@router.post("/import/riprocessa")
+def riprocessa(db: Session = Depends(get_db), _=Depends(puo_importare)):
+    try:
+        esito = riprocessa_movimenti(db)
+    except ErroreImportTesoreria as e:
+        db.rollback()
+        raise HTTPException(400, f"Un file originale non si legge più: {e}")
+    db.commit()
+    return esito

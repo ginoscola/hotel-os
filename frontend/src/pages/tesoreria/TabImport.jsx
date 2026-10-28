@@ -202,6 +202,20 @@ export default function TabImport({ conti, permessi, onCambio }) {
   }, [avvisi])
   useEffect(() => { carica() }, [carica])
 
+  async function rileggi() {
+    if (!(await conferma({
+      titolo: 'Rileggere i file originali?',
+      messaggio: 'Controparte e descrizione di tutti i movimenti vengono ricalcolate dai file XML già ' +
+        'caricati, poi si riapplicano le regole. Le categorie corrette a mano non cambiano.',
+    }))) return
+    try {
+      const r = (await api.post('/tesoreria/import/riprocessa', null, { timeout: TIMEOUT_IMPORT })).data
+      avvisi.successo(`Riletti ${r.n_riletti} movimenti: ${r.n_aggiornati} aggiornati, ` +
+        `${r.ricalcolo.n_cambiati} con categoria cambiata`)
+      onCambio()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
   async function elimina(i) {
     if (!(await conferma({
       titolo: `Eliminare l'import di «${i.nome_file}»?`,
@@ -226,7 +240,9 @@ export default function TabImport({ conti, permessi, onCambio }) {
         </Card>
       )}
 
-      <Card title="Import caricati">
+      <Card title="Import caricati" actions={permessi.puo_importare && storico?.length > 0 && (
+        <Button size="sm" variant="secondary" onClick={rileggi}>Rileggi i file originali</Button>
+      )}>
         {!storico ? <Loading /> : storico.length === 0 ? <StatoVuoto>Nessun import.</StatoVuoto> : (
           <Table compact maxHeight="50vh">
             <thead>

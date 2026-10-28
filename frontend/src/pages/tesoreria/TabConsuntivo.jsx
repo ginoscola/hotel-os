@@ -11,7 +11,7 @@ import { formatData, formatEuro, formatEuroIntero, mostraErrore } from '../../ut
 import {
   Button, Card, Checkbox, Drawer, Field, Input, KpiTile, Loading, Messaggio, Paginazione, Select, StatoVuoto, Table, Td, Th,
 } from '../../components/ui'
-import { BadgeCategoria, Importo, isoLocale, oggiISO, queryString } from './helpers.jsx'
+import { BadgeCategoria, Importo, causaleDi, isoLocale, oggiISO, queryString } from './helpers.jsx'
 
 const LS_CONTO = 'tesoreria_consuntivo_conto'
 const LS_AP_COLONNE = 'tesoreria_consuntivo_ap_colonne'
@@ -57,7 +57,7 @@ function DrawerMovimenti({ riga, filtri, onChiudi }) {
               {dati.righe.map(m => (
                 <tr key={m.id} className={m.categoria_manuale ? 'ui-riga-modificata' : undefined}>
                   <Td style={{ whiteSpace: 'nowrap' }}>{formatData(m.data_contabile)}</Td>
-                  <Td>{m.controparte ? <b>{m.controparte}</b> : null}<div className="ui-text-muted">{m.descrizione}</div></Td>
+                  <Td title={m.descrizione}>{m.controparte ? <b>{m.controparte}</b> : null}<div className="ui-text-muted">{causaleDi(m)}</div></Td>
                   <Td num><Importo v={m.importo} /></Td>
                 </tr>
               ))}

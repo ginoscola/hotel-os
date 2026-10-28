@@ -89,6 +89,7 @@ def movimento_json(m: TesoreriaMovimento, categorie: dict) -> dict:
         "importo": euro(m.importo),
         "descrizione": m.descrizione,
         "controparte": m.controparte,
+        "causale": m.causale,
         "causale_abi": m.causale_abi,
         "categoria_id": m.categoria_id,
         "categoria_codice": cat.codice if cat else None,

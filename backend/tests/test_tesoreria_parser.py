@@ -169,3 +169,63 @@ def test_rifiuta_movimenti_non_contabilizzati():
     xml = _leggi("estratto_principale.xml").replace(b"<ns5:Sts>BOOK</ns5:Sts>", b"<ns5:Sts>PDNG</ns5:Sts>", 1)
     with pytest.raises(ErroreImportTesoreria, match="non contabilizzato"):
         parse_estratto_cbi(xml)
+
+
+# ── Controparte e causale separate (formati reali, nomi inventati) ─────────────
+
+from app.services.tesoreria_parser import campi_etichettati, controparte_e_causale  # noqa: E402
+
+USCITA_ETICHETTE = (
+    "Bonifico tramite Internet Banking *BAGNI ALFA SNC DI ROSSI Msaldo FT 10 ID.BON:0899500000000000000000000000IT "
+    "Info aggiuntive: Codice Riferimento Operazione: 0899500000000000000000000000IT Iban beneficiario: "
+    "IT00X0000000000000000333333 Nominativo beneficiario: BAGNI ALFA SNC DI ROSSI MARIO E LUIGI Codice causale: 26 "
+    "Data contabile: 17/09/2026 Dati esito: La disposizione e' Eseguita. Causale: saldo FT 10 Esito: Eseguita "
+    "Importo: -5117.90 Intestazione ordinante: KM DI MARE SRL"
+)
+
+
+@pytest.mark.parametrize("descrizione, nome, abi, importo, atteso", [
+    # bonifico in uscita con etichette: nome completo (non troncato a 24) e causale
+    (USCITA_ETICHETTE, "*BAGNI ALFA SNC DI ROSSI Msaldo FT 10              ID.BON:0899500000000000000000000000IT",
+     "26//11", "-5117.90", ("BAGNI ALFA SNC DI ROSSI MARIO E LUIGI", "saldo FT 10")),
+    # bonifico in uscita senza etichette: nome a 24 caratteri (spazi conservati) + causale
+    ("Bonifico tramite Internet Banking *Comune di Esempio Canone pubblicita 2025",
+     "*Comune di Esempio       Canone pubblicita 2025", "26//11", "-366", ("Comune di Esempio", "Canone pubblicita 2025")),
+    ("Bonifico tramite Internet Banking *ASSOCIAZIONE ALBERGATORIQUOTA ASSOCIATIVA 2027",
+     "*ASSOCIAZIONE ALBERGATORIQUOTA ASSOCIATIVA 2027", "26//11", "-150",
+     ("ASSOCIAZIONE ALBERGATORI", "QUOTA ASSOCIATIVA 2027")),
+    ("Giro conto *KM DI MARE SRL GIROCONTO", "*KM DI MARE SRL          GIROCONTO", "34//00", "-1000",
+     ("KM DI MARE SRL", "GIROCONTO")),
+    # entrata: ragione sociale e descrizione aggiuntiva senza prefissi né nome
+    ("Bonifico a vs favore *ROSSI MARIO Caparra camera 12 Info aggiuntive: Data ordine: 26/10/2026 "
+     "Ragione sociale ordinante: ROSSI MARIO Indirizzo ordinante: VIA FINTA 1 ID_BONIFICO: 0000IT "
+     "Descrizione aggiuntiva del movimento: *2026-10-26*ROSSI MARIO Caparra camera 12",
+     "*ROSSI MARIO Caparra camera 12", "48//00", "300", ("ROSSI MARIO", "Caparra camera 12")),
+    # SDD con documento: [documento 36][creditore 31][riferimento]
+    ("SDD Core - Richiesta Incasso SEPA REF-0001 FORNITORE BETA SPA X1",
+     "REF-0001" + " " * 28 + "FORNITORE BETA SPA" + " " * 13 + "X1", "31//22", "-489.27",
+     ("FORNITORE BETA SPA", "SDD REF-0001")),
+    # SDD senza documento: [creditore 31][riferimento]
+    ("SDD B2B - Richiesta Incasso SEPA TELEFONIA SPA MU0001", "TELEFONIA SPA" + " " * 18 + "MU0001",
+     "31//21", "-80", ("TELEFONIA SPA", "SDD MU0001")),
+    # Ri.Ba.: [riferimento 22][scadenza 9][creditore 24][indirizzo]
+    ("Addebito RIBA CBI attivo 07090/2026A0000000000 30/09/26 GAMMA S.R.L. VIA ROMA 1 Car. avviso : 30/09/26",
+     "07090/2026A0000000000 30/09/26 GAMMA S.R.L.            VIA ROMA 1             Car. avviso : 30/09/26",
+     "31//48", "-1200", ("GAMMA S.R.L.", "Ri.Ba. scadenza 30/09/26")),
+    # bonifico istantaneo: nome e causale attaccati, resta tutto in controparte
+    ("Disposizione per emolumenti intern *INSTANT DEL 23/10/2026 ORE 12:16 ID. 0000IT BEN ANNA BIANCHI",
+     "*INSTANT DEL 23/10/2026 ORE 12:16 ID. 0000IT BEN ANNA BIANCHI", "39//11", "-629.07", ("ANNA BIANCHI", "")),
+    # scritture della banca: nessuna controparte, la causale è il testo
+    ("Addebito rata mutuo *000/000000/003 Scad.:20/10/2026 Cap.: 937,95", "*000/000000/003 Scad.:20/10/2026",
+     "15//10", "-1478.89", ("", "Addebito rata mutuo *000/000000/003 Scad.:20/10/2026 Cap.: 937,95")),
+    ("Carta del Credito Cooperativo ******606 CARTA MOVIMENTO", "******606   CARTA MOVIMENTO", "45//15", "-271.62",
+     ("", "Carta del Credito Cooperativo ******606 CARTA MOVIMENTO")),
+])
+def test_controparte_e_causale(descrizione, nome, abi, importo, atteso):
+    assert controparte_e_causale(descrizione, nome, abi, Decimal(importo)) == atteso
+
+
+def test_campi_etichettati_non_confonde_causale_e_codice_causale():
+    campi = campi_etichettati(USCITA_ETICHETTE)
+    assert campi["Codice causale"] == "26"
+    assert campi["Causale"] == "saldo FT 10"

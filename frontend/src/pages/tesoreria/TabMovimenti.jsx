@@ -8,7 +8,7 @@ import {
   Button, Checkbox, Field, Input, Loading, Messaggio, Modal, Paginazione, Select, StatoVuoto, Table, Td, Textarea, Th,
   ThOrdinabile, useAvvisi,
 } from '../../components/ui'
-import { BadgeCategoria, Importo, ModaleRegola, SelectCategoria, queryString } from './helpers.jsx'
+import { BadgeCategoria, Importo, ModaleRegola, SelectCategoria, causaleDi, queryString } from './helpers.jsx'
 
 const PER_PAGINA = 50
 
@@ -48,10 +48,12 @@ function ModaleMovimento({ movimento, conti, puoModificare, onChiudi, onSalvato,
       {riga('Data valuta', formatData(movimento.data_valuta))}
       {riga('Importo', <Importo v={movimento.importo} forte />)}
       {riga('Controparte', movimento.controparte || '—')}
+      {riga('Descrizione', causaleDi(movimento))}
       {riga('Causale ABI', movimento.causale_abi || '—')}
       {riga('Categoria', <BadgeCategoria nome={movimento.categoria_nome} colore={movimento.categoria_colore}
         manuale={movimento.categoria_manuale} />)}
-      <div style={{ margin: '8px 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} className="ui-text-muted">
+      <div className="ui-text-muted" style={{ marginTop: 8 }}>Testo completo della banca</div>
+      <div style={{ margin: '2px 0 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} className="ui-text-muted">
         {movimento.descrizione}
       </div>
       {puoModificare && (
@@ -199,8 +201,8 @@ export default function TabMovimenti({ conti, categorie, permessi, filtroInizial
                     <Td muted>{conti.find(c => c.id === m.conto_id)?.codice}</Td>
                     <Td style={{ maxWidth: 220 }}>{m.controparte || <span className="ui-text-muted">—</span>}</Td>
                     <Td style={{ maxWidth: 420 }}>
-                      <div className="ui-text-muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        title={m.descrizione}>{m.descrizione}</div>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={m.descrizione}>{causaleDi(m)}</div>
                       {(m.note || m.straordinario) && (
                         <div className="ui-text-muted">{m.straordinario ? '★ straordinario ' : ''}{m.note || ''}</div>
                       )}

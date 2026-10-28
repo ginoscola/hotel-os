@@ -27,13 +27,13 @@ _COLONNE_ORDINABILI = {
     "data_valuta": TesoreriaMovimento.data_valuta,
     "importo": TesoreriaMovimento.importo,
     "controparte": TesoreriaMovimento.controparte,
-    "descrizione": TesoreriaMovimento.descrizione,
+    "descrizione": func.coalesce(TesoreriaMovimento.causale, TesoreriaMovimento.descrizione),
 }
 PAROLE_PROPOSTA = 3
 MAX_RIGHE_EXPORT = 50000
 LUNGHEZZA_DESCRIZIONE_PDF = 200   # nel pdf il testo va a capo: oltre, righe troppo alte
 # pdf orizzontale: pesi delle colonne (stesso ordine delle intestazioni), importo allineato a destra
-LARGHEZZE_PDF = [7, 7, 9, 16, 34, 8, 12, 5, 5, 10]
+LARGHEZZE_PDF = [7, 7, 9, 20, 30, 8, 12, 5, 5, 10]
 COLONNE_NUMERICHE_PDF = (5,)   # parole iniziali della descrizione proposte come regola se manca la controparte
 
 
@@ -68,6 +68,7 @@ def filtra_movimenti(q, conto_id: Optional[int] = None, data_da: Optional[date] 
         q = q.filter(or_(
             TesoreriaMovimento.descrizione.ilike(like),
             TesoreriaMovimento.controparte.ilike(like),
+            TesoreriaMovimento.causale.ilike(like),
             TesoreriaMovimento.note.ilike(like),
             cast(TesoreriaMovimento.importo, String).ilike(like),
         ))
@@ -137,18 +138,22 @@ def export_movimenti(
     categorie = mappa_categorie(db)
     conti = {c.id: c.nome for c in db.query(TesoreriaConto)}
 
-    def descrizione(m):
-        if formato == "pdf" and len(m.descrizione) > LUNGHEZZA_DESCRIZIONE_PDF:
-            return m.descrizione[:LUNGHEZZA_DESCRIZIONE_PDF] + "…"
-        return m.descrizione
+    def causale(m):
+        testo = m.causale if m.causale is not None else m.descrizione
+        if formato == "pdf" and len(testo) > LUNGHEZZA_DESCRIZIONE_PDF:
+            return testo[:LUNGHEZZA_DESCRIZIONE_PDF] + "…"
+        return testo
 
+    # Il testo completo della banca solo in xlsx/csv (nel pdf non sta in pagina)
+    completo = formato != "pdf"
     intestazioni = ["Data contabile", "Data valuta", "Conto", "Controparte", "Descrizione", "Importo",
-                    "Categoria", "Corretta a mano", "Straordinario", "Note"]
+                    "Categoria", "Corretta a mano", "Straordinario", "Note"] + (["Testo completo banca"] if completo else [])
     dati = [
         [cella_data(m.data_contabile), cella_data(m.data_valuta), conti.get(m.conto_id, ""),
-         m.controparte or "", descrizione(m), cella_importo(m.importo, formato),
+         m.controparte or "", causale(m), cella_importo(m.importo, formato),
          categorie[m.categoria_id].nome if m.categoria_id in categorie else "Da classificare",
          "sì" if m.categoria_manuale else "", "sì" if m.straordinario else "", m.note or ""]
+        + ([m.descrizione] if completo else [])
         for m in righe
     ]
     periodo = f" dal {cella_data(data_da)}" if data_da else ""
