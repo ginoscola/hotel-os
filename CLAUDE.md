@@ -2851,6 +2851,15 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **28/10/2026 (4)** — blocco C fatto (posizione, consuntivo, soglie), prova sui dati reali con
   quadratura ok. Prossimo: blocco D (frontend `Tesoreria.jsx`, Admin, attivazione modulo, 4.0.0) —
   serve l'ok dell'utente.
+- **28/10/2026 (7, fine giornata)** — dopo la Fase 1, su richiesta dell'utente: v4.1.1 link "vedi" dei
+  movimenti da classificare; v4.1.2 anno precedente affiancato nel grafico del consuntivo; v4.2.0–4.2.2
+  export xlsx/csv/pdf di Movimenti e Consuntivo (pdf orizzontale) e colonne Controparte/Descrizione
+  separate; v4.3.0 controparte e causale dai dati strutturati della banca (6.693 movimenti rielaborati,
+  0 categorie cambiate); v4.4.0–4.4.2 scheda KPI (indici 1, 2, 3, 6, 8, 10) con tassa di soggiorno per
+  trimestre. Annotate le indicazioni per Fase 2 (GoProfit resta operativo, HotelOS controlla con la banca,
+  fonte Passcom) e Fase 3 (IVA trimestrale, fonti di stima per imposta). Dati reali caricati: XML
+  2025–2026 dei due conti; saldi carte/prepagata da inserire dall'utente. **Prossimo passo**: uso del
+  modulo da parte dell'utente; la Fase 2 parte solo con il suo ok (presentare prima la strategia).
 - **28/10/2026 (6)** — v4.1.0: carte di credito azzerate in automatico all'addebito in banca (l'utente
   inserisce solo il totale di ogni estratto). XML 2025–2026 dei conti già caricati dall'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
