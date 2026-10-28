@@ -150,3 +150,56 @@ def stato_carta(chiusura: date, importo_estratto: Decimal, candidati: list, test
                 and (not testo or testo in (descrizione or "").upper())):
             return {"saldo": ZERO, "stato": "addebitato", "data_addebito": data_mov}
     return {"saldo": importo_estratto, "stato": "da_addebitare", "data_addebito": None}
+
+
+# ── KPI ─────────────────────────────────────────────────────────────────────────
+
+def serie_saldi(saldi_per_conto: list, da: date, a: date) -> dict:
+    """{giorno: saldo totale} dal `da` all'`a` sommando i conti; ogni conto ha i saldi a fine giornata
+    dei giorni con movimenti ({data: Decimal}) e tiene il valore fino al saldo noto successivo.
+    Prima del primo saldo noto un conto vale 0 se è nato a zero (es. conto POS aperto ad aprile 2025),
+    altrimenti il giorno è None (dato mancante)."""
+    stati = []
+    for saldi in saldi_per_conto:
+        date_note = sorted(saldi)
+        stati.append({"date": date_note, "saldi": saldi, "i": 0, "corrente": None})
+    serie = {}
+    giorno = da
+    while giorno <= a:
+        totale, mancante = ZERO, False
+        for st in stati:
+            while st["i"] < len(st["date"]) and st["date"][st["i"]] <= giorno:
+                st["corrente"] = st["saldi"][st["date"][st["i"]]]
+                st["i"] += 1
+            if st["corrente"] is not None:
+                totale += st["corrente"]
+            elif st["date"] and st["saldi"][st["date"][0]] == 0:
+                continue
+            elif st["date"]:
+                mancante = True
+        serie[giorno] = None if mancante else totale
+        giorno += timedelta(days=1)
+    return serie
+
+
+def minimo_serie(serie: dict) -> Optional[tuple]:
+    """(giorno, saldo) del saldo più basso; a parità il primo giorno. None se non ci sono dati."""
+    validi = [(g, v) for g, v in sorted(serie.items()) if v is not None]
+    return min(validi, key=lambda x: x[1]) if validi else None
+
+
+def inverno_di_riferimento(oggi: date) -> tuple:
+    """Ultimo periodo senza stagione completo (1 ottobre – 30 aprile) prima di `oggi`."""
+    anno_fine = oggi.year if oggi >= date(oggi.year, 5, 1) else oggi.year - 1
+    return date(anno_fine - 1, 10, 1), date(anno_fine, 4, 30)
+
+
+def mesi_di_autonomia(liquidita: Decimal, netti_mensili: list) -> Optional[dict]:
+    """Per quanti mesi la liquidità copre il consumo medio di cassa dei mesi senza stagione
+    (media dei netti operativi mensili, negativi = consumo). None se in quei mesi la cassa non cala."""
+    if not netti_mensili:
+        return None
+    consumo = -sum(netti_mensili, ZERO) / len(netti_mensili)
+    if consumo <= 0:
+        return None
+    return {"consumo_mensile": consumo, "mesi": liquidita / consumo if liquidita > 0 else ZERO}

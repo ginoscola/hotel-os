@@ -649,3 +649,22 @@ def test_riprocessa_dai_file_originali(client, test_engine):
     assert righe[500.0]["controparte"] == "MARIO ROSSI"
     assert righe[-1478.89]["controparte"] is None and righe[-1478.89]["causale"].startswith("Addebito rata mutuo")
     assert righe[-1478.89]["categoria_codice"] == "banca"          # manuale: non toccata
+
+
+def test_kpi(client):
+    _importa(client)
+    _importa(client, POS, "pos.xml")
+    r = client.get("/tesoreria/kpi", params={"anno": 2026})
+    assert r.status_code == 200, r.text
+    k = r.json()
+    giorni = {p["data"]: p["saldo"] for p in k["andamento"]}
+    assert giorni["2026-03-02"] == 9299.5 - 1300.0 and giorni["2026-03-04"] == 10820.61 - 138.2
+    assert giorni["2026-01-01"] is None                       # prima dei dati: mancante, non zero
+    assert k["minimo"]["anno"] == {"data": "2026-03-02", "saldo": 7999.5}
+    pos = next(f for f in k["fido"] if f["nome"] == "Conto POS")
+    assert pos["anno"]["saldo_minimo"] == -1300.0 and pos["anno"]["utilizzo_pct"] == 1.0
+    assert pos["anno"]["giorni_sotto_zero"] >= 3
+    nomi = [p["nome"] for p in k["peso_uscite"]]
+    assert "Incassi POS/online" not in nomi and nomi[0] == "Mutuo – rate e spese"
+    assert k["costo_incassi"]["anno"]["incassi_pos"] == 2361.8    # al netto dello storno
+    assert k["tassa_soggiorno"]["disponibile"] is False

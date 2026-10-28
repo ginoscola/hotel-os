@@ -2645,6 +2645,39 @@ da env `TESORERIA_DIR`, `regole_attive()`, `categoria_automatica()`, `ricalcola_
 - Nessun componente nuovo in `components/ui` (Libreria UI invariata).
 - ⚠️ Dopo il deploy serve il riavvio del backend (endpoint nuovi) e `npm run build` (fatto).
 
+### Scheda KPI (28/10/2026, v4.4.0)
+Indici scelti dall'utente tra quelli proposti: 1, 2, 3, 6, 8, 10 (tutti calcolabili in Fase 1).
+`GET /tesoreria/kpi?anno=` (`routers/tesoreria_kpi.py`, tab "KPI" → `TabKpi.jsx`, `NavAnno`, default anno
+corrente); calcoli puri in `services/tesoreria_report.py` (`serie_saldi`, `minimo_serie`,
+`inverno_di_riferimento`, `mesi_di_autonomia`).
+1. **Andamento del saldo**: somma dei conti correnti a fine giornata dal 1/1 a oggi (o 31/12), anno vs anno
+   prima (stesso giorno; 29/02 saltato). Saldo tenuto fino al saldo noto successivo; prima del primo
+   saldo un conto vale 0 se è nato a zero (POS aperto il 14/04/2025), altrimenti il giorno è mancante.
+2. **Punto più basso** (anno, anno prima stesso periodo, anno prima intero) e **uso del fido** per conto con
+   fido: saldo minimo, giorni sotto zero, utilizzo massimo in € e % del fido.
+3. **Mesi di autonomia** = liquidità netta di oggi (`posizione()`) / consumo medio mensile = −media del
+   netto operativo mensile dell'ultimo inverno completo (1/10–30/4, `consuntivo()`); data di esaurimento
+   stimata. Stima dallo storico: in Fase 3 la sostituisce il saldo previsto mese per mese.
+6. **Costo degli incassi**: commissioni POS (codici ABI `16//60` PagoBancomat, `16//63` circuiti
+   internazionali) / incassi POS netti (categoria `incassi_pos`); costi bancari (categoria `banca`) /
+   entrate operative. Anno vs stesso periodo anno prima.
+8. **Peso delle uscite sugli incassi**: uscite di ogni categoria operativa di tipo uscita/neutra (non le
+   categorie di entrata, che hanno solo storni) / entrate operative, anno vs anno prima, Δ in punti.
+10. **Tassa di soggiorno**: incassata per mese = `report_totali(con_ts=True) − report_totali(con_ts=False)`
+   di Corrispettivi (stessa logica della tab Totali), versata = categoria `tassa_soggiorno` per mese del
+   bonifico; "da versare" progressivo. ⚠️ Correzione a una lettura precedente: il versamento del
+   15/10/2026 (30.030,50 €, causali troncate dalla banca a "IMPOSTA DI SOGGIORNO LUGL") copre
+   **luglio–settembre** (incassati 30.673,50 €): il Comune si paga a trimestre (aprile–giugno a luglio,
+   luglio–settembre a ottobre). Al 28/10/2026 restano ~834 € di differenza, non agosto e settembre.
+   Corrispettivi solo dall'aprile 2026: per il 2025 la sezione è vuota.
+Dati reali 2026 al 28/10: minimo −26.105 € il 30/04/2026 (2025: +17.313 € il 22/04); fido POS usato fino
+al 30% (39.574 €, 53 giorni sotto zero; 2025: 0,6%); autonomia 5,2 mesi (consumo inverno 25/26
+72.651 €/mese); commissioni POS 0,98% (2025: 0,94%); affitti 25,4% delle entrate (2025: 19,7%).
+**KPI rimandati alle loro fasi** (proposti, non ancora scelti): debito verso i fornitori e tempi medi di
+pagamento → Fase 2; cassa libera (saldo − impegni a 90 giorni) e debito residuo del mutuo → Fase 3;
+caparre già incassate per la stagione successiva e precisione delle previsioni → Fase 4. Non scelti per
+ora: uso del fido come indice a sé, incassi per canale, incassato vs fatturato, primi 10 fornitori.
+
 ### Controparte e causale separate (28/10/2026, v4.3.0)
 Richiesta dell'utente: in Movimenti "Controparte" = solo il titolare dell'altro conto, "Descrizione" =
 solo la causale. Prima la controparte veniva dalla prima riga del testo, dove la banca incolla il nome
@@ -2744,6 +2777,8 @@ esistenti, mai query duplicate sulle loro tabelle.
   `_contanti()` in `routers/tesoreria_report.py` (posizione attuale). Usa `saldo_corrente`,
   `mesi[-1].mese`, `saldo_iniziale.data`: se cambiano nome o significato, aggiornare `_contanti()`.
 - **Moduli/permessi**: `app/permessi.py` (condiviso con `lista_moduli()`).
+- **Corrispettivi → tassa di soggiorno incassata**: `report_totali()` di `routers/corrispettivi_report.py`
+  (chiamato due volte, con e senza tassa) in `_tassa_incassata_per_mese()` di `routers/tesoreria_kpi.py`.
 - **Corrispettivi → export**: `_risposta_tabella()` di `routers/corrispettivi_documenti.py` (xlsx/csv/pdf
   da intestazioni + righe) usata dagli export di Movimenti e Consuntivo.
 

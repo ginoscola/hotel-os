@@ -105,3 +105,37 @@ def test_carta_addebito_non_riconosciuto(candidato, testo):
 def test_carta_senza_testo_abbina_solo_importo_e_estratto_a_zero():
     assert stato_carta(CHIUSURA, D("3042.39"), [ADDEBITO_AMEX], None, date(2026, 10, 28))["stato"] == "addebitato"
     assert stato_carta(CHIUSURA, D("0"), [], "X", date(2026, 10, 28))["stato"] == "nessun_debito"
+
+
+# ── KPI ─────────────────────────────────────────────────────────────────────────
+
+from app.services.tesoreria_report import (  # noqa: E402
+    inverno_di_riferimento, mesi_di_autonomia, minimo_serie, serie_saldi,
+)
+
+
+def test_serie_saldi_tiene_il_valore_e_somma_i_conti():
+    principale = {date(2026, 3, 1): D("1000"), date(2026, 3, 3): D("800")}
+    pos_nato_a_zero = {date(2026, 3, 2): D("0"), date(2026, 3, 3): D("-300")}
+    s = serie_saldi([principale, pos_nato_a_zero], date(2026, 3, 1), date(2026, 3, 4))
+    assert s == {date(2026, 3, 1): D("1000"), date(2026, 3, 2): D("1000"),
+                 date(2026, 3, 3): D("500"), date(2026, 3, 4): D("500")}
+
+
+def test_serie_saldi_dato_mancante_prima_del_primo_saldo():
+    s = serie_saldi([{date(2026, 3, 2): D("1000")}], date(2026, 3, 1), date(2026, 3, 2))
+    assert s == {date(2026, 3, 1): None, date(2026, 3, 2): D("1000")}
+    assert minimo_serie(s) == (date(2026, 3, 2), D("1000"))
+    assert minimo_serie({date(2026, 3, 1): None}) is None
+
+
+def test_inverno_di_riferimento():
+    assert inverno_di_riferimento(date(2026, 10, 28)) == (date(2025, 10, 1), date(2026, 4, 30))
+    assert inverno_di_riferimento(date(2026, 3, 15)) == (date(2024, 10, 1), date(2025, 4, 30))
+
+
+def test_mesi_di_autonomia():
+    a = mesi_di_autonomia(D("300000"), [D("-80000"), D("-40000"), D("0")])
+    assert (a["consumo_mensile"], a["mesi"]) == (D("40000"), D("7.5"))
+    assert mesi_di_autonomia(D("100"), [D("500")]) is None        # in inverno la cassa cresce
+    assert mesi_di_autonomia(D("100"), []) is None
