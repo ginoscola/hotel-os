@@ -31,7 +31,10 @@ _COLONNE_ORDINABILI = {
 }
 PAROLE_PROPOSTA = 3
 MAX_RIGHE_EXPORT = 50000
-LUNGHEZZA_DESCRIZIONE_PDF = 90   # il pdf è A4 verticale: descrizioni lunghe troncate   # parole iniziali della descrizione proposte come regola se manca la controparte
+LUNGHEZZA_DESCRIZIONE_PDF = 200   # nel pdf il testo va a capo: oltre, righe troppo alte
+# pdf orizzontale: pesi delle colonne (stesso ordine delle intestazioni), importo allineato a destra
+LARGHEZZE_PDF = [7, 7, 9, 16, 34, 8, 12, 5, 5, 10]
+COLONNE_NUMERICHE_PDF = (5,)   # parole iniziali della descrizione proposte come regola se manca la controparte
 
 
 def filtra_movimenti(q, conto_id: Optional[int] = None, data_da: Optional[date] = None,
@@ -151,7 +154,7 @@ def export_movimenti(
     periodo = f" dal {cella_data(data_da)}" if data_da else ""
     periodo += f" al {cella_data(data_a)}" if data_a else ""
     return _risposta_tabella(formato, "tesoreria_movimenti", f"Tesoreria — movimenti{periodo}",
-                             intestazioni, dati)
+                             intestazioni, dati, LARGHEZZE_PDF, COLONNE_NUMERICHE_PDF)
 
 
 @router.put("/movimenti/{movimento_id}")

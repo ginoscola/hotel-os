@@ -425,4 +425,4 @@ def export_consuntivo(data_da: date, data_a: date, conto_id: Optional[int] = Non
     conto = c["conti"][0]["nome"] if conto_id and c["conti"] else "tutti i conti"
     titolo = f"Tesoreria — consuntivo dal {cella_data(data_da)} al {cella_data(data_a)} ({conto})"
     return _risposta_tabella(formato, f"tesoreria_consuntivo_{data_da.isoformat()}_{data_a.isoformat()}",
-                             titolo, intestazioni, righe)
+                             titolo, intestazioni, righe, [30, 9, 12, 12, 12, 13, 12], (1, 2, 3, 4, 5, 6))

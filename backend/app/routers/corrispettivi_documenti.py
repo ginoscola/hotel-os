@@ -19,6 +19,7 @@ Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
 """
 import csv
 import io
+from xml.sax.saxutils import escape
 from datetime import date, datetime
 from typing import Optional
 
@@ -28,8 +29,9 @@ from fastapi.responses import StreamingResponse
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.enums import TA_RIGHT
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -622,13 +624,31 @@ def _csv_tabella(intestazioni: list, righe: list) -> io.BytesIO:
     return io.BytesIO(buf.getvalue().encode('utf-8-sig'))
 
 
-def _pdf_tabella(intestazioni: list, righe: list, titolo: str) -> io.BytesIO:
+def _pdf_tabella(intestazioni: list, righe: list, titolo: str, larghezze: Optional[list] = None,
+                 numeriche: tuple = ()) -> io.BytesIO:
+    """Tabella pdf. Senza `larghezze`: A4 verticale, colonne larghe quanto il testo (comportamento
+    storico). Con `larghezze` (pesi relativi, uno per colonna): A4 orizzontale, colonne in proporzione
+    alla pagina e testo che va a capo nella cella; `numeriche` = indici colonne allineate a destra."""
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20, bottomMargin=20)
+    pagina = landscape(A4) if larghezze else A4
+    doc = SimpleDocTemplate(buf, pagesize=pagina, topMargin=20, bottomMargin=20, leftMargin=24, rightMargin=24)
     stili = getSampleStyleSheet()
     elementi = [Paragraph(titolo, stili['Heading2']), Spacer(1, 10)]
-    dati = [intestazioni] + [[str(x) for x in r] for r in righe]
-    tabella = Table(dati, repeatRows=1)
+    if larghezze:
+        utile = pagina[0] - doc.leftMargin - doc.rightMargin
+        col_widths = [utile * w / sum(larghezze) for w in larghezze]
+        testo = ParagraphStyle('cella', fontSize=7, leading=8.5)
+        testo_num = ParagraphStyle('cella_num', parent=testo, alignment=TA_RIGHT)
+        testo_head = ParagraphStyle('cella_head', parent=testo, textColor=colors.white)
+        dati = [[Paragraph(escape(str(x)), testo_head) for x in intestazioni]] + [
+            [Paragraph(escape(str(x)), testo_num if i in numeriche else testo) for i, x in enumerate(r)]
+            for r in righe
+        ]
+        tabella = Table(dati, repeatRows=1, colWidths=col_widths)
+        tabella.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP')]))
+    else:
+        dati = [intestazioni] + [[str(x) for x in r] for r in righe]
+        tabella = Table(dati, repeatRows=1)
     tabella.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(f'#{_BLU}')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -642,11 +662,12 @@ def _pdf_tabella(intestazioni: list, righe: list, titolo: str) -> io.BytesIO:
     return buf
 
 
-def _risposta_tabella(formato: str, nome: str, titolo: str, intestazioni: list, righe: list) -> StreamingResponse:
+def _risposta_tabella(formato: str, nome: str, titolo: str, intestazioni: list, righe: list,
+                      larghezze_pdf: Optional[list] = None, numeriche_pdf: tuple = ()) -> StreamingResponse:
     if formato == 'csv':
         buf, media = _csv_tabella(intestazioni, righe), 'text/csv; charset=utf-8-sig'
     elif formato == 'pdf':
-        buf, media = _pdf_tabella(intestazioni, righe, titolo), 'application/pdf'
+        buf, media = _pdf_tabella(intestazioni, righe, titolo, larghezze_pdf, numeriche_pdf), 'application/pdf'
     else:
         buf, media = _xlsx_tabella(intestazioni, righe), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     return StreamingResponse(buf, media_type=media, headers={

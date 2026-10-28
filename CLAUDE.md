@@ -2652,6 +2652,12 @@ nel pdf descrizioni troncate a 90 caratteri) e `GET /tesoreria/consuntivo/export
 precedente e Δ, netto operativo per mese), `formato=xlsx|csv|pdf`, con `ExportMenu` nelle due schede.
 Celle con `cella_importo()`/`cella_data()` di `tesoreria_shared.py`: numeri veri nell'xlsx, "1234,56"
 nel csv (Excel italiano lo legge come numero), "1.234,56" nel pdf; date gg/mm/aaaa.
+PDF (v4.2.1): il primo export usciva tagliato a destra (A4 verticale, colonne larghe quanto il testo).
+`_pdf_tabella()`/`_risposta_tabella()` di Corrispettivi hanno ora i parametri facoltativi
+`larghezze_pdf` (pesi relativi → A4 **orizzontale**, colonne in proporzione, testo che va a capo nella
+cella) e `numeriche_pdf` (indici allineati a destra); senza, comportamento storico invariato (export
+Corrispettivi penali/tipo incasso/totali non toccati). Pesi in `LARGHEZZE_PDF` di
+`tesoreria_movimenti.py` e nell'export del consuntivo; descrizione troncata a 200 caratteri.
 
 ### Carte di credito: azzeramento automatico (28/10/2026, v4.1.0)
 Scelta dell'utente: ogni mese si inserisce **solo il totale dell'estratto** di ogni carta (AMEX
