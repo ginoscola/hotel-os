@@ -8,11 +8,12 @@ import api from '../../api/client.js'
 import { STILE_CONFRONTO, colors } from '../../styles/tokens.js'
 import { formatData, formatEuro, formatEuroIntero, mostraErrore } from '../../utils/format.js'
 import {
-  Button, Card, Drawer, Field, Input, KpiTile, Loading, Messaggio, Paginazione, Select, StatoVuoto, Table, Td, Th,
+  Button, Card, Checkbox, Drawer, Field, Input, KpiTile, Loading, Messaggio, Paginazione, Select, StatoVuoto, Table, Td, Th,
 } from '../../components/ui'
 import { BadgeCategoria, Importo, isoLocale, oggiISO } from './helpers.jsx'
 
 const LS_CONTO = 'tesoreria_consuntivo_conto'
+const LS_AP_COLONNE = 'tesoreria_consuntivo_ap_colonne'
 const COLORE_NETTO = colors.info
 const PER_PAGINA_DRAWER = 50
 
@@ -86,6 +87,8 @@ export default function TabConsuntivo({ conti }) {
   const [dati, setDati] = useState(null)
   const [errore, setErrore] = useState(null)
   const [aperta, setAperta] = useState(null)
+  const [apColonne, setApColonne] = useState(() => localStorage.getItem(LS_AP_COLONNE) === 'true')
+  const cambiaApColonne = v => { setApColonne(v); localStorage.setItem(LS_AP_COLONNE, String(v)) }
 
   const filtri = useMemo(() => ({
     data_da: periodo[0], data_a: periodo[1], ...(contoId ? { conto_id: Number(contoId) } : {}),
@@ -159,7 +162,8 @@ export default function TabConsuntivo({ conti }) {
             <Kpi label="Saldo fine periodo" k={dati.kpi.saldo_fine} />
           </div>
 
-          <Card title="Netto operativo per mese">
+          <Card title="Netto operativo per mese"
+            actions={<Checkbox label="Anno precedente affiancato" checked={apColonne} onChange={cambiaApColonne} />}>
             {dati.mensile.length === 0 ? <StatoVuoto /> : (
               <ResponsiveContainer width="100%" height={260}>
                 <ComposedChart data={dati.mensile} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
@@ -171,8 +175,13 @@ export default function TabConsuntivo({ conti }) {
                   <Legend formatter={legendaNeutra} />
                   <ReferenceLine y={0} stroke={colors.borderStrong} />
                   <Bar dataKey="netto_operativo" name="Netto operativo" fill={COLORE_NETTO} radius={[4, 4, 0, 0]} />
-                  <Line dataKey="netto_operativo_ap" name="Anno precedente" stroke={COLORE_NETTO} dot={false}
-                    {...STILE_CONFRONTO} />
+                  {apColonne ? (
+                    <Bar dataKey="netto_operativo_ap" name="Anno precedente" fill={COLORE_NETTO}
+                      fillOpacity={STILE_CONFRONTO.strokeOpacity} radius={[4, 4, 0, 0]} />
+                  ) : (
+                    <Line dataKey="netto_operativo_ap" name="Anno precedente" stroke={COLORE_NETTO} dot={false}
+                      {...STILE_CONFRONTO} />
+                  )}
                 </ComposedChart>
               </ResponsiveContainer>
             )}
