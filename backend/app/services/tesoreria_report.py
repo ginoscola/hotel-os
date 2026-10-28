@@ -203,3 +203,50 @@ def mesi_di_autonomia(liquidita: Decimal, netti_mensili: list) -> Optional[dict]
     if consumo <= 0:
         return None
     return {"consumo_mensile": consumo, "mesi": liquidita / consumo if liquidita > 0 else ZERO}
+
+
+# ── Tassa di soggiorno per trimestre ───────────────────────────────────────────
+
+TRIMESTRI = ((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12))
+
+
+def tassa_per_trimestre(incassata: dict, versamenti: list, anno: int, oggi: date) -> dict:
+    """Tassa di soggiorno incassata e versata per trimestre (il Comune si paga a trimestre).
+
+    `incassata` = {mese: Decimal} dell'anno; `versamenti` = [(data, importo positivo)] dal 1/4
+    dell'anno al 31/3 dell'anno dopo: un versamento vale per il trimestre **precedente** a quello in
+    cui è fatto (aprile–giugno si versa a luglio). Stato del trimestre: 'aperto' (non ancora finito),
+    'versato', 'da_versare' (finito, incassato e senza versamento), 'nessuna' (niente incassato).
+    "Da versare" = incassato dei trimestri aperti o non versati; "scarto" = incassato − versato dei
+    trimestri versati (documenti per data di check-out vs presenze dichiarate, esenzioni, rettifiche).
+    """
+    versati = defaultdict(lambda: ZERO)
+    date_versamento = defaultdict(list)
+    for giorno, importo in versamenti:
+        indice = (giorno.month - 1) // 3 - 1          # trimestre precedente
+        anno_rif = giorno.year
+        if indice < 0:
+            indice, anno_rif = 3, giorno.year - 1
+        if anno_rif != anno:
+            continue
+        versati[indice] += importo
+        date_versamento[indice].append(giorno)
+
+    righe, da_versare, scarto = [], ZERO, ZERO
+    for i, mesi in enumerate(TRIMESTRI):
+        inc = sum((incassata.get(m, ZERO) for m in mesi), ZERO)
+        ver = versati.get(i, ZERO)
+        fine_trimestre = ultimo_giorno_mese(anno, mesi[-1])
+        if ver:
+            stato = "versato"
+            scarto += inc - ver
+        elif oggi <= fine_trimestre:
+            stato = "aperto" if inc else "nessuna"
+        else:
+            stato = "da_versare" if inc else "nessuna"
+        if stato in ("aperto", "da_versare"):
+            da_versare += inc
+        righe.append({"trimestre": i + 1, "mesi": mesi, "incassata": inc, "versata": ver, "stato": stato,
+                      "date_versamento": sorted(date_versamento.get(i, [])),
+                      "scarto": inc - ver if stato == "versato" else None})
+    return {"trimestri": righe, "da_versare": da_versare, "scarto": scarto}

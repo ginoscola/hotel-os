@@ -139,3 +139,26 @@ def test_mesi_di_autonomia():
     assert (a["consumo_mensile"], a["mesi"]) == (D("40000"), D("7.5"))
     assert mesi_di_autonomia(D("100"), [D("500")]) is None        # in inverno la cassa cresce
     assert mesi_di_autonomia(D("100"), []) is None
+
+
+from app.services.tesoreria_report import tassa_per_trimestre  # noqa: E402
+
+
+def test_tassa_per_trimestre():
+    incassata = {5: D("2000"), 6: D("8000"), 7: D("11000"), 8: D("15000"), 9: D("4600"), 10: D("300")}
+    versamenti = [(date(2026, 7, 8), D("9900")), (date(2026, 10, 15), D("30000")),
+                  (date(2026, 4, 10), D("50"))]                  # aprile = 1° trimestre, già nella lista
+    t = tassa_per_trimestre(incassata, versamenti, 2026, date(2026, 10, 28))
+    stati = {r["trimestre"]: (r["stato"], r["incassata"], r["versata"], r["scarto"]) for r in t["trimestri"]}
+    assert stati[1] == ("versato", D("0"), D("50"), D("-50"))
+    assert stati[2] == ("versato", D("10000"), D("9900"), D("100"))
+    assert stati[3] == ("versato", D("30600"), D("30000"), D("600"))
+    assert stati[4] == ("aperto", D("300"), D("0"), None)
+    assert (t["da_versare"], t["scarto"]) == (D("300"), D("650"))
+
+
+def test_tassa_trimestre_finito_senza_versamento_e_versamento_di_gennaio():
+    incassata = {11: D("500")}
+    assert tassa_per_trimestre(incassata, [], 2026, date(2027, 1, 10))["trimestri"][3]["stato"] == "da_versare"
+    t = tassa_per_trimestre(incassata, [(date(2027, 1, 16), D("500"))], 2026, date(2027, 1, 20))
+    assert t["trimestri"][3]["stato"] == "versato" and t["da_versare"] == D("0")

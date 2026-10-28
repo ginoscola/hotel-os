@@ -2665,13 +2665,21 @@ corrente); calcoli puri in `services/tesoreria_report.py` (`serie_saldi`, `minim
    entrate operative. Anno vs stesso periodo anno prima.
 8. **Peso delle uscite sugli incassi**: uscite di ogni categoria operativa di tipo uscita/neutra (non le
    categorie di entrata, che hanno solo storni) / entrate operative, anno vs anno prima, Δ in punti.
-10. **Tassa di soggiorno**: incassata per mese = `report_totali(con_ts=True) − report_totali(con_ts=False)`
-   di Corrispettivi (stessa logica della tab Totali), versata = categoria `tassa_soggiorno` per mese del
-   bonifico; "da versare" progressivo. ⚠️ Correzione a una lettura precedente: il versamento del
+10. **Tassa di soggiorno, per trimestre** (v4.4.2, `tassa_per_trimestre()`): incassata per mese da
+   `report_fatturati()` di Corrispettivi (tassa_soggiorno per struttura, **documenti annullati esclusi**);
+   versata = categoria `tassa_soggiorno`, ogni versamento vale per il **trimestre precedente** a quello del
+   bonifico (gen–mar dell'anno dopo → 4° trimestre). Stato: aperto / versato / da versare / nessuna.
+   **Da versare** = incassato dei trimestri aperti o finiti senza versamento; **scarto** = incassato −
+   versato dei trimestri versati: NON è un debito (l'utente conferma di aver versato tutto). Cause:
+   documenti alla data di check-out vs presenze dichiarate al Comune, esenzioni, rettifiche. Prima
+   versione (v4.4.0) con `report_totali()` contava anche gli annullati (~219 €) e mostrava lo scarto come
+   "da versare". Al 28/10/2026: da versare 0, scarto 614,60 € (2° trim. 29 €, 3° trim. 585,60 €; per
+   hotel il più alto è International). ⚠️ Correzione a una lettura precedente: il versamento del
    15/10/2026 (30.030,50 €, causali troncate dalla banca a "IMPOSTA DI SOGGIORNO LUGL") copre
    **luglio–settembre** (incassati 30.673,50 €): il Comune si paga a trimestre (aprile–giugno a luglio,
    luglio–settembre a ottobre). Al 28/10/2026 restano ~834 € di differenza, non agosto e settembre.
-   Corrispettivi solo dall'aprile 2026: per il 2025 la sezione è vuota.
+   Corrispettivi solo dall'aprile 2026: per il 2025 la sezione è vuota. In Fase 3 il calendario fiscale
+   userà la stessa regola trimestrale per le scadenze della tassa di soggiorno.
 Dati reali 2026 al 28/10: minimo −26.105 € il 30/04/2026 (2025: +17.313 € il 22/04); fido POS usato fino
 al 30% (39.574 €, 53 giorni sotto zero; 2025: 0,6%); autonomia 5,2 mesi (consumo inverno 25/26
 72.651 €/mese); commissioni POS 0,98% (2025: 0,94%); affitti 25,4% delle entrate (2025: 19,7%).
@@ -2779,8 +2787,9 @@ esistenti, mai query duplicate sulle loro tabelle.
   `_contanti()` in `routers/tesoreria_report.py` (posizione attuale). Usa `saldo_corrente`,
   `mesi[-1].mese`, `saldo_iniziale.data`: se cambiano nome o significato, aggiornare `_contanti()`.
 - **Moduli/permessi**: `app/permessi.py` (condiviso con `lista_moduli()`).
-- **Corrispettivi → tassa di soggiorno incassata**: `report_totali()` di `routers/corrispettivi_report.py`
-  (chiamato due volte, con e senza tassa) in `_tassa_incassata_per_mese()` di `routers/tesoreria_kpi.py`.
+- **Corrispettivi → tassa di soggiorno incassata**: `report_fatturati()` di `routers/corrispettivi_report.py`
+  (`mesi[].per_struttura[].tassa_soggiorno`, annullati esclusi) in `_tassa_incassata_per_mese()` di
+  `routers/tesoreria_kpi.py`.
 - **Corrispettivi → export**: `_risposta_tabella()` di `routers/corrispettivi_documenti.py` (xlsx/csv/pdf
   da intestazioni + righe) usata dagli export di Movimenti e Consuntivo.
 

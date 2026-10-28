@@ -9,7 +9,7 @@ import api from '../../api/client.js'
 import { STILE_CONFRONTO, colors, coloreSerie } from '../../styles/tokens.js'
 import { formatDataIt, formatEuro, formatEuroIntero, formatPerc, mostraErrore } from '../../utils/format.js'
 import {
-  Card, KpiTile, Loading, Messaggio, NavAnno, StatoVuoto, Table, Td, Th,
+  Badge, Card, KpiTile, Loading, Messaggio, NavAnno, StatoVuoto, Table, Td, Th,
 } from '../../components/ui'
 import { BadgeCategoria, Importo } from './helpers.jsx'
 
@@ -81,7 +81,7 @@ function Contenuto({ d }) {
           confronto={costo.ap.commissioni_pos_pct != null ? formatPerc(costo.ap.commissioni_pos_pct) : null}
           confrontoLabel="anno prec." />
         <KpiTile label="Tassa di soggiorno da versare" value={ts.disponibile ? formatEuro(ts.da_versare) : '—'}
-          sub={ts.disponibile ? `incassata ${formatEuro(ts.incassata)} · versata ${formatEuro(ts.versata)}` : 'nessun dato Corrispettivi'} />
+          sub={ts.disponibile ? `scarto incassata − versata: ${formatEuro(ts.scarto)}` : 'nessun dato Corrispettivi'} />
       </div>
       <p className="ui-text-muted">
         Autonomia: liquidità netta di oggi ({formatEuro(a.liquidita_netta)}) divisa per il consumo medio di cassa dei
@@ -163,22 +163,29 @@ function Contenuto({ d }) {
         <Card title={`Tassa di soggiorno ${d.anno}`}>
           {!ts.disponibile ? <StatoVuoto>Nessun dato nei Corrispettivi per quest'anno.</StatoVuoto> : (
             <Table compact>
-              <thead><tr><Th>Mese</Th><Th num>Incassata</Th><Th num>Versata</Th><Th num tot>Da versare</Th></tr></thead>
+              <thead><tr><Th>Trimestre</Th><Th num>Incassata</Th><Th num>Versata</Th><Th>Stato</Th><Th num tot>Scarto</Th></tr></thead>
               <tbody>
-                {ts.mesi.map(m => (
-                  <tr key={m.mese}>
-                    <Td>{m.etichetta}</Td>
-                    <Td num>{formatEuro(m.incassata)}</Td>
-                    <Td num>{m.versata ? formatEuro(m.versata) : '—'}</Td>
-                    <Td num tot><Importo v={m.da_versare_cumulato} /></Td>
+                {ts.trimestri.map(t => (
+                  <tr key={t.trimestre} className={t.stato === 'nessuna' ? 'ui-riga-attenuata' : t.stato === 'da_versare' ? 'ui-riga-avviso' : undefined}>
+                    <Td>{t.trimestre}° ({t.mesi})</Td>
+                    <Td num>{formatEuro(t.incassata)}</Td>
+                    <Td num>{t.versata ? formatEuro(t.versata) : '—'}</Td>
+                    <Td>
+                      {t.stato === 'versato' && <Badge tono="ok">versato il {t.date_versamento.map(formatDataIt).join(', ')}</Badge>}
+                      {t.stato === 'aperto' && <Badge tono="info">in corso</Badge>}
+                      {t.stato === 'da_versare' && <Badge tono="warn">da versare</Badge>}
+                      {t.stato === 'nessuna' && <span className="ui-text-muted">—</span>}
+                    </Td>
+                    <Td num tot>{t.scarto != null ? <Importo v={t.scarto} /> : '—'}</Td>
                   </tr>
                 ))}
               </tbody>
             </Table>
           )}
           <p className="ui-text-muted" style={{ marginTop: 8 }}>
-            Incassata dagli ospiti (Corrispettivi, per mese del documento) e versata al Comune (banca, per mese del
-            bonifico). «Da versare» è il progressivo: si azzera quando il versamento del trimestre è fatto.
+            Il Comune si paga a trimestre: ogni versamento vale per il trimestre precedente (aprile–giugno a luglio).
+            Incassata = Corrispettivi, documenti annullati esclusi. Lo scarto non è un debito: i documenti contano la
+            tassa alla data del check-out, la dichiarazione le presenze del periodo; pesano anche esenzioni e rettifiche.
           </p>
         </Card>
       </div>

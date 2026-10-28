@@ -2,26 +2,25 @@
 costo degli incassi, peso delle uscite sugli incassi, tassa di soggiorno incassata e versata.
 
 Riusa `consuntivo()` e `posizione()` (tesoreria_report) e, per la tassa di soggiorno incassata,
-`report_totali()` di Corrispettivi (differenza tra totale con e senza tassa di soggiorno, per mese):
+`report_fatturati()` di Corrispettivi (tassa di soggiorno per mese, documenti annullati esclusi):
 nessuna query duplicata sulle tabelle di Corrispettivi.
 """
 
-from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import extract, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.tesoreria import TesoreriaCategoria, TesoreriaConto, TesoreriaMovimento
-from app.routers.corrispettivi_report import report_totali
+from app.routers.corrispettivi_report import report_fatturati
 from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti, consuntivo, posizione
 from app.routers.tesoreria_shared import euro, puo_vedere
 from app.services.tesoreria_report import (
-    ZERO, anno_prima, inverno_di_riferimento, mesi_di_autonomia, minimo_serie, serie_saldi,
+    ZERO, anno_prima, inverno_di_riferimento, mesi_di_autonomia, minimo_serie, serie_saldi, tassa_per_trimestre,
 )
 from app.utils.locale_it import MESI_IT
 
@@ -53,14 +52,11 @@ def _commissioni_pos(db: Session, da: date, a: date) -> Decimal:
 
 
 def _tassa_incassata_per_mese(db: Session, anno: int) -> dict:
-    """{mese: tassa di soggiorno incassata} dai Corrispettivi (vuoto se l'anno non ha dati)."""
-    con = report_totali(anno=anno, lordo=True, con_ts=True, is_test=False, db=db, _=None)
-    senza = report_totali(anno=anno, lordo=True, con_ts=False, is_test=False, db=db, _=None)
-
-    def totale(r, mese):
-        return (r["scontrini"]["totale_mese"].get(str(mese), 0) or 0) + (r["fatture"]["totale_mese"].get(str(mese), 0) or 0)
-
-    return {m["mese"]: Decimal(str(round(totale(con, m["mese"]) - totale(senza, m["mese"]), 2))) for m in con["mesi"]}
+    """{mese: tassa di soggiorno incassata} dai Corrispettivi, documenti annullati esclusi
+    (`report_fatturati()`, colonna tassa_soggiorno per struttura). Vuoto se l'anno non ha dati."""
+    r = report_fatturati(anno=anno, lordo=True, is_test=False, db=db, _=None)
+    return {m["mese"]: Decimal(str(round(sum(s.get("tassa_soggiorno", 0) for s in m["per_struttura"].values()), 2)))
+            for m in r["mesi"]}
 
 
 @router.get("/kpi")
@@ -151,24 +147,28 @@ def kpi(anno: Optional[int] = Query(None, ge=2020, le=2100), db: Session = Depen
                      "delta_punti": round(p - p_ap, 2) if p is not None and p_ap is not None else None})
     peso.sort(key=lambda x: -x["uscite"])
 
-    # ── 10. Tassa di soggiorno incassata e versata ─────────────────────────────
+    # ── 10. Tassa di soggiorno incassata e versata, per trimestre ───────────────
     incassata = _tassa_incassata_per_mese(db, anno)
-    versata = defaultdict(lambda: ZERO)
-    for mese, somma in db.query(extract("month", TesoreriaMovimento.data_contabile), func.sum(TesoreriaMovimento.importo)) \
-            .join(TesoreriaCategoria, TesoreriaCategoria.id == TesoreriaMovimento.categoria_id) \
-            .filter(TesoreriaCategoria.codice == CATEGORIA_TASSA, TesoreriaMovimento.data_contabile >= inizio,
-                    TesoreriaMovimento.data_contabile <= date(anno, 12, 31)) \
-            .group_by(extract("month", TesoreriaMovimento.data_contabile)):
-        versata[int(mese)] = -somma
-    mesi_tassa, cumulata = [], ZERO
-    for mese in sorted(set(incassata) | set(versata)):
-        inc, ver = incassata.get(mese, ZERO), versata.get(mese, ZERO)
-        cumulata += inc - ver
-        mesi_tassa.append({"mese": mese, "etichetta": MESI_IT[mese - 1], "incassata": euro(inc),
-                           "versata": euro(ver), "da_versare_cumulato": euro(cumulata)})
-    tot_inc, tot_ver = sum(incassata.values(), ZERO), sum(versata.values(), ZERO)
-    tassa = {"disponibile": bool(incassata), "incassata": euro(tot_inc), "versata": euro(tot_ver),
-             "da_versare": euro(tot_inc - tot_ver), "mesi": mesi_tassa}
+    versamenti = [
+        (g, -imp) for g, imp in db.query(TesoreriaMovimento.data_contabile, TesoreriaMovimento.importo)
+        .join(TesoreriaCategoria, TesoreriaCategoria.id == TesoreriaMovimento.categoria_id)
+        .filter(TesoreriaCategoria.codice == CATEGORIA_TASSA, TesoreriaMovimento.data_contabile >= date(anno, 4, 1),
+                TesoreriaMovimento.data_contabile <= date(anno + 1, 3, 31))
+    ]
+    trim = tassa_per_trimestre(incassata, versamenti, anno, oggi)
+    tassa = {
+        "disponibile": bool(incassata),
+        "incassata": euro(sum(incassata.values(), ZERO)),
+        "versata": euro(sum((t["versata"] for t in trim["trimestri"]), ZERO)),
+        "da_versare": euro(trim["da_versare"]),
+        "scarto": euro(trim["scarto"]),
+        "trimestri": [
+            {"trimestre": t["trimestre"], "mesi": f"{MESI_IT[t['mesi'][0] - 1]}–{MESI_IT[t['mesi'][-1] - 1]}",
+             "incassata": euro(t["incassata"]), "versata": euro(t["versata"]), "stato": t["stato"],
+             "date_versamento": sorted({d.isoformat() for d in t["date_versamento"]}), "scarto": euro(t["scarto"])}
+            for t in trim["trimestri"]
+        ],
+    }
 
     return {
         "anno": anno, "fino_al": fine.isoformat(), "ap_fino_al": ap_fine.isoformat(),
