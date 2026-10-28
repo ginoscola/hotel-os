@@ -1,6 +1,6 @@
 // Movimenti bancari: filtri, ricerca, ordinamento, paginazione; correzione della categoria (manuale,
 // vince sulle regole), dettaglio con note/straordinario e "crea regola da questo movimento".
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../../api/client.js'
 import { formatData, formatEuro, mostraErrore } from '../../utils/format.js'
 import {
@@ -69,9 +69,11 @@ function ModaleMovimento({ movimento, conti, puoModificare, onChiudi, onSalvato,
 
 export default function TabMovimenti({ conti, categorie, permessi, filtroIniziale }) {
   const daClassificareId = categorie.find(c => c.codice === 'da_classificare')?.id
-  const [filtri, setFiltri] = useState({
-    conto_id: '', data_da: '', data_a: '', categoria_id: '', segno: '', solo_manuali: false, straordinario: '',
-  })
+  const [filtri, setFiltri] = useState(() => ({
+    conto_id: '', data_da: '', data_a: '', segno: '', solo_manuali: false, straordinario: '',
+    // Arrivando dal link "vedi" della Posizione si apre già filtrato (niente richiesta senza filtro)
+    categoria_id: filtroIniziale?.daClassificare && daClassificareId ? String(daClassificareId) : '',
+  }))
   const [testo, setTesto] = useState('')
   const [q, setQ] = useState('')
   const [ordine, setOrdine] = useState({ per: 'data_contabile', direzione: 'desc' })
@@ -81,6 +83,7 @@ export default function TabMovimenti({ conti, categorie, permessi, filtroInizial
   const [aperto, setAperto] = useState(null)
   const [regola, setRegola] = useState(null)
   const avvisi = useAvvisi()
+  const ultimaRichiesta = useRef(0)
 
   // Link "vedi" dalla Posizione: movimenti da classificare
   useEffect(() => {
@@ -100,10 +103,14 @@ export default function TabMovimenti({ conti, categorie, permessi, filtroInizial
     const params = { pagina, per_pagina: PER_PAGINA, ordina_per: ordine.per, direzione: ordine.direzione }
     Object.entries(filtri).forEach(([k, v]) => { if (v !== '' && v !== false) params[k] = v })
     if (q) params.q = q
+    // Solo la risposta dell'ultima richiesta conta: una più lenta, partita prima con altri filtri,
+    // non deve sovrascriverla
+    const richiesta = ++ultimaRichiesta.current
     try {
       setErrore(null)
-      setDati((await api.get('/tesoreria/movimenti', { params })).data)
-    } catch (e) { setErrore(mostraErrore(e)) }
+      const r = await api.get('/tesoreria/movimenti', { params })
+      if (richiesta === ultimaRichiesta.current) setDati(r.data)
+    } catch (e) { if (richiesta === ultimaRichiesta.current) setErrore(mostraErrore(e)) }
   }, [filtri, q, ordine, pagina])
 
   useEffect(() => { carica() }, [carica])
