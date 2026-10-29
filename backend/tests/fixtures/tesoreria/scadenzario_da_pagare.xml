@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="windows-1252"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Worksheet ss:Name="-Scaddoc">
+  <Table>
+   <Row ss:Index="2">
+    <Cell ss:Index="1" ss:StyleID="s11"><Data ss:Type="String">Scadenzario Fornitori</Data></Cell>
+   </Row>
+   <Row ss:Index="4">
+    <Cell ss:Index="1" ss:StyleID="s11"><Data ss:Type="String">Azienda:</Data></Cell>
+    <Cell ss:Index="2" ss:StyleID="s11"><Data ss:Type="String">XX1 SOCIETA DI PROVA SRL</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="s11"><Data ss:Type="String">Data di Stampa:</Data></Cell>
+    <Cell ss:Index="4" ss:StyleID="s11"><Data ss:Type="String">15/10/2026</Data></Cell>
+   </Row>
+   <Row ss:Index="6">
+    <Cell ss:Index="1" ss:StyleID="s11"><Data ss:Type="String">Data pag</Data></Cell>
+    <Cell ss:Index="2" ss:StyleID="s11"><Data ss:Type="String">Stato</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="s11"><Data ss:Type="String">Tipo</Data></Cell>
+    <Cell ss:Index="4" ss:StyleID="s11"><Data ss:Type="String">Documento</Data></Cell>
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">Data doc. Data reg.</Data></Cell>
+    <Cell ss:Index="6" ss:StyleID="s11"><Data ss:Type="String">Prot. IVA</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="s11"><Data ss:Type="String">Fornitore</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="s11"><Data ss:Type="String">Importo scadenza</Data></Cell>
+   </Row>
+   <Row ss:Index="8">
+    <Cell ss:Index="1" ss:StyleID="s11"><Data ss:Type="String">Ordine:</Data></Cell>
+    <Cell ss:Index="2" ss:StyleID="s11"><Data ss:Type="String">Data Scadenza</Data></Cell>
+   </Row>
+   <Row ss:Index="10">
+    <Cell ss:Index="1" ss:StyleID="s11"><Data ss:Type="String">Data Scadenza</Data></Cell>
+    <Cell ss:Index="2" ss:StyleID="s11"><Data ss:Type="String">01/01/2011</Data></Cell>
+   </Row>
+   <Row ss:Index="12">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">*PAREGGIO*</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">01/01/11</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">01/01/11</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00001</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">FORNITORE VECCHIO S.P.A.</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">-150.00</Data></Cell>
+   </Row>
+   <Row ss:Index="14">
+    <Cell ss:Index="1" ss:StyleID="s11"><Data ss:Type="String">Data Scadenza</Data></Cell>
+    <Cell ss:Index="2" ss:StyleID="s11"><Data ss:Type="String">31/12/2025</Data></Cell>
+   </Row>
+   <Row ss:Index="16">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">RIMESSA</Data></Cell>
+    <Cell ss:Index="6" ss:StyleID="s11"><Data ss:Type="String">FR</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="s11"><Data ss:Type="Number">1</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="s11"><Data ss:Type="String">/</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="s11"><Data ss:Type="String">45</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">05/12/25</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">10/12/25</Data></Cell>
+    <Cell ss:Index="12" ss:StyleID="s11"><Data ss:Type="String">A01/000900 31000</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00002</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">Albergo Esempio S.a.s. di Prova Mario &amp; C.</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">5000.00</Data></Cell>
+   </Row>
+   <Row ss:Index="18">
+    <Cell ss:Index="4" ss:StyleID="s11"><Data ss:Type="String"> C.</Data></Cell>
+   </Row>
+   <Row ss:Index="20">
+    <Cell ss:Index="2" ss:StyleID="s11"><Data ss:Type="String">DESCRIZIONE TESTATA:</Data></Cell>
+    <Cell ss:Index="3" ss:StyleID="s11"><Data ss:Type="String">Gennaio - Dicembre 25
+</Data></Cell>
+    <Cell ss:Index="4" ss:StyleID="s11"><Data ss:Type="String"> C.</Data></Cell>
+   </Row>
+   <Row ss:Index="22">
+    <Cell ss:Index="1" ss:StyleID="s11"><Data ss:Type="String">Data Scadenza</Data></Cell>
+    <Cell ss:Index="2" ss:StyleID="s11"><Data ss:Type="String">31/10/2026</Data></Cell>
+   </Row>
+   <Row ss:Index="24">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">RIC.BANC.</Data></Cell>
+    <Cell ss:Index="6" ss:StyleID="s11"><Data ss:Type="String">FR</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="s11"><Data ss:Type="Number">1</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="s11"><Data ss:Type="String">/</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="s11"><Data ss:Type="String">1001</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">30/09/26</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">02/10/26</Data></Cell>
+    <Cell ss:Index="12" ss:StyleID="s11"><Data ss:Type="String">A01/001800 44000</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00003</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">CAFFÈ ROSSI S.R.L.</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">120.50</Data></Cell>
+   </Row>
+   <Row ss:Index="26">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">RIC.BANC.</Data></Cell>
+    <Cell ss:Index="6" ss:StyleID="s11"><Data ss:Type="String">FR</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="s11"><Data ss:Type="Number">1</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="s11"><Data ss:Type="String">/</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="s11"><Data ss:Type="String">1002</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">30/09/26</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">02/10/26</Data></Cell>
+    <Cell ss:Index="12" ss:StyleID="s11"><Data ss:Type="String">A01/001801 44001</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00003</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">CAFFÈ ROSSI S.R.L.</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">80.25</Data></Cell>
+   </Row>
+   <Row ss:Index="28">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">RIC.BANC.</Data></Cell>
+    <Cell ss:Index="6" ss:StyleID="s11"><Data ss:Type="String">NR</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="s11"><Data ss:Type="Number">1</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="s11"><Data ss:Type="String">/</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="s11"><Data ss:Type="String">17</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">30/09/26</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">02/10/26</Data></Cell>
+    <Cell ss:Index="12" ss:StyleID="s11"><Data ss:Type="String">A01/001802 44002</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00003</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">CAFFÈ ROSSI S.R.L.</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">-20.75</Data></Cell>
+   </Row>
+   <Row ss:Index="30">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">ADDEB. C/C</Data></Cell>
+    <Cell ss:Index="6" ss:StyleID="s11"><Data ss:Type="String">FR</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="s11"><Data ss:Type="Number">1</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="s11"><Data ss:Type="String">/</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="s11"><Data ss:Type="String">7X0001</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">10/10/26</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">14/10/26</Data></Cell>
+    <Cell ss:Index="12" ss:StyleID="s11"><Data ss:Type="String">A01/001850 45000</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00004</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">TELEFONIA ESEMPIO SPA</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">25.47</Data></Cell>
+   </Row>
+   <Row ss:Index="32">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">RIMESSA</Data></Cell>
+    <Cell ss:Index="6" ss:StyleID="s11"><Data ss:Type="String">FR</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="s11"><Data ss:Type="Number">8</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="s11"><Data ss:Type="String">/</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="s11"><Data ss:Type="String">10/200</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">05/10/26</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">20/10/26</Data></Cell>
+    <Cell ss:Index="12" ss:StyleID="s11"><Data ss:Type="String">A08/000130 45500</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00005</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">SERVIZI ONLINE LTD</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">300.00</Data></Cell>
+   </Row>
+   <Row ss:Index="34">
+    <Cell ss:Index="1" ss:StyleID="s11"><Data ss:Type="String">Data Scadenza</Data></Cell>
+    <Cell ss:Index="2" ss:StyleID="s11"><Data ss:Type="String">30/11/2026</Data></Cell>
+   </Row>
+   <Row ss:Index="36">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">CONTANTI</Data></Cell>
+    <Cell ss:Index="6" ss:StyleID="s11"><Data ss:Type="String">FR</Data></Cell>
+    <Cell ss:Index="7" ss:StyleID="s11"><Data ss:Type="Number">1</Data></Cell>
+    <Cell ss:Index="8" ss:StyleID="s11"><Data ss:Type="String">/</Data></Cell>
+    <Cell ss:Index="9" ss:StyleID="s11"><Data ss:Type="String">55</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">12/10/26</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">15/10/26</Data></Cell>
+    <Cell ss:Index="12" ss:StyleID="s11"><Data ss:Type="String">A01/001900 46000</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00006</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">ORTOFRUTTA PROVA SRL</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">172.89</Data></Cell>
+   </Row>
+   <Row ss:Index="38">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">*PAREGGIO*</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">30/11/26</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">30/11/26</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00002</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">Albergo Esempio S.a.s. di Prova Mario &amp; C.</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">-2650.00</Data></Cell>
+   </Row>
+   <Row ss:Index="40">
+    <Cell ss:Index="5" ss:StyleID="s11"><Data ss:Type="String">*PAREGGIO*</Data></Cell>
+    <Cell ss:Index="10" ss:StyleID="s11"><Data ss:Type="String">30/11/26</Data></Cell>
+    <Cell ss:Index="11" ss:StyleID="s11"><Data ss:Type="String">30/11/26</Data></Cell>
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">601.00002</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="String">Albergo Esempio S.a.s. di Prova Mario &amp; C.</Data></Cell>
+    <Cell ss:Index="15" ss:StyleID="s11"><Data ss:Type="Number">-2650.00</Data></Cell>
+   </Row>
+   <Row ss:Index="42">
+    <Cell ss:Index="13" ss:StyleID="s11"><Data ss:Type="String">Totale</Data></Cell>
+    <Cell ss:Index="14" ss:StyleID="s11"><Data ss:Type="Number">228.36</Data></Cell>
+   </Row>
+   <Row ss:Index="44">
+    <Cell ss:Index="1" ss:StyleID="s11"><Data ss:Type="String">Fine Stampa</Data></Cell>
+   </Row>
+  </Table>
+ </Worksheet>
+</Workbook>

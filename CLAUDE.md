@@ -2409,7 +2409,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | Fase | Contenuto | Stato |
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
-| 2 | Scadenzario Passcom e abbinamento con la banca | ⏳ in corso — roadmap approvata 29/10/2026, blocco A da autorizzare |
+| 2 | Scadenzario Passcom e abbinamento con la banca | ⏳ in corso — blocco A ✅ (29/10/2026), blocco B da autorizzare |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
@@ -2782,6 +2782,23 @@ Formato verificato sul file reale: dettaglio = colonne 5–15 (`ss:Index`), impo
 ignorare, `DESCRIZIONE TESTATA` anche con colonna 4. Chiave conto+protocollo+scadenza+importo: 0 duplicati su
 1.285 righe (i pareggi non hanno protocollo).
 
+### Fase 2 — Blocco A fatto (29/10/2026)
+- Modelli `TesoreriaScadImport` (`tesoreria_scad_import`: data_fotografia, data_stampa, file, sha256, totale,
+  scadenza_da/a, avvisi) e `TesoreriaScadenza` (`tesoreria_scadenze`, `import_id` CASCADE, UNIQUE
+  import+`chiave`, indici su chiave e codice fornitore; `registro` = colonna 7, registro IVA 1 Italia/8 estero).
+  Migrazione `tes005_2026` (solo tabelle), applicata al DB reale (verificati downgrade e nuovo upgrade).
+- `services/tesoreria_passcom_parser.py` → `parse_scadenzario(bytes)`: errori bloccanti
+  (`ErroreImportTesoreria`, stesso tipo del parser banca) su non-XML, foglio `-Scaddoc` assente, riga
+  `Totale` assente, totale ≠ somma (±0,01), riga di dettaglio prima di una "Data Scadenza", file delle rate
+  pagate (colonna 3/4 valorizzata). Ignorate le righe di sola colonna 4, la colonna 4 delle descrizioni,
+  "Fine Stampa" e le intestazioni; altre righe sconosciute → avviso. `chiave` con suffisso `#n` per
+  righe identiche nello stesso file (pareggi senza protocollo).
+- Test `test_tesoreria_passcom_parser.py` (10) con fixture finta `tests/fixtures/tesoreria/scadenzario_da_pagare.xml`
+  (windows-1252, nota di credito, registro 8, pareggi doppi, descrizione con a capo). Suite: 729 verdi.
+- Prova sul file reale del 28/10 (senza DB): 1.285 scadenze, totale 110.590,39 ✓, nessun avviso, chiavi
+  univoche, file "pagate" rifiutato. 76 fornitori, 22 con saldo ≤ 0 (pareggi); aperto netto dei fornitori a
+  saldo positivo 121.597,46 €.
+
 ### Fase 2 — indicazioni già raccolte (28/10/2026)
 - **GoProfit resta lo strumento operativo per i pagamenti ai fornitori** (decisione dell'utente):
   scarica le fatture dallo SDI in automatico, quindi è più aggiornato di qualunque fonte di HotelOS
@@ -2900,7 +2917,8 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **28/10/2026 (6)** — v4.1.0: carte di credito azzerate in automatico all'addebito in banca (l'utente
   inserisce solo il totale di ogni estratto). XML 2025–2026 dei conti già caricati dall'utente.
 - **29/10/2026** — analizzato lo ZIP fatture AdE (Fase 5); v4.4.3 conferma cambio categoria in Movimenti.
-  **Fase 2 avviata**: roadmap e decisioni sopra; prossimo passo = strategia blocco A da autorizzare.
+  **Fase 2 avviata**: roadmap e decisioni sopra; blocco A fatto (tabelle + lettore scadenzario).
+  Prossimo: blocco B (import a fotografie) — serve l'ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

@@ -9,6 +9,12 @@ movimenti, categorie e regole di classificazione.
 - Saldi: saldo a fine giornata (data contabile). Dall'XML arriva il saldo di chiusura di ogni giorno
   con movimenti; carte e prepagata hanno solo saldi inseriti a mano.
 - Importi `Numeric(14,2)`, letti come `Decimal`: mai float.
+
+Fase 2: fotografie dello scadenzario fornitori Passcom ("da pagare"). Ogni import è una fotografia
+delle scadenze aperte a una data; più file con la stessa data compongono la stessa fotografia (anno
+contabile vecchio + nuovo a cavallo d'anno). Le scadenze sono identificate da `chiave` (codice
+fornitore + protocollo + data scadenza + importo), stabile tra una fotografia e l'altra: abbinamenti
+con la banca e pagamenti segnati a mano si legano alla chiave, non alla riga importata.
 """
 
 from sqlalchemy import (
@@ -145,4 +151,52 @@ class TesoreriaMovimento(Base):
         UniqueConstraint("conto_id", "impronta", name="uq_tesoreria_movimento_impronta"),
         Index("ix_tesoreria_movimenti_conto_data", "conto_id", "data_contabile"),
         Index("ix_tesoreria_movimenti_categoria", "categoria_id"),
+    )
+
+
+class TesoreriaScadImport(Base):
+    """Fotografia dello scadenzario fornitori Passcom (un file), con il file originale su disco."""
+    __tablename__ = "tesoreria_scad_import"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    data_fotografia = Column(Date, nullable=False, index=True)          # default: data di stampa
+    data_stampa     = Column(Date, nullable=True)
+    nome_file       = Column(String(255), nullable=False)
+    sha256          = Column(String(64), nullable=False, index=True)
+    percorso        = Column(String(500), nullable=True)
+    n_righe         = Column(Integer, nullable=False, default=0, server_default="0")
+    totale          = Column(Numeric(14, 2), nullable=False, default=0, server_default="0")
+    scadenza_da     = Column(Date, nullable=True)
+    scadenza_a      = Column(Date, nullable=True)
+    avvisi          = Column(JSON, nullable=True)
+    note            = Column(Text, nullable=True)
+    utente_id       = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class TesoreriaScadenza(Base):
+    """Una scadenza aperta di una fotografia (riga di dettaglio dello scadenzario Passcom)."""
+    __tablename__ = "tesoreria_scadenze"
+
+    id                 = Column(Integer, primary_key=True, autoincrement=True)
+    import_id          = Column(Integer, ForeignKey("tesoreria_scad_import.id", ondelete="CASCADE"), nullable=False)
+    chiave             = Column(String(160), nullable=False)
+    data_scadenza      = Column(Date, nullable=False)
+    tipo_pagamento     = Column(String(20), nullable=False)             # RIMESSA, RIC.BANC., ... o *PAREGGIO*
+    pareggio           = Column(Boolean, nullable=False, default=False, server_default="false")
+    tipo_documento     = Column(String(5), nullable=True)               # FR, NR, PG, ... (NULL per i pareggi)
+    registro           = Column(String(5), nullable=True)               # registro IVA (1 Italia, 8 estero)
+    numero_documento   = Column(String(30), nullable=True)
+    data_documento     = Column(Date, nullable=True)
+    data_registrazione = Column(Date, nullable=True)
+    protocollo         = Column(String(40), nullable=True)
+    codice_fornitore   = Column(String(20), nullable=False)             # es. '601.00073'
+    fornitore          = Column(String(200), nullable=False)
+    importo            = Column(Numeric(14, 2), nullable=False)         # note di credito e pareggi con segno
+    descrizione        = Column(Text, nullable=True)                    # DESCRIZIONE TESTATA
+
+    __table_args__ = (
+        UniqueConstraint("import_id", "chiave", name="uq_tesoreria_scadenza_import_chiave"),
+        Index("ix_tesoreria_scadenze_chiave", "chiave"),
+        Index("ix_tesoreria_scadenze_fornitore", "codice_fornitore"),
     )
