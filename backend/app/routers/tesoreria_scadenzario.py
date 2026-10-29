@@ -10,6 +10,7 @@ d'anno); un file con la stessa data e lo stesso anno contabile **sostituisce** i
   File in area temporanea con un token (24h), stessa area degli estratti conto. Nessuna scrittura sul DB.
 - POST /scadenzario/conferma: salva fotografia e scadenze, file originale in {dir}/scadenzario/{anno}/.
 - GET /scadenzario/import, GET /scadenzario/import/{id}/file, DELETE /scadenzario/import/{id}.
+Dopo conferma ed eliminazione si ricalcolano gli abbinamenti con la banca (tesoreria_abbinamenti).
 """
 
 import hashlib
@@ -27,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.revenue import User
 from app.models.tesoreria import TesoreriaScadenza, TesoreriaScadImport
+from app.routers.tesoreria_abbinamenti import ricalcola_abbinamenti
 from app.routers.tesoreria_import import _leggi_anteprima, _pulisci_anteprime_scadute
 from app.routers.tesoreria_shared import euro, nome_sicuro, puo_importare, puo_vedere, storage_dir
 from app.services.tesoreria_parser import ErroreImportTesoreria
@@ -206,6 +208,8 @@ def conferma_scadenzario(
         copiato = dest / f"{imp.id}_{meta['nome_file']}"
         shutil.copyfile(d / "file.xml", copiato)
         imp.percorso = str(copiato)
+        db.flush()
+        abbinamenti = ricalcola_abbinamenti(db)
         db.commit()
     except Exception:
         db.rollback()
@@ -216,7 +220,8 @@ def conferma_scadenzario(
         Path(p).unlink(missing_ok=True)
     shutil.rmtree(d, ignore_errors=True)
     return {"import_id": imp.id, "data_fotografia": data_foto.isoformat(), "anno_contabile": anno,
-            "n_righe": imp.n_righe, "totale": euro(imp.totale), "sostituiti": [v.id for v in vecchi]}
+            "n_righe": imp.n_righe, "totale": euro(imp.totale), "sostituiti": [v.id for v in vecchi],
+            "abbinamenti": abbinamenti}
 
 
 @router.get("/scadenzario/import")
@@ -256,6 +261,8 @@ def elimina_scadenzario(import_id: int, conferma: bool = False, db: Session = De
     n = db.query(TesoreriaScadenza).filter(TesoreriaScadenza.import_id == import_id).count()
     percorso = imp.percorso
     db.delete(imp)
+    db.flush()
+    ricalcola_abbinamenti(db)
     db.commit()
     if percorso:
         Path(percorso).unlink(missing_ok=True)

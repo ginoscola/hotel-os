@@ -6,6 +6,7 @@
 - tesoreria_report.py     → posizione attuale con avvisi, consuntivo, soglie degli avvisi
 - tesoreria_kpi.py        → scheda KPI
 - tesoreria_scadenzario.py → import a fotografie dello scadenzario fornitori Passcom (Fase 2)
+- tesoreria_abbinamenti.py → abbinamento scadenze ↔ banca, conferme, pagate a mano (Fase 2)
 Costanti e helper comuni in tesoreria_shared.py (permessi per modulo, classificazione).
 """
 
@@ -13,6 +14,7 @@ from fastapi import APIRouter
 
 from app.routers import (
     tesoreria_config, tesoreria_import, tesoreria_kpi, tesoreria_movimenti, tesoreria_report, tesoreria_scadenzario,
+    tesoreria_abbinamenti,
 )
 
 router = APIRouter(prefix="/tesoreria", tags=["tesoreria"])
@@ -22,3 +24,4 @@ router.include_router(tesoreria_config.router)
 router.include_router(tesoreria_report.router)
 router.include_router(tesoreria_kpi.router)
 router.include_router(tesoreria_scadenzario.router)
+router.include_router(tesoreria_abbinamenti.router)

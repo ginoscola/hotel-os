@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.revenue import User
 from app.models.tesoreria import TesoreriaConto, TesoreriaImport, TesoreriaMovimento, TesoreriaSaldo
+from app.routers.tesoreria_abbinamenti import ricalcola_abbinamenti
 from app.routers.tesoreria_shared import (
     categoria_automatica, euro, id_ripiego, mappa_categorie, nome_sicuro, puo_importare, puo_vedere,
     regole_attive, ricalcola_categorie, storage_dir,
@@ -243,6 +244,8 @@ def conferma_import(
         copiato = dest / f"{imp.id}_{meta['nome_file']}"
         shutil.copyfile(d / "file.xml", copiato)
         imp.percorso = str(copiato)
+        db.flush()
+        abbinamenti = ricalcola_abbinamenti(db)     # nuove uscite: scadenze Passcom pagate
         db.commit()
     except Exception:
         db.rollback()
@@ -253,7 +256,7 @@ def conferma_import(
 
     return {"import_id": imp.id, "conto_id": conto.id, "n_nuovi": len(nuovi),
             "n_gia_presenti": analisi["n_gia_presenti"], "n_saldi": len(risultato.saldi),
-            "n_discrepanze": len(analisi["discrepanze"])}
+            "n_discrepanze": len(analisi["discrepanze"]), "abbinamenti": abbinamenti}
 
 
 @router.get("/import")
@@ -317,6 +320,8 @@ def elimina_import(
         .delete(synchronize_session=False)
     percorso = imp.percorso
     db.delete(imp)
+    db.flush()
+    ricalcola_abbinamenti(db)       # gli abbinamenti con i movimenti eliminati spariscono
     db.commit()
     if percorso:
         Path(percorso).unlink(missing_ok=True)

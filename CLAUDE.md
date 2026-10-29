@@ -2409,7 +2409,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | Fase | Contenuto | Stato |
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
-| 2 | Scadenzario Passcom e abbinamento con la banca | ⏳ in corso — blocchi A, B ✅ (29/10/2026), blocco C da autorizzare |
+| 2 | Scadenzario Passcom e abbinamento con la banca | ⏳ in corso — blocchi A, B, C ✅ (29/10/2026), blocco D da autorizzare |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
@@ -2823,6 +2823,43 @@ ignorare, `DESCRIZIONE TESTATA` anche con colonna 4. Chiave conto+protocollo+sca
   MARR 29.861 €, CIL 23.321 €, SGR 12.085 €. Reimport dello stesso file riconosciuto.
 - ⚠️ Endpoint nuovi: serve il riavvio del backend prima di usarli (frontend nel blocco D).
 
+### Fase 2 — Blocco C fatto (29/10/2026)
+- Motore puro `services/tesoreria_abbinamento.py::abbina(scadenze, movimenti, alias, scartati)` → `Proposta`
+  (chiavi, movimenti, stato `automatico`|`proposto`, regola, nota). Canali per codice ABI: Ri.Ba. `31//48`
+  (gruppo fornitore+data scadenza ±3 gg: somma di tutti gli addebiti = somma del gruppo, poi 1:1, poi un
+  sottoinsieme ≤ 6 addebiti → proposto), SDD `31//22`/`31//21` (±7), bonifico `26//11`/`26//10`/`26//31` (±15,
+  e "bonifico_somma" per più fatture con il numero citato nella causale), assegno `13//00` (nessun nome:
+  sempre proposto, solo se l'importo è univoco). Altra modalità rispetto a Passcom: finestra −30/+45 gg,
+  sempre proposto con nota. **Importi 1:1 al centesimo esatto** (un caso reale 200,02 vs 200,03 era un
+  falso abbinamento); ±0,01 solo sulle somme. Nome: `parole()` (maiuscolo, senza accenti, sigle puntate
+  unite 'C.I.L'→'CIL', senza forme societarie), `forza_nome()` 2/1/0 (alias imparato, tutte o ≥ 2 parole in
+  comune, troncamenti ≥ 4 lettere). Nome diverso (TheFork / La Fourchette) con la modalità indicata e un
+  solo pagamento compatibile → proposto. Automatico solo con modalità indicata + nome forte (o numero
+  fattura citato) + un solo candidato.
+- Tabelle (`tes007_2026`, applicata al DB reale): `tesoreria_abbinamenti` (stato, regola, nota, fornitore),
+  `tesoreria_abbinamento_scadenze` (chiave + dati copiati: restano quando la scadenza sparisce dalle
+  fotografie, servono ai tempi di pagamento), `tesoreria_abbinamento_movimenti` (FK movimento CASCADE),
+  `tesoreria_pagate_manuali` (chiave UNIQUE, data pagamento, nota, dati copiati), `tesoreria_fornitori_banca`
+  (codice fornitore ↔ nome in banca normalizzato, imparato alla conferma se il nome non era già riconosciuto).
+- `routers/tesoreria_abbinamenti.py`: `fotografia_corrente()` (per anno contabile l'import più recente,
+  uniti), `ricalcola_abbinamenti(db)` (cancella automatici/proposti e quelli rimasti senza movimenti, esclude
+  confermati, pagate a mano, coppie scartate, pareggi, fornitori saldati, residui; note di credito incluse
+  nelle somme Ri.Ba.) chiamata da conferma/eliminazione di scadenzario **ed estratti conto**. Endpoint:
+  `GET /scadenzario/abbinamenti?stato=&codice_fornitore=` (con conteggi), `POST …/ricalcola`, `POST
+  …/conferma` e `…/scarta` (`{ids}`), `DELETE …/abbinamenti/{id}` (annulla una scelta + ricalcolo), `POST
+  …/abbinamenti/manuale` (`{chiavi, movimenti, nota}` → confermato, regola 'manuale'), `GET
+  /scadenzario/movimenti-candidati?chiave=` (±90 gg, per nome/importo/data), `GET|POST /scadenzario/pagate-manuali`
+  (`{chiavi, data_pagamento?, nota?}`, selezione multipla), `POST /scadenzario/pagate-manuali/rimuovi`.
+  Scrittura con `puo_modificare`.
+- Test: `test_tesoreria_abbinamento.py` (12, puri) + 7 in `test_tesoreria_scadenzario_api.py`. Suite: 761 verdi.
+- **Prova sui dati reali** (4 XML banca + scadenzario 28/10, DB di test, svuotato; ricalcolo 0,7 s):
+  **721 scadenze abbinate in automatico per 92.610 €** che per lo studio sono ancora aperte — soprattutto
+  **MARR luglio/agosto/settembre (717 fatture, 87.360 €, pagate con le Ri.Ba. di fine mese)**, poi IGEA
+  (Ri.Ba. 30/09/2025), Nuova Ascom, Comune di Gabicce, Castellana; 3 da confermare (TheFork, assegni Sogeal
+  1.350 € e Masini 1.000 €). Restano non abbinate 127 scadenze scadute (35.522 €: MARR giugno parziale
+  4.530 € in banca contro 6.638 € in Passcom, Meta/Google pagati con carta, Zucchetti, differenze di importo
+  Adriagelo/Vesti il lavoro) → da guardare nella vista per fornitore del blocco D.
+
 ### Fase 2 — indicazioni già raccolte (28/10/2026)
 - **GoProfit resta lo strumento operativo per i pagamenti ai fornitori** (decisione dell'utente):
   scarica le fatture dallo SDI in automatico, quindi è più aggiornato di qualunque fonte di HotelOS
@@ -2868,6 +2905,8 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **Corrispettivi → tassa di soggiorno incassata**: `report_fatturati()` di `routers/corrispettivi_report.py`
   (`mesi[].per_struttura[].tassa_soggiorno`, annullati esclusi) in `_tassa_incassata_per_mese()` di
   `routers/tesoreria_kpi.py`.
+- **Tesoreria interna**: `tesoreria_import.conferma_import`/`elimina_import` chiamano
+  `ricalcola_abbinamenti()` di `tesoreria_abbinamenti.py` (gli estratti conto cambiano gli abbinamenti).
 - **Corrispettivi → export**: `_risposta_tabella()` di `routers/corrispettivi_documenti.py` (xlsx/csv/pdf
   da intestazioni + righe) usata dagli export di Movimenti e Consuntivo.
 
@@ -2943,7 +2982,8 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **29/10/2026** — analizzato lo ZIP fatture AdE (Fase 5); v4.4.3 conferma cambio categoria in Movimenti.
   **Fase 2 avviata**: roadmap e decisioni sopra; blocco A fatto (tabelle + lettore scadenzario).
   Blocco B fatto (import a fotografie, sostituzione stesso giorno con conferma).
-  Prossimo: blocco C (abbinamento con la banca) — serve l'ok dell'utente.
+  Blocco C fatto (abbinamento con la banca: 721 scadenze già pagate trovate).
+  Prossimo: blocco D (scheda Scadenzario, vista per fornitore, KPI, v4.5.0) — serve l'ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

@@ -76,8 +76,9 @@ def client(test_engine, tmp_path_factory):
 def pulisci(test_engine):
     utente_corrente["u"] = ADMIN
     with test_engine.begin() as conn:
-        conn.execute(text("TRUNCATE tesoreria_scadenze, tesoreria_scad_import, user_module_permissions, "
-                          "module_permissions, modules, users RESTART IDENTITY CASCADE"))
+        conn.execute(text("TRUNCATE tesoreria_abbinamenti, tesoreria_pagate_manuali, tesoreria_fornitori_banca, "
+                          "tesoreria_movimenti, tesoreria_conti, tesoreria_scadenze, tesoreria_scad_import, "
+                          "user_module_permissions, module_permissions, modules, users RESTART IDENTITY CASCADE"))
         conn.execute(text("INSERT INTO modules (code, name, ordine, attivo) VALUES ('tesoreria', 'TESORERIA', 30, true)"))
         conn.execute(text("""
             INSERT INTO module_permissions (module_code, ruolo, puo_vedere, puo_modificare, puo_importare)
@@ -236,3 +237,142 @@ def test_viewer_vede_ma_non_importa(client):
     assert client.get("/tesoreria/scadenzario/import").status_code == 200
     assert _anteprima(client).status_code == 403
     assert client.delete("/tesoreria/scadenzario/import/1?conferma=true").status_code == 403
+
+
+# ── Abbinamenti con la banca (blocco C) ────────────────────────────────────────
+
+USCITE = [
+    # data, importo, abi, controparte, causale
+    ("2026-10-31", "-180.00", "31//48", "CAFFE ROSSI SRL", "Ri.Ba. scadenza 31/10/26"),     # 3 scadenze (con NR)
+    ("2026-10-28", "-25.47", "31//22", "TELEFONIA ESEMPIO S.P.A.", "SDD bolletta"),
+    ("2026-10-31", "-300.00", "26//11", "SOL SERVICES", "fattura 10/200"),                  # nome diverso
+    ("2026-11-02", "-172.89", "13//00", None, "Vs assegno n."),                             # contanti → assegno
+    ("2026-11-03", "-99.00", "26//11", "ALTRO FORNITORE", "acconto"),
+]
+
+
+def _uscite(test_engine, righe=USCITE):
+    with test_engine.begin() as conn:
+        conn.execute(text("INSERT INTO tesoreria_conti (codice, nome, tipo, fido, ha_import, ordine) "
+                          "VALUES ('PRINC', 'Conto principale', 'conto', 0, true, 1)"))
+        for i, (g, imp, abi, contro, causale) in enumerate(righe, start=1):
+            conn.execute(text("""
+                INSERT INTO tesoreria_movimenti (conto_id, data_contabile, importo, descrizione, controparte, causale,
+                                                 causale_abi, impronta)
+                VALUES (1, :g, :imp, :d, :c, :causale, :abi, :imp_id)
+            """), dict(g=g, imp=imp, d=f"{causale} {contro or ''}", c=contro, causale=causale, abi=abi, imp_id=f"T{i}"))
+
+
+def _abbinamenti(client, **params):
+    r = client.get("/tesoreria/scadenzario/abbinamenti", params=params)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_import_calcola_gli_abbinamenti(client, test_engine):
+    _uscite(test_engine)
+    esito = _importa(client)
+    assert esito["abbinamenti"]["n_automatici"] == 2 and esito["abbinamenti"]["n_proposti"] == 2
+    d = _abbinamenti(client)
+    assert d["conteggi"] == {"automatico": 2, "proposto": 2, "confermato": 0, "scartato": 0}
+    per_regola = {a["regola"]: a for a in d["abbinamenti"]}
+    riba = per_regola["riba_somma"]
+    assert riba["stato"] == "automatico" and riba["n_scadenze"] == 3 and riba["differenza"] == 0
+    assert per_regola["sdd"]["stato"] == "automatico"
+    assert per_regola["bonifico"]["stato"] == "proposto" and "diverso" in per_regola["bonifico"]["nota"]
+    assert per_regola["assegno"]["stato"] == "proposto"
+    # fornitore saldato dai pareggi e residuo 2011: mai abbinati
+    tutte = {s["chiave"].split("|")[0] for a in d["abbinamenti"] for s in a["scadenze"]}
+    assert "601.00002" not in tutte and "601.00001" not in tutte
+
+
+def test_conferma_impara_il_nome_in_banca(client, test_engine):
+    _uscite(test_engine)
+    _importa(client)
+    bonifico = next(a for a in _abbinamenti(client)["abbinamenti"] if a["regola"] == "bonifico")
+    r = client.post("/tesoreria/scadenzario/abbinamenti/conferma", json={"ids": [bonifico["id"]]})
+    assert r.status_code == 200 and r.json()["confermati"] == [bonifico["id"]]
+    with test_engine.connect() as conn:
+        assert conn.execute(text("SELECT codice_fornitore, nome_banca FROM tesoreria_fornitori_banca")).all() == [
+            ("601.00005", "SOL SERVICES")]
+    # il ricalcolo non tocca i confermati
+    client.post("/tesoreria/scadenzario/abbinamenti/ricalcola")
+    d = _abbinamenti(client)
+    assert d["conteggi"]["confermato"] == 1 and d["conteggi"]["automatico"] == 2 and d["conteggi"]["proposto"] == 1
+
+
+def test_scarta_non_ripropone(client, test_engine):
+    _uscite(test_engine)
+    _importa(client)
+    assegno = next(a for a in _abbinamenti(client)["abbinamenti"] if a["regola"] == "assegno")
+    r = client.post("/tesoreria/scadenzario/abbinamenti/scarta", json={"ids": [assegno["id"]]})
+    assert r.status_code == 200
+    client.post("/tesoreria/scadenzario/abbinamenti/ricalcola")
+    d = _abbinamenti(client)
+    assert d["conteggi"]["scartato"] == 1 and not any(a["regola"] == "assegno" and a["stato"] != "scartato"
+                                                       for a in d["abbinamenti"])
+    # annullando lo scarto la proposta torna
+    assert client.delete(f"/tesoreria/scadenzario/abbinamenti/{assegno['id']}").status_code == 200
+    assert any(a["regola"] == "assegno" and a["stato"] == "proposto" for a in _abbinamenti(client)["abbinamenti"])
+
+
+def test_abbinamento_manuale_e_candidati(client, test_engine):
+    _uscite(test_engine)
+    _importa(client)
+    chiave = next(s["chiave"] for a in _abbinamenti(client)["abbinamenti"] if a["regola"] == "assegno"
+                  for s in a["scadenze"])
+    cand = client.get("/tesoreria/scadenzario/movimenti-candidati", params={"chiave": chiave}).json()
+    assert cand[0]["importo"] == -172.89
+    altro = next(c for c in cand if c["importo"] == -99.0)
+    r = client.post("/tesoreria/scadenzario/abbinamenti/manuale",
+                    json={"chiavi": [chiave], "movimenti": [altro["id"]], "nota": "acconto"})
+    assert r.status_code == 200, r.text
+    assert r.json()["stato"] == "confermato" and r.json()["differenza"] == round(99.0 - 172.89, 2)
+    d = _abbinamenti(client)
+    assert not any(a["regola"] == "assegno" for a in d["abbinamenti"])   # proposta sostituita
+    # una scadenza già confermata non si abbina di nuovo
+    r = client.post("/tesoreria/scadenzario/abbinamenti/manuale", json={"chiavi": [chiave], "movimenti": [altro["id"]]})
+    assert r.status_code == 409
+    assert client.post("/tesoreria/scadenzario/abbinamenti/manuale",
+                       json={"chiavi": ["inesistente"], "movimenti": [altro["id"]]}).status_code == 400
+
+
+def test_pagate_a_mano_selezione_multipla(client, test_engine):
+    _uscite(test_engine)
+    _importa(client)
+    proposte = [a for a in _abbinamenti(client)["abbinamenti"] if a["stato"] == "proposto"]
+    chiavi = [s["chiave"] for a in proposte for s in a["scadenze"]]
+    r = client.post("/tesoreria/scadenzario/pagate-manuali",
+                    json={"chiavi": chiavi, "data_pagamento": "2026-11-01", "nota": "pagate con carta"})
+    assert r.status_code == 200 and r.json()["segnate"] == 2
+    assert _abbinamenti(client)["conteggi"]["proposto"] == 0          # le proposte su quelle scadenze spariscono
+    elenco = client.get("/tesoreria/scadenzario/pagate-manuali").json()
+    assert len(elenco) == 2 and elenco[0]["nota"] == "pagate con carta"
+    # già abbinata in automatico e confermata: non si segna a mano
+    sdd = next(a for a in _abbinamenti(client)["abbinamenti"] if a["regola"] == "sdd")
+    client.post("/tesoreria/scadenzario/abbinamenti/conferma", json={"ids": [sdd["id"]]})
+    r = client.post("/tesoreria/scadenzario/pagate-manuali", json={"chiavi": [sdd["scadenze"][0]["chiave"]]})
+    assert r.status_code == 409
+    r = client.post("/tesoreria/scadenzario/pagate-manuali/rimuovi", json={"chiavi": chiavi})
+    assert r.json()["rimosse"] == 2 and _abbinamenti(client)["conteggi"]["proposto"] == 2
+
+
+def test_movimento_eliminato_toglie_l_abbinamento(client, test_engine):
+    _uscite(test_engine)
+    _importa(client)
+    sdd = next(a for a in _abbinamenti(client)["abbinamenti"] if a["regola"] == "sdd")
+    client.post("/tesoreria/scadenzario/abbinamenti/conferma", json={"ids": [sdd["id"]]})
+    with test_engine.begin() as conn:
+        conn.execute(text("DELETE FROM tesoreria_movimenti WHERE id = :i"), {"i": sdd["movimenti"][0]["id"]})
+    client.post("/tesoreria/scadenzario/abbinamenti/ricalcola")
+    assert _abbinamenti(client)["conteggi"]["confermato"] == 0
+
+
+def test_viewer_non_modifica_abbinamenti(client, test_engine):
+    _uscite(test_engine)
+    _importa(client)
+    utente_corrente["u"] = VIEWER
+    assert client.get("/tesoreria/scadenzario/abbinamenti").status_code == 200
+    assert client.post("/tesoreria/scadenzario/abbinamenti/ricalcola").status_code == 403
+    assert client.post("/tesoreria/scadenzario/abbinamenti/conferma", json={"ids": [1]}).status_code == 403
+    assert client.post("/tesoreria/scadenzario/pagate-manuali", json={"chiavi": ["x"]}).status_code == 403

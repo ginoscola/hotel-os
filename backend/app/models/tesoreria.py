@@ -203,3 +203,84 @@ class TesoreriaScadenza(Base):
         Index("ix_tesoreria_scadenze_chiave", "chiave"),
         Index("ix_tesoreria_scadenze_fornitore", "codice_fornitore"),
     )
+
+
+STATI_ABBINAMENTO = ("automatico", "proposto", "confermato", "scartato")
+
+
+class TesoreriaAbbinamento(Base):
+    """Abbinamento tra scadenze Passcom (per chiave) e movimenti bancari: una Ri.Ba. può pagare più
+    fatture, un bonifico più fatture citate, e più addebiti dello stesso giorno un gruppo di scadenze.
+
+    `automatico`/`proposto` sono ricalcolati a ogni import; `confermato`/`scartato` sono scelte
+    dell'utente e non cambiano mai (uno scartato impedisce di riproporre le stesse coppie)."""
+    __tablename__ = "tesoreria_abbinamenti"
+
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    stato            = Column(String(12), nullable=False)               # STATI_ABBINAMENTO
+    regola           = Column(String(20), nullable=False)               # riba, sdd, bonifico, manuale, ...
+    nota             = Column(String(255), nullable=True)
+    codice_fornitore = Column(String(20), nullable=False, index=True)
+    fornitore        = Column(String(200), nullable=False)
+    utente_id        = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now())
+    confermato_at    = Column(DateTime(timezone=True), nullable=True)
+
+
+class TesoreriaAbbinamentoScadenza(Base):
+    """Scadenza di un abbinamento, con i dati copiati: restano anche quando la scadenza sparisce dalle
+    fotografie successive (servono per i tempi di pagamento)."""
+    __tablename__ = "tesoreria_abbinamento_scadenze"
+
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    abbinamento_id   = Column(Integer, ForeignKey("tesoreria_abbinamenti.id", ondelete="CASCADE"), nullable=False)
+    chiave           = Column(String(160), nullable=False, index=True)
+    data_scadenza    = Column(Date, nullable=False)
+    data_documento   = Column(Date, nullable=True)
+    numero_documento = Column(String(30), nullable=True)
+    tipo_pagamento   = Column(String(20), nullable=True)
+    importo          = Column(Numeric(14, 2), nullable=False)
+
+    __table_args__ = (UniqueConstraint("abbinamento_id", "chiave", name="uq_tesoreria_abb_scadenza"),)
+
+
+class TesoreriaAbbinamentoMovimento(Base):
+    __tablename__ = "tesoreria_abbinamento_movimenti"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    abbinamento_id = Column(Integer, ForeignKey("tesoreria_abbinamenti.id", ondelete="CASCADE"), nullable=False)
+    movimento_id   = Column(Integer, ForeignKey("tesoreria_movimenti.id", ondelete="CASCADE"), nullable=False,
+                            index=True)
+
+    __table_args__ = (UniqueConstraint("abbinamento_id", "movimento_id", name="uq_tesoreria_abb_movimento"),)
+
+
+class TesoreriaPagataManuale(Base):
+    """Scadenza segnata pagata a mano (contanti, carta, compensazione: niente in conto corrente)."""
+    __tablename__ = "tesoreria_pagate_manuali"
+
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    chiave           = Column(String(160), nullable=False, unique=True)
+    data_pagamento   = Column(Date, nullable=True)
+    nota             = Column(String(255), nullable=True)
+    codice_fornitore = Column(String(20), nullable=False)
+    fornitore        = Column(String(200), nullable=False)
+    data_scadenza    = Column(Date, nullable=False)
+    data_documento   = Column(Date, nullable=True)
+    numero_documento = Column(String(30), nullable=True)
+    importo          = Column(Numeric(14, 2), nullable=False)
+    utente_id        = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class TesoreriaFornitoreBanca(Base):
+    """Nome con cui un fornitore Passcom compare in banca, imparato dagli abbinamenti confermati."""
+    __tablename__ = "tesoreria_fornitori_banca"
+
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    codice_fornitore = Column(String(20), nullable=False)
+    nome_banca       = Column(String(200), nullable=False)              # normalizzato (normalizza_nome)
+    nome_originale   = Column(String(200), nullable=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("codice_fornitore", "nome_banca", name="uq_tesoreria_fornitore_banca"),)
