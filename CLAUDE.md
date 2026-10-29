@@ -2644,7 +2644,8 @@ da env `TESORERIA_DIR`, `regole_attive()`, `categoria_automatica()`, `ricalcola_
   grafico mensile barre + anno precedente `STILE_CONFRONTO` stesso colore, tabella operative →
   subtotale → non operative, clic categoria → `Drawer` movimenti; avvisi se quadratura non torna o
   anno precedente parziale), **Movimenti** (`TabMovimenti`: ricerca con debounce 400ms, filtri,
-  `ThOrdinabile`, categoria modificabile in riga → manuale con `ui-riga-modificata`, modale
+  `ThOrdinabile`, categoria modificabile in riga → manuale con `ui-riga-modificata` (dalla v4.4.3 con
+  conferma `useConferma` prima del salvataggio, contro i cambi accidentali dalla tendina), modale
   Dettagli con note/straordinario/"Torna alla categoria automatica"/"Crea regola"), **Import e
   saldi** (`TabImport`: `DropZone` .xml → modale anteprima → conferma, storico con Scarica/Elimina,
   saldi manuali di carte/prepagate).

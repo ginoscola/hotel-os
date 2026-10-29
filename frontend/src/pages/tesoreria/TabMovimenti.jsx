@@ -6,7 +6,7 @@ import { ExportMenu } from '../../components/ExportMenu.jsx'
 import { formatData, formatEuro, mostraErrore } from '../../utils/format.js'
 import {
   Button, Checkbox, Field, Input, Loading, Messaggio, Modal, Paginazione, Select, StatoVuoto, Table, Td, Textarea, Th,
-  ThOrdinabile, useAvvisi,
+  ThOrdinabile, useAvvisi, useConferma,
 } from '../../components/ui'
 import { BadgeCategoria, Importo, ModaleRegola, SelectCategoria, causaleDi, queryString } from './helpers.jsx'
 
@@ -86,6 +86,7 @@ export default function TabMovimenti({ conti, categorie, permessi, filtroInizial
   const [aperto, setAperto] = useState(null)
   const [regola, setRegola] = useState(null)
   const avvisi = useAvvisi()
+  const conferma = useConferma()
   const ultimaRichiesta = useRef(0)
 
   // Link "vedi" dalla Posizione: movimenti da classificare
@@ -125,7 +126,19 @@ export default function TabMovimenti({ conti, categorie, permessi, filtroInizial
   }
 
   async function cambiaCategoria(m, categoriaId) {
-    if (!categoriaId) return
+    if (!categoriaId || categoriaId === m.categoria_id) return
+    // Conferma per evitare cambi accidentali dalla tendina in riga
+    const nuova = categorie.find(c => c.id === categoriaId)?.nome || '—'
+    const ok = await conferma({
+      titolo: 'Cambiare la categoria?',
+      messaggio: <>
+        Movimento del {formatData(m.data_contabile)} di {formatEuro(m.importo)} ({m.controparte || causaleDi(m)}):<br />
+        da <b>{m.categoria_nome || 'Da classificare'}</b> a <b>{nuova}</b>.<br />
+        La categoria diventa manuale: le regole non la cambieranno più.
+      </>,
+      confermaLabel: 'Cambia categoria',
+    })
+    if (!ok) return
     try {
       await api.put(`/tesoreria/movimenti/${m.id}`, { categoria_id: categoriaId })
       carica()
