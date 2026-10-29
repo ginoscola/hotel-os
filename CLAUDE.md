@@ -2409,7 +2409,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | Fase | Contenuto | Stato |
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
-| 2 | Scadenzario Passcom e abbinamento con la banca | ⬜ non iniziata |
+| 2 | Scadenzario Passcom e abbinamento con la banca | ⏳ in corso — roadmap approvata 29/10/2026, blocco A da autorizzare |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
@@ -2762,6 +2762,26 @@ ricariche dal conto principale ("Ricarica carta prepagata TASCA", 500–1.000 �
 in automatico alla disponibilità: le spese con la carta non sono note, il valore sarebbe gonfiato.
 Effetto accettato: per qualche giorno dopo una ricarica la liquidità risulta più bassa del vero.
 
+### Fase 2 — decisioni (29/10/2026)
+Roadmap: A tabelle + lettore scadenzario Passcom → B import a fotografie (anteprima/conferma, confronto con la
+precedente) → C abbinamento con la banca (salvato, incerti da confermare, alias codice fornitore Passcom ↔ nome
+in banca imparato dalle conferme) → D scheda Scadenzario (per settimana, stati, per fornitore, "da segnalare allo
+studio"), KPI debito fornitori e tempi medi di pagamento, v4.5.0. Scelte dell'utente:
+1. **Pareggi**: aperto calcolato **per fornitore al netto dei `*PAREGGIO*`**; saldo fornitore ≤ 0 → nulla da pagare.
+2. **Residui vecchi** (partite 2011–2024): riquadro a parte "da verificare con lo studio", fuori dalla vista settimanale.
+3. Solo il file **"da pagare"**; quello delle pagate (stato P) in Fase 4.
+4. **Segna come pagata a mano**, anche con **selezione multipla** (contanti, carta, altro non visibile in banca);
+   persistente tra una fotografia e l'altra (legata alla chiave della scadenza, non alla riga importata).
+5. Tempi medi di pagamento dagli abbinamenti con la banca (data fattura → pagamento effettivo).
+6. **La modalità di pagamento di Passcom è solo indicativa**: l'abbinamento cerca prima con la regola della
+   modalità indicata, poi anche con gli altri canali (bonifico/SDD/Ri.Ba.) — es. fattura "CONTANTI" pagata con
+   bonifico → proposta come abbinamento incerto da confermare, con nota "modalità diversa da quella in Passcom".
+Formato verificato sul file reale: dettaglio = colonne 5–15 (`ss:Index`), importi con **punto** decimale
+("-150.00"), NR già negative nel file, gruppo `1='Data Scadenza'`/`2=gg/mm/aaaa`, intestazione con
+"Data di Stampa" (default della data fotografia), righe di sola colonna 4 (frammenti di ragione sociale) da
+ignorare, `DESCRIZIONE TESTATA` anche con colonna 4. Chiave conto+protocollo+scadenza+importo: 0 duplicati su
+1.285 righe (i pareggi non hanno protocollo).
+
 ### Fase 2 — indicazioni già raccolte (28/10/2026)
 - **GoProfit resta lo strumento operativo per i pagamenti ai fornitori** (decisione dell'utente):
   scarica le fatture dallo SDI in automatico, quindi è più aggiornato di qualunque fonte di HotelOS
@@ -2879,6 +2899,8 @@ esistenti, mai query duplicate sulle loro tabelle.
   modulo da parte dell'utente; la Fase 2 parte solo con il suo ok (presentare prima la strategia).
 - **28/10/2026 (6)** — v4.1.0: carte di credito azzerate in automatico all'addebito in banca (l'utente
   inserisce solo il totale di ogni estratto). XML 2025–2026 dei conti già caricati dall'utente.
+- **29/10/2026** — analizzato lo ZIP fatture AdE (Fase 5); v4.4.3 conferma cambio categoria in Movimenti.
+  **Fase 2 avviata**: roadmap e decisioni sopra; prossimo passo = strategia blocco A da autorizzare.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.
