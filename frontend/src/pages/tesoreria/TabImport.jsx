@@ -1,5 +1,5 @@
-// Import degli estratti conto (XML CBI) con anteprima e conferma, storico degli import con file
-// originali, e saldi inseriti a mano per carte di credito e prepagate.
+// Import degli estratti conto (XML CBI) e dello scadenzario fornitori Passcom con anteprima e conferma,
+// storico degli import con file originali, e saldi inseriti a mano per carte di credito e prepagate.
 import { useCallback, useEffect, useState } from 'react'
 import api from '../../api/client.js'
 import { colors } from '../../styles/tokens.js'
@@ -105,6 +105,170 @@ function ModaleAnteprima({ file, onChiudi, onImportato }) {
         </div>
       )}
     </Modal>
+  )
+}
+
+function ModaleScadenzario({ file, onChiudi, onImportato }) {
+  const [anteprima, setAnteprima] = useState(null)
+  const [data, setData] = useState(null)        // null = data di stampa del file
+  const [errore, setErrore] = useState(null)
+  const [note, setNote] = useState('')
+  const [lavoro, setLavoro] = useState(true)
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
+
+  // L'anteprima dipende dalla data della fotografia (confronto con la precedente): si rifà se cambia
+  useEffect(() => {
+    let annullato = false
+    const fd = new FormData()
+    fd.append('file', file)
+    if (data) fd.append('data_fotografia', data)
+    setLavoro(true); setErrore(null)
+    api.post('/tesoreria/scadenzario/anteprima', fd, { timeout: TIMEOUT_IMPORT })
+      .then(r => { if (!annullato) setAnteprima(r.data) })
+      .catch(e => { if (!annullato) setErrore(mostraErrore(e, 'Errore nella lettura del file')) })
+      .finally(() => { if (!annullato) setLavoro(false) })
+    return () => { annullato = true }
+  }, [file, data])
+
+  async function salva() {
+    const a = anteprima
+    let sostituisci = false
+    if (a.sostituisce.length) {
+      sostituisci = await conferma({
+        titolo: 'Sostituire lo scadenzario dello stesso giorno?',
+        messaggio: `Esiste già uno scadenzario del ${formatData(a.data_fotografia)} per l'anno contabile ` +
+          `${a.anno_contabile} («${a.sostituisce[0].nome_file}»): viene sostituito da questo file.`,
+        confermaLabel: 'Sostituisci',
+      })
+      if (!sostituisci) return
+    }
+    setLavoro(true); setErrore(null)
+    try {
+      const r = await api.post('/tesoreria/scadenzario/conferma',
+        { token: a.token, data_fotografia: a.data_fotografia, sostituisci, note: note || null }, { timeout: TIMEOUT_IMPORT })
+      const ab = r.data.abbinamenti
+      avvisi.successo(`Scadenzario importato: ${r.data.n_righe} scadenze. Pagate in banca: ` +
+        `${ab.n_scadenze_automatiche}, da confermare: ${ab.n_proposti}`)
+      onImportato()
+    } catch (e) {
+      setErrore(mostraErrore(e, "Errore durante l'import"))
+      setLavoro(false)
+    }
+  }
+
+  const a = anteprima
+  const r = a?.riepilogo
+  const c = a?.confronto
+  return (
+    <Modal titolo={`Importa scadenzario Passcom — ${file.name}`} onChiudi={onChiudi} larghezza={820} chiudiSuSfondo={false}
+      footer={<>
+        <Button variant="secondary" onClick={onChiudi}>Annulla</Button>
+        <Button onClick={salva} disabled={!a || a.gia_importato || lavoro}>Conferma import</Button>
+      </>}>
+      <Messaggio>{errore}</Messaggio>
+      {!a ? (lavoro && <Loading testo="Lettura del file…" />) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {a.gia_importato && (
+            <Messaggio tipo="warn">Questo file è già stato importato (scadenzario del {formatData(a.gia_importato.data_fotografia)}).</Messaggio>
+          )}
+          {a.sostituisce.length > 0 && (
+            <Messaggio tipo="warn">C'è già uno scadenzario del {formatData(a.data_fotografia)}: confermando verrà sostituito.</Messaggio>
+          )}
+          {a.avvisi.map((t, i) => <Messaggio key={i} tipo="warn">{t}</Messaggio>)}
+          <Field label="Data della fotografia (di default la data di stampa)">
+            <Input type="date" value={data ?? a.data_fotografia} onChange={e => e.target.value && setData(e.target.value)} />
+          </Field>
+          <div className="ui-kpi-row">
+            <KpiTile label="Scadenze" value={formatN(r.n_scadenze)} sub={`${formatData(a.scadenza_da)} – ${formatData(a.scadenza_a)}`} />
+            <KpiTile label="Totale del file" value={formatEuro(r.totale)} sub={`anno contabile ${a.anno_contabile}`} />
+            <KpiTile label="Aperto netto" value={formatEuro(r.aperto)} sub={`${r.n_fornitori} fornitori, ${r.n_fornitori_saldati} compensati`} />
+            <KpiTile label="Residui anni precedenti" value={formatEuro(r.residui)} sub={`${r.n_residui} scadenze`} />
+          </div>
+          {c ? (
+            <Messaggio tipo="info">
+              Rispetto allo scadenzario del {formatData(c.data_fotografia)}: {c.n_nuove} scadenze nuove
+              ({formatEuro(c.importo_nuove)}), {c.n_chiuse} chiuse in contabilità ({formatEuro(c.importo_chiuse)}).
+            </Messaggio>
+          ) : <p className="ui-text-muted">Primo scadenzario di questo anno contabile: nessun confronto.</p>}
+          <Table compact maxHeight="30vh">
+            <thead><tr><Th>Fornitore</Th><Th num>Scadenze</Th><Th num>Fatture</Th><Th num>Pareggi</Th><Th num tot>Aperto</Th></tr></thead>
+            <tbody>
+              {r.fornitori.slice(0, 15).map(f => (
+                <tr key={f.codice_fornitore}>
+                  <Td>{f.fornitore}</Td><Td num>{f.n}</Td><Td num>{formatEuro(f.fatture)}</Td>
+                  <Td num>{f.pareggi ? formatEuro(f.pareggi) : '—'}</Td><Td num tot>{formatEuro(f.aperto)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          <Field label="Note (facoltative)"><Input value={note} onChange={e => setNote(e.target.value)} /></Field>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+function ImportScadenzario({ permessi, onCambio }) {
+  const [storico, setStorico] = useState(null)
+  const [file, setFile] = useState(null)
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
+
+  const carica = useCallback(async () => {
+    try { setStorico((await api.get('/tesoreria/scadenzario/import')).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }, [avvisi])
+  useEffect(() => { carica() }, [carica])
+
+  async function elimina(i) {
+    if (!(await conferma({
+      titolo: `Eliminare lo scadenzario del ${formatData(i.data_fotografia)}?`,
+      messaggio: 'Spariscono le sue scadenze; gli abbinamenti con la banca vengono ricalcolati sullo scadenzario ' +
+        'precedente. Le conferme e i "pagati a mano" restano.',
+      pericolo: true,
+    }))) return
+    try {
+      await api.delete(`/tesoreria/scadenzario/import/${i.id}`, { params: { conferma: true } })
+      carica(); onCambio()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  return (
+    <Card title="Scadenzario fornitori (Passcom)">
+      {permessi.puo_importare && (
+        <div style={{ marginBottom: 12 }}>
+          <DropZone accept=".xml" icona="📋" onFile={setFile}
+            titolo="Trascina qui lo scadenzario fornitori o clicca per sceglierlo"
+            sottotitolo="Da Passcom: Scadenzario fornitori, rate da pagare, esportazione Excel (file .xml)." />
+        </div>
+      )}
+      {!storico ? <Loading /> : storico.length === 0 ? <StatoVuoto>Nessuno scadenzario caricato.</StatoVuoto> : (
+        <Table compact maxHeight="35vh">
+          <thead><tr><Th>Fotografia del</Th><Th>Anno cont.</Th><Th>File</Th><Th num>Scadenze</Th><Th num>Totale</Th><Th>Caricato</Th><Th></Th></tr></thead>
+          <tbody>
+            {storico.map(i => (
+              <tr key={i.id}>
+                <Td>{formatData(i.data_fotografia)}</Td><Td>{i.anno_contabile ?? '—'}</Td>
+                <Td>{i.nome_file}{i.note ? <span className="ui-text-muted"> — {i.note}</span> : null}</Td>
+                <Td num>{formatN(i.n_righe)}</Td><Td num>{formatEuro(i.totale)}</Td>
+                <Td muted>{formatData(i.created_at?.slice(0, 10))} {i.utente || ''}</Td>
+                <Td style={{ whiteSpace: 'nowrap' }}>
+                  {i.ha_file && (
+                    <Button size="sm" variant="ghost"
+                      onClick={() => scarica(`/tesoreria/scadenzario/import/${i.id}/file`, {}, i.nome_file).catch(e => avvisi.errore(mostraErrore(e)))}>
+                      Scarica
+                    </Button>
+                  )}
+                  {permessi.puo_importare && <Button size="sm" variant="danger-soft" onClick={() => elimina(i)}>Elimina</Button>}
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      {file && <ModaleScadenzario file={file} onChiudi={() => setFile(null)}
+        onImportato={() => { setFile(null); carica(); onCambio() }} />}
+    </Card>
   )
 }
 
@@ -279,6 +443,8 @@ export default function TabImport({ conti, permessi, onCambio }) {
           </Table>
         )}
       </Card>
+
+      <ImportScadenzario permessi={permessi} onCambio={onCambio} />
 
       <SaldiManuali conti={conti} puoModificare={permessi.puo_modificare} onCambio={onCambio} />
 

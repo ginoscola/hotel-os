@@ -1,5 +1,6 @@
 """Tesoreria — scheda KPI: andamento del saldo, punto più basso e uso del fido, mesi di autonomia,
-costo degli incassi, peso delle uscite sugli incassi, tassa di soggiorno incassata e versata.
+costo degli incassi, peso delle uscite sugli incassi, tassa di soggiorno incassata e versata;
+dalla Fase 2 debito verso i fornitori (ultimo scadenzario Passcom) e tempi di pagamento (abbinamenti).
 
 Riusa `consuntivo()` e `posizione()` (tesoreria_report) e, per la tassa di soggiorno incassata,
 `report_fatturati()` di Corrispettivi (tassa di soggiorno per mese, documenti annullati esclusi):
@@ -18,6 +19,7 @@ from app.database import get_db
 from app.models.tesoreria import TesoreriaCategoria, TesoreriaConto, TesoreriaMovimento
 from app.routers.corrispettivi_report import report_fatturati
 from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti, consuntivo, posizione
+from app.routers.tesoreria_scadenzario_report import stato_scadenze, tempi_pagamento
 from app.routers.tesoreria_shared import euro, puo_vedere
 from app.services.tesoreria_report import (
     ZERO, anno_prima, inverno_di_riferimento, mesi_di_autonomia, minimo_serie, serie_saldi, tassa_per_trimestre,
@@ -170,8 +172,23 @@ def kpi(anno: Optional[int] = Query(None, ge=2020, le=2100), db: Session = Depen
         ],
     }
 
+    # ── Fase 2. Debito verso i fornitori e tempi di pagamento ─────────────────
+    st = stato_scadenze(db, oggi)
+    t = st["totali"]
+    fornitori = {
+        "disponibile": t is not None,
+        "data_fotografia": st["data_fotografia"].isoformat() if st["data_fotografia"] else None,
+        "aperto_passcom": euro(t["aperto_passcom"]) if t else None,
+        "da_pagare": euro(t["da_pagare"]["importo"]) if t else None,
+        "scaduto": euro(t["scaduto"]["importo"]) if t else None,
+        "da_segnalare": euro(t["da_segnalare"]["importo"]) if t else None,
+        "tempi": tempi_pagamento(db, inizio, fine),
+        "tempi_ap": tempi_pagamento(db, ap_inizio, ap_fine),
+    }
+
     return {
         "anno": anno, "fino_al": fine.isoformat(), "ap_fino_al": ap_fine.isoformat(),
+        "fornitori": fornitori,
         "andamento": andamento,
         "minimo": {"anno": _minimo(serie), "ap_stesso_periodo": _minimo({g: v for g, v in serie_ap.items() if g <= ap_fine}),
                    "ap_intero": _minimo(serie_ap)},

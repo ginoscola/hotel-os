@@ -8,7 +8,10 @@ Regole (decise con l'utente, 29/10/2026):
 - l'aperto si calcola **per fornitore al netto dei pareggi**: un fornitore con saldo ≤ 0 non ha nulla da
   pagare (pagamenti/compensazioni registrati a date diverse dalle fatture che chiudono);
 - **residui**: scadenze anteriori al 1° gennaio dell'anno precedente a quello della fotografia (es. fino
-  al 2024 per una fotografia del 2026), da verificare con lo studio, fuori dalla vista per settimana.
+  al 2024 per una fotografia del 2026), da verificare con lo studio, fuori dalla vista per settimana;
+- i pareggi coprono prima le scadenze già pagate in banca (lo studio ha registrato il pagamento come
+  pareggio: non vanno segnalate), poi le aperte dalla più vecchia (`compensa_pareggi`). Caso reale MARR:
+  pagamenti di luglio–settembre registrati come pareggi, non collegati alle fatture.
 """
 
 from collections import defaultdict
@@ -98,3 +101,45 @@ def confronta(precedenti, attuali) -> dict:
     return {"nuove": nuove, "chiuse": chiuse,
             "importo_nuove": sum((s.importo for s in nuove), ZERO),
             "importo_chiuse": sum((s.importo for s in chiuse), ZERO)}
+
+
+def compensa_pareggi(righe: list) -> None:
+    """Distribuisce i pareggi di ogni fornitore sulle sue scadenze (modifica le righe sul posto).
+
+    I `*PAREGGIO*` sono pagamenti/compensazioni che lo studio ha registrato senza collegarli alle singole
+    fatture. Per fornitore, il credito dei pareggi (più le note di credito ancora aperte) copre:
+    1. prima le scadenze già pagate (in banca o a mano): lo studio le ha già registrate, non vanno segnalate;
+    2. poi le scadenze aperte, dalla più vecchia.
+    Ogni riga è un dict con `stato`, `importo`, `data_scadenza`, `codice_fornitore`, `pareggio`; riceve
+    `compensato` (quota coperta), `aperto` (quota ancora da pagare, per le aperte) e `da_segnalare` (quota
+    pagata ma non ancora registrata, per le pagate). Una riga coperta per intero diventa `compensata`.
+    """
+    pagate = ("pagata_banca", "pagata_manuale")
+    per_forn = {}
+    for r in righe:
+        r["compensato"], r["aperto"], r["da_segnalare"] = ZERO, ZERO, ZERO
+        if not r["pareggio"] and r["importo"] < 0 and r["stato"] in pagate:
+            r["da_segnalare"] = r["importo"]       # nota di credito dentro una Ri.Ba. pagata: riduce il totale
+        per_forn.setdefault(r["codice_fornitore"], []).append(r)
+    for gruppo in per_forn.values():
+        credito = -sum((r["importo"] for r in gruppo if r["pareggio"]), ZERO)
+        credito += -sum((r["importo"] for r in gruppo if not r["pareggio"] and r["importo"] < 0
+                         and r["stato"] not in pagate), ZERO)
+        credito = max(credito, ZERO)
+        ordinate = sorted((r for r in gruppo if not r["pareggio"] and r["importo"] > 0),
+                          key=lambda r: (r["stato"] not in pagate, r["data_scadenza"]))
+        for r in gruppo:
+            if not r["pareggio"] and r["importo"] < 0 and r["stato"] not in pagate:
+                r["compensato"], r["stato_originale"], r["stato"] = r["importo"], r["stato"], "compensata"
+        for r in ordinate:
+            quota = min(credito, r["importo"])
+            credito -= quota
+            r["compensato"] = quota
+            resto = r["importo"] - quota
+            if r["stato"] in pagate:
+                r["da_segnalare"] = resto
+            else:
+                r["aperto"] = resto
+            if resto == 0:
+                r["stato_originale"] = r["stato"]
+                r["stato"] = "compensata"

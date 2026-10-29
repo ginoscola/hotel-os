@@ -2409,7 +2409,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | Fase | Contenuto | Stato |
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
-| 2 | Scadenzario Passcom e abbinamento con la banca | ⏳ in corso — blocchi A, B, C ✅ (29/10/2026), blocco D da autorizzare |
+| 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
@@ -2852,13 +2852,48 @@ ignorare, `DESCRIZIONE TESTATA` anche con colonna 4. Chiave conto+protocollo+sca
   (`{chiavi, data_pagamento?, nota?}`, selezione multipla), `POST /scadenzario/pagate-manuali/rimuovi`.
   Scrittura con `puo_modificare`.
 - Test: `test_tesoreria_abbinamento.py` (12, puri) + 7 in `test_tesoreria_scadenzario_api.py`. Suite: 761 verdi.
-- **Prova sui dati reali** (4 XML banca + scadenzario 28/10, DB di test, svuotato; ricalcolo 0,7 s):
-  **721 scadenze abbinate in automatico per 92.610 €** che per lo studio sono ancora aperte — soprattutto
-  **MARR luglio/agosto/settembre (717 fatture, 87.360 €, pagate con le Ri.Ba. di fine mese)**, poi IGEA
-  (Ri.Ba. 30/09/2025), Nuova Ascom, Comune di Gabicce, Castellana; 3 da confermare (TheFork, assegni Sogeal
-  1.350 € e Masini 1.000 €). Restano non abbinate 127 scadenze scadute (35.522 €: MARR giugno parziale
-  4.530 € in banca contro 6.638 € in Passcom, Meta/Google pagati con carta, Zucchetti, differenze di importo
-  Adriagelo/Vesti il lavoro) → da guardare nella vista per fornitore del blocco D.
+- **Prova sui dati reali** (4 XML banca + scadenzario 28/10, DB di test, svuotato; ricalcolo 0,7 s): 721
+  scadenze abbinate in automatico per 92.610 € (MARR luglio/agosto/settembre: 717 fatture, 87.360 €, con le
+  Ri.Ba. di fine mese; IGEA Ri.Ba. 30/09/2025, Nuova Ascom, Comune di Gabicce, Castellana), 3 da confermare
+  (TheFork, assegni Sogeal 1.350 € e Masini 1.000 €).
+  ⚠️ **Lettura corretta nel blocco D**: quei pagamenti MARR lo studio li ha **già registrati come pareggi**
+  (non collegati alle fatture, per questo le fatture restano aperte nello scadenzario): non sono da
+  segnalare. Vedi `compensa_pareggi()` sotto: al netto dei pareggi restano da segnalare solo ~2.839 €.
+
+### Fase 2 — Blocco D fatto (29/10/2026, v4.5.0) — Fase 2 chiusa
+- **Pareggi distribuiti per fornitore** (`services/tesoreria_scadenzario.compensa_pareggi`): il credito dei
+  `*PAREGGIO*` (+ note di credito aperte) copre **prima le scadenze già pagate** (in banca o a mano: lo studio
+  ha registrato il pagamento come pareggio → non vanno segnalate), poi le aperte dalla più vecchia. Ogni riga
+  riceve `compensato`, `aperto` (da pagare), `da_segnalare` (pagata ma non registrata); coperta per intero →
+  stato `compensata` (`stato_originale` conservato). Le note di credito dentro una Ri.Ba. pagata hanno
+  `da_segnalare` negativo (il totale torna con l'addebito). Sostituisce il vecchio stato "saldata".
+  Scoperto sui dati reali: senza questa regola risultavano 87.360 € MARR "da segnalare" già registrati.
+- `routers/tesoreria_scadenzario_report.py`: `stato_scadenze(db, oggi)` (stato per riga: pareggio,
+  pagata_banca, pagata_manuale, da_confermare, residuo, scaduta, aperta → poi compensata; totali da_pagare /
+  scaduto / in_scadenza 30 gg / da_segnalare / da_confermare / residui / compensate, sempre sulle quote
+  `aperto`/`da_segnalare`; riepilogo per fornitore), `tempi_pagamento(db, da, a)` (giorni fattura → pagamento
+  in banca e rispetto alla scadenza, medie pesate sull'importo, dagli abbinamenti automatici/confermati).
+  Endpoint `GET /scadenzario/stato`, `GET /scadenzario/fornitore/{codice}` (scadenze, pagamenti in banca con
+  nome simile o imparato negli ultimi 18 mesi, totali mensili, abbinamenti), `GET
+  /scadenzario/da-segnalare/export?formato=xlsx|csv|pdf` (solo fornitori con quota da segnalare > 0).
+- KPI (`tesoreria_kpi.py`, blocco `fornitori`): debito verso i fornitori (= da pagare), scaduto, da
+  segnalare, tempo medio di pagamento dell'anno vs anno precedente, primi 10 fornitori per importo.
+- Frontend: scheda **Scadenzario** (`pages/tesoreria/TabScadenzario.jsx`, tra Movimenti e Import; vista in
+  `localStorage('tesoreria_scadenzario_vista')`): KPI in alto, viste Per settimana (lun–dom, scadute in un
+  blocco a parte, filtro Da pagare/Tutte, selezione multipla → "Segna pagate"), Da confermare (proposti,
+  automatici, confermati, scartati; conferma/scarta anche multipli, "Annulla la scelta"), Da segnalare allo
+  studio (`ExportMenu`), Per fornitore (→ `Drawer` dettaglio: scadenze selezionabili, "Abbina a un
+  pagamento" con candidati, "Segna pagate", "Togli pagata a mano", pagamenti in banca, abbinamenti), Residui.
+  Pulsante "Ricalcola abbinamenti". In **Import e saldi** la card "Scadenzario fornitori (Passcom)": DropZone,
+  anteprima con data della fotografia modificabile (rifà l'anteprima), confronto con la precedente, conferma
+  della sostituzione dello stesso giorno con `useConferma`, storico con Scarica/Elimina. KPI: card Fornitori.
+- Test: 5 nuovi in `test_tesoreria_scadenzario_api.py` (stato, dettaglio, export, tempi, pareggi). Suite: 766 verdi.
+- **Dati reali** (DB di test, svuotato): stato 0,17 s; da pagare 111.677 € (299 scadenze, 81.310 € entro 30
+  giorni), **scaduto 16.774 €** (41: Google Ireland 2.751 €, Bagni Peppo 4.270 €, Vesti il lavoro, Ortofrutta,
+  Sky, CHS, Zucchetti…), da segnalare 2.839 € (Nuova Ascom, Comune di Gabicce, Castellana), 3 da confermare,
+  residui 4.998 €, 890 scadenze chiuse da pareggi. Tempo medio di pagamento 2026: 61,5 giorni dalla fattura,
+  0,1 giorni dopo la scadenza (MARR 63 giorni: Ri.Ba. a fine mese successivo).
+- ⚠️ Dopo il deploy: riavvio del backend (endpoint e tabelle nuove) e `npm run build` (fatto).
 
 ### Fase 2 — indicazioni già raccolte (28/10/2026)
 - **GoProfit resta lo strumento operativo per i pagamenti ai fornitori** (decisione dell'utente):
@@ -2982,8 +3017,9 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **29/10/2026** — analizzato lo ZIP fatture AdE (Fase 5); v4.4.3 conferma cambio categoria in Movimenti.
   **Fase 2 avviata**: roadmap e decisioni sopra; blocco A fatto (tabelle + lettore scadenzario).
   Blocco B fatto (import a fotografie, sostituzione stesso giorno con conferma).
-  Blocco C fatto (abbinamento con la banca: 721 scadenze già pagate trovate).
-  Prossimo: blocco D (scheda Scadenzario, vista per fornitore, KPI, v4.5.0) — serve l'ok dell'utente.
+  Blocco C fatto (abbinamento con la banca). Blocco D fatto: scheda Scadenzario, pareggi distribuiti per
+  fornitore (i pagamenti MARR erano già registrati come pareggi), KPI fornitori. **Fase 2 chiusa con v4.5.0.**
+  Prossimo: l'utente carica lo scadenzario reale e usa la scheda; Fase 3 solo con il suo ok (strategia prima).
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

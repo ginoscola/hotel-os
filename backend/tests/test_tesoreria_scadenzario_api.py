@@ -376,3 +376,85 @@ def test_viewer_non_modifica_abbinamenti(client, test_engine):
     assert client.post("/tesoreria/scadenzario/abbinamenti/ricalcola").status_code == 403
     assert client.post("/tesoreria/scadenzario/abbinamenti/conferma", json={"ids": [1]}).status_code == 403
     assert client.post("/tesoreria/scadenzario/pagate-manuali", json={"chiavi": ["x"]}).status_code == 403
+
+
+# ── Scheda Scadenzario (blocco D) ──────────────────────────────────────────────
+
+def test_stato_delle_scadenze(client, test_engine):
+    from app.routers.tesoreria_scadenzario_report import stato_scadenze
+    _uscite(test_engine)
+    _importa(client)
+    sdd = next(a for a in _abbinamenti(client)["abbinamenti"] if a["regola"] == "sdd")
+    client.post("/tesoreria/scadenzario/abbinamenti/conferma", json={"ids": [sdd["id"]]})
+    with sessionmaker(bind=test_engine)() as db:
+        st = stato_scadenze(db, oggi=date(2026, 11, 15))
+    per_stato = {}
+    for r in st["scadenze"]:
+        per_stato.setdefault(r["stato"], []).append(r)
+    assert len(per_stato["pagata_banca"]) == 4             # Ri.Ba. (3, con nota di credito) + SDD
+    assert len(per_stato["da_confermare"]) == 2            # bonifico con nome diverso, assegno
+    assert len(per_stato["pareggio"]) == 3
+    assert {r["codice_fornitore"] for r in per_stato["compensata"]} == {"601.00002"}     # coperta dai pareggi
+    assert "aperta" not in per_stato and "scaduta" not in per_stato
+    sdd_riga = next(r for r in per_stato["pagata_banca"] if r["codice_fornitore"] == "601.00004")
+    assert sdd_riga["pagata_come"] == "Addebito diretto" and sdd_riga["data_pagamento"] == date(2026, 10, 28)
+    t = st["totali"]
+    assert t["da_segnalare"]["importo"] == Decimal("205.47")        # 180,00 + 25,47
+    assert t["da_pagare"]["importo"] == Decimal("472.89")           # 300,00 + 172,89 da confermare
+    # senza abbinamenti, dopo la scadenza: scaduta
+    client.post("/tesoreria/scadenzario/pagate-manuali", json={"chiavi": [r["chiave"] for r in per_stato["da_confermare"]]})
+    with sessionmaker(bind=test_engine)() as db:
+        st = stato_scadenze(db, oggi=date(2026, 12, 15))
+    assert sum(1 for r in st["scadenze"] if r["stato"] == "pagata_manuale") == 2
+    assert st["totali"]["da_segnalare"]["n"] == 6
+    assert st["totali"]["da_segnalare"]["importo"] == Decimal("678.36")
+
+
+def test_stato_senza_scadenzario(client):
+    r = client.get("/tesoreria/scadenzario/stato").json()
+    assert r["data_fotografia"] is None and r["scadenze"] == []
+
+
+def test_dettaglio_fornitore_ed_export(client, test_engine):
+    _uscite(test_engine)
+    _importa(client)
+    d = client.get("/tesoreria/scadenzario/fornitore/601.00003").json()
+    assert d["fornitore"] == "CAFFÈ ROSSI S.R.L." and len(d["scadenze"]) == 3
+    assert [p["importo"] for p in d["pagamenti"]] == [-180.0] and d["pagamenti"][0]["abbinato"]
+    assert d["mensile"] == [{"mese": "2026-10", "importo": 180.0}]
+    assert d["abbinamenti"][0]["regola"] == "riba_somma"
+    assert client.get("/tesoreria/scadenzario/fornitore/999").status_code == 404
+    r = client.get("/tesoreria/scadenzario/da-segnalare/export", params={"formato": "csv"})
+    assert r.status_code == 200
+    testo = r.content.decode("utf-8-sig")
+    assert "CAFFÈ ROSSI" in testo and "TELEFONIA ESEMPIO" in testo and "TOTALE" in testo
+    for formato in ("xlsx", "pdf"):
+        assert client.get("/tesoreria/scadenzario/da-segnalare/export", params={"formato": formato}).status_code == 200
+
+
+def test_tempi_di_pagamento(client, test_engine):
+    from app.routers.tesoreria_scadenzario_report import tempi_pagamento
+    _uscite(test_engine)
+    _importa(client)
+    with sessionmaker(bind=test_engine)() as db:
+        t = tempi_pagamento(db, date(2026, 1, 1), date(2026, 12, 31))
+    # Ri.Ba. 31/10 per fatture del 30/09 (31 giorni, la nota di credito non pesa) + SDD 28/10 per fattura del 10/10
+    assert t["n"] == 3
+    attesa = (31 * 120.50 + 31 * 80.25 + 18 * 25.47) / (120.50 + 80.25 + 25.47)
+    assert t["giorni_da_fattura"] == round(attesa, 1)
+    assert t["fornitori"][0]["codice_fornitore"] == "601.00003"
+
+
+def test_pareggi_coprono_prima_le_pagate():
+    from app.services.tesoreria_scadenzario import compensa_pareggi
+    def r(stato, importo, giorno, pareggio=False):
+        return {"stato": stato, "importo": Decimal(importo), "data_scadenza": date(2026, 1, giorno),
+                "codice_fornitore": "F", "pareggio": pareggio}
+    righe = [r("pagata_banca", "100.00", 20), r("pagata_banca", "-10.00", 20), r("scaduta", "50.00", 5),
+             r("aperta", "70.00", 25), r("pareggio", "-120.00", 28, True)]
+    compensa_pareggi(righe)
+    pag, nc, scad, aperta, _ = righe
+    assert pag["stato"] == "compensata" and pag["stato_originale"] == "pagata_banca"     # la pagata per prima
+    assert nc["da_segnalare"] == Decimal("-10.00")
+    assert scad["stato"] == "scaduta" and scad["compensato"] == Decimal("20.00") and scad["aperto"] == Decimal("30.00")
+    assert aperta["aperto"] == Decimal("70.00")

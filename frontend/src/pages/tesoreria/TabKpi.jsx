@@ -1,6 +1,7 @@
 // KPI di tesoreria: andamento del saldo delle banche (anno vs anno precedente), punto più basso e uso
 // del fido, mesi di autonomia, costo degli incassi, peso delle uscite sugli incassi, tassa di
-// soggiorno incassata (Corrispettivi) e versata (banca).
+// soggiorno incassata (Corrispettivi) e versata (banca); debito verso i fornitori e tempi di pagamento
+// (scadenzario Passcom abbinato alla banca).
 import { useEffect, useState } from 'react'
 import {
   CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -140,6 +141,8 @@ function Contenuto({ d }) {
         </p>
       </Card>
 
+      <Fornitori f={d.fornitori} anno={d.anno} periodo={periodo} />
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
         <Card title={`Costo degli incassi (${periodo})`}>
           <Table compact>
@@ -190,5 +193,48 @@ function Contenuto({ d }) {
         </Card>
       </div>
     </>
+  )
+}
+
+const giorni = v => (v == null ? '—' : `${v.toFixed(0)} giorni`)
+
+function Fornitori({ f, anno, periodo }) {
+  if (!f?.disponibile) {
+    return (
+      <Card title="Fornitori">
+        <StatoVuoto>Nessuno scadenzario Passcom caricato: il debito verso i fornitori compare dopo il primo import.</StatoVuoto>
+      </Card>
+    )
+  }
+  const t = f.tempi
+  return (
+    <Card title={`Fornitori — scadenzario del ${formatDataIt(f.data_fotografia)}`}>
+      <div className="ui-kpi-row">
+        <KpiTile label="Debito verso i fornitori" value={formatEuro(f.da_pagare)}
+          sub={`aperto per Passcom ${formatEuro(f.aperto_passcom)}`} />
+        <KpiTile label="Scaduto non pagato" value={formatEuro(f.scaduto)} colore={f.scaduto > 0 ? colors.danger : undefined} />
+        <KpiTile label="Pagato, da segnalare allo studio" value={formatEuro(f.da_segnalare)} />
+        <KpiTile label={`Tempo medio di pagamento ${anno}`} value={giorni(t.giorni_da_fattura)}
+          sub={t.n ? `dalla fattura · ${giorni(t.giorni_dopo_scadenza)} rispetto alla scadenza` : 'nessun pagamento abbinato'}
+          confronto={f.tempi_ap.n ? giorni(f.tempi_ap.giorni_da_fattura) : null} confrontoLabel="anno prec." />
+      </div>
+      {t.fornitori.length > 0 && (
+        <Table compact>
+          <thead><tr><Th>Fornitore</Th><Th num>Fatture pagate</Th><Th num>Importo</Th><Th num tot>Giorni dalla fattura</Th></tr></thead>
+          <tbody>
+            {t.fornitori.map(x => (
+              <tr key={x.codice_fornitore}>
+                <Td>{x.fornitore}</Td><Td num>{x.n}</Td><Td num>{formatEuro(x.importo)}</Td><Td num tot>{x.giorni_da_fattura.toFixed(0)}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      <p className="ui-text-muted" style={{ marginTop: 8 }}>
+        Debito = scadenze aperte dell'ultimo scadenzario non ancora pagate in banca né segnate a mano (al netto dei
+        pareggi e senza i residui di anni precedenti). Tempi ({periodo}): giorni dalla data della fattura al pagamento
+        in banca, media pesata sull'importo, solo per le fatture abbinate a un pagamento.
+      </p>
+    </Card>
   )
 }
