@@ -2497,6 +2497,22 @@ Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
   Genera richiesta → **Invia richiesta** (il "Download richiesta (xml)" è solo il modulo, non le
   fatture). Richiesta di prova 01/10–28/10/2026 inviata il 28/10/2026, identificativo
   `2810261047580000000000573682076`, elaborazione **entro 5 giorni** → ZIP da mettere in `fatture_xml/`.
+- **29/10/2026 — ZIP AdE analizzato** (`fatture_xml/…_fileProdotto1.zip`, arrivato in ~1 giorno;
+  `…_fileInput.xml` accanto è solo il modulo della richiesta, da ignorare). ZIP piatto: per ogni fattura
+  il file (`.xml`/`.XML` o firmato `.xml.p7m`, 35 su 65) + `{nome}_metaDato.xml` (namespace
+  `urn:xml.fatturazione.sogei.it`, coppie nome/valore: `idfile`, `dataaccoglienza`, `hashfile`,
+  cedente P.IVA/denominazione, `nomefile`, `numerofatture`…). `.p7m` = CMS DER, estraibile con
+  `openssl cms -verify -noverify -inform DER` (nessuna dipendenza Python nuova). Tutte FPR12, 65
+  documenti, 39 fornitori, 65.620,43 €; totale = Σ riepiloghi IVA e = Σ `ImportoPagamento` su tutte.
+  Tipi: TD01 32, **TD24 differite 21** (fornitori alimentari, data 30/09), **TD17 11 + TD18 1
+  integrazioni reverse charge** (Booking, Google, Meta, Canva, OpenAI, Sklum — numerate 10/123…,
+  generate per l'IVA, non sono debiti da pagare: vanno escluse dai debiti, contano solo per l'IVA).
+  `DatiPagamento` assente su 16 (le 12 integrazioni + 4), sempre una sola rata (TP02), modalità
+  MP12 Ri.Ba./MP05 bonifico/MP20 SDD/MP19/MP21/MP08 contanti/MP02 assegno; scadenze fino al 30/11.
+  31 con allegato PDF incorporato, 19 con DDT. Confronto con lo scadenzario Passcom del 28/10: quasi
+  tutte le TD01/TD24 già registrate dallo studio (ritardo minimo a ottobre); diverse "da pagare" per
+  Passcom risultano già pagate in banca (SDD Studio Gasperoni, Nuova Ascom, TIM, TheFork; assegni
+  Sogeal e Masini; Comune di Gabicce) → conferma il controllo incrociato previsto in Fase 2.
 - **28/10/2026 — Consuntivo**: Entrate/Uscite/Netto operativo escludono le categorie
   `escludi_da_operativo` (giroconti, erogazione mutuo), mostrate in una riga a parte "Movimenti non
   operativi"; con "tutti i conti" giroconti sempre esclusi; saldi inizio/fine = saldi reali banca;
