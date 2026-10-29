@@ -104,42 +104,65 @@ def confronta(precedenti, attuali) -> dict:
 
 
 def compensa_pareggi(righe: list) -> None:
-    """Distribuisce i pareggi di ogni fornitore sulle sue scadenze (modifica le righe sul posto).
+    """Distribuisce note di credito aperte e pareggi di ogni fornitore sulle sue scadenze (modifica le righe
+    sul posto).
 
-    I `*PAREGGIO*` sono pagamenti/compensazioni che lo studio ha registrato senza collegarli alle singole
-    fatture. Per fornitore, il credito dei pareggi (più le note di credito ancora aperte) copre:
-    1. prima le scadenze già pagate (in banca o a mano): lo studio le ha già registrate, non vanno segnalate;
-    2. poi le scadenze aperte, dalla più vecchia.
+    Per fornitore:
+    1. ogni **nota di credito** riduce le fatture del suo stesso stato (aperta → aperte, pagata → pagate),
+       prima quelle con la stessa data di scadenza (stessa Ri.Ba.), poi le altre dalla più vecchia: una nota
+       aperta riduce un pagamento ancora da fare, una nota pagata era già dentro l'addebito in banca (e i
+       pareggi dello studio ne sono già al netto). Il credito che avanza resta credito (una nota pagata
+       senza fatture da ridurre resta in `da_segnalare`, negativa);
+    2. i `*PAREGGIO*` (pagamenti/compensazioni registrati dallo studio senza collegarli alle fatture) coprono
+       prima le scadenze già pagate (in banca o a mano: già registrate, non vanno segnalate), poi le aperte
+       dalla più vecchia.
     Ogni riga è un dict con `stato`, `importo`, `data_scadenza`, `codice_fornitore`, `pareggio`; riceve
     `compensato` (quota coperta), `aperto` (quota ancora da pagare, per le aperte) e `da_segnalare` (quota
     pagata ma non ancora registrata, per le pagate). Una riga coperta per intero diventa `compensata`.
+    Caso reale MARR (29/10/2026): le note di credito di ottobre finivano sui mesi già pagati invece di
+    ridurre la Ri.Ba. del 31/10.
     """
     pagate = ("pagata_banca", "pagata_manuale")
     per_forn = {}
     for r in righe:
         r["compensato"], r["aperto"], r["da_segnalare"] = ZERO, ZERO, ZERO
-        if not r["pareggio"] and r["importo"] < 0 and r["stato"] in pagate:
-            r["da_segnalare"] = r["importo"]       # nota di credito dentro una Ri.Ba. pagata: riduce il totale
         per_forn.setdefault(r["codice_fornitore"], []).append(r)
     for gruppo in per_forn.values():
-        credito = -sum((r["importo"] for r in gruppo if r["pareggio"]), ZERO)
-        credito += -sum((r["importo"] for r in gruppo if not r["pareggio"] and r["importo"] < 0
-                         and r["stato"] not in pagate), ZERO)
-        credito = max(credito, ZERO)
-        ordinate = sorted((r for r in gruppo if not r["pareggio"] and r["importo"] > 0),
-                          key=lambda r: (r["stato"] not in pagate, r["data_scadenza"]))
-        for r in gruppo:
-            if not r["pareggio"] and r["importo"] < 0 and r["stato"] not in pagate:
-                r["compensato"], r["stato_originale"], r["stato"] = r["importo"], r["stato"], "compensata"
-        for r in ordinate:
-            quota = min(credito, r["importo"])
-            credito -= quota
-            r["compensato"] = quota
-            resto = r["importo"] - quota
+        positive = [r for r in gruppo if not r["pareggio"] and r["importo"] > 0]
+        resto = {id(r): r["importo"] for r in positive}
+
+        def copri(credito, ordinate):
+            for r in ordinate:
+                if credito <= 0:
+                    break
+                quota = min(credito, resto[id(r)])
+                resto[id(r)] -= quota
+                credito -= quota
+            return credito
+
+        note = sorted((r for r in gruppo if not r["pareggio"] and r["importo"] < 0), key=lambda r: r["data_scadenza"])
+        for nc in note:
+            pagata = nc["stato"] in pagate
+            simili = sorted((r for r in positive if (r["stato"] in pagate) == pagata), key=lambda r: r["data_scadenza"])
+            stessa = [r for r in simili if r["data_scadenza"] == nc["data_scadenza"]]
+            altre = [r for r in simili if r["data_scadenza"] != nc["data_scadenza"]]
+            avanzo = copri(-nc["importo"], stessa + altre)
+            if pagata and avanzo > 0:
+                nc["da_segnalare"] = -avanzo           # pagata in banca senza fatture pagate da ridurre
+            nc["compensato"] = nc["importo"] + avanzo if pagata else nc["importo"]
+            if not pagata or avanzo == 0:
+                nc["stato_originale"], nc["stato"] = nc["stato"], "compensata"
+
+        credito = max(-sum((r["importo"] for r in gruppo if r["pareggio"]), ZERO), ZERO)
+        copri(credito, sorted(positive, key=lambda r: (r["stato"] not in pagate, r["data_scadenza"])))
+
+        for r in positive:
+            rimasto = resto[id(r)]
+            r["compensato"] = r["importo"] - rimasto
             if r["stato"] in pagate:
-                r["da_segnalare"] = resto
+                r["da_segnalare"] = rimasto
             else:
-                r["aperto"] = resto
-            if resto == 0:
+                r["aperto"] = rimasto
+            if rimasto == 0:
                 r["stato_originale"] = r["stato"]
                 r["stato"] = "compensata"

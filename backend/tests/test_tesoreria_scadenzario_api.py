@@ -391,10 +391,11 @@ def test_stato_delle_scadenze(client, test_engine):
     per_stato = {}
     for r in st["scadenze"]:
         per_stato.setdefault(r["stato"], []).append(r)
-    assert len(per_stato["pagata_banca"]) == 4             # Ri.Ba. (3, con nota di credito) + SDD
+    assert len(per_stato["pagata_banca"]) == 3             # Ri.Ba. (2 fatture) + SDD
+    # la nota di credito della Ri.Ba. pagata riduce le fatture della stessa Ri.Ba.: risulta chiusa
     assert len(per_stato["da_confermare"]) == 2            # bonifico con nome diverso, assegno
     assert len(per_stato["pareggio"]) == 3
-    assert {r["codice_fornitore"] for r in per_stato["compensata"]} == {"601.00002"}     # coperta dai pareggi
+    assert {r["codice_fornitore"] for r in per_stato["compensata"]} == {"601.00002", "601.00003"}  # pareggi, nota
     assert "aperta" not in per_stato and "scaduta" not in per_stato
     sdd_riga = next(r for r in per_stato["pagata_banca"] if r["codice_fornitore"] == "601.00004")
     assert sdd_riga["pagata_come"] == "Addebito diretto" and sdd_riga["data_pagamento"] == date(2026, 10, 28)
@@ -406,7 +407,7 @@ def test_stato_delle_scadenze(client, test_engine):
     with sessionmaker(bind=test_engine)() as db:
         st = stato_scadenze(db, oggi=date(2026, 12, 15))
     assert sum(1 for r in st["scadenze"] if r["stato"] == "pagata_manuale") == 2
-    assert st["totali"]["da_segnalare"]["n"] == 6
+    assert st["totali"]["da_segnalare"]["n"] == 5            # la nota di credito è dentro la sua Ri.Ba.
     assert st["totali"]["da_segnalare"]["importo"] == Decimal("678.36")
 
 
@@ -464,6 +465,38 @@ def test_pareggi_coprono_prima_le_pagate():
     compensa_pareggi(righe)
     pag, nc, scad, aperta, _ = righe
     assert pag["stato"] == "compensata" and pag["stato_originale"] == "pagata_banca"     # la pagata per prima
-    assert nc["da_segnalare"] == Decimal("-10.00")
-    assert scad["stato"] == "scaduta" and scad["compensato"] == Decimal("20.00") and scad["aperto"] == Decimal("30.00")
+    assert nc["stato"] == "compensata" and nc["da_segnalare"] == Decimal("0.00")      # dentro la pagata
+    assert scad["stato"] == "scaduta" and scad["compensato"] == Decimal("30.00") and scad["aperto"] == Decimal("20.00")
     assert aperta["aperto"] == Decimal("70.00")
+    assert scad["aperto"] + aperta["aperto"] == Decimal("90.00")      # = saldo Passcom del fornitore
+
+
+def test_note_di_credito_aperte_riducono_la_stessa_riba():
+    """Caso MARR: mesi passati pagati e chiusi da pareggi al netto delle note di credito; le note di credito
+    ancora aperte riducono la Ri.Ba. aperta con la stessa scadenza, non i mesi già pagati."""
+    from app.services.tesoreria_scadenzario import compensa_pareggi
+    def r(stato, importo, giorno, mese=10, pareggio=False):
+        return {"stato": stato, "importo": Decimal(importo), "data_scadenza": date(2026, mese, giorno),
+                "codice_fornitore": "F", "pareggio": pareggio}
+    righe = [r("pagata_banca", "500.00", 30, 9), r("pagata_banca", "-20.00", 30, 9),
+             r("pareggio", "-480.00", 30, 9, True),
+             r("aperta", "200.00", 31), r("aperta", "100.00", 31), r("aperta", "-30.00", 31),
+             r("aperta", "80.00", 30, 11)]
+    compensa_pareggi(righe)
+    pag, nc_pag, _, a1, a2, nc, nov = righe
+    assert pag["stato"] == "compensata" and nc_pag["stato"] == "compensata"   # nota pagata + pareggio = fattura
+    assert nc["stato"] == "compensata"
+    assert a1["aperto"] + a2["aperto"] == Decimal("270.00")         # 300 − 30 di nota di credito
+    assert nov["aperto"] == Decimal("80.00")                          # la scadenza successiva non tocca
+    assert sum(x["da_segnalare"] for x in righe) == Decimal("0.00")      # pareggio = fattura − nota pagata
+
+
+def test_nota_di_credito_senza_fattura_stessa_data_va_sulla_piu_vecchia():
+    from app.services.tesoreria_scadenzario import compensa_pareggi
+    righe = [{"stato": "aperta", "importo": Decimal(v), "data_scadenza": d, "codice_fornitore": "F",
+              "pareggio": False}
+             for v, d in (("50.00", date(2026, 11, 30)), ("40.00", date(2026, 10, 31)), ("-60.00", date(2026, 10, 15)))]
+    compensa_pareggi(righe)
+    nov, ott, _ = righe
+    assert ott["aperto"] == Decimal("0.00") and ott["stato"] == "compensata"
+    assert nov["aperto"] == Decimal("30.00")

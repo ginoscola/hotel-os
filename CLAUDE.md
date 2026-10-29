@@ -2894,6 +2894,14 @@ ignorare, `DESCRIZIONE TESTATA` anche con colonna 4. Chiave conto+protocollo+sca
   residui 4.998 €, 890 scadenze chiuse da pareggi. Tempo medio di pagamento 2026: 61,5 giorni dalla fattura,
   0,1 giorni dopo la scadenza (MARR 63 giorni: Ri.Ba. a fine mese successivo).
 - ⚠️ Dopo il deploy: riavvio del backend (endpoint e tabelle nuove) e `npm run build` (fatto).
+- **Note di credito** (v4.5.2, segnalato dall'utente sulla Ri.Ba. MARR del 31/10): prima le note di credito
+  aperte finivano nel credito comune con i pareggi, che copre per primo le scadenze già pagate → la Ri.Ba.
+  aperta restava al lordo (27.204,63 € invece di 26.892,95 €). E le note già pagate (dentro le Ri.Ba. di
+  luglio–settembre, pareggi dello studio già al netto) non chiudevano le loro fatture: i pareggi restavano
+  "corti" e la differenza (699,31 €) risultava aperta su giugno. Ora in `compensa_pareggi()` ogni nota di
+  credito riduce le fatture **dello stesso stato** (aperta → aperte, pagata → pagate), prima quelle con la
+  **stessa data di scadenza**, poi le altre dalla più vecchia; dopo, i pareggi come prima. Una nota pagata
+  risulta "chiusa"; il "da segnalare" non ha più quote negative di note già dentro un pagamento.
 - **Filtri** (v4.5.1, richiesta dell'utente): in cima alla scheda Scadenzario data di scadenza dal/al,
   modalità di pagamento (dalle modalità presenti nel file) e fornitore (parte del nome, con suggerimenti).
   Lato client (`riassumi()` ricalcola KPI e riepilogo per fornitore sulle sole righe filtrate, stesse quote
