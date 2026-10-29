@@ -428,6 +428,15 @@ def test_dettaglio_fornitore_ed_export(client, test_engine):
     assert r.status_code == 200
     testo = r.content.decode("utf-8-sig")
     assert "CAFFÈ ROSSI" in testo and "TELEFONIA ESEMPIO" in testo and "TOTALE" in testo
+    filtrato = client.get("/tesoreria/scadenzario/da-segnalare/export",
+                          params={"formato": "csv", "modalita": "ADDEB. C/C"}).content.decode("utf-8-sig")
+    assert "TELEFONIA ESEMPIO" in filtrato and "CAFFÈ ROSSI" not in filtrato
+    fuori = client.get("/tesoreria/scadenzario/da-segnalare/export",
+                       params={"formato": "csv", "scadenza_da": "2026-11-01"}).content.decode("utf-8-sig")
+    assert "TELEFONIA ESEMPIO" not in fuori and "CAFFÈ ROSSI" not in fuori
+    per_nome = client.get("/tesoreria/scadenzario/da-segnalare/export",
+                          params={"formato": "csv", "fornitore": "caffè"}).content.decode("utf-8-sig")
+    assert "CAFFÈ ROSSI" in per_nome and "TELEFONIA ESEMPIO" not in per_nome
     for formato in ("xlsx", "pdf"):
         assert client.get("/tesoreria/scadenzario/da-segnalare/export", params={"formato": formato}).status_code == 200
 

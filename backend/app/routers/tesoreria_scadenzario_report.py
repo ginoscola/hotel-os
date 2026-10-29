@@ -240,13 +240,27 @@ def dettaglio_fornitore(codice: str, db: Session = Depends(get_db), _=Depends(pu
 
 
 @router.get("/scadenzario/da-segnalare/export")
-def export_da_segnalare(formato: str = Query("xlsx", pattern="^(xlsx|csv|pdf)$"), db: Session = Depends(get_db),
-                        _=Depends(puo_vedere)):
-    """Scadenze pagate (in banca o a mano) ma ancora aperte in Passcom: la lista da mandare allo studio."""
+def export_da_segnalare(
+    formato: str = Query("xlsx", pattern="^(xlsx|csv|pdf)$"),
+    scadenza_da: Optional[date] = None,
+    scadenza_a: Optional[date] = None,
+    modalita: Optional[str] = None,
+    fornitore: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _=Depends(puo_vedere),
+):
+    """Scadenze pagate (in banca o a mano) ma ancora aperte in Passcom: la lista da mandare allo studio.
+    Filtri facoltativi come nella scheda: data di scadenza, modalità di pagamento, fornitore (parte del nome)."""
     st = stato_scadenze(db)
-    da_segnalare = {f["codice_fornitore"] for f in st["fornitori"] if f["da_segnalare"] > 0}
-    righe = sorted((r for r in st["scadenze"] if r["stato"] in STATI_PAGATE and r["da_segnalare"] != 0
-                    and r["codice_fornitore"] in da_segnalare),
+    pagate = [r for r in st["scadenze"] if r["stato"] in STATI_PAGATE and r["da_segnalare"] != 0
+              and (not scadenza_da or r["data_scadenza"] >= scadenza_da)
+              and (not scadenza_a or r["data_scadenza"] <= scadenza_a)
+              and (not modalita or r["tipo_pagamento"] == modalita)
+              and (not fornitore or fornitore.strip().lower() in r["fornitore"].lower())]
+    per_forn = defaultdict(lambda: ZERO)
+    for r in pagate:
+        per_forn[r["codice_fornitore"]] += r["da_segnalare"]
+    righe = sorted((r for r in pagate if per_forn[r["codice_fornitore"]] > 0),
                    key=lambda r: (r["fornitore"], r["data_scadenza"]))
     intestazioni = ["Fornitore", "Cod. conto", "Documento", "Data doc.", "Scadenza", "Importo", "Pagata il", "Come"]
     corpo = [[r["fornitore"], r["codice_fornitore"],

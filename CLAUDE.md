@@ -2894,6 +2894,12 @@ ignorare, `DESCRIZIONE TESTATA` anche con colonna 4. Chiave conto+protocollo+sca
   residui 4.998 €, 890 scadenze chiuse da pareggi. Tempo medio di pagamento 2026: 61,5 giorni dalla fattura,
   0,1 giorni dopo la scadenza (MARR 63 giorni: Ri.Ba. a fine mese successivo).
 - ⚠️ Dopo il deploy: riavvio del backend (endpoint e tabelle nuove) e `npm run build` (fatto).
+- **Filtri** (v4.5.1, richiesta dell'utente): in cima alla scheda Scadenzario data di scadenza dal/al,
+  modalità di pagamento (dalle modalità presenti nel file) e fornitore (parte del nome, con suggerimenti).
+  Lato client (`riassumi()` ricalcola KPI e riepilogo per fornitore sulle sole righe filtrate, stesse quote
+  `aperto`/`da_segnalare` del backend); valgono per tutte le viste, "Da confermare" compresa (abbinamenti
+  con almeno una scadenza che rientra). L'export "da segnalare" riceve gli stessi filtri
+  (`scadenza_da`, `scadenza_a`, `modalita`, `fornitore`). La card "Aperto per Passcom" resta non filtrata.
 
 ### Fase 2 — indicazioni già raccolte (28/10/2026)
 - **GoProfit resta lo strumento operativo per i pagamenti ai fornitori** (decisione dell'utente):

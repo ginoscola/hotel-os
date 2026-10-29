@@ -10,10 +10,10 @@ import { ExportMenu } from '../../components/ExportMenu.jsx'
 import { colors } from '../../styles/tokens.js'
 import { formatData, formatEuro, formatN, mostraErrore } from '../../utils/format.js'
 import {
-  Badge, Button, Card, Drawer, Field, Input, KpiTile, Loading, Messaggio, Modal, SegmentedControl, StatoVuoto,
+  Badge, Button, Card, Drawer, Field, Input, KpiTile, Loading, Messaggio, Modal, SegmentedControl, Select, StatoVuoto,
   Table, Td, Th, useAvvisi, useConferma,
 } from '../../components/ui'
-import { Importo, isoLocale, oggiISO } from './helpers.jsx'
+import { Importo, isoLocale, oggiISO, queryString } from './helpers.jsx'
 
 const LS_VISTA = 'tesoreria_scadenzario_vista'
 
@@ -301,7 +301,7 @@ function useAzioniAbbinamenti(onCambio) {
   }
 }
 
-function VistaConfermare({ permessi, versione, onCambio }) {
+function VistaConfermare({ permessi, versione, onCambio, filtro }) {
   const [dati, setDati] = useState(null)
   const [mostra, setMostra] = useState('proposto')
   const { sel, imposta, svuota, tutte } = useSelezione()
@@ -318,6 +318,7 @@ function VistaConfermare({ permessi, versione, onCambio }) {
 
   const c = dati?.conteggi || {}
   const ids = [...sel].map(Number)
+  const abbinamenti = dati ? dati.abbinamenti.filter(a => !filtro || a.scadenze.some(filtro)) : []
   return (
     <>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
@@ -327,9 +328,10 @@ function VistaConfermare({ permessi, versione, onCambio }) {
           { value: 'confermato', label: `Confermati (${c.confermato ?? '…'})` },
           { value: 'scartato', label: `Scartati (${c.scartato ?? '…'})` },
         ]} />
-        {permessi.puo_modificare && ['proposto', 'automatico'].includes(mostra) && dati?.abbinamenti.length > 0 && (
+        {filtro && dati && <span className="ui-text-muted">{abbinamenti.length} con i filtri</span>}
+        {permessi.puo_modificare && ['proposto', 'automatico'].includes(mostra) && abbinamenti.length > 0 && (
           <>
-            <Button size="sm" variant="ghost" onClick={() => tutte(dati.abbinamenti.map(a => String(a.id)))}>Seleziona tutti</Button>
+            <Button size="sm" variant="ghost" onClick={() => tutte(abbinamenti.map(a => String(a.id)))}>Seleziona tutti</Button>
             <Button size="sm" disabled={!sel.size} onClick={() => azioni.conferma(ids)}>Conferma {sel.size || ''}</Button>
             <Button size="sm" variant="danger-soft" disabled={!sel.size} onClick={() => azioni.scarta(ids)}>Scarta {sel.size || ''}</Button>
           </>
@@ -341,8 +343,8 @@ function VistaConfermare({ permessi, versione, onCambio }) {
           con i prossimi import).
         </p>
       )}
-      {!dati ? <Loading /> : dati.abbinamenti.length === 0 ? <StatoVuoto>Nessun abbinamento.</StatoVuoto>
-        : dati.abbinamenti.map(a => (
+      {!dati ? <Loading /> : abbinamenti.length === 0 ? <StatoVuoto>Nessun abbinamento.</StatoVuoto>
+        : abbinamenti.map(a => (
           <CardAbbinamento key={a.id} a={a} permessi={permessi} selezionato={sel.has(String(a.id))}
             onSeleziona={['proposto', 'automatico'].includes(a.stato) ? on => imposta(String(a.id), on) : null}
             onConferma={azioni.conferma} onScarta={azioni.scarta} onAnnulla={azioni.annulla} />
@@ -351,7 +353,7 @@ function VistaConfermare({ permessi, versione, onCambio }) {
   )
 }
 
-function VistaSegnalare({ dati, onFornitore }) {
+function VistaSegnalare({ dati, filtri, onFornitore }) {
   const daSegnalare = new Set(dati.fornitori.filter(f => f.da_segnalare > 0).map(f => f.codice_fornitore))
   const righe = dati.scadenze.filter(r => ['pagata_banca', 'pagata_manuale'].includes(r.stato) && r.da_segnalare !== 0
     && daSegnalare.has(r.codice_fornitore))
@@ -363,7 +365,8 @@ function VistaSegnalare({ dati, onFornitore }) {
   }, [righe])
   return (
     <Card title={`Pagate ma ancora aperte in Passcom — ${righe.length} scadenze, ${formatEuro(righe.reduce((s, r) => s + r.da_segnalare, 0))}`}
-      actions={<ExportMenu nome="scadenze_da_registrare" url="/tesoreria/scadenzario/da-segnalare/export" />}>
+      actions={<ExportMenu nome="scadenze_da_registrare" url={`/tesoreria/scadenzario/da-segnalare/export?${queryString({
+        scadenza_da: filtri.da, scadenza_a: filtri.a, modalita: filtri.modalita, fornitore: filtri.fornitore.trim() })}`} />}>
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
         Da mandare allo studio perché registri i pagamenti. Non compaiono quelle già coperte dai pareggi di
         Passcom (pagamenti registrati senza collegarli alle fatture). Per fornitore: {perFornitore.slice(0, 6)
@@ -593,6 +596,77 @@ function DettaglioFornitore({ codice, permessi, versione, onChiudi, onCambio }) 
   )
 }
 
+// ── Filtri (data di scadenza e modalità di pagamento) ────────────────────────
+
+const STATI_DA_PAGARE = ['aperta', 'scaduta', 'da_confermare']
+const FILTRI_VUOTI = { da: '', a: '', modalita: '', fornitore: '' }
+
+/** Totali e riepilogo per fornitore ricalcolati sulle sole scadenze filtrate (stesse regole del backend:
+ *  quote `aperto` e `da_segnalare`, già al netto dei pareggi). */
+function riassumi(dati, scadenze) {
+  const somma = (filtro, campo = 'aperto') => {
+    const sel = scadenze.filter(filtro)
+    return { n: sel.length, importo: sel.reduce((x, r) => x + r[campo], 0) }
+  }
+  const limite = (() => {
+    const [y, m, d] = dati.oggi.split('-').map(Number)
+    return isoLocale(new Date(y, m - 1, d + dati.totali.giorni_in_scadenza))
+  })()
+  const totali = {
+    ...dati.totali,
+    da_pagare: somma(r => STATI_DA_PAGARE.includes(r.stato)),
+    scaduto: somma(r => r.stato === 'scaduta'),
+    in_scadenza: somma(r => r.stato === 'aperta' && r.data_scadenza <= limite),
+    da_segnalare: somma(r => ['pagata_banca', 'pagata_manuale'].includes(r.stato), 'da_segnalare'),
+    da_confermare: somma(r => r.stato === 'da_confermare'),
+    residui: somma(r => r.stato === 'residuo'),
+  }
+  const orig = new Map(dati.fornitori.map(f => [f.codice_fornitore, f]))
+  const g = new Map()
+  for (const r of scadenze) {
+    const o = orig.get(r.codice_fornitore)
+    if (!g.has(r.codice_fornitore)) {
+      g.set(r.codice_fornitore, { ...o, n: 0, da_pagare: 0, scaduto: 0, da_segnalare: 0, n_da_confermare: 0,
+        residui: 0, prossima_scadenza: null })
+    }
+    const f = g.get(r.codice_fornitore)
+    f.n += 1
+    if (STATI_DA_PAGARE.includes(r.stato)) {
+      f.da_pagare += r.aperto
+      if (r.stato === 'aperta' && (!f.prossima_scadenza || r.data_scadenza < f.prossima_scadenza)) f.prossima_scadenza = r.data_scadenza
+    }
+    if (r.stato === 'scaduta') f.scaduto += r.aperto
+    if (['pagata_banca', 'pagata_manuale'].includes(r.stato)) f.da_segnalare += r.da_segnalare
+    if (r.stato === 'da_confermare') f.n_da_confermare += 1
+    if (r.stato === 'residuo') f.residui += r.aperto
+  }
+  const fornitori = [...g.values()].sort((a, b) => b.da_pagare - a.da_pagare || b.da_segnalare - a.da_segnalare
+    || a.fornitore.localeCompare(b.fornitore))
+  return { ...dati, totali, fornitori, scadenze }
+}
+
+function BarraFiltri({ filtri, onChange, modalita, fornitori, attivi }) {
+  const set = patch => onChange({ ...filtri, ...patch })
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
+      <Field label="Scadenza dal"><Input type="date" value={filtri.da} onChange={e => set({ da: e.target.value })} /></Field>
+      <Field label="al"><Input type="date" value={filtri.a} onChange={e => set({ a: e.target.value })} /></Field>
+      <Field label="Modalità di pagamento">
+        <Select value={filtri.modalita} onChange={e => set({ modalita: e.target.value })}>
+          <option value="">Tutte</option>
+          {modalita.map(m => <option key={m} value={m}>{m}</option>)}
+        </Select>
+      </Field>
+      <Field label="Fornitore">
+        <Input value={filtri.fornitore} list="tesoreria-fornitori" placeholder="nome o parte del nome" style={{ width: 240 }}
+          onChange={e => set({ fornitore: e.target.value })} />
+        <datalist id="tesoreria-fornitori">{fornitori.map(f => <option key={f} value={f} />)}</datalist>
+      </Field>
+      {attivi && <Button size="sm" variant="ghost" onClick={() => onChange(FILTRI_VUOTI)}>Togli filtri</Button>}
+    </div>
+  )
+}
+
 // ── Scheda ───────────────────────────────────────────────────────────────────
 
 export default function TabScadenzario({ permessi, onVaiA }) {
@@ -600,6 +674,7 @@ export default function TabScadenzario({ permessi, onVaiA }) {
   const [errore, setErrore] = useState(null)
   const [versione, setVersione] = useState(0)
   const [fornitore, setFornitore] = useState(null)
+  const [filtri, setFiltri] = useState(FILTRI_VUOTI)
   const [vista, setVista] = useState(() => {
     try {
       const v = localStorage.getItem(LS_VISTA)
@@ -631,6 +706,18 @@ export default function TabScadenzario({ permessi, onVaiA }) {
     } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
+  const testoFornitore = filtri.fornitore.trim().toLowerCase()
+  const attivi = !!(filtri.da || filtri.a || filtri.modalita || testoFornitore)
+  const filtro = useMemo(() => (attivi ? r => (!filtri.da || r.data_scadenza >= filtri.da)
+    && (!filtri.a || r.data_scadenza <= filtri.a) && (!filtri.modalita || r.tipo_pagamento === filtri.modalita)
+    && (!testoFornitore || (r.fornitore || '').toLowerCase().includes(testoFornitore)) : null),
+  [attivi, filtri, testoFornitore])
+  const visibili = useMemo(() => (dati?.data_fotografia && filtro ? riassumi(dati, dati.scadenze.filter(filtro)) : dati),
+    [dati, filtro])
+  const modalita = useMemo(() => [...new Set((dati?.scadenze || []).filter(r => !r.pareggio)
+    .map(r => r.tipo_pagamento))].sort(), [dati])
+  const nomiFornitori = useMemo(() => [...new Set((dati?.scadenze || []).map(r => r.fornitore))].sort(), [dati])
+
   if (errore) return <Messaggio>{errore}</Messaggio>
   if (!dati) return <Loading />
   if (!dati.data_fotografia) {
@@ -641,10 +728,12 @@ export default function TabScadenzario({ permessi, onVaiA }) {
       </StatoVuoto>
     )
   }
-  const t = dati.totali
+  const t = visibili.totali
 
   return (
     <div>
+      <BarraFiltri filtri={filtri} onChange={setFiltri} modalita={modalita} fornitori={nomiFornitori} attivi={attivi} />
+      {attivi && <p className="ui-text-muted" style={{ marginTop: -8, marginBottom: 8 }}>Totali e viste con i filtri applicati.</p>}
       <div className="ui-kpi-row">
         <KpiTile size="lg" label="Da pagare" value={formatEuro(t.da_pagare.importo)}
           sub={`${formatN(t.da_pagare.n)} scadenze · ${formatEuro(t.in_scadenza.importo)} entro ${t.giorni_in_scadenza} giorni`} />
@@ -662,11 +751,11 @@ export default function TabScadenzario({ permessi, onVaiA }) {
         {permessi.puo_modificare && <Button size="sm" variant="secondary" onClick={ricalcola}>Ricalcola abbinamenti</Button>}
       </div>
 
-      {vista === 'settimane' && <VistaSettimane dati={dati} permessi={permessi} onCambio={cambio} onFornitore={setFornitore} />}
-      {vista === 'confermare' && <VistaConfermare permessi={permessi} versione={versione} onCambio={cambio} />}
-      {vista === 'segnalare' && <VistaSegnalare dati={dati} onFornitore={setFornitore} />}
-      {vista === 'fornitori' && <VistaFornitori dati={dati} onFornitore={setFornitore} />}
-      {vista === 'residui' && <VistaResidui dati={dati} onFornitore={setFornitore} />}
+      {vista === 'settimane' && <VistaSettimane dati={visibili} permessi={permessi} onCambio={cambio} onFornitore={setFornitore} />}
+      {vista === 'confermare' && <VistaConfermare permessi={permessi} versione={versione} onCambio={cambio} filtro={filtro} />}
+      {vista === 'segnalare' && <VistaSegnalare dati={visibili} filtri={filtri} onFornitore={setFornitore} />}
+      {vista === 'fornitori' && <VistaFornitori dati={visibili} onFornitore={setFornitore} />}
+      {vista === 'residui' && <VistaResidui dati={visibili} onFornitore={setFornitore} />}
 
       {fornitore && (
         <DettaglioFornitore codice={fornitore} permessi={permessi} versione={versione}
