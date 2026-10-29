@@ -161,6 +161,9 @@ class TesoreriaScadImport(Base):
     id              = Column(Integer, primary_key=True, autoincrement=True)
     data_fotografia = Column(Date, nullable=False, index=True)          # default: data di stampa
     data_stampa     = Column(Date, nullable=True)
+    # Anno contabile di Passcom = anno dell'ultima data di registrazione del file. Stessa data e stesso
+    # anno contabile = stesso file riscaricato: il nuovo sostituisce il vecchio (con conferma).
+    anno_contabile  = Column(Integer, nullable=True)
     nome_file       = Column(String(255), nullable=False)
     sha256          = Column(String(64), nullable=False, index=True)
     percorso        = Column(String(500), nullable=True)

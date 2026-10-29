@@ -2409,7 +2409,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | Fase | Contenuto | Stato |
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
-| 2 | Scadenzario Passcom e abbinamento con la banca | ⏳ in corso — blocco A ✅ (29/10/2026), blocco B da autorizzare |
+| 2 | Scadenzario Passcom e abbinamento con la banca | ⏳ in corso — blocchi A, B ✅ (29/10/2026), blocco C da autorizzare |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
@@ -2799,6 +2799,30 @@ ignorare, `DESCRIZIONE TESTATA` anche con colonna 4. Chiave conto+protocollo+sca
   univoche, file "pagate" rifiutato. 76 fornitori, 22 con saldo ≤ 0 (pareggi); aperto netto dei fornitori a
   saldo positivo 121.597,46 €.
 
+### Fase 2 — Blocco B fatto (29/10/2026)
+- `routers/tesoreria_scadenzario.py` (incluso da `tesoreria.py`, permessi del modulo): `POST
+  /scadenzario/anteprima` (multipart `file` + `data_fotografia` facoltativa, default = Data di Stampa del
+  file; riepilogo, confronto, `sostituisce`, `gia_importato`; nessuna scrittura), `POST /scadenzario/conferma`
+  (`{token, data_fotografia?, sostituisci?, note?}`; 409 stesso file già importato; 409 se esiste già un
+  import con stessa data **e** stesso anno contabile e manca `sostituisci: true` — scelta dell'utente: il
+  file riscaricato lo stesso giorno sostituisce il precedente, previa conferma; i sostituiti si cancellano
+  con scadenze e file), `GET /scadenzario/import`, `GET /scadenzario/import/{id}/file`,
+  `DELETE /scadenzario/import/{id}?conferma=true`. Token nella stessa area `_anteprima` degli estratti
+  conto (helper riusati da `tesoreria_import.py`), `meta.tipo = 'scadenzario'`. File in
+  `{TESORERIA_DIR}/scadenzario/{anno fotografia}/{id}_{nome}`.
+- **Anno contabile** = anno dell'ultima data di registrazione del file (`anno_contabile()`), colonna
+  `tesoreria_scad_import.anno_contabile` (migrazione `tes006_2026`, applicata al DB reale). Il confronto
+  avviene con l'ultimo import **dello stesso anno contabile** con data anteriore: nuove / chiuse in
+  contabilità (per `chiave`), max 200 righe di dettaglio per lista.
+- Calcoli puri `services/tesoreria_scadenzario.py`: `per_fornitore()` (fatture, pareggi, netto, aperto =
+  max(netto, 0), residui), `riepilogo()`, `confronta()`, `unisci_fotografia()` (più file della stessa data
+  senza doppioni di chiave — per il blocco D), `limite_residui()` = 1° gennaio dell'anno precedente.
+- Test `test_tesoreria_scadenzario_api.py` (13). Suite: 742 verdi.
+- Prova sul file reale (DB di test, svuotato): anteprima 0,5 s, conferma 0,3 s; 1.285 scadenze, aperto
+  121.597,46 €, 22 fornitori saldati, **80 residui** (scadenze prima del 2025) per 4.525,34 €; primi per aperto
+  MARR 29.861 €, CIL 23.321 €, SGR 12.085 €. Reimport dello stesso file riconosciuto.
+- ⚠️ Endpoint nuovi: serve il riavvio del backend prima di usarli (frontend nel blocco D).
+
 ### Fase 2 — indicazioni già raccolte (28/10/2026)
 - **GoProfit resta lo strumento operativo per i pagamenti ai fornitori** (decisione dell'utente):
   scarica le fatture dallo SDI in automatico, quindi è più aggiornato di qualunque fonte di HotelOS
@@ -2918,7 +2942,8 @@ esistenti, mai query duplicate sulle loro tabelle.
   inserisce solo il totale di ogni estratto). XML 2025–2026 dei conti già caricati dall'utente.
 - **29/10/2026** — analizzato lo ZIP fatture AdE (Fase 5); v4.4.3 conferma cambio categoria in Movimenti.
   **Fase 2 avviata**: roadmap e decisioni sopra; blocco A fatto (tabelle + lettore scadenzario).
-  Prossimo: blocco B (import a fotografie) — serve l'ok dell'utente.
+  Blocco B fatto (import a fotografie, sostituzione stesso giorno con conferma).
+  Prossimo: blocco C (abbinamento con la banca) — serve l'ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.
