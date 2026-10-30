@@ -2992,7 +2992,7 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
   - Fisse: 7085 libri sociali 309,87 € il 16/3; 3850 diritto camerale 354 € (FC 221 + AN 133) a luglio;
     INAIL 18320 in 4 rate ~580 € (16/2, 16/5, 16/8, 16/11); **TARI** 3944 + TEFA Gabicce (D836)
     17.709 € rata unica con F24 il 1/7/2026; **registro contratto d'affitto ERICE** (1550) 1.300 € il
-    21/1/2026 (il "conto terzi" del 4/7/2022 è lo stesso tributo, contribuente ERICE, KM coobbligato).
+    21/1/2026 (il "conto terzi" del 4/7/2022 è lo stesso tributo, contribuente ERICE, KM coobbligato; caricato per errore: nessun versamento per conto terzi nel 2026).
   - Dipendenti: 1001 ritenute + DM10 INPS + addizionali 3802/3847/3848 + EBTU/FAST, il 16 del mese dopo.
   - F23 2026: 5 versamenti (sanzioni, 5.397,47 €) e ravvedimenti del 18/2 (codici 8947–8952): occasionali,
     fuori dalla previsione. Codici da verificare: 1075, 4071, 4731.
