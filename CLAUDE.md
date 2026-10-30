@@ -2960,6 +2960,22 @@ accanto alla DropZone), così ogni richiesta resta coerente con le precedenti.
 - La conservazione sul portale non è illimitata (fonte non ufficiale: fino al 31/12 del secondo anno
   dopo la ricezione): scaricare per tempo.
 
+### Fase 3 — calendario fiscale indipendente dallo studio (30/10/2026)
+Scelta dell'utente: **non dipendere dal commercialista** per il calendario fiscale.
+- Date per legge (calcolate da HotelOS, slittamento al primo giorno lavorativo); importi da: **cassetto
+  fiscale AdE** (l'utente ha accesso per la S.r.l.: versamenti F24 con dettaglio per codice tributo —
+  in banca ogni F24 è una "Delega Unificata" unica —, dichiarazioni Redditi SC/IRAP/IVA → acconti esatti
+  dall'imposta dell'anno prima, ripartizione 40/60 o 50/50 dedotta dagli F24 di giugno/novembre 2025,
+  LIPE trimestrali), **Passcom (Passepartout)** per liquidazioni IVA, dati HotelOS (cedolini → F24
+  dipendenti, Corrispettivi → IVA vendite, fatture XML Fase 5 → IVA acquisti). Saldo IRES/IRAP = stima.
+- **F24 dipendenti: il 16 del mese successivo** alle paghe a cui si riferiscono (confermato).
+- **IMU: no** (la S.r.l. non possiede immobili). **TARI: sì, la paga la S.r.l.** → tabella "tributi
+  locali" (avviso inserito a mano: importo + rate con date; prima dell'avviso, stima da quanto pagato
+  l'anno prima in banca — pagoPA al Comune di Gabicce, oggi in categoria Utenze).
+- Tassa di soggiorno 2025 versata per intero (terzo trimestre il 14/11/2025, 29.854 €: fuori dal confronto
+  1/1–28/10 della Fase 1); nel 2026 versamenti trimestrali (luglio, ottobre) → schema usato in previsione.
+- Compensi del marchio: ancora a zero nel 2026, fuori dalla previsione finché non c'è una data.
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
