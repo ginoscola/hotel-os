@@ -3070,6 +3070,22 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
   38.600 € luglio). L'utente **sposterà le date dei pagamenti Du Parc in base alla liquidità della S.r.l.**:
   è l'uscita più flessibile → idea per la strategia della Fase 3: rate Du Parc modificabili al volo dalla
   previsione (anche "cosa succede se sposto la rata"), eventualmente un suggerimento su quando pagarle.
+- **Club Hotel** (contratto in `uploads/tesoreria_campioni/affitti/`): concedente **ERICE S.N.C. di Forlani
+  Letizia & C.**, affitto d'azienda dal **1/1/2026, 2 anni**, poi rinnovo tacito annuale (disdetta entro il
+  30/9). Canone **145.000 € + IVA = 176.900 €**, nessun ISTAT, 3 rate: **43.500 + IVA (53.070 €) entro il 30/11
+  dell'anno precedente**, 43.500 + IVA (53.070 €) entro il 30/4, **58.000 + IVA (70.760 €) entro il 31/8**.
+  Fideiussione 58.000 €. Registro annuale a cura del concedente, metà a carico nostro (in F24: 1550, 1.300 €
+  a gennaio). Banca 2026: 53.070 il 24/4, 70.760 il 12/8 ✓; la rata del 30/11/2025 è quella pagata per errore
+  dal conto della S.n.c. Du Parc (rimborsata col riaddebito del 13/7/2026). Prima del 2026 contratto diverso
+  (2025: 43.920 + 58.560 + 600 €).
+- **International**: concedente **Hotel International S.n.c. di Giunta e C.** (atto registrato il 31/1/2025),
+  durata 5 anni solari fino al **31/12/2029**, rinnovo tacito di altri 5. Canone **150.000 € + IVA = 183.000 €**
+  (130.000 immobile + 20.000 altri beni), **nessuna rivalutazione**, 3 rate uguali (**61.000 €**) il **1/1, 1/7 e
+  1/8**; modificabili per accordo scritto. Fideiussione 100.000 €. Banca 2026: 61.000 il 26–27/1, 23/7, 17/8 ✓.
+  Il PDF ha testo non estraibile (font): letto come immagine.
+- **Totale affitti per anno di canone: 518.500 € IVA inclusa** (Du Parc 158.600 + Club 176.900 + International
+  183.000). Prossime uscite: Club 53.070 € entro il 30/11/2026, Du Parc 30.000 € a dicembre, International
+  61.000 € il 1/1/2027.
 - Configurazione prevista nella Fase 3 (da approvare con la strategia): sezione Admin con contratti/piani di
   pagamento modificabili (Du Parc = piano libero di rate decise dall'utente).
 
