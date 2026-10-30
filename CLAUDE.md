@@ -2410,7 +2410,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
-| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⬜ non iniziata |
+| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⏳ dati raccolti e strategia presentata (30/10/2026); codice non iniziato, serve ok |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
@@ -3104,6 +3104,20 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
   budget e tempi di incasso (caparre, POS, OTA) rispetto alla competenza.
 - **Piano del mutuo**: aggiungere la libreria `xlrd` per leggere il `.xls` originale (nuova dipendenza
   approvata dall'utente, da installare nella Fase 3).
+
+### Fase 3 — strategia presentata (30/10/2026), NON ancora autorizzata
+Proposta: tabella unica `tesoreria_impegni` (data, importo, tipo, stato stimato/confermato/pagato/coperto
+da credito, movimento abbinato) generata da fonti gestite in Admin (calendario fiscale, affitti, mutuo,
+carte, ricorrenti, interventi) + scadenzario + stime storiche per categoria + incassi; scheda Previsione
+(saldo con forchetta pessimista–ottimista, soglia fido, tabella mensile certo/stimato, cassa libera a 90 gg,
+salva previsione) e scheda Impegni. Blocchi: A tabelle + calendario fiscale → B affitti/mutuo (xlrd)/
+ricorrenti/interventi/carte → C motore previsione (incassi, scenari, collaudo sul 2026) → D frontend, v4.6.0.
+Risposte dell'utente:
+1. **Orizzonte fino al 31/12/2027** (poi sempre 12–15 mesi avanti).
+2. **Credito IVA simulato su tutti gli F24 in ordine di scadenza, TARI esclusa** (pagata sempre in cassa).
+3. **Incassi dei ristoranti dal Budget**: prima del blocco C va sviluppato il modulo Budget per includere
+   Mare Mosso e Buona Onda (lavoro nel modulo Budget, fuori dalla Tesoreria, con strategia propria).
+4. **Avvio del blocco A: in attesa** — l'utente ha chiesto di aspettare.
 
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
