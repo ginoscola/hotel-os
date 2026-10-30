@@ -3064,7 +3064,12 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
   + IVA = 158.600 €**, uguale per il 2026 salvo decisione diversa. Dalla banca: il canone dell'anno N è
   fatturato a fine anno (FT 4/1) e pagato a rate **da dicembre N a luglio N+1** (canone 2025: 30.000 l'11/12/2025,
   30.000 il 10/3/2026, 3 × 20.000 a giugno, 38.600 il 6/7/2026). In più "riaddebito costi di competenza"
-  53.304,36 € il 13/7/2026 (fattura Du Parc 12/2025 in Passcom) — da chiarire se ricorrente.
+  53.304,36 € il 13/7/2026 (fattura Du Parc 12/2025 in Passcom): **una tantum, non ricorrente** — rimborso
+  di una rata di un altro affitto pagata per errore dal conto della S.n.c. invece che dalla S.r.l.
+- Previsione: per ora lo schema del canone 2025 (30.000 € dicembre, 30.000 € marzo, 60.000 € giugno,
+  38.600 € luglio). L'utente **sposterà le date dei pagamenti Du Parc in base alla liquidità della S.r.l.**:
+  è l'uscita più flessibile → idea per la strategia della Fase 3: rate Du Parc modificabili al volo dalla
+  previsione (anche "cosa succede se sposto la rata"), eventualmente un suggerimento su quando pagarle.
 - Configurazione prevista nella Fase 3 (da approvare con la strategia): sezione Admin con contratti/piani di
   pagamento modificabili (Du Parc = piano libero di rate decise dall'utente).
 
