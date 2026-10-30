@@ -3028,7 +3028,10 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
   - **Concordato preventivo biennale (CPB) 2024–2025** (quadro CP): reddito concordato 18.590 €, imposta
     sostitutiva 12% sulla parte eccedente → **codice 4071 = imposta sostitutiva CPB** (159 € nel 2025,
     330 € nel 2026). Reddito effettivo 2024 30.215 €, utile civilistico 26.251 €, componenti positivi
-    1.113.840 €. Da chiedere all'utente: adesione al CPB 2026–2027 (cambia la base dell'IRES).
+    1.113.840 €. **Nessuna adesione al CPB 2026–2027** (risposta dell'utente, 30/10/2026): dal 2026
+    IRES/IRAP sul reddito effettivo → saldo 2026 (a giugno/luglio 2027) = imposta effettiva 2026 −
+    acconti 2026 (3.773 € IRES) da **stimare** (utile dalla contabilità × aliquota, con avviso che
+    imponibile ≠ utile); acconti 2027 = imposta 2026 (storico) — fino alla dichiarazione, stima.
   - IRES 2024 = 17.263 € × 24% = 4.143 €; acconti versati 3.976 € → saldo 167 € (2003, luglio 2025).
   - **Metodo acconti IRES = storico al 100% dell'imposta dell'anno prima, 50/50**: acconti 2025 =
     2.071,50 × 2 = 4.143 €; IRES 2025 = acconti 2025 − credito 370 € = 3.773 € → acconti 2026 = 1.886,50 × 2
