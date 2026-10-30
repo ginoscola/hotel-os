@@ -3036,7 +3036,20 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
   - **Metodo acconti IRES = storico al 100% dell'imposta dell'anno prima, 50/50**: acconti 2025 =
     2.071,50 × 2 = 4.143 €; IRES 2025 = acconti 2025 − credito 370 € = 3.773 € → acconti 2026 = 1.886,50 × 2
     ✓. Regola: 1° acconto entro 30/6 (proroga ISA al 20–23/7), 2° entro 30/11, saldo con il 1° acconto.
-  - Mancano ancora dichiarazione IVA (credito annuale) e IRAP.
+- **Dichiarazioni IVA** (4 PDF dal cassetto: IVA 2025 del 17/4/2025 + integrativa 1/7/2025, anno 2024;
+  IVA 2026 del 18/2/2026 + integrativa 21/4/2026, anno 2025; VH in colonna 1 = credito, colonna 2 = debito):
+  - Anno 2024: IVA vendite (VE26) 110.650 €, detraibile (VF71) 159.855 €, **credito annuo VL33 54.435 €**
+    (= compensato nel 2025 ✓). Liquidazioni mensili 2024 tutte a credito tranne agosto (debito 5.636 €);
+    credito che cresce in autunno/inverno (dicembre 54.436 €).
+  - Anno 2025: IVA vendite 169.488 €, detraibile 258.352 €, VL4 38.800 € + IVA periodica versata 18.466 €
+    (agosto) = **credito annuo VL33 57.266 €**, utilizzabile nel 2026. Compensati in F24 nel 2026 fino al
+    16/10: 44.886,87 € → **residuo ≈ 12.379 €** a fine ottobre 2026 (copre il 2° acconto IRES/IRAP e parte
+    degli F24 di novembre–dicembre; il non usato passa nella dichiarazione successiva).
+  - Regola per la previsione: credito annuo dalla dichiarazione IVA (presentata a febbraio–aprile),
+    consumato dagli F24 in ordine di scadenza (come fa lo studio: in estate soprattutto contributi e
+    ritenute); prima della dichiarazione, stima dall'anno prima. ⚠️ Oltre 5.000 € il credito annuo si
+    compensa solo dopo la presentazione della dichiarazione (nel 2026 usato da aprile).
+  - Manca ancora l'IRAP.
 
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
