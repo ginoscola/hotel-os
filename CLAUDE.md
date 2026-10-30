@@ -3213,6 +3213,15 @@ esistenti, mai query duplicate sulle loro tabelle.
   Blocco C fatto (abbinamento con la banca). Blocco D fatto: scheda Scadenzario, pareggi distribuiti per
   fornitore (i pagamenti MARR erano già registrati come pareggi), KPI fornitori. **Fase 2 chiusa con v4.5.0.**
   Prossimo: l'utente carica lo scadenzario reale e usa la scheda; Fase 3 solo con il suo ok (strategia prima).
+- **30/10/2026 — PUNTO DI RIPRESA.** Fase 2 chiusa (v4.5.0–4.5.2). Raccolti tutti i dati per la Fase 3
+  (quietanze F24/F23 2025–2026, TARI acconto + conguaglio, Redditi SC/IRAP anno 2024, IVA anni 2024–2025,
+  contratti d'affitto Club e International, schema Du Parc, ricorrenti dalla banca): vedi le sezioni
+  "Fase 3 — …" sopra. **Strategia della Fase 3 presentata** con risposte dell'utente (orizzonte 31/12/2027,
+  credito IVA su tutti gli F24 tranne TARI, incassi ristoranti dal Budget). L'utente lavora al **Budget dei
+  ristoranti (MMS/BON) in un'altra sessione**. **Prossimo passo (31/10/2026)**: partire con la **Fase 3,
+  blocco A** (tabelle `tesoreria_impegni` + calendario fiscale + lettore avviso TARI + collaudo sul 2026) —
+  l'utente ha detto "domani partiremo"; confermare comunque con lui prima di scrivere codice, e prima del
+  blocco C verificare che il Budget includa i ristoranti.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.
