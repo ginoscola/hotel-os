@@ -2996,6 +2996,20 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
   - Dipendenti: 1001 ritenute + DM10 INPS + addizionali 3802/3847/3848 + EBTU/FAST, il 16 del mese dopo.
   - F23 2026: 5 versamenti (sanzioni, 5.397,47 €) e ravvedimenti del 18/2 (codici 8947–8952): occasionali,
     fuori dalla previsione. Codici da verificare: 1075, 4071, 4731.
+- **Confronto con le quietanze 2025** (43 deleghe + 2 F24 TARI, tutte trovate in banca tranne una da
+  109,71 € del 20/8/2025):
+  - **Il credito IVA annuale è strutturale, non un caso del 2026**: 2025 compensati 54.435 € (credito
+    2024), 2026 44.887 € (credito 2025) — vendite al 10%, acquisti al 22%, inverni a credito. La
+    previsione deve usare il credito disponibile dalla dichiarazione IVA di ogni anno, non azzerarlo.
+  - **IVA a debito solo per agosto** (6008, versata il 16/9): 2025 18.466,35 €, 2026 5.281,61 €.
+    Nessun acconto IVA di dicembre (6013) in entrambi gli anni.
+  - **Acconti IRES/IRAP 50/50 confermati** (soggetto ISA): 2025 IRES 2001 2.071,50 il 23/7 e 2002
+    2.071,50 il 1/12; IRAP 3812/3813 2.359,50 + 2.359,50. Quindi **2° acconto 2026 = 1.886,50 + 2.382,50
+    = 4.269 € entro il 30/11/2026**.
+  - **TARI in due versamenti**: 2025 11.996 € il 1/7 e 21.656 € il 1/12 (totale 33.652 €); 2026 per ora
+    solo 17.709 € il 1/7 → atteso un secondo versamento a dicembre 2026 (importo dall'avviso).
+  - Ritenute lavoro autonomo (1040): 2025 16.980 € (4.000 € a febbraio e a dicembre), 2026 solo 804 €.
+  - Contributi INPS (DM10) lordi: 2025 75.223 €, 2026 69.224 € a settembre.
 
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
