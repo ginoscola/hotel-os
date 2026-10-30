@@ -3006,8 +3006,14 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
   - **Acconti IRES/IRAP 50/50 confermati** (soggetto ISA): 2025 IRES 2001 2.071,50 il 23/7 e 2002
     2.071,50 il 1/12; IRAP 3812/3813 2.359,50 + 2.359,50. Quindi **2° acconto 2026 = 1.886,50 + 2.382,50
     = 4.269 € entro il 30/11/2026**.
-  - **TARI in due versamenti**: 2025 11.996 € il 1/7 e 21.656 € il 1/12 (totale 33.652 €); 2026 per ora
-    solo 17.709 € il 1/7 → atteso un secondo versamento a dicembre 2026 (importo dall'avviso).
+  - **TARI in due versamenti**: 2025 11.996 € il 1/7 e 21.656 € il 1/12 (totale 33.652 €). 2026: avviso
+    di **acconto** (tariffe dell'anno prima, 2 rate 30/6 e 30/9, pagate insieme con un solo F24 il 1/7:
+    17.709 € con TEFA) + avviso di **conguaglio** n. 4553 del 23/10/2026 (tariffe definitive + "conguaglio
+    presenze" sulla quota variabile, quindi non prevedibile con precisione) **19.044 € in rata unica entro
+    il 1/12/2026**, F24 precompilato (3944 + TEFA, ente D836). Totale TARI 2026 = 36.753 €. 4 utenze a
+    Gabicce (V. Veneto 165, Panoramica 48 sub 3 e 4, Panoramica 33). Regola per la previsione: acconto a
+    luglio e conguaglio a dicembre; prima dell'avviso, stima dal totale dell'anno prima. File:
+    `uploads/tesoreria_campioni/fisco/TARI 2026 KMDIMARE conguaglio.pdf`.
   - Ritenute lavoro autonomo (1040): 2025 16.980 € (4.000 € a febbraio e a dicembre), 2026 solo 804 €.
   - Contributi INPS (DM10) lordi: 2025 75.223 €, 2026 69.224 € a settembre.
 
