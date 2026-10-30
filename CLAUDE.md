@@ -3058,6 +3058,16 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
   conguaglio, Redditi SC e IRAP anno 2024, IVA anni 2024–2025. Da aggiungere quando disponibili:
   Redditi SC/IRAP 2026 (anno 2025). Liquidazioni Passcom non necessarie per lo storico.
 
+### Fase 3 — affitti (30/10/2026)
+- **Du Parc** (Hotel Du Parc S.n.c. di Eli…, parte correlata): **nessun contratto vincolante, documento
+  interno** — importo e scadenze li decide la società in base alla convenienza contabile. Canone **130.000 €
+  + IVA = 158.600 €**, uguale per il 2026 salvo decisione diversa. Dalla banca: il canone dell'anno N è
+  fatturato a fine anno (FT 4/1) e pagato a rate **da dicembre N a luglio N+1** (canone 2025: 30.000 l'11/12/2025,
+  30.000 il 10/3/2026, 3 × 20.000 a giugno, 38.600 il 6/7/2026). In più "riaddebito costi di competenza"
+  53.304,36 € il 13/7/2026 (fattura Du Parc 12/2025 in Passcom) — da chiarire se ricorrente.
+- Configurazione prevista nella Fase 3 (da approvare con la strategia): sezione Admin con contratti/piani di
+  pagamento modificabili (Du Parc = piano libero di rate decise dall'utente).
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
