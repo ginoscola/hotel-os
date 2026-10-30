@@ -3023,6 +3023,17 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
     File: `uploads/tesoreria_campioni/fisco/TARI 2026 (Acconto).pdf` e `… conguaglio.pdf`.
   - Ritenute lavoro autonomo (1040): 2025 16.980 € (4.000 € a febbraio e a dicembre), 2026 solo 804 €.
   - Contributi INPS (DM10) lordi: 2025 75.223 €, 2026 69.224 € a settembre.
+- **Redditi SC 2025 (anno d'imposta 2024)** dal cassetto (quadri CP, RF, RN, RO, RS, RX; la Redditi 2026
+  non è ancora nel cassetto, ma è stata presentata: saldo e acconti 2026 già versati a luglio):
+  - **Concordato preventivo biennale (CPB) 2024–2025** (quadro CP): reddito concordato 18.590 €, imposta
+    sostitutiva 12% sulla parte eccedente → **codice 4071 = imposta sostitutiva CPB** (159 € nel 2025,
+    330 € nel 2026). Reddito effettivo 2024 30.215 €, utile civilistico 26.251 €, componenti positivi
+    1.113.840 €. Da chiedere all'utente: adesione al CPB 2026–2027 (cambia la base dell'IRES).
+  - IRES 2024 = 17.263 € × 24% = 4.143 €; acconti versati 3.976 € → saldo 167 € (2003, luglio 2025).
+  - **Metodo acconti IRES = storico al 100% dell'imposta dell'anno prima, 50/50**: acconti 2025 =
+    2.071,50 × 2 = 4.143 €; IRES 2025 = acconti 2025 − credito 370 € = 3.773 € → acconti 2026 = 1.886,50 × 2
+    ✓. Regola: 1° acconto entro 30/6 (proroga ISA al 20–23/7), 2° entro 30/11, saldo con il 1° acconto.
+  - Mancano ancora dichiarazione IVA (credito annuale) e IRAP.
 
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
