@@ -42,6 +42,7 @@ from app.database import get_db
 from app.models.revenue import BudgetConfig, BudgetEntry, DailyRevenue, Hotel, HotelSeason
 from app.services.budget_calculator import KPIBudget, calcola_kpi_budget, calcola_mese_contabile
 from app.services.budget_importer import importa_budget_excel
+from app.services.budget_ristoranti import riepilogo_gruppo as riepilogo_ristoranti_gruppo
 from app.services.pickup_forecast import parametri_hotel, previsione_stagione
 from app.services.weekly_aggregator import settimana_di
 from app.routers.export import (
@@ -459,9 +460,11 @@ def confronto_gruppo(
     version: str = Query('v1'),
     db: Session = Depends(get_db),
 ):
-    """Confronto actual vs budget per tutti gli hotel del gruppo."""
+    """Confronto actual vs budget per tutti gli hotel del gruppo + ristoranti (solo qui: la Home usa
+    _confronto_gruppo_dati e resta sugli hotel)."""
     return {'season_year': season_year, 'version': version,
-            'hotel': _confronto_gruppo_dati(season_year, version, db)}
+            'hotel': _confronto_gruppo_dati(season_year, version, db),
+            'ristoranti': riepilogo_ristoranti_gruppo(season_year, version, db)}
 
 
 @router.get("/gruppo/{season_year}/proiezione")

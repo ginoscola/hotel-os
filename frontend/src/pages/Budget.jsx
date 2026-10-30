@@ -8,6 +8,7 @@ import { formatData, formatEuro, formatPerc, formatN, mostraErrore } from '../ut
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import { ExportMenu } from '../components/ExportMenu.jsx'
 import SpiegazionePrevisione from '../components/SpiegazionePrevisione.jsx'
+import TabRistoranti from './budget/TabRistoranti.jsx'
 import {
   Badge, Button, Card, Field, FileButton, HotelTag, Input, KpiTile, Loading, Messaggio, Modal,
   PageHeader, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
@@ -798,21 +799,41 @@ function TabGruppo({ anno, version }) {
   if (loading) return <Loading />
   if (!conf) return <StatoVuoto>Nessun dato di gruppo disponibile.</StatoVuoto>
 
-  const budGruppo = conf.hotel?.reduce((s, h) => s + (h.budget?.revenue_total || 0), 0)
-  const actGruppo = conf.hotel?.reduce((s, h) => s + (h.actual?.revenue_total || 0), 0)
+  const ristoranti = conf.ristoranti || []
+  const budHotel = conf.hotel?.reduce((s, h) => s + (h.budget?.revenue_total || 0), 0)
+  const actHotel = conf.hotel?.reduce((s, h) => s + (h.actual?.revenue_total || 0), 0)
+  const projHotel = proj?.proiezione_gruppo_revenue
+  const budGruppo = budHotel + ristoranti.reduce((s, r) => s + r.budget, 0)
+  const actGruppo = actHotel + ristoranti.reduce((s, r) => s + r.consuntivo, 0)
+  const projGruppo = projHotel != null ? projHotel + ristoranti.reduce((s, r) => s + r.proiezione, 0) : null
+  // Hotel: actual − budget. Ristoranti: solo settimane chiuse (nessun OTB sulle settimane future).
+  const scHotel = conf.hotel?.length ? actHotel - budHotel : null
+  const scRistoranti = ristoranti.some(r => r.scostamento != null)
+    ? ristoranti.reduce((s, r) => s + (r.scostamento || 0), 0) : null
+  const scGruppo = scHotel == null && scRistoranti == null ? null : (scHotel || 0) + (scRistoranti || 0)
+  const budConfronto = budHotel + ristoranti.reduce((s, r) => s + r.budget_confrontabile, 0)
+  const scGruppoPct = scGruppo != null && budConfronto ? scGruppo / budConfronto * 100 : null
+  const datiGrafico = [
+    ...(conf.hotel || []),
+    ...ristoranti.map(r => ({
+      hotel_code: r.struttura_code,
+      budget: { revenue_total: r.budget },
+      actual: { revenue_total: r.consuntivo },
+    })),
+  ]
 
   return (
     <div>
       <div className="ui-kpi-row">
         <KpiTile label="Budget Gruppo" value={formatEuro(budGruppo)} minWidth={180} />
         <KpiTile label="Actual Gruppo" value={formatEuro(actGruppo)} minWidth={180} />
-        <KpiTile label="Proiezione Gruppo" value={formatEuro(proj?.proiezione_gruppo_revenue)} minWidth={180} />
+        <KpiTile label="Proiezione Gruppo" value={formatEuro(projGruppo)} minWidth={180} />
       </div>
 
       <Table style={{ marginBottom: 20 }}>
         <thead>
           <tr>
-            <Th>Hotel</Th>
+            <Th>Struttura</Th>
             <Th num>Budget Rev.</Th>
             <Th num>Actual Rev.</Th>
             <Th num>Scostamento €</Th>
@@ -843,14 +864,58 @@ function TabGruppo({ anno, version }) {
               </tr>
             )
           })}
+          {ristoranti.length > 0 && (
+            <>
+              <tr className="ui-riga-subtotale">
+                <Td>Totale hotel</Td>
+                <Td num>{formatEuro(budHotel)}</Td>
+                <Td num>{formatEuro(actHotel)}</Td>
+                <Td num>{conSegno(scHotel, formatEuro)}</Td>
+                <Td num>{conSegno(scHotel != null && budHotel ? scHotel / budHotel * 100 : null, v => `${v.toFixed(1)}%`)}</Td>
+                <Td num>—</Td>
+                <Td num>{formatEuro(projHotel)}</Td>
+              </tr>
+              {ristoranti.map(r => (
+                <tr key={r.struttura_code}>
+                  <Td>
+                    <HotelTag code={r.struttura_code} />{' '}
+                    <span className="ui-text-muted">{r.nome}</span>
+                  </Td>
+                  <Td num>{formatEuro(r.budget)}</Td>
+                  <Td num>{formatEuro(r.consuntivo)}</Td>
+                  <Td num style={{ color: coloreSegno(r.scostamento) }}>{conSegno(r.scostamento, formatEuro)}</Td>
+                  <Td num style={{ color: coloreSegno(r.scostamento_pct) }}>
+                    {conSegno(r.scostamento_pct != null ? r.scostamento_pct * 100 : null, v => `${v.toFixed(1)}%`)}
+                  </Td>
+                  <Td num>—</Td>
+                  <Td num>{formatEuro(r.proiezione)}</Td>
+                </tr>
+              ))}
+              <tr className="ui-riga-totale">
+                <Td>Totale gruppo</Td>
+                <Td num>{formatEuro(budGruppo)}</Td>
+                <Td num>{formatEuro(actGruppo)}</Td>
+                <Td num>{conSegno(scGruppo, formatEuro)}</Td>
+                <Td num>{conSegno(scGruppoPct, v => `${v.toFixed(1)}%`)}</Td>
+                <Td num>—</Td>
+                <Td num>{formatEuro(projGruppo)}</Td>
+              </tr>
+            </>
+          )}
         </tbody>
       </Table>
+      {ristoranti.length > 0 && (
+        <p className="ui-text-muted" style={{ marginTop: -12, marginBottom: 20 }}>
+          Ristoranti: consuntivo dai corrispettivi inseriti a mano, scostamento solo sulle settimane chiuse.
+          Occupazione, ADR e RevPAR restano calcolati solo sugli hotel.
+        </p>
+      )}
 
-      {/* Grafico comparativo revenue per hotel */}
-      {conf.hotel?.length > 0 && (
-        <Card title="Revenue — Budget vs Actual per hotel">
+      {/* Grafico comparativo revenue per struttura */}
+      {datiGrafico.length > 0 && (
+        <Card title="Revenue — Budget vs Actual per struttura">
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={conf.hotel} margin={{ left: 0, right: 20 }}>
+            <BarChart data={datiGrafico} margin={{ left: 0, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="hotel_code" tick={{ fontSize: 12 }} />
               <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} width={42} />
@@ -881,13 +946,14 @@ export default function Budget() {
     { id: 'confronto', label: 'Confronto Actual vs Budget' },
     { id: 'proiezione', label: 'Proiezione Fine Stagione' },
     { id: 'gruppo', label: 'Budget Gruppo' },
+    { id: 'ristoranti', label: 'Ristoranti' },
   ]
 
   return (
     <div>
       {/* Selettori hotel / anno / versione nell'intestazione */}
       <PageHeader title="Budget">
-        {tab !== 'gruppo' && (
+        {tab !== 'gruppo' && tab !== 'ristoranti' && (
           <SegmentedControl
             value={hotel}
             onChange={setHotel}
@@ -918,6 +984,9 @@ export default function Budget() {
       )}
       {tab === 'gruppo' && (
         <TabGruppo anno={anno} version={version} />
+      )}
+      {tab === 'ristoranti' && (
+        <TabRistoranti anno={anno} version={version} />
       )}
     </div>
   )

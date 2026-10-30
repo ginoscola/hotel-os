@@ -341,6 +341,31 @@ class BudgetPrevisioneCorrettivo(Base):
     )
 
 
+class BudgetRistorante(Base):
+    """Budget settimanale di incasso (IVA inclusa) dei ristoranti: MMS = solo clienti esterni, BON.
+
+    Gli ospiti Du Parc al Mare Mosso restano nel F&B del budget DPH: stesso perimetro del consuntivo
+    (corrispettivi_manuali), quindi nessun doppio conteggio. Nessuna riga = settimana senza budget.
+    """
+
+    __tablename__ = "budget_ristoranti"
+
+    id = Column(Integer, primary_key=True)
+    struttura_code = Column(String(10), nullable=False)
+    season_year = Column(Integer, nullable=False)
+    week_start = Column(Date, nullable=False)
+    version = Column(String(20), nullable=False, default='v1', server_default='v1')
+    importo = Column(Numeric(12, 2), nullable=False)
+    note = Column(Text, nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("struttura_code", "season_year", "week_start", "version",
+                         name="uq_budget_ristorante_settimana"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Modulo Spese Dipendenti
 # ---------------------------------------------------------------------------

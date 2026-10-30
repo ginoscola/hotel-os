@@ -16,6 +16,7 @@ from app.routers import prenotazioni as prenotazioni_router
 from app.routers import usali_contabile as usali_contabile_router
 from app.routers import usali_fnb as usali_fnb_router
 from app.routers import budget_previsione as budget_previsione_router
+from app.routers import budget_ristoranti as budget_ristoranti_router
 from app.routers import tesoreria as tesoreria_router
 
 
@@ -59,6 +60,7 @@ app.include_router(modules.router)
 app.include_router(hotels.router)
 app.include_router(budget.router)
 app.include_router(budget_previsione_router.router)
+app.include_router(budget_ristoranti_router.router)
 app.include_router(upload.router)
 app.include_router(dashboard.router)
 app.include_router(settimane.router)

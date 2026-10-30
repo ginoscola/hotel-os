@@ -1646,6 +1646,20 @@ reimportabile: l'import accetta solo xlsx.
 `calcola_kpi_budget()` usa `math.floor(x + 0.5)`, uguale a `Math.round()` della tab. Fino alla v3.24.0 usava
 `round()` di Python (arrotonda al pari, 150,5 → 150) e la tab mostrava 1 camera in più di quanto salvato/
 esportato; corretto in v3.24.1 (nessuna riga in DB era a ,5, nessun ricalcolo necessario). Mai `round()` qui.
+**Budget ristoranti** (v4.6.0, 30/10/2026, scheda "Ristoranti" → `pages/budget/TabRistoranti.jsx`): tabella
+`budget_ristoranti` (`budgetrist001_2026`; struttura MMS|BON, anno, settimana, versione, importo, note), non
+righe in `hotels`/`budget_entries` (Dashboard e Forecast iterano `hotels`; occupazione/ADR non hanno senso).
+Un solo importo settimanale di **incasso IVA inclusa** (aliquota unica 10%). **MMS = solo clienti esterni**:
+gli ospiti Du Parc restano nel F&B del budget DPH, quindi nessun doppio conteggio e nessun budget del Mare
+Mosso nel suo complesso. Consuntivo = `corrispettivi_manuali.arrangiamenti_lordo` (non test), per settimana.
+Logica in `services/budget_ristoranti.py`, router `budget_ristoranti.py` (prefix `/budget-ristoranti`:
+`GET /{anno}`, `PUT /{anno}/{week_start}` — importo null cancella —, `POST /{anno}/precompila` = settimana −364
+gg, `GET /{anno}/export`). Griglia: dalla prima apertura all'ultima chiusura degli hotel + settimane con dati
+(nessuna stagione propria). Scostamento **solo su settimane chiuse con budget e consuntivo**; proiezione =
+consuntivo delle chiuse, altrimenti budget (niente pickup: nessuna prenotazione). `GET /budget/gruppo/{anno}/
+confronto` espone `ristoranti`: la scheda Gruppo li somma ai ricavi, KPI camere solo hotel. La Home usa
+`_confronto_gruppo_dati()`, che resta solo hotel. Le versioni non si clonano come per gli hotel: una versione
+nuova si riempie a mano o da anno precedente. Tesoreria Fase 3: leggere gli incassi da qui.
 ⚠️ **`daily_revenue.hotel_id` era NULL su tutti gli upload dal 15/06/2026** (bug reale, trovato qui):
 `_upsert_daily_revenue` in `upload.py` non valorizzava mai `hotel_id` (le righe precedenti erano state
 riempite da una migrazione), e `_actual_settimanale()` filtrava proprio su `hotel_id` → Confronto Actual vs
