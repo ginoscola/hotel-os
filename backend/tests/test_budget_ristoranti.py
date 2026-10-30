@@ -189,3 +189,14 @@ def test_fonte_trend_e_avanzamento(client, Sessione):
     assert t['proiezione'] == 1500 + 200 + 1000 + 1000
     assert t['trend'] == 'sopra_budget'   # 3700 vs 3000
     assert d['totali']['BON']['trend'] is None   # nessun budget
+
+
+def test_gruppo_scostamento_senza_settimane_confrontabili(client):
+    # BON: solo consuntivo (300). MMS: budget su settimana senza consuntivo → actual − budget
+    _put(client, date(2026, 7, 4), 'MMS', 2000)
+    r = {x['struttura_code']: x for x in client.get("/budget/gruppo/2026/confronto").json()['ristoranti']}
+    assert r['BON']['scostamento'] == 300
+    assert r['BON']['scostamento_pct'] is None
+    assert r['MMS']['scostamento'] == 1700 - 2000
+    assert r['MMS']['scostamento_pct'] == pytest.approx(-0.15)
+    assert r['MMS']['budget_confrontabile'] == 2000

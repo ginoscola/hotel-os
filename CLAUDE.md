@@ -1664,6 +1664,8 @@ nuova si riempie a mano o da anno precedente. Tesoreria Fase 3: leggere gli inca
 Inserimento: passandoci con un ristorante selezionato si torna su DPH), `pages/budget/VisteRistorante.jsx` sui
 dati di `GET /budget-ristoranti/{anno}` (`fonte` per settimana, `trend` con soglia 5%, `settimane_chiuse/totali`).
 Niente camere, OTB e pickup. Helper comuni in `pages/budget/helpers.js`.
+Scheda Gruppo (v4.7.1, `riepilogo_gruppo()`): senza settimane confrontabili lo scostamento è actual − budget,
+come gli hotel, così la colonna non resta vuota; le schede del singolo ristorante restano sulle settimane chiuse.
 ⚠️ **`daily_revenue.hotel_id` era NULL su tutti gli upload dal 15/06/2026** (bug reale, trovato qui):
 `_upsert_daily_revenue` in `upload.py` non valorizzava mai `hotel_id` (le righe precedenti erano state
 riempite da una migrazione), e `_actual_settimanale()` filtrava proprio su `hotel_id` → Confronto Actual vs

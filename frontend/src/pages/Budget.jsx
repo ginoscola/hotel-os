@@ -888,7 +888,8 @@ function TabGruppo({ anno, version }) {
       </Table>
       {ristoranti.length > 0 && (
         <p className="ui-text-muted" style={{ marginTop: -12, marginBottom: 20 }}>
-          Ristoranti: consuntivo dai corrispettivi inseriti a mano, scostamento solo sulle settimane chiuse.
+          Ristoranti: consuntivo dai corrispettivi inseriti a mano. Scostamento sulle settimane chiuse;
+          finché non ce ne sono, actual − budget come per gli hotel.
           Occupazione, ADR e RevPAR restano calcolati solo sugli hotel.
         </p>
       )}

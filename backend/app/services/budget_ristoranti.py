@@ -160,7 +160,20 @@ def riepilogo(anno: int, version: str, db: Session, oggi: Optional[date] = None)
 
 
 def riepilogo_gruppo(anno: int, version: str, db: Session) -> list:
-    """Righe per la scheda Gruppo: solo i ristoranti con budget o consuntivo nell'anno."""
+    """Righe per la scheda Gruppo: solo i ristoranti con budget o consuntivo nell'anno.
+
+    Senza settimane confrontabili lo scostamento è actual − budget, come per gli hotel: la colonna
+    non resta vuota prima della stagione (−100%) né negli anni senza budget.
+    """
     totali = riepilogo(anno, version, db)['totali']
-    return [{'struttura_code': c, 'nome': n, **totali[c]} for c, n in RISTORANTI.items()
-            if totali[c]['budget'] or totali[c]['consuntivo']]
+    righe = []
+    for codice, nome in RISTORANTI.items():
+        t = dict(totali[codice])
+        if not (t['budget'] or t['consuntivo']):
+            continue
+        if t['scostamento'] is None:
+            t['scostamento'] = round(t['consuntivo'] - t['budget'], 2)
+            t['budget_confrontabile'] = t['budget']
+            t['scostamento_pct'] = t['scostamento'] / t['budget'] if t['budget'] else None
+        righe.append({'struttura_code': codice, 'nome': nome, **t})
+    return righe
