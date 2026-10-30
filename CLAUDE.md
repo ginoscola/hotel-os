@@ -3089,6 +3089,22 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
 - Configurazione prevista nella Fase 3 (da approvare con la strategia): sezione Admin con contratti/piani di
   pagamento modificabili (Du Parc = piano libero di rate decise dall'utente).
 
+### Fase 3 — altre risposte dell'utente (30/10/2026)
+- **Interventi inverno 2026/27**: non ancora definiti — in programma lavori a **piscina** e **parcheggio**,
+  forse una **nuova cella frigorifera**. Servono come voci inseribili/modificabili (importo stimato, mese,
+  stato ipotesi/confermato), non dati fissi.
+- **Ricorrenti fuori scadenzario** (dalla banca): assicurazioni **Unipol/Mancini** a fine dicembre–gennaio e
+  fine giugno–luglio (polizze globali alberghi DPH ~2.970–3.010 € e INT ~1.815–1.840 €, incendio ~451 €,
+  BCC Assicurazioni SDD ~494 € a giugno); **canone RAI** speciale fine giugno (2 × ~1.024 € CLB e DPH);
+  **SIAE** a luglio (2025: 1.117 + 984 + 857 €; 2026 non trovata in banca: da verificare). Pagate in
+  stagione. Proposta: ricorrenti ricavati dallo storico banca, modificabili.
+- **Scenari**: 3 — pessimista / realista / ottimista (realista = previsione base).
+- **Incassi futuri dal Budget** (modulo Budget), ma **nel budget mancano i ristoranti** (MMS/BON): vanno
+  aggiunti (o stimati a parte) prima di usarlo. Da verificare nella strategia: IVA inclusa/esclusa del
+  budget e tempi di incasso (caparre, POS, OTA) rispetto alla competenza.
+- **Piano del mutuo**: aggiungere la libreria `xlrd` per leggere il `.xls` originale (nuova dipendenza
+  approvata dall'utente, da installare nella Fase 3).
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
