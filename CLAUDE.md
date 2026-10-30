@@ -3049,7 +3049,14 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
     consumato dagli F24 in ordine di scadenza (come fa lo studio: in estate soprattutto contributi e
     ritenute); prima della dichiarazione, stima dall'anno prima. ⚠️ Oltre 5.000 € il credito annuo si
     compensa solo dopo la presentazione della dichiarazione (nel 2026 usato da aprile).
-  - Manca ancora l'IRAP.
+- **IRAP 2025 (anno 2024)**, quadri IC/IR: valore della produzione netta 121.005 € × **3,90%** (regione
+  codice 06 in F24) = **4.719 €**; acconti 2025 = 2.359,50 × 2 = 4.719 ✓ (storico 100%, 50/50); saldo 2024
+  364 € (3800, luglio 2025). Acconti 2026 = 2.382,50 × 2 = 4.765 € (IRAP 2025 da confermare con la
+  dichiarazione 2026, non ancora nel cassetto). Dal quadro IC 2024: ricavi 1.113.840 €, godimento beni di
+  terzi (affitti) 346.721 €, servizi 314.605 €, materie prime 135.846 €.
+- Raccolta dati fiscali per la Fase 3 **completa** (30/10/2026): F24/F23 2025–2026, TARI acconto e
+  conguaglio, Redditi SC e IRAP anno 2024, IVA anni 2024–2025. Da aggiungere quando disponibili:
+  Redditi SC/IRAP 2026 (anno 2025). Liquidazioni Passcom non necessarie per lo storico.
 
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
