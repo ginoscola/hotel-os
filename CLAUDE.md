@@ -2975,6 +2975,27 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
 - Tassa di soggiorno 2025 versata per intero (terzo trimestre il 14/11/2025, 29.854 €: fuori dal confronto
   1/1–28/10 della Fase 1); nel 2026 versamenti trimestrali (luglio, ottobre) → schema usato in previsione.
 - Compensi del marchio: ancora a zero nel 2026, fuori dalla previsione finché non c'è una data.
+- **Analisi quietanze F24/F23 2026** (30/10/2026, file in `uploads/tesoreria_campioni/fisco/`): PDF
+  "Quietanza di versamento" AdE leggibili con `pdfplumber` (righe `SEZIONE codice … debito credito`,
+  "Saldo delega", "DATA DEL VERSAMENTO"). Tutte le deleghe con saldo > 0 trovate in banca ("Imposte e
+  tasse:Delega Unificata", 1–3 giorni dopo; più deleghe dello stesso giorno = un solo addebito); F24 a
+  zero non in banca. F23 = "Imposte e tasse : ex SAC" in banca. Scoperte:
+  - ⚠️ **IVA MENSILE, non trimestrale** (codice 6008 = IVA agosto, 5.281,61 € il 16/9/2026; volume
+    d'affari oltre la soglia): gli altri mesi 2026 senza IVA a debito in F24. Da chiarire con le
+    liquidazioni Passcom (mensili).
+  - **Credito IVA 2025 (6099) usato in compensazione**: 44.886,87 € nel 2026, soprattutto contributi e
+    ritenute dei dipendenti di giugno–agosto → in banca gli F24 estivi 2026 sono quasi a zero. Quando il
+    credito finisce si pagano per intero: la previsione 2027 non deve copiare il 2026. Residuo dalla
+    dichiarazione IVA.
+  - IRES/IRAP: saldo 2025 a credito (2003 −370, 3800 −294), 1° acconto 2026 il **20/7** (proroga ISA):
+    IRES 2001 1.886,50, IRAP 3812 2.382,50; 2° acconto il 30/11.
+  - Fisse: 7085 libri sociali 309,87 € il 16/3; 3850 diritto camerale 354 € (FC 221 + AN 133) a luglio;
+    INAIL 18320 in 4 rate ~580 € (16/2, 16/5, 16/8, 16/11); **TARI** 3944 + TEFA Gabicce (D836)
+    17.709 € rata unica con F24 il 1/7/2026; **registro contratto d'affitto ERICE** (1550) 1.300 € il
+    21/1/2026 (il "conto terzi" del 4/7/2022 è lo stesso tributo, contribuente ERICE, KM coobbligato).
+  - Dipendenti: 1001 ritenute + DM10 INPS + addizionali 3802/3847/3848 + EBTU/FAST, il 16 del mese dopo.
+  - F23 2026: 5 versamenti (sanzioni, 5.397,47 €) e ravvedimenti del 18/2 (codici 8947–8952): occasionali,
+    fuori dalla previsione. Codici da verificare: 1075, 4071, 4731.
 
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
