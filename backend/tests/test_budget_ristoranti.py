@@ -171,3 +171,21 @@ def test_gruppo_aggiunge_ristoranti_senza_toccare_gli_hotel(client):
     assert [r['struttura_code'] for r in d['ristoranti']] == ['MMS', 'BON']
     assert d['ristoranti'][0]['budget'] == 1200
     assert all(h['hotel_code'] not in ('MMS', 'BON') for h in d['hotel'])
+
+
+def test_fonte_trend_e_avanzamento(client, Sessione):
+    _put(client, WS_1, 'MMS', 1000)   # consuntivo 1500: chiusa
+    _put(client, date(2026, 6, 20), 'MMS', 1000)   # in corso
+    _put(client, date(2026, 6, 27), 'MMS', 1000)   # futura
+    db = Sessione()
+    d = riepilogo(2026, 'v1', db, oggi=date(2026, 6, 22))
+    db.close()
+    assert _settimana(d, WS_1)['MMS']['fonte'] == 'consuntivo'
+    assert _settimana(d, date(2026, 6, 20))['MMS']['fonte'] == 'in_corso'
+    assert _settimana(d, date(2026, 6, 27))['MMS']['fonte'] == 'budget'
+    t = d['totali']['MMS']
+    # + settimana 13/06 con solo consuntivo (200)
+    assert (t['settimane_chiuse'], t['settimane_totali']) == (2, 4)
+    assert t['proiezione'] == 1500 + 200 + 1000 + 1000
+    assert t['trend'] == 'sopra_budget'   # 3700 vs 3000
+    assert d['totali']['BON']['trend'] is None   # nessun budget

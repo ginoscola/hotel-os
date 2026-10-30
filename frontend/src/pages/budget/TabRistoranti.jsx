@@ -4,16 +4,15 @@ import { ExportMenu } from '../../components/ExportMenu.jsx'
 import {
   Button, HotelTag, Input, KpiTile, Loading, Messaggio, SectionTitle, Table, Td, Th, useAvvisi, useConferma,
 } from '../../components/ui'
-import { colors } from '../../styles/tokens.js'
 import { isAdmin } from '../../utils/auth.js'
 import { formatEuro, formatN, mostraErrore } from '../../utils/format.js'
+import { coloreSegno, conSegno } from './helpers.js'
 
 const MESI = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
   'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
 
 const fmtGiorno = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
-const coloreSegno = (v) => v == null ? undefined : (v >= 0 ? colors.success : colors.danger)
-const conSegno = (v) => v == null ? '—' : `${v >= 0 ? '+' : ''}${formatEuro(v)}`
+const conSegnoEuro = (v) => conSegno(v, formatEuro)
 const zeroComeVuoto = (v) => v ? formatEuro(v) : '—'
 
 function CellaBudget({ valore, note, modificabile, onSalva }) {
@@ -140,7 +139,7 @@ export default function TabRistoranti({ anno, version }) {
         <KpiTile label="Consuntivo" value={formatEuro(tot.consuntivo)} minWidth={170} />
         <KpiTile
           label="Scostamento"
-          value={conSegno(tot.scostamento)}
+          value={conSegnoEuro(tot.scostamento)}
           colore={coloreSegno(tot.scostamento)}
           sub={`sulle settimane chiuse${tot.scostamento_pct != null ? ` (${(tot.scostamento_pct * 100).toFixed(1)}%)` : ''}`}
           minWidth={170}
@@ -186,7 +185,7 @@ export default function TabRistoranti({ anno, version }) {
                       />
                     </Td>,
                     <Td key={`${r.code}-c`} num>{c.consuntivo != null ? formatEuro(c.consuntivo) : '—'}</Td>,
-                    <Td key={`${r.code}-s`} num style={{ color: coloreSegno(c.scostamento) }}>{conSegno(c.scostamento)}</Td>,
+                    <Td key={`${r.code}-s`} num style={{ color: coloreSegno(c.scostamento) }}>{conSegnoEuro(c.scostamento)}</Td>,
                   ]
                 })}
                 <Td num gruppo>{zeroComeVuoto(budget)}</Td>
@@ -199,7 +198,7 @@ export default function TabRistoranti({ anno, version }) {
             {ristoranti.map(r => [
               <Td key={`${r.code}-b`} num gruppo>{formatEuro(totali[r.code].budget)}</Td>,
               <Td key={`${r.code}-c`} num>{formatEuro(totali[r.code].consuntivo)}</Td>,
-              <Td key={`${r.code}-s`} num>{conSegno(totali[r.code].scostamento)}</Td>,
+              <Td key={`${r.code}-s`} num>{conSegnoEuro(totali[r.code].scostamento)}</Td>,
             ])}
             <Td num gruppo>{formatEuro(tot.budget)}</Td>
             <Td num>{formatEuro(tot.consuntivo)}</Td>

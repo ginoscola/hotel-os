@@ -9,19 +9,13 @@ import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import { ExportMenu } from '../components/ExportMenu.jsx'
 import SpiegazionePrevisione from '../components/SpiegazionePrevisione.jsx'
 import TabRistoranti from './budget/TabRistoranti.jsx'
+import { ConfrontoRistorante, ProiezioneRistorante } from './budget/VisteRistorante.jsx'
+import { COLORE_ACTUAL, COLORE_BUDGET, TREND, coloreSegno, conSegno, labelSettimana } from './budget/helpers.js'
 import {
   Badge, Button, Card, Field, FileButton, HotelTag, Input, KpiTile, Loading, Messaggio, Modal,
   PageHeader, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
 } from '../components/ui'
 import { colors } from '../styles/tokens.js'
-
-// Colori serie grafici Budget vs Actual (uguali in tutti i grafici del modulo)
-const COLORE_BUDGET = colors.textSubtle
-const COLORE_ACTUAL = colors.info
-
-// Verde se ≥ 0, rosso se < 0, testo normale se null
-const coloreSegno = (v) => v == null ? undefined : (v >= 0 ? colors.success : colors.danger)
-const conSegno = (v, fmt) => v == null ? '—' : `${v >= 0 ? '+' : ''}${fmt(v)}`
 
 const MESI_IT = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -29,6 +23,7 @@ const MESI_IT = [
 ]
 const HOTEL_CODES = ['CLB', 'DPH', 'INT']
 const HOTEL_NOMI = { CLB: 'Club Hotel', DPH: 'Hotel Du Parc', INT: 'Hotel International' }
+const RISTORANTI_NOMI = { MMS: 'Mare Mosso', BON: 'Buona Onda' }
 
 // Calcolo KPI budget lato frontend (speculare a budget_calculator.py).
 // occupancy: % 0-100 (input); adrFnb/adrExtra: € per camera venduta (input).
@@ -101,14 +96,6 @@ function valoriRiga(s, edit, stagione) {
     ?? roomsAvailabileSettimana(s.week_start, stagione)
   const kpi = calcolaKpiFrontend(occupancy, adr, adrFnb, adrExtra, ra)
   return { occupancy, adr, adrFnb, adrExtra, ra, kpi }
-}
-
-function labelSettimana(ws) {
-  const d = new Date(ws + 'T00:00:00')
-  const we = new Date(ws + 'T00:00:00')
-  we.setDate(we.getDate() + 6)
-  const fmt = (dt) => `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`
-  return `${fmt(d)}–${fmt(we)}`
 }
 
 
@@ -625,11 +612,6 @@ function FragmentBdgAct({ thSub }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB 3 — Proiezione Fine Stagione
 // ─────────────────────────────────────────────────────────────────────────────
-const TREND = {
-  sopra_budget: { label: 'SOPRA BUDGET', colore: colors.success, tono: 'ok' },
-  sotto_budget: { label: 'SOTTO BUDGET', colore: colors.danger,  tono: 'err' },
-  in_linea:     { label: 'IN LINEA',     colore: colors.info,    tono: 'info' },
-}
 // Fonte del valore di ogni settimana (vedi _proiezione_hotel in budget.py)
 const FONTE_SETTIMANA = {
   consuntivo: { label: 'Consuntivo', tono: 'ok' },
@@ -941,6 +923,17 @@ export default function Budget() {
   const [tab, setTab] = useState('inserimento')
 
   const anniDisponibili = [2025, 2026, 2027]
+  const isRistorante = hotel in RISTORANTI_NOMI
+  // I ristoranti si compilano nella loro scheda: Inserimento Budget resta solo per gli hotel
+  const cambiaTab = (id) => {
+    if (id === 'inserimento' && isRistorante) setHotel('DPH')
+    setTab(id)
+  }
+  const opzioniStruttura = [
+    ...HOTEL_CODES.map(c => ({ value: c, label: HOTEL_NOMI[c] })),
+    ...(tab === 'confronto' || tab === 'proiezione'
+      ? Object.entries(RISTORANTI_NOMI).map(([value, label]) => ({ value, label })) : []),
+  ]
   const tabs = [
     { id: 'inserimento', label: 'Inserimento Budget' },
     { id: 'confronto', label: 'Confronto Actual vs Budget' },
@@ -957,7 +950,7 @@ export default function Budget() {
           <SegmentedControl
             value={hotel}
             onChange={setHotel}
-            options={HOTEL_CODES.map(c => ({ value: c, label: HOTEL_NOMI[c] }))}
+            options={opzioniStruttura}
           />
         )}
         <Select value={anno} onChange={e => setAnno(Number(e.target.value))} aria-label="Anno">
@@ -971,16 +964,18 @@ export default function Budget() {
         )}
       </PageHeader>
 
-      <Tabs tabs={tabs} value={tab} onChange={setTab} />
+      <Tabs tabs={tabs} value={tab} onChange={cambiaTab} />
 
       {tab === 'inserimento' && (
         <TabInserimento hotel={hotel} anno={anno} version={version} onVersionChange={setVersion} />
       )}
-      {tab === 'confronto' && (
-        <TabConfronto hotel={hotel} anno={anno} version={version} />
+      {tab === 'confronto' && (isRistorante
+        ? <ConfrontoRistorante codice={hotel} anno={anno} version={version} />
+        : <TabConfronto hotel={hotel} anno={anno} version={version} />
       )}
-      {tab === 'proiezione' && (
-        <TabProiezione hotel={hotel} anno={anno} version={version} />
+      {tab === 'proiezione' && (isRistorante
+        ? <ProiezioneRistorante codice={hotel} anno={anno} version={version} />
+        : <TabProiezione hotel={hotel} anno={anno} version={version} />
       )}
       {tab === 'gruppo' && (
         <TabGruppo anno={anno} version={version} />

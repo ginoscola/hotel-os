@@ -1660,6 +1660,10 @@ consuntivo delle chiuse, altrimenti budget (niente pickup: nessuna prenotazione)
 confronto` espone `ristoranti`: la scheda Gruppo li somma ai ricavi, KPI camere solo hotel. La Home usa
 `_confronto_gruppo_dati()`, che resta solo hotel. Le versioni non si clonano come per gli hotel: una versione
 nuova si riempie a mano o da anno precedente. Tesoreria Fase 3: leggere gli incassi da qui.
+**Confronto e Proiezione anche per i ristoranti** (v4.7.0): MMS/BON nel selettore delle due schede (non in
+Inserimento: passandoci con un ristorante selezionato si torna su DPH), `pages/budget/VisteRistorante.jsx` sui
+dati di `GET /budget-ristoranti/{anno}` (`fonte` per settimana, `trend` con soglia 5%, `settimane_chiuse/totali`).
+Niente camere, OTB e pickup. Helper comuni in `pages/budget/helpers.js`.
 ⚠️ **`daily_revenue.hotel_id` era NULL su tutti gli upload dal 15/06/2026** (bug reale, trovato qui):
 `_upsert_daily_revenue` in `upload.py` non valorizzava mai `hotel_id` (le righe precedenti erano state
 riempite da una migrazione), e `_actual_settimanale()` filtrava proprio su `hotel_id` → Confronto Actual vs

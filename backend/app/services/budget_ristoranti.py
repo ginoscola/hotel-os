@@ -18,6 +18,7 @@ from app.services.budget_calculator import calcola_mese_contabile
 from app.services.weekly_aggregator import settimana_di
 
 RISTORANTI = {'MMS': 'Mare Mosso — clienti esterni', 'BON': 'Buona Onda'}
+SOGLIA_TREND = 0.05  # stessa soglia della proiezione hotel
 
 
 def consuntivo_settimanale(anno: int, db: Session) -> dict:
@@ -58,7 +59,8 @@ def _settimane(anno: int, db: Session, presenti: set) -> list:
 
 def _totali_vuoti() -> dict:
     return {'budget': 0.0, 'consuntivo': 0.0, 'proiezione': 0.0,
-            'budget_confrontabile': 0.0, 'scostamento': 0.0, 'ha_confronto': False}
+            'budget_confrontabile': 0.0, 'scostamento': 0.0, 'ha_confronto': False,
+            'settimane_totali': 0, 'settimane_chiuse': 0}
 
 
 def _accumula(t: dict, c: dict) -> None:
@@ -69,11 +71,34 @@ def _accumula(t: dict, c: dict) -> None:
         t['budget_confrontabile'] += c['budget']
         t['scostamento'] += c['scostamento']
         t['ha_confronto'] = True
+    if c['budget'] is not None or c['consuntivo'] is not None:
+        t['settimane_totali'] += 1
+        if c['fonte'] == 'consuntivo':
+            t['settimane_chiuse'] += 1
+
+
+def _trend(proiezione: float, budget: float) -> Optional[str]:
+    if not budget:
+        return None
+    scarto = (proiezione - budget) / budget
+    if scarto > SOGLIA_TREND:
+        return 'sopra_budget'
+    return 'sotto_budget' if scarto < -SOGLIA_TREND else 'in_linea'
+
+
+def _fonte(stato: str, consuntivo: Optional[float]) -> str:
+    """Da dove viene il valore di proiezione della settimana."""
+    if stato == 'chiusa' and consuntivo is not None:
+        return 'consuntivo'
+    return 'in_corso' if stato == 'in_corso' else 'budget'
 
 
 def _chiudi_totali(t: dict) -> dict:
     confronto = t['ha_confronto']
     return {
+        'trend': _trend(t['proiezione'], t['budget']),
+        'settimane_totali': t['settimane_totali'],
+        'settimane_chiuse': t['settimane_chiuse'],
         'budget': round(t['budget'], 2),
         'consuntivo': round(t['consuntivo'], 2),
         'proiezione': round(t['proiezione'], 2),
@@ -115,7 +140,8 @@ def riepilogo(anno: int, version: str, db: Session, oggi: Optional[date] = None)
                 'note': b.note if b else None,
                 'consuntivo': round(con, 2) if con is not None else None,
                 'scostamento': round(con - bud, 2) if stato == 'chiusa' and bud is not None and con is not None else None,
-                'proiezione': con if con is not None and stato == 'chiusa' else bud if bud is not None else con,
+                'proiezione': round(con, 2) if con is not None and (stato == 'chiusa' or bud is None) else bud,
+                'fonte': _fonte(stato, con),
             }
             riga[codice] = cella
             for t in (totali[codice], totali['totale'], mese_tot[codice], mese_tot['totale']):
