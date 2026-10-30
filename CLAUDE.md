@@ -3011,9 +3011,13 @@ Scelta dell'utente: **non dipendere dal commercialista** per il calendario fisca
     17.709 € con TEFA) + avviso di **conguaglio** n. 4553 del 23/10/2026 (tariffe definitive + "conguaglio
     presenze" sulla quota variabile, quindi non prevedibile con precisione) **19.044 € in rata unica entro
     il 1/12/2026**, F24 precompilato (3944 + TEFA, ente D836). Totale TARI 2026 = 36.753 €. 4 utenze a
-    Gabicce (V. Veneto 165, Panoramica 48 sub 3 e 4, Panoramica 33). Regola per la previsione: acconto a
-    luglio e conguaglio a dicembre; prima dell'avviso, stima dal totale dell'anno prima. File:
-    `uploads/tesoreria_campioni/fisco/TARI 2026 KMDIMARE conguaglio.pdf`.
+    Gabicce (V. Veneto 165, Panoramica 48 sub 3 e 4, Panoramica 33). **Regola scritta nell'avviso di
+    acconto** (n. 2152 del 14/05/2026): acconto = **75% del dovuto annuo a tariffe dell'anno prima**, 2 rate
+    30/6 e 30/9 o rata unica entro il 30/6; il resto con avviso a **scadenza 1° dicembre**. Previsione:
+    prima degli avvisi, acconto = 75% del totale dell'anno prima a fine giugno, conguaglio = totale anno
+    prima × (1 + variazione) − acconto al 1/12; arrivato l'avviso, importi veri inseriti a mano. L'avviso
+    di acconto è una scansione (nessun testo): niente lettura automatica degli avvisi, inserimento manuale.
+    File: `uploads/tesoreria_campioni/fisco/TARI 2026 (Acconto).pdf` e `… conguaglio.pdf`.
   - Ritenute lavoro autonomo (1040): 2025 16.980 € (4.000 € a febbraio e a dicembre), 2026 solo 804 €.
   - Contributi INPS (DM10) lordi: 2025 75.223 €, 2026 69.224 € a settembre.
 
