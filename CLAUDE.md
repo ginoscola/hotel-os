@@ -2940,6 +2940,26 @@ ignorare, `DESCRIZIONE TESTATA` anche con colonna 4. Chiave conto+protocollo+sca
 - Da chiedere allo studio: metodo acconti (40/60 o 50/50 ISA), aliquota IRAP regionale, IRES/IRAP
   2025 dovute e acconti 2026 versati, eventuale IMU.
 
+### Fase 5 — regole per scaricare gli ZIP fatture dall'AdE (30/10/2026)
+Decise con l'utente: **mostrarle come istruzioni nella futura sezione di upload** degli ZIP (testo fisso
+accanto alla DropZone), così ogni richiesta resta coerente con le precedenti.
+- Portale Fatture e Corrispettivi → Consultazione/Richieste → "Richieste di Fatture Elettroniche" →
+  Creazione richiesta guidata: **Puntuale**, fatture **Ricevute**, tipo **Tutte**, **tipo data = data di
+  ricezione** (mai emissione) → Genera richiesta → **Invia richiesta** ("Download richiesta (xml)" è solo
+  il modulo). ZIP pronto in ~1–5 giorni.
+- Perché la ricezione: un periodo chiuso non riceve più fatture (con l'emissione le TD24 differite datate
+  a fine mese arrivano fino al 15 del mese dopo e sfuggirebbero); è la data che conta per la detrazione
+  IVA e quella in cui il debito diventa noto.
+- **Una richiesta per trimestre** (il portale limita il periodo, probabilmente a 3 mesi); da qui in poi
+  una al mese, il mese **intero**, richiesta dopo la sua fine.
+- Storico da scaricare: 01/01/2025 → 30/09/2026 (7 trimestri, come gli estratti conto) + ottobre 2026
+  intero a inizio novembre (la prova 01–28/10 resta: i doppioni si scartano per `idfile` SDI, quindi
+  l'import deve deduplicare su quello, mai rifiutare un file sovrapposto).
+- ZIP caricati così come arrivano, non decompressi (nome suggerito `AAAA-Tn.zip` / `AAAA-MM.zip`);
+  il `…_fileInput.xml` accanto è il modulo della richiesta, da ignorare.
+- La conservazione sul portale non è illimitata (fonte non ufficiale: fino al 31/12 del secondo anno
+  dopo la ricezione): scaricare per tempo.
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
