@@ -3248,6 +3248,37 @@ esistenti, mai query duplicate sulle loro tabelle.
 
 ---
 
+## Indice WAVE (in sviluppo — progetto a fasi)
+WAVE = Weekly Achieved Value vs Excellence: fatturato del periodo ÷ miglior fatturato mai ottenuto nello stesso
+periodo (netto IVA, senza tassa di soggiorno), KPI sempre sui totali. Specifica completa: `prompt_hotelos_wave.md`
+nella root (**fuori da git**, verrà cancellata a lavoro finito: le decisioni vanno scritte qui). Storico 2022–2025:
+`uploads/wave/Storico_fatturato_WAVE_2022-2025.xlsx` (foglio Storico, colonna H). Stesse regole di lavoro della
+Tesoreria: una fase per volta, ok esplicito prima del codice, chiedere nei dubbi.
+Fasi: 1 storico + riferimento · 2 Dashboard Hotel · 3 Gruppo + Home · 4 ritmo di stagione.
+**Stato**: decisioni prese (31/10/2026), strategia della Fase 1 presentata, codice non iniziato.
+
+Decisioni (31/10/2026, oltre a quelle della specifica):
+- Storico importato così com'è (anche le 5 differenze tra file segnalate nel foglio Note), correzioni da Admin.
+- Dal 2026 il **record** si aggiorna dai Corrispettivi: hotel = `arrangiamenti` di `report_fatturati()` ÷ 1,10
+  (penali, shop e tassa esclusi, come lo storico 2025); ristoranti = arrangiamenti MMS/BON ÷ 1,10.
+- **L'anno in corso non concorre al record** finché la stagione non è chiusa.
+- Mesi fuori da aprile–settembre ignorati.
+- **Il WAVE si misura sempre sui dati Revenue** (`daily_revenue.revenue_total` ÷ 1,10, notte per notte) — settimane,
+  mesi, stagione e futuro — contro il riferimento per data documento (strada "A"): coerente con la linea
+  dell'occupazione e col prenotato; sul singolo mese di inizio/fine stagione può scostarsi (CLB settembre 2025:
+  maturato +43% sul fatturato), sulla stagione 1–2%. Verificato sul 2026: `daily_revenue` è **IVA inclusa e senza
+  tassa di soggiorno** (stagione: DPH 523.621 vs arrangiamenti lordi 530.506, CLB 596.736 vs 586.441, INT 542.284 vs
+  545.086; con la tassa sarebbero +2,5%).
+- **Grafico settimanale**: nelle settimane di aprile–maggio nessuna barra WAVE (solo occupazione) + etichetta
+  "Inizio stagione (apr+mag): X%"; la settimana a cavallo maggio/giugno conta solo i giorni di giugno (quelli di
+  maggio vanno nel blocco).
+- **Home**: due tachimetri ("a oggi, completo" = settimane passate hotel + ristoranti; "proiezione hotel" =
+  prenotato + pickup), con **soglie automatiche dal budget**: WAVE del budget = budget ÷ 1,10 (hotel: stessa base
+  dei dati Revenue; ristoranti: `budget_ristoranti`, IVA inclusa) ÷ riferimento; verde ≥ WAVE del budget, arancio
+  fino a 5 punti sotto, rosso oltre; tacca sul budget.
+
+---
+
 ## Principi di progettazione
 
 ### Riusabilità tra moduli
