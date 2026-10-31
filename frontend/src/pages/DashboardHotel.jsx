@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, BarChart, Bar, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ReferenceArea, ReferenceLine,
+  ReferenceArea, ReferenceLine, Cell,
 } from 'recharts'
 import api from '../api/client.js'
 import { ExportMenu } from '../components/ExportMenu.jsx'
@@ -388,6 +388,77 @@ function CardCorrispettivi({ hotel, data }) {
   )
 }
 
+/**
+ * Scarto in euro dal 100% WAVE: una riga per il blocco "Inizio stagione" (apr+mag) + una per ogni settimana di
+ * giugno–settembre; `cumulato` = scarto accumulato da inizio stagione (ultimo punto = scarto di stagione).
+ */
+function righeScartoWave(wave) {
+  if (!wave) return []
+  const righe = []
+  let cum = 0
+  const inizio = wave.periodi.find(p => p.periodo === 'inizio')
+  if (inizio?.riferimento != null) {
+    cum = (inizio.valore ?? 0) - inizio.riferimento
+    righe.push({ week_start: `${wave.anno}-05-01`, label: 'Apr+mag', scarto: cum, cumulato: cum })
+  }
+  for (const s of wave.settimane) {
+    if (s.riferimento == null) continue
+    const scarto = (s.valore ?? 0) - s.riferimento
+    cum += scarto
+    righe.push({ week_start: s.week_start, scarto, cumulato: cum })
+  }
+  return righe
+}
+
+function GraficoScartoWave({ wave, waveComp, compLabel, isAnnoPrecedente, snapshotDate }) {
+  const dati = useMemo(() => {
+    const comp = {}
+    for (const r of righeScartoWave(waveComp)) {
+      const k = r.label ? 'inizio' : (isAnnoPrecedente ? addDays(r.week_start, 364) : r.week_start)
+      comp[k] = r.cumulato
+    }
+    const fmt = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+    return righeScartoWave(wave).map(r => ({
+      ...r, label: r.label ?? `${fmt(r.week_start)}–${fmt(addDays(r.week_start, 6))}`,
+      cumulato_comp: comp[r.label ? 'inizio' : r.week_start] ?? null,
+    }))
+  }, [wave, waveComp, isAnnoPrecedente])
+  if (!dati.length) return null
+  const finale = dati[dati.length - 1].cumulato
+  const euroK = v => `${(v / 1000).toFixed(0)}k`
+  return (
+    <Card style={{ marginBottom: 24 }}
+      title={<span>Distanza dal 100% WAVE, in euro <SpiegazioneWave /></span>}>
+      <div className="ui-text-muted" style={{ marginBottom: 8 }}>
+        Barre = incassato − 100% WAVE di ogni settimana (verde sopra, rosso sotto); la prima è il blocco aprile+maggio.
+        Linea = scarto accumulato da inizio stagione: a fine stagione{' '}
+        <strong style={{ color: finale >= 0 ? colors.success : colors.danger }}>
+          {finale > 0 ? '+' : ''}{formatEuro(finale)}
+        </strong>. Importi netti IVA, senza tassa di soggiorno.
+      </div>
+      <ResponsiveContainer width="100%" height={280}>
+        <ComposedChart data={dati} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
+          <YAxis tickFormatter={euroK} width={52} />
+          <Tooltip formatter={(v, n) => [v != null ? formatEuro(v) : '—', n]} />
+          <Legend />
+          {pastReferenceArea(dati, 'week_start', 'label', snapshotDate)}
+          <ReferenceLine y={0} stroke={colors.textMuted} />
+          <Bar dataKey="scarto" name="Scarto della settimana" legendType="none">
+            {dati.map(r => <Cell key={r.week_start} fill={r.scarto >= 0 ? colors.success : colors.danger} fillOpacity={0.55} />)}
+          </Bar>
+          <Line dataKey="cumulato" name="Scarto accumulato" stroke={colors.text} strokeWidth={3} dot={{ r: 2 }} />
+          {waveComp && (
+            <Line dataKey="cumulato_comp" name={`Scarto accumulato ${compLabel}`} stroke={colors.text} dot={false}
+              connectNulls {...STILE_CONFRONTO} />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </Card>
+  )
+}
+
 /** Incassato vs 100% WAVE per periodo e stagione, con lo scarto in euro (netto IVA, senza tassa). */
 function TabellaScartoWave({ wave }) {
   const righe = [...wave.periodi, { periodo: 'stagione', etichetta: 'Stagione', ...wave.stagione }]
@@ -731,6 +802,11 @@ function ContenutoDashboard({
           </ResponsiveContainer>
           <TabellaScartoWave wave={dati.wave} />
         </Card>
+      )}
+
+      {dati.wave && (
+        <GraficoScartoWave wave={dati.wave} waveComp={datiComp?.wave ?? null} compLabel={compLabel}
+          isAnnoPrecedente={isAnnoPrecedente} snapshotDate={currentSnap?.snapshot_date} />
       )}
 
       {/* Grafico revenue giornaliero — linee in confronto, barre a tipologia senza confronto */}

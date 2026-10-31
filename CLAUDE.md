@@ -3284,6 +3284,11 @@ Fasi: 1 storico + riferimento · 2 Dashboard Hotel · 3 Gruppo + Home · 4 ritmo
   le settimane di **tutto giugno–settembre** anche senza dati (incasso zero dopo la chiusura) e `wave.settimane`
   (lista `WaveSettimana` con `progressivo`) nella risposta dashboard. Scarto 2026: CLB −82.336 € (agosto −51.845),
   INT −62.224 € (agosto −36.736), DPH −6.291 €.
+- **v4.9.2 — distanza in euro** (richiesta dell'utente: "si misura la redditività", la % non rendeva la distanza):
+  card "Distanza dal 100% WAVE, in euro" (`GraficoScartoWave` in `DashboardHotel.jsx`, solo frontend sui dati di
+  `wave`): barre = incassato − 100% della settimana (verde/rosso, prima barra = blocco aprile+maggio), linea = scarto
+  accumulato da inizio stagione (ultimo punto = scarto di stagione), confronto tratteggiato. 2026: CLB scende a
+  −82k, INT a −62k (il buco si apre ad agosto), DPH oscilla tra −6k e +20k.
 - Confronto anno precedente: nel 2026 non disponibile (nessuna snapshot 2025, scelta dell'utente: niente dato 2025
   dallo storico); funzionerà dal 2027.
 - Dati reali 2026 (snapshot 21/09): DPH 98,7%, CLB 86,8%, INT 88,8%. Limite noto: il riferimento settimanale è la
