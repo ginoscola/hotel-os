@@ -3274,6 +3274,16 @@ Fasi: 1 storico + riferimento · 2 Dashboard Hotel · 3 Gruppo + Home · 4 ritmo
   aggiunta alla tabella settimanale** (KPI sui totali, `totaliAggregati()` condivisa con la mensile).
   `components/SpiegazioneWave.jsx` = pulsante "ⓘ" + finestra con il testo della specifica (`TOOLTIP_WAVE`): se cambia
   il calcolo, aggiornare anche quel testo.
+- **v4.9.1 — il grafico ingannava** (segnalato dall'utente: "dal grafico la stagione sembra buona, ma il totale è
+  molto sotto il 100%"): le barre settimanali pesano tutte uguale a vista mentre agosto vale molti più euro di
+  settembre (CLB: 5/9 al 205% = +15k €, agosto 65–96% = −52k €), e il riferimento spalmato per giorni fa picchi agli
+  estremi dei mesi. Correzione: linea principale **WAVE stagione progressivo** (Σ incassi ÷ Σ riferimenti fino alla
+  settimana, Inizio stagione compreso; l'ultimo punto = WAVE di stagione), barre settimanali chiare come dettaglio,
+  confronto sul progressivo, tabella **Incassato / 100% WAVE / Scarto €** per periodo sotto il grafico
+  (`TabellaScartoWave`), tessera "X € su Y € (netto IVA)". Per far tornare il progressivo, `wave_hotel()` restituisce
+  le settimane di **tutto giugno–settembre** anche senza dati (incasso zero dopo la chiusura) e `wave.settimane`
+  (lista `WaveSettimana` con `progressivo`) nella risposta dashboard. Scarto 2026: CLB −82.336 € (agosto −51.845),
+  INT −62.224 € (agosto −36.736), DPH −6.291 €.
 - Confronto anno precedente: nel 2026 non disponibile (nessuna snapshot 2025, scelta dell'utente: niente dato 2025
   dallo storico); funzionerà dal 2027.
 - Dati reali 2026 (snapshot 21/09): DPH 98,7%, CLB 86,8%, INT 88,8%. Limite noto: il riferimento settimanale è la

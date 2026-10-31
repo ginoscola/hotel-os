@@ -388,6 +388,38 @@ function CardCorrispettivi({ hotel, data }) {
   )
 }
 
+/** Incassato vs 100% WAVE per periodo e stagione, con lo scarto in euro (netto IVA, senza tassa). */
+function TabellaScartoWave({ wave }) {
+  const righe = [...wave.periodi, { periodo: 'stagione', etichetta: 'Stagione', ...wave.stagione }]
+  return (
+    <Table compact style={{ marginTop: 12 }}>
+      <thead>
+        <tr>
+          <Th>Periodo</Th><Th num>Incassato</Th><Th num>100% WAVE</Th><Th num>Scarto</Th><Th num>WAVE</Th>
+          <Th>Anno del record</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {righe.map(p => {
+          const scarto = p.valore != null && p.riferimento != null ? p.valore - p.riferimento : null
+          return (
+            <tr key={p.periodo} className={p.periodo === 'stagione' ? 'ui-riga-sezione' : undefined}>
+              <Td>{p.etichetta}</Td>
+              <Td num>{p.valore != null ? formatEuro(p.valore) : '—'}</Td>
+              <Td num>{p.riferimento != null ? formatEuro(p.riferimento) : '—'}</Td>
+              <Td num style={{ color: scarto == null ? undefined : scarto >= 0 ? colors.success : colors.danger }}>
+                {scarto != null ? `${scarto > 0 ? '+' : ''}${formatEuro(scarto)}` : '—'}
+              </Td>
+              <Td num>{fmtWave(p.wave)}</Td>
+              <Td>{p.periodo === 'stagione' ? 'somma dei migliori' : (p.anno_record ?? '—')}</Td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </Table>
+  )
+}
+
 function TabellaAggregatiMensili({ mesi, wave, exportUrl, exportNome, exportSnapshot }) {
   if (!mesi || mesi.length === 0) return null
   const totKpi = totaliAggregati(mesi)
@@ -581,15 +613,23 @@ function ContenutoDashboard({
     if (mese === 4 || mese === 5) return { wave: inizio?.wave ?? null, nota: 'Inizio stagione (apr+mag)' }
     return { wave: null, nota: refStart ? 'fuori dai periodi WAVE' : null }
   })()
+  // Settimane del grafico: giugno–settembre intero dal backend (anche dopo la chiusura, incasso zero) + quelle
+  // con dati; il progressivo dell'ultima settimana = WAVE di stagione
   const settimaneWave = useMemo(() => {
     const comp = {}
-    for (const c of datiComp?.settimane || []) comp[isAnnoPrecedente ? addDays(c.week_start, 364) : c.week_start] = c
-    return settimane.map(s => ({
-      week_start: s.week_start, label: s.label, wave: s.wave, occupancy: s.occupancy,
-      wave_riferimento: s.wave_riferimento, wave_comp: comp[s.week_start]?.wave ?? null,
+    for (const c of datiComp?.wave?.settimane || []) comp[isAnnoPrecedente ? addDays(c.week_start, 364) : c.week_start] = c
+    const occ = Object.fromEntries(settimane.map(s => [s.week_start, s]))
+    const ws = new Set([...settimane.map(s => s.week_start), ...(dati.wave?.settimane || []).map(s => s.week_start)])
+    const w = Object.fromEntries((dati.wave?.settimane || []).map(s => [s.week_start, s]))
+    const fmt = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+    return [...ws].sort().map(k => ({
+      week_start: k, label: occ[k]?.label ?? `${fmt(k)}–${fmt(addDays(k, 6))}`,
+      occupancy: occ[k]?.occupancy ?? null,
+      wave: w[k]?.wave ?? null, progressivo: w[k]?.progressivo ?? null,
+      progressivo_comp: comp[k]?.progressivo ?? null,
     }))
-  }, [settimane, datiComp, isAnnoPrecedente])
-  const maxWave = Math.max(100, ...settimaneWave.flatMap(s => [s.wave ?? 0, s.wave_comp ?? 0, s.occupancy ?? 0]))
+  }, [settimane, dati.wave, datiComp, isAnnoPrecedente])
+  const maxWave = Math.max(100, ...settimaneWave.flatMap(s => [s.wave ?? 0, s.progressivo_comp ?? 0, s.occupancy ?? 0]))
   const totSettimane = useMemo(() => totaliAggregati(settimane), [settimane])
 
   // Area della settimana di riferimento nei grafici giornalieri
@@ -627,7 +667,9 @@ function ContenutoDashboard({
           ))}
           <KpiTile label={<>WAVE stagione <SpiegazioneWave /></>}
             value={fmtWave(waveStagione)} colore={COLORE_WAVE}
-            sub={dati.wave?.stagione?.riferimento != null ? `rif. ${formatEuro(dati.wave.stagione.riferimento)}` : 'nessun riferimento'}
+            sub={dati.wave?.stagione?.riferimento != null
+              ? `${formatEuro(dati.wave.stagione.valore)} su ${formatEuro(dati.wave.stagione.riferimento)} (netto IVA)`
+              : 'nessun riferimento'}
             confronto={datiComp ? fmtWave(waveStagioneComp) : null} confrontoLabel={compLabel}
             delta={calcolaDelta(waveStagione, waveStagioneComp)} />
           <KpiTile label={<>WAVE sett. {refLabel ?? 'rif.'} <SpiegazioneWave /></>}
@@ -663,9 +705,10 @@ function ContenutoDashboard({
           title={<span>WAVE settimanale e occupazione <SpiegazioneWave /></span>}
           actions={<ExportMenu url={exportSett} nome={`${hotel}_settimanale`} snapshot={snapDate} />}>
           <div className="ui-text-muted" style={{ marginBottom: 8 }}>
-            Inizio stagione (apr+mag): <strong>{fmtWave(inizio?.wave)}</strong>
-            {' · '}Stagione: <strong>{fmtWave(waveStagione)}</strong>
-            {' · '}aprile e maggio senza barre settimanali (contano solo come blocco)
+            La linea <strong>WAVE stagione progressivo</strong> è il totale incassato fino a quella settimana ÷ il
+            totale del 100% fino a lì (inizio stagione compreso): l'ultimo punto è il WAVE di stagione
+            ({fmtWave(waveStagione)}). Le barre sono le singole settimane, solo come dettaglio: pesano tutte uguale a
+            vista, ma agosto vale molti più euro di settembre. Aprile e maggio senza barre (contano come blocco).
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={settimaneWave} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
@@ -676,14 +719,17 @@ function ContenutoDashboard({
               <Legend />
               {pastReferenceArea(settimaneWave, 'week_start', 'label', currentSnap?.snapshot_date)}
               <ReferenceLine y={100} stroke={colors.textMuted} strokeDasharray="2 2" />
-              <Bar dataKey="wave" name="WAVE %" fill={COLORE_WAVE} />
+              <Bar dataKey="wave" name="WAVE settimana %" fill={COLORE_WAVE} fillOpacity={0.3} />
+              <Line dataKey="occupancy" name="Occupazione %" stroke={colors.info} dot={false} strokeWidth={1.5} />
+              <Line dataKey="progressivo" name="WAVE stagione progressivo %" stroke={COLORE_WAVE} strokeWidth={3}
+                dot={{ r: 2 }} connectNulls />
               {datiComp && (
-                <Line dataKey="wave_comp" name={`WAVE ${compLabel}`} stroke={COLORE_WAVE} dot={false}
-                  connectNulls {...STILE_CONFRONTO} />
+                <Line dataKey="progressivo_comp" name={`WAVE progressivo ${compLabel}`} stroke={COLORE_WAVE}
+                  dot={false} connectNulls {...STILE_CONFRONTO} />
               )}
-              <Line dataKey="occupancy" name="Occupazione %" stroke={colors.info} dot={false} strokeWidth={2} />
             </ComposedChart>
           </ResponsiveContainer>
+          <TabellaScartoWave wave={dati.wave} />
         </Card>
       )}
 

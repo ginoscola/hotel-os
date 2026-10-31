@@ -275,7 +275,13 @@ def test_wave_hotel_settimana_a_cavallo_maggio_giugno(Sessione, client):
         db.close()
     assert w['anno'] == 2026
     sett = w['settimane'][date(2026, 5, 30)]
-    assert sett == {'valore': 5000.0, 'riferimento': 5000.0, 'wave': 100.0}   # solo i 5 giorni di giugno
+    assert sett['valore'] == 5000.0 and sett['riferimento'] == 5000.0 and sett['wave'] == 100.0  # solo giugno
+    # progressivo: inizio (2.000 su 4.000) + settimana (5.000 su 5.000)
+    assert sett['progressivo'] == pytest.approx(7000 / 9000 * 100, abs=0.05)
+    # settimane di giugno senza dati (hotel chiuso) = incasso zero; l'ultima chiude sul WAVE di stagione
+    assert w['settimane'][date(2026, 6, 13)]['valore'] == 0.0
+    ultima = max(k for k, v in w['settimane'].items() if v['progressivo'] is not None)
+    assert w['settimane'][ultima]['progressivo'] == w['stagione']['wave']
     periodi = {p['periodo']: p for p in w['periodi']}
     assert periodi['inizio']['valore'] == 2000.0 and periodi['inizio']['wave'] == 50.0
     assert periodi['luglio']['riferimento'] is None and periodi['luglio']['wave'] is None

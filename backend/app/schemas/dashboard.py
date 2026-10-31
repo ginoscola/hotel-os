@@ -75,10 +75,16 @@ class WavePeriodo(WaveCella):
     anno_record: Optional[int] = None
 
 
+class WaveSettimana(WaveCella):
+    week_start: date
+    progressivo: Optional[float] = None      # % Σ incassi ÷ Σ riferimenti fino a questa settimana
+
+
 class WaveHotel(BaseModel):
     anno: int
     stagione: WaveCella
     periodi: List[WavePeriodo]
+    settimane: List[WaveSettimana] = []      # giugno–settembre intero + apr/mag presenti nei dati
 
 
 class DashboardHotelResponse(BaseModel):

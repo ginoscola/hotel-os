@@ -115,7 +115,7 @@ def dashboard_hotel(
         kpi_stagione=kpi_stagione,
         settimane=settimane,
         giorni=giorni,
-        wave=w,
+        wave={**w, 'settimane': [{'week_start': k, **v} for k, v in w['settimane'].items()]} if w else None,
     )
 
 
