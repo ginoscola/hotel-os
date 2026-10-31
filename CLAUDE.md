@@ -3263,6 +3263,8 @@ Decisioni (31/10/2026, oltre a quelle della specifica):
   (penali, shop e tassa esclusi, come lo storico 2025); ristoranti = arrangiamenti MMS/BON ÷ 1,10.
 - **L'anno in corso non concorre al record** finché la stagione non è chiusa.
 - Mesi fuori da aprile–settembre ignorati.
+- **Riferimento di un anno X = migliore degli anni precedenti a X** (non di tutti gli anni): un record di X
+  risulta > 100%; il primo anno di una struttura (INT, BON 2025) non ha riferimento.
 - **Il WAVE si misura sempre sui dati Revenue** (`daily_revenue.revenue_total` ÷ 1,10, notte per notte) — settimane,
   mesi, stagione e futuro — contro il riferimento per data documento (strada "A"): coerente con la linea
   dell'occupazione e col prenotato; sul singolo mese di inizio/fine stagione può scostarsi (CLB settembre 2025:
