@@ -56,6 +56,29 @@ class SettimanaDashboard(BaseModel):
     inc_rooms: Optional[float]
     inc_fnb: Optional[float]
     inc_extra: Optional[float]
+    # Indice WAVE (services/wave_hotel.py): solo giorni di giugno–settembre, None senza riferimento
+    wave: Optional[float] = None             # %
+    wave_valore: Optional[float] = None      # € netto IVA
+    wave_riferimento: Optional[float] = None # €
+
+
+class WaveCella(BaseModel):
+    valore: Optional[float] = None           # € netto IVA, senza tassa di soggiorno
+    riferimento: Optional[float] = None      # €
+    wave: Optional[float] = None             # %
+
+
+class WavePeriodo(WaveCella):
+    periodo: str                             # inizio | giugno | luglio | agosto | settembre
+    etichetta: str
+    mesi: List[int]
+    anno_record: Optional[int] = None
+
+
+class WaveHotel(BaseModel):
+    anno: int
+    stagione: WaveCella
+    periodi: List[WavePeriodo]
 
 
 class DashboardHotelResponse(BaseModel):
@@ -69,6 +92,7 @@ class DashboardHotelResponse(BaseModel):
     kpi_stagione: KPISchema                     # KPI aggregati su tutta la stagione
     settimane: List[SettimanaDashboard]
     giorni: List[GiornoSchema]
+    wave: Optional[WaveHotel] = None
 
 
 class ContributoHotel(BaseModel):

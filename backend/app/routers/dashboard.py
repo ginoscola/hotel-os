@@ -26,6 +26,7 @@ from app.schemas.dashboard import (
 )
 from app.services.file_parser import RigaRevenue
 from app.services.kpi_calculator import aggrega_totali_righe, calcola_kpi, kpi_da_riga
+from app.services.wave_hotel import wave_hotel
 from app.services.weekly_aggregator import aggrega_settimane
 from app.services.group_aggregator import aggrega_gruppo_settimanale
 from app.utils.locale_it import GIORNI_IT, formatta_data_it
@@ -96,6 +97,12 @@ def dashboard_hotel(
 
     settimane = _settimane_dashboard(righe)
     giorni = _giorni_schema(righe)
+    w = wave_hotel(db, hotel_code, righe)
+    if w:
+        for s in settimane:
+            cella = w['settimane'].get(s.week_start)
+            if cella:
+                s.wave, s.wave_valore, s.wave_riferimento = cella['wave'], cella['valore'], cella['riferimento']
 
     return DashboardHotelResponse(
         hotel_code=hotel_code,
@@ -108,6 +115,7 @@ def dashboard_hotel(
         kpi_stagione=kpi_stagione,
         settimane=settimane,
         giorni=giorni,
+        wave=w,
     )
 
 

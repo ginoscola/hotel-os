@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  LineChart, Line, BarChart, Bar,
+  LineChart, Line, BarChart, Bar, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ReferenceArea,
+  ReferenceArea, ReferenceLine,
 } from 'recharts'
 import api from '../api/client.js'
 import { ExportMenu } from '../components/ExportMenu.jsx'
 import NavigazioneSnapshot from '../components/NavigazioneSnapshot.jsx'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
+import SpiegazioneWave from '../components/SpiegazioneWave.jsx'
 import TooltipConTotale from '../components/TooltipConTotale.jsx'
 import { useSnapshotConfronto } from '../hooks/useSnapshotConfronto.js'
 import {
@@ -18,7 +19,46 @@ import {
   Badge, Card, KpiTile, Loading, Messaggio, PageHeader, SegmentedControl, SezioneApribile, StatoVuoto,
   Table, Td, Th,
 } from '../components/ui'
-import { colors, COLORI_REVENUE, STILE_CONFRONTO } from '../styles/tokens.js'
+import { colors, coloreSerie, COLORI_REVENUE, STILE_CONFRONTO } from '../styles/tokens.js'
+
+// Indice WAVE (services/wave_hotel.py): calcolato dal backend, qui solo mostrato
+const COLORE_WAVE = coloreSerie(4)
+const fmtWave = v => (v != null ? formatPerc(v) : '—')
+
+/** Periodo WAVE del mese (aprile e maggio = blocco "inizio"), solo per l'anno della snapshot. */
+function wavePeriodoMese(wave, ym) {
+  if (!wave) return null
+  const [anno, mese] = ym.split('-').map(Number)
+  if (anno !== wave.anno) return null
+  const codice = mese === 4 || mese === 5 ? 'inizio' : ({ 6: 'giugno', 7: 'luglio', 8: 'agosto', 9: 'settembre' })[mese]
+  return wave.periodi.find(p => p.periodo === codice) ?? null
+}
+
+/** Totali di una lista di aggregati (mesi o settimane) con KPI ricalcolati sui totali, mai medie. */
+function totaliAggregati(righe) {
+  const tot = righe.reduce((acc, m) => {
+    acc.rooms_sold      += m.rooms_sold
+    acc.rooms_available += m.rooms_available
+    acc.revenue_rooms   += m.revenue_rooms
+    acc.revenue_fnb     += m.revenue_fnb
+    acc.revenue_extra   += m.revenue_extra
+    acc.revenue_total   += m.revenue_total
+    acc.giorni          += m.giorni
+    return acc
+  }, { rooms_sold: 0, rooms_available: 0, revenue_rooms: 0, revenue_fnb: 0, revenue_extra: 0, revenue_total: 0, giorni: 0 })
+  const { rooms_sold: rs, rooms_available: ra, revenue_total: rt } = tot
+  return {
+    ...tot,
+    occupancy: ra > 0 ? (rs / ra * 100) : null,
+    adr:       rs > 0 ? (tot.revenue_rooms / rs) : null,
+    rmc:       rs > 0 ? (rt / rs) : null,
+    revpar:    ra > 0 ? (tot.revenue_rooms / ra) : null,
+    trevpar:   ra > 0 ? (rt / ra) : null,
+    inc_rooms: rt > 0 ? (tot.revenue_rooms / rt * 100) : null,
+    inc_fnb:   rt > 0 ? (tot.revenue_fnb   / rt * 100) : null,
+    inc_extra: rt > 0 ? (tot.revenue_extra  / rt * 100) : null,
+  }
+}
 
 const HOTEL_CODES = ['CLB', 'DPH', 'INT']
 const HOTEL_NOMI = { CLB: 'Club Hotel', DPH: 'Hotel Du Parc', INT: 'Hotel International' }
@@ -57,6 +97,7 @@ function aggregaMensile(giorni) {
       const label    = `${MESI_IT[parseInt(month) - 1]} ${year}`
       const rs = m.rooms_sold, ra = m.rooms_available, rt = m.revenue_total
       return {
+        ym: m.ym,
         label,
         giorni:      m.giorni_presenze,
         rooms_sold:  rs,
@@ -157,6 +198,7 @@ function IntestazioneAggregati({ prima }) {
         <Th>{prima}</Th><Th num>Gg.</Th><Th num>Cam. vend.</Th><Th num>Occup. %</Th><Th num>ADR</Th>
         <Th num>RMC</Th><Th num>RevPAR</Th><Th num>TRevPAR</Th><Th num>Inc. Rooms</Th>
         <Th num>Inc. F&B</Th><Th num>Inc. Extra</Th><Th num tot>Rev. Totale</Th>
+        <Th num>WAVE <SpiegazioneWave /></Th>
       </tr>
     </thead>
   )
@@ -346,31 +388,23 @@ function CardCorrispettivi({ hotel, data }) {
   )
 }
 
-function TabellaAggregatiMensili({ mesi, exportUrl, exportNome, exportSnapshot }) {
+function TabellaAggregatiMensili({ mesi, wave, exportUrl, exportNome, exportSnapshot }) {
   if (!mesi || mesi.length === 0) return null
+  const totKpi = totaliAggregati(mesi)
 
-  const tot = mesi.reduce((acc, m) => {
-    acc.rooms_sold      += m.rooms_sold
-    acc.rooms_available += m.rooms_available
-    acc.revenue_rooms   += m.revenue_rooms
-    acc.revenue_fnb     += m.revenue_fnb
-    acc.revenue_extra   += m.revenue_extra
-    acc.revenue_total   += m.revenue_total
-    acc.giorni          += m.giorni
-    return acc
-  }, { rooms_sold: 0, rooms_available: 0, revenue_rooms: 0, revenue_fnb: 0, revenue_extra: 0, revenue_total: 0, giorni: 0 })
-
-  const { rooms_sold: rs, rooms_available: ra, revenue_total: rt } = tot
-  const totKpi = {
-    ...tot,
-    occupancy: ra > 0 ? (rs / ra * 100) : null,
-    adr:       rs > 0 ? (tot.revenue_rooms / rs) : null,
-    rmc:       rs > 0 ? (rt / rs) : null,
-    revpar:    ra > 0 ? (tot.revenue_rooms / ra) : null,
-    trevpar:   ra > 0 ? (rt / ra) : null,
-    inc_rooms: rt > 0 ? (tot.revenue_rooms / rt * 100) : null,
-    inc_fnb:   rt > 0 ? (tot.revenue_fnb   / rt * 100) : null,
-    inc_extra: rt > 0 ? (tot.revenue_extra  / rt * 100) : null,
+  // Aprile e maggio consecutivi: una sola cella WAVE (blocco "Inizio stagione")
+  const cellaWave = (m, i) => {
+    const mese = Number(m.ym.slice(5))
+    const prec = mesi[i - 1], succ = mesi[i + 1]
+    if (mese === 5 && prec && prec.ym === `${m.ym.slice(0, 4)}-04`) return null
+    const unita = mese === 4 && succ && succ.ym === `${m.ym.slice(0, 4)}-05`
+    const p = wavePeriodoMese(wave, m.ym)
+    return (
+      <Td num rowSpan={unita ? 2 : undefined} style={unita ? { verticalAlign: 'middle' } : undefined}
+        title={p && p.periodo === 'inizio' ? 'Inizio stagione (aprile + maggio)' : undefined}>
+        {fmtWave(p?.wave)}
+      </Td>
+    )
   }
 
   return (
@@ -380,9 +414,11 @@ function TabellaAggregatiMensili({ mesi, exportUrl, exportNome, exportSnapshot }
         <IntestazioneAggregati prima="Mese" />
         <tbody>
           {mesi.map((m, i) => (
-            <tr key={i}><Td>{m.label}</Td><CelleAggregato m={m} /></tr>
+            <tr key={i}><Td>{m.label}</Td><CelleAggregato m={m} />{cellaWave(m, i)}</tr>
           ))}
-          <tr className="ui-riga-sezione"><Td>TOTALE STAGIONE</Td><CelleAggregato m={totKpi} /></tr>
+          <tr className="ui-riga-sezione">
+            <Td>TOTALE STAGIONE</Td><CelleAggregato m={totKpi} /><Td num>{fmtWave(wave?.stagione?.wave)}</Td>
+          </tr>
         </tbody>
       </Table>
     </Card>
@@ -534,6 +570,28 @@ function ContenutoDashboard({
       })()
     : null
 
+  // WAVE: stagione, settimana di riferimento (in aprile/maggio vale il blocco "Inizio stagione")
+  const waveStagione = dati.wave?.stagione?.wave ?? null
+  const waveStagioneComp = datiComp?.wave?.stagione?.wave ?? null
+  const inizio = dati.wave?.periodi.find(p => p.periodo === 'inizio') ?? null
+  const waveSettRif = (() => {
+    const s = settimane.find(x => x.week_start === refStart)
+    if (s?.wave != null) return { wave: s.wave, nota: s.wave_riferimento != null ? `rif. ${formatEuro(s.wave_riferimento)}` : null }
+    const mese = refStart ? Number(refStart.slice(5, 7)) : null
+    if (mese === 4 || mese === 5) return { wave: inizio?.wave ?? null, nota: 'Inizio stagione (apr+mag)' }
+    return { wave: null, nota: refStart ? 'fuori dai periodi WAVE' : null }
+  })()
+  const settimaneWave = useMemo(() => {
+    const comp = {}
+    for (const c of datiComp?.settimane || []) comp[isAnnoPrecedente ? addDays(c.week_start, 364) : c.week_start] = c
+    return settimane.map(s => ({
+      week_start: s.week_start, label: s.label, wave: s.wave, occupancy: s.occupancy,
+      wave_riferimento: s.wave_riferimento, wave_comp: comp[s.week_start]?.wave ?? null,
+    }))
+  }, [settimane, datiComp, isAnnoPrecedente])
+  const maxWave = Math.max(100, ...settimaneWave.flatMap(s => [s.wave ?? 0, s.wave_comp ?? 0, s.occupancy ?? 0]))
+  const totSettimane = useMemo(() => totaliAggregati(settimane), [settimane])
+
   // Area della settimana di riferimento nei grafici giornalieri
   const areaRif = (conEtichetta) => refStart && refEnd && (
     <ReferenceArea x1={refStart} x2={refEnd} fill={colors.info} fillOpacity={conEtichetta ? 0.1 : 0.08}
@@ -567,6 +625,13 @@ function ContenutoDashboard({
               value={kpi[key] != null ? fmt(kpi[key]) : '—'}
               confronto={kpiCompV(key, fmt)} confrontoLabel={compLabel} delta={kpiDelta(key)} />
           ))}
+          <KpiTile label={<>WAVE stagione <SpiegazioneWave /></>}
+            value={fmtWave(waveStagione)} colore={COLORE_WAVE}
+            sub={dati.wave?.stagione?.riferimento != null ? `rif. ${formatEuro(dati.wave.stagione.riferimento)}` : 'nessun riferimento'}
+            confronto={datiComp ? fmtWave(waveStagioneComp) : null} confrontoLabel={compLabel}
+            delta={calcolaDelta(waveStagione, waveStagioneComp)} />
+          <KpiTile label={<>WAVE sett. {refLabel ?? 'rif.'} <SpiegazioneWave /></>}
+            value={fmtWave(waveSettRif.wave)} colore={COLORE_WAVE} sub={waveSettRif.nota} />
         </div>
       </Card>
 
@@ -591,6 +656,36 @@ function ContenutoDashboard({
           </LineChart>
         </ResponsiveContainer>
       </Card>
+
+      {/* WAVE settimanale: barre WAVE + linea occupazione sulla stessa scala % */}
+      {dati.wave && (
+        <Card style={{ marginBottom: 24 }}
+          title={<span>WAVE settimanale e occupazione <SpiegazioneWave /></span>}
+          actions={<ExportMenu url={exportSett} nome={`${hotel}_settimanale`} snapshot={snapDate} />}>
+          <div className="ui-text-muted" style={{ marginBottom: 8 }}>
+            Inizio stagione (apr+mag): <strong>{fmtWave(inizio?.wave)}</strong>
+            {' · '}Stagione: <strong>{fmtWave(waveStagione)}</strong>
+            {' · '}aprile e maggio senza barre settimanali (contano solo come blocco)
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={settimaneWave} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={50} />
+              <YAxis tickFormatter={v => `${v}%`} domain={[0, Math.ceil(maxWave / 20) * 20]} width={44} />
+              <Tooltip formatter={(v, n) => [fmtWave(v), n]} />
+              <Legend />
+              {pastReferenceArea(settimaneWave, 'week_start', 'label', currentSnap?.snapshot_date)}
+              <ReferenceLine y={100} stroke={colors.textMuted} strokeDasharray="2 2" />
+              <Bar dataKey="wave" name="WAVE %" fill={COLORE_WAVE} />
+              {datiComp && (
+                <Line dataKey="wave_comp" name={`WAVE ${compLabel}`} stroke={COLORE_WAVE} dot={false}
+                  connectNulls {...STILE_CONFRONTO} />
+              )}
+              <Line dataKey="occupancy" name="Occupazione %" stroke={colors.info} dot={false} strokeWidth={2} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
 
       {/* Grafico revenue giornaliero — linee in confronto, barre a tipologia senza confronto */}
       <Card style={{ marginBottom: 24 }}
@@ -628,7 +723,7 @@ function ContenutoDashboard({
       </Card>
 
       {/* Aggregati mensili — intera stagione */}
-      <TabellaAggregatiMensili mesi={mesiAggregati}
+      <TabellaAggregatiMensili mesi={mesiAggregati} wave={dati.wave}
         exportUrl={exportMens} exportNome={`${hotel}_mensile`} exportSnapshot={snapDate} />
 
       {/* Tabella aggregati settimanali — intera stagione */}
@@ -649,13 +744,18 @@ function ContenutoDashboard({
                       {s.label}
                     </Td>
                     <CelleAggregato m={s} />
+                    <Td num>{fmtWave(s.wave)}</Td>
                   </tr>
                 )
               })}
+              <tr className="ui-riga-sezione">
+                <Td>TOTALE STAGIONE</Td><CelleAggregato m={totSettimane} /><Td num>{fmtWave(waveStagione)}</Td>
+              </tr>
             </tbody>
           </Table>
           <div className="ui-text-muted" style={{ marginTop: 6, fontSize: 'var(--fs-xs)' }}>
-            ● = settimana di riferimento della snapshot · <em>corsivo</em> = settimana parziale
+            ● = settimana di riferimento della snapshot · <em>corsivo</em> = settimana parziale ·
+            WAVE solo sui giorni di giugno–settembre (aprile e maggio nel blocco "Inizio stagione")
           </div>
         </Card>
       )}

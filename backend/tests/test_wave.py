@@ -250,3 +250,40 @@ def test_endpoint_riferimento(Sessione, client):
     r = client.get("/wave/riferimento?anno=2026")
     assert r.status_code == 200
     assert [s['struttura_code'] for s in r.json()['strutture']] == ['DPH', 'CLB', 'INT', 'MMS', 'BON']
+
+
+# ── WAVE di un hotel sulle righe Revenue (Fase 2) ─────────────────────────────
+
+def _righe_revenue(codice, giorni_valori):
+    from app.services.file_parser import RigaRevenue
+    return [RigaRevenue(hotel_code=codice, data=g, rooms_sold=10, rooms_available=20, pax=20,
+                        revenue_rooms=v, revenue_fnb=0, revenue_extra=0, revenue_total=v)
+            for g, v in giorni_valori]
+
+
+def test_wave_hotel_settimana_a_cavallo_maggio_giugno(Sessione, client):
+    from datetime import timedelta
+    from app.services.wave_hotel import wave_hotel
+    # riferimenti 2026 dal 2025: giugno 30.000 (1.000 al giorno), maggio 4.000 (blocco inizio)
+    _import(client, [('DPH', 2025, 'Giugno', 30000), ('DPH', 2025, 'Maggio', 4000)], True)
+    # 30/5/2026 (sabato) → 5/6: 7 giorni a 1.100 lordi = 1.000 netti
+    giorni = [(date(2026, 5, 30) + timedelta(days=i), 1100.0) for i in range(7)]
+    db = Sessione()
+    try:
+        w = wave_hotel(db, 'DPH', _righe_revenue('DPH', giorni), oggi=date(2026, 10, 31))
+    finally:
+        db.close()
+    assert w['anno'] == 2026
+    sett = w['settimane'][date(2026, 5, 30)]
+    assert sett == {'valore': 5000.0, 'riferimento': 5000.0, 'wave': 100.0}   # solo i 5 giorni di giugno
+    periodi = {p['periodo']: p for p in w['periodi']}
+    assert periodi['inizio']['valore'] == 2000.0 and periodi['inizio']['wave'] == 50.0
+    assert periodi['luglio']['riferimento'] is None and periodi['luglio']['wave'] is None
+    # stagione: Σ incassi dei periodi con riferimento ÷ Σ riferimenti
+    assert w['stagione']['valore'] == 7000.0 and w['stagione']['riferimento'] == 34000.0
+    assert w['stagione']['wave'] == pytest.approx(20.6)
+
+
+def test_wave_hotel_senza_giorni_di_stagione():
+    from app.services.wave_hotel import wave_hotel
+    assert wave_hotel(None, 'DPH', _righe_revenue('DPH', [(date(2026, 10, 3), 100.0)])) is None

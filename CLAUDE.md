@@ -3255,7 +3255,30 @@ nella root (**fuori da git**, verrà cancellata a lavoro finito: le decisioni va
 `uploads/wave/Storico_fatturato_WAVE_2022-2025.xlsx` (foglio Storico, colonna H). Stesse regole di lavoro della
 Tesoreria: una fase per volta, ok esplicito prima del codice, chiedere nei dubbi.
 Fasi: 1 storico + riferimento · 2 Dashboard Hotel · 3 Gruppo + Home · 4 ritmo di stagione.
-**Stato**: ✅ Fase 1 (v4.8.0, 31/10/2026). Fase 2 (Dashboard Hotel) solo con ok dell'utente.
+**Stato**: ✅ Fase 1 (v4.8.0), ✅ Fase 2 (v4.9.0), 31/10/2026. Fase 3 (Gruppo + Home) solo con ok dell'utente.
+
+**Fase 2 — fatto** (Dashboard Hotel):
+- `services/wave_hotel.py::wave_hotel(db, hotel_code, righe, oggi)` — UNICA implementazione, usata da
+  `GET /dashboard/hotel/{code}` e dagli export settimanale/mensile. Anno = anno prevalente delle righe di
+  aprile–settembre; numeratore `revenue_total ÷ 1,10`; per settimana solo i giorni di giugno–settembre (settimane di
+  aprile/maggio → None); stagione = Σ incassi dei soli periodi con riferimento ÷ Σ riferimenti. Restituisce
+  `{anno, stagione, periodi[], settimane{week_start: {valore, riferimento, wave}}}`.
+- Risposta dashboard: `DashboardHotelResponse.wave` (`WaveHotel`: anno, stagione, periodi con `anno_record`) e su
+  ogni `SettimanaDashboard` `wave`/`wave_valore`/`wave_riferimento` (campi nuovi opzionali, nessun campo cambiato).
+- Export hotel settimanale e mensile: **17 colonne** (ultima "WAVE (%)", riga TOTALE = WAVE di stagione); nel
+  mensile xlsx le celle WAVE di aprile e maggio sono unite (csv/pdf: stesso valore del blocco su entrambe le righe).
+- Frontend `DashboardHotel.jsx`: tessere "WAVE stagione" (con confronto) e "WAVE sett. rif." (in apr/mag mostra
+  l'Inizio stagione), grafico "WAVE settimanale e occupazione" (`ComposedChart`: barre WAVE `coloreSerie(4)`, linea
+  occupazione `colors.info`, linea WAVE del confronto con `STILE_CONFRONTO`, linea a 100%, `pastReferenceArea`),
+  colonna WAVE nelle tabelle mensile (aprile+maggio in una cella `rowSpan`) e settimanale, **riga TOTALE STAGIONE
+  aggiunta alla tabella settimanale** (KPI sui totali, `totaliAggregati()` condivisa con la mensile).
+  `components/SpiegazioneWave.jsx` = pulsante "ⓘ" + finestra con il testo della specifica (`TOOLTIP_WAVE`): se cambia
+  il calcolo, aggiornare anche quel testo.
+- Confronto anno precedente: nel 2026 non disponibile (nessuna snapshot 2025, scelta dell'utente: niente dato 2025
+  dallo storico); funzionerà dal 2027.
+- Dati reali 2026 (snapshot 21/09): DPH 98,7%, CLB 86,8%, INT 88,8%. Limite noto: il riferimento settimanale è la
+  quota del mese per giorni, quindi dentro un mese le prime settimane (più deboli) risultano basse e le ultime alte
+  (CLB giugno: 50% → 128%) — è la stagionalità interna al mese, non un errore.
 
 **Fase 1 — fatto** (storico e riferimento):
 - Tabella `wave_storico` (`models/wave.py`, migrazione `wave001_2026`): struttura × anno × mese, `netto`

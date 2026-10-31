@@ -27,6 +27,8 @@ from app.models.revenue import DailyRevenue, Hotel
 from app.routers.dashboard import _carica_righe, _db_a_riga
 from app.services.file_parser import RigaRevenue
 from app.services.kpi_calculator import calcola_kpi
+from app.services.wave import periodo_di
+from app.services.wave_hotel import wave_hotel
 from app.services.weekly_aggregator import AggregatoSettimanale, aggrega_settimane
 from app.services.group_aggregator import aggrega_gruppo_settimanale
 
@@ -61,8 +63,9 @@ def export_hotel_settimanale(
     if not righe:
         raise HTTPException(status_code=404, detail="Nessun dato nel periodo selezionato.")
     settimane = aggrega_settimane(righe)
+    w = wave_hotel(db, hotel_code, righe)
     nome = f"{hotel_code}_settimanale"
-    return _risposta(formato, nome, _xlsx_hotel_sett, _csv_hotel_sett, _pdf_hotel_sett, hotel_code, settimane)
+    return _risposta(formato, nome, _xlsx_hotel_sett, _csv_hotel_sett, _pdf_hotel_sett, hotel_code, settimane, w)
 
 
 # ---------------------------------------------------------------------------
@@ -86,8 +89,9 @@ def export_hotel_mensile(
     mesi = _aggrega_mesi(righe)
     if not mesi:
         raise HTTPException(status_code=404, detail="Nessun dato nel periodo selezionato.")
+    w = wave_hotel(db, hotel_code, righe)
     nome = f"{hotel_code}_mensile"
-    return _risposta(formato, nome, _xlsx_hotel_mens, _csv_hotel_mens, _pdf_hotel_mens, hotel_code, mesi)
+    return _risposta(formato, nome, _xlsx_hotel_mens, _csv_hotel_mens, _pdf_hotel_mens, hotel_code, mesi, w)
 
 
 # ---------------------------------------------------------------------------
@@ -176,11 +180,20 @@ _INT_SETT = [
     "Settimana", "Giorni", "Cam. Vendute", "Cam. Disponibili",
     "Occup. %", "ADR (€)", "RevPAR (€)", "TRevPAR (€)", "RMC (€)",
     "Rev. Camere (€)", "Rev. F&B (€)", "Rev. Extra (€)", "Rev. Totale (€)",
-    "Inc. Rooms (%)", "Inc. F&B (%)", "Inc. Extra (%)",
+    "Inc. Rooms (%)", "Inc. F&B (%)", "Inc. Extra (%)", "WAVE (%)",
 ]
 
 
-def _riga_sett(s: AggregatoSettimanale) -> list:
+def _wave_sett(w: Optional[dict], week_start) -> Optional[float]:
+    """WAVE di una settimana (services/wave_hotel.py); None per aprile/maggio o senza riferimento."""
+    return ((w or {}).get('settimane', {}).get(week_start) or {}).get('wave')
+
+
+def _wave_stagione(w: Optional[dict]) -> Optional[float]:
+    return (w or {}).get('stagione', {}).get('wave')
+
+
+def _riga_sett(s: AggregatoSettimanale, w: Optional[dict] = None) -> list:
     return [
         f"{s.week_start.strftime('%d/%m/%Y')}–{s.week_end.strftime('%d/%m/%Y')}",
         s.giorni,
@@ -198,20 +211,21 @@ def _riga_sett(s: AggregatoSettimanale) -> list:
         s.kpi.inc_rooms,
         s.kpi.inc_fnb,
         s.kpi.inc_extra,
+        _wave_sett(w, s.week_start),
     ]
 
 
-def _xlsx_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale]) -> io.BytesIO:
+def _xlsx_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale], w: Optional[dict] = None) -> io.BytesIO:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Settimanale"
     _scrivi_intestazione(ws, _INT_SETT)
 
     for i, s in enumerate(settimane, start=2):
-        _scrivi_riga_sett(ws, i, _riga_sett(s))
+        _scrivi_riga_sett(ws, i, _riga_sett(s, w))
 
     # Riga totale stagione in grassetto
-    tot = _totale_sett(settimane)
+    tot = _totale_sett(settimane, w)
     riga_tot = len(settimane) + 2
     _scrivi_riga_sett(ws, riga_tot, tot, bold=True)
 
@@ -221,12 +235,12 @@ def _xlsx_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale]) -> 
 
 def _scrivi_riga_sett(ws, row_num: int, valori: list, bold: bool = False) -> None:
     """Scrive una riga con formattazione numero appropriata per ogni colonna."""
-    # Formati per le 16 colonne: stringa, int, int, int, %, €, €, €, €, €, €, €, €, %, %, %
+    # Formati per le 17 colonne: stringa, int, int, int, %, €, €, €, €, €, €, €, €, %, %, %, % (WAVE)
     formati = [
         None, _FMT_INT, _FMT_INT, _FMT_INT,
         _FMT_PERC, _FMT_EURO, _FMT_EURO, _FMT_EURO, _FMT_EURO,
         _FMT_EURO, _FMT_EURO, _FMT_EURO, _FMT_EURO,
-        _FMT_PERC, _FMT_PERC, _FMT_PERC,
+        _FMT_PERC, _FMT_PERC, _FMT_PERC, _FMT_PERC,
     ]
     for j, (val, fmt) in enumerate(zip(valori, formati), start=1):
         cell = ws.cell(row=row_num, column=j, value=val)
@@ -238,8 +252,8 @@ def _scrivi_riga_sett(ws, row_num: int, valori: list, bold: bool = False) -> Non
             cell.fill = PatternFill("solid", fgColor=_GRIGIO_RIGA)
 
 
-def _totale_sett(settimane: List[AggregatoSettimanale]) -> list:
-    """Calcola la riga aggregata totale stagione."""
+def _totale_sett(settimane: List[AggregatoSettimanale], w: Optional[dict] = None) -> list:
+    """Calcola la riga aggregata totale stagione (WAVE = di stagione, comprende l'inizio stagione)."""
     rs = sum(s.rooms_sold for s in settimane)
     ra = sum(s.rooms_available for s in settimane)
     rr = sum(s.revenue_rooms for s in settimane)
@@ -254,6 +268,7 @@ def _totale_sett(settimane: List[AggregatoSettimanale]) -> list:
         kpi.occupancy, kpi.adr, kpi.revpar, kpi.trevpar, kpi.rmc,
         round(rr, 2), round(rf, 2), round(rx, 2), round(rt, 2),
         kpi.inc_rooms, kpi.inc_fnb, kpi.inc_extra,
+        _wave_stagione(w),
     ]
 
 
@@ -442,13 +457,13 @@ def _totale_gruppo_sett(settimane) -> list:
 # CSV — hotel settimanale
 # ---------------------------------------------------------------------------
 
-def _csv_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale]) -> io.BytesIO:
+def _csv_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale], wv: Optional[dict] = None) -> io.BytesIO:
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(_INT_SETT)
     for s in settimane:
-        w.writerow([_sv(v) for v in _riga_sett(s)])
-    w.writerow([_sv(v) for v in _totale_sett(settimane)])
+        w.writerow([_sv(v) for v in _riga_sett(s, wv)])
+    w.writerow([_sv(v) for v in _totale_sett(settimane, wv)])
     return io.BytesIO(b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8"))
 
 
@@ -522,12 +537,12 @@ _PDF_INT_SETT = [
     "Settimana", "Gg.", "C.V.", "C.D.",
     "Occ%", "ADR", "RevPAR", "TRevPAR", "RMC",
     "R.Cam.", "R.F&B", "R.Extra", "R.Tot.",
-    "I.Rm%", "I.FB%", "I.Ex%",
+    "I.Rm%", "I.FB%", "I.Ex%", "WAVE",
 ]
-_PDF_CW_SETT = [88, 22, 30, 30, 36, 42, 44, 48, 42, 48, 42, 40, 48, 36, 36, 36]
+_PDF_CW_SETT = [88, 22, 30, 30, 36, 42, 44, 48, 42, 48, 42, 40, 48, 36, 36, 36, 36]
 
 
-def _pdf_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale]) -> io.BytesIO:
+def _pdf_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale], w: Optional[dict] = None) -> io.BytesIO:
     titolo = f"{hotel_code} — Aggregati settimanali"
     righe_pdf = []
     for s in settimane:
@@ -539,8 +554,9 @@ def _pdf_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale]) -> i
             _pv(s.revenue_rooms, 0, "€"), _pv(s.revenue_fnb, 0, "€"),
             _pv(s.revenue_extra, 0, "€"), _pv(s.revenue_total, 0, "€"),
             _pv(s.kpi.inc_rooms, 1, "%"), _pv(s.kpi.inc_fnb, 1, "%"), _pv(s.kpi.inc_extra, 1, "%"),
+            _pv(_wave_sett(w, s.week_start), 1, "%"),
         ])
-    tot = _totale_sett(settimane)
+    tot = _totale_sett(settimane, w)
     righe_pdf.append([
         "TOTALE", str(tot[1]), str(tot[2]), str(tot[3]),
         _pv(tot[4], 1, "%"), _pv(tot[5], 2, "€"),
@@ -548,6 +564,7 @@ def _pdf_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale]) -> i
         _pv(tot[9], 0, "€"), _pv(tot[10], 0, "€"),
         _pv(tot[11], 0, "€"), _pv(tot[12], 0, "€"),
         _pv(tot[13], 1, "%"), _pv(tot[14], 1, "%"), _pv(tot[15], 1, "%"),
+        _pv(tot[16], 1, "%"),
     ])
     n = len(righe_pdf)
     extra = [("FONTNAME", (0, n), (-1, n), "Helvetica-Bold")]
@@ -565,7 +582,15 @@ def _pdf_hotel_sett(hotel_code: str, settimane: List[AggregatoSettimanale]) -> i
 
 _INT_MENS     = ["Mese"] + _INT_SETT[1:]
 _PDF_INT_MENS = ["Mese"] + _PDF_INT_SETT[1:]
-_PDF_CW_MENS  = [70, 22, 34, 34, 36, 44, 46, 50, 44, 50, 44, 42, 50, 36, 36, 36]
+_PDF_CW_MENS  = [70, 22, 34, 34, 36, 44, 46, 50, 44, 50, 44, 42, 50, 36, 36, 36, 36]
+
+
+def _wave_mese(m: dict, w: Optional[dict]) -> Optional[float]:
+    """WAVE del periodo del mese; aprile e maggio hanno quello del blocco "Inizio stagione"."""
+    if not w or m["anno"] != w["anno"]:
+        return None
+    codice = periodo_di(m["mese"])
+    return next((p["wave"] for p in w["periodi"] if p["periodo"] == codice), None)
 
 
 def _aggrega_mesi(righe: List[RigaRevenue]) -> List[dict]:
@@ -601,7 +626,7 @@ def _aggrega_mesi(righe: List[RigaRevenue]) -> List[dict]:
     return mesi
 
 
-def _riga_mens(m: dict) -> list:
+def _riga_mens(m: dict, w: Optional[dict] = None) -> list:
     k = m["kpi"]
     return [
         m["label"], m["giorni"], m["rooms_sold"], m["rooms_available"],
@@ -609,10 +634,11 @@ def _riga_mens(m: dict) -> list:
         round(m["revenue_rooms"], 2), round(m["revenue_fnb"], 2),
         round(m["revenue_extra"], 2), round(m["revenue_total"], 2),
         k.inc_rooms, k.inc_fnb, k.inc_extra,
+        _wave_mese(m, w),
     ]
 
 
-def _totale_mens(mesi: List[dict]) -> list:
+def _totale_mens(mesi: List[dict], w: Optional[dict] = None) -> list:
     rs = sum(m["rooms_sold"] for m in mesi)
     ra = sum(m["rooms_available"] for m in mesi)
     rr = sum(m["revenue_rooms"] for m in mesi)
@@ -625,32 +651,40 @@ def _totale_mens(mesi: List[dict]) -> list:
         kpi.occupancy, kpi.adr, kpi.revpar, kpi.trevpar, kpi.rmc,
         round(rr, 2), round(rf, 2), round(rx, 2), round(rt, 2),
         kpi.inc_rooms, kpi.inc_fnb, kpi.inc_extra,
+        _wave_stagione(w),
     ]
 
 
-def _xlsx_hotel_mens(hotel_code: str, mesi: List[dict]) -> io.BytesIO:
+def _xlsx_hotel_mens(hotel_code: str, mesi: List[dict], w: Optional[dict] = None) -> io.BytesIO:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Mensile"
     _scrivi_intestazione(ws, _INT_MENS)
     for i, m in enumerate(mesi, start=2):
-        _scrivi_riga_sett(ws, i, _riga_mens(m))
-    _scrivi_riga_sett(ws, len(mesi) + 2, _totale_mens(mesi), bold=True)
+        _scrivi_riga_sett(ws, i, _riga_mens(m, w))
+    # Aprile e maggio consecutivi: una sola cella WAVE (blocco "Inizio stagione"), come a schermo
+    col_wave = len(_INT_MENS)
+    for i in range(len(mesi) - 1):
+        a, b = mesi[i], mesi[i + 1]
+        if (a["anno"], a["mese"], b["mese"]) == (b["anno"], 4, 5):
+            ws.merge_cells(start_row=i + 2, start_column=col_wave, end_row=i + 3, end_column=col_wave)
+            ws.cell(row=i + 2, column=col_wave).alignment = Alignment(vertical="center")
+    _scrivi_riga_sett(ws, len(mesi) + 2, _totale_mens(mesi, w), bold=True)
     _auto_width(ws)
     return _to_buf(wb)
 
 
-def _csv_hotel_mens(hotel_code: str, mesi: List[dict]) -> io.BytesIO:
+def _csv_hotel_mens(hotel_code: str, mesi: List[dict], wv: Optional[dict] = None) -> io.BytesIO:
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(_INT_MENS)
     for m in mesi:
-        w.writerow([_sv(v) for v in _riga_mens(m)])
-    w.writerow([_sv(v) for v in _totale_mens(mesi)])
+        w.writerow([_sv(v) for v in _riga_mens(m, wv)])
+    w.writerow([_sv(v) for v in _totale_mens(mesi, wv)])
     return io.BytesIO(b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8"))
 
 
-def _pdf_hotel_mens(hotel_code: str, mesi: List[dict]) -> io.BytesIO:
+def _pdf_hotel_mens(hotel_code: str, mesi: List[dict], w: Optional[dict] = None) -> io.BytesIO:
     titolo = f"{hotel_code} — Aggregati mensili"
     righe_pdf = []
     for m in mesi:
@@ -662,8 +696,9 @@ def _pdf_hotel_mens(hotel_code: str, mesi: List[dict]) -> io.BytesIO:
             _pv(m["revenue_rooms"], 0, "€"), _pv(m["revenue_fnb"], 0, "€"),
             _pv(m["revenue_extra"], 0, "€"), _pv(m["revenue_total"], 0, "€"),
             _pv(k.inc_rooms, 1, "%"), _pv(k.inc_fnb, 1, "%"), _pv(k.inc_extra, 1, "%"),
+            _pv(_wave_mese(m, w), 1, "%"),
         ])
-    tot = _totale_mens(mesi)
+    tot = _totale_mens(mesi, w)
     righe_pdf.append([
         "TOTALE", str(tot[1]), str(tot[2]), str(tot[3]),
         _pv(tot[4], 1, "%"), _pv(tot[5], 2, "€"),
@@ -671,6 +706,7 @@ def _pdf_hotel_mens(hotel_code: str, mesi: List[dict]) -> io.BytesIO:
         _pv(tot[9], 0, "€"), _pv(tot[10], 0, "€"),
         _pv(tot[11], 0, "€"), _pv(tot[12], 0, "€"),
         _pv(tot[13], 1, "%"), _pv(tot[14], 1, "%"), _pv(tot[15], 1, "%"),
+        _pv(tot[16], 1, "%"),
     ])
     n = len(righe_pdf)
     extra = [("FONTNAME", (0, n), (-1, n), "Helvetica-Bold")]

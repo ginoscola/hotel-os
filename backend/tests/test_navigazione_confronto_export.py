@@ -346,17 +346,18 @@ class TestExportExcel:
         assert "spreadsheetml" in resp.headers["content-type"]
 
     @richiede_csv
-    def test_export_xlsx_hotel_sett_16_colonne(self, client):
-        """Il foglio settimanale hotel deve avere esattamente 16 colonne."""
+    def test_export_xlsx_hotel_sett_17_colonne(self, client):
+        """Il foglio settimanale hotel deve avere esattamente 17 colonne (l'ultima è WAVE)."""
         _importa_hotel(client, "CLB")
         resp = client.get("/export/hotel/CLB/settimanale?formato=xlsx")
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(resp.content))
         ws = wb.active
-        assert ws.max_column == 16
-        # Verifica prima e ultima intestazione
+        assert ws.max_column == 17
+        # Verifica prima e ultime intestazioni
         assert ws.cell(row=1, column=1).value == "Settimana"
         assert "Inc." in str(ws.cell(row=1, column=16).value)
+        assert "WAVE" in str(ws.cell(row=1, column=17).value)
 
     @richiede_csv
     def test_export_xlsx_hotel_sett_riga_totale_bold(self, client):
@@ -407,16 +408,17 @@ class TestExportCSV:
         assert "Settimana" in reader[0][0]
 
     @richiede_csv
-    def test_export_csv_hotel_sett_16_colonne(self, client):
-        """Il CSV settimanale hotel deve avere 16 colonne e includere Inc. Rooms/F&B/Extra."""
+    def test_export_csv_hotel_sett_17_colonne(self, client):
+        """Il CSV settimanale hotel deve avere 17 colonne e includere Inc. Rooms/F&B/Extra e WAVE."""
         _importa_hotel(client, "CLB")
         resp = client.get("/export/hotel/CLB/settimanale?formato=csv")
         import csv as csv_mod
         contenuto = resp.content.decode("utf-8-sig")
         reader = list(csv_mod.reader(contenuto.splitlines()))
         intestazione = reader[0]
-        assert len(intestazione) == 16
+        assert len(intestazione) == 17
         assert any("Inc." in col for col in intestazione)
+        assert intestazione[-1].startswith("WAVE")
         assert any("TRevPAR" in col for col in intestazione)
         assert any("RMC" in col for col in intestazione)
 
