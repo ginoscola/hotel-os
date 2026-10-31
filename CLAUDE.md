@@ -3255,7 +3255,32 @@ nella root (**fuori da git**, verrà cancellata a lavoro finito: le decisioni va
 `uploads/wave/Storico_fatturato_WAVE_2022-2025.xlsx` (foglio Storico, colonna H). Stesse regole di lavoro della
 Tesoreria: una fase per volta, ok esplicito prima del codice, chiedere nei dubbi.
 Fasi: 1 storico + riferimento · 2 Dashboard Hotel · 3 Gruppo + Home · 4 ritmo di stagione.
-**Stato**: decisioni prese (31/10/2026), strategia della Fase 1 presentata, codice non iniziato.
+**Stato**: ✅ Fase 1 (v4.8.0, 31/10/2026). Fase 2 (Dashboard Hotel) solo con ok dell'utente.
+
+**Fase 1 — fatto** (storico e riferimento):
+- Tabella `wave_storico` (`models/wave.py`, migrazione `wave001_2026`): struttura × anno × mese, `netto`
+  Numeric(14,4), lordo/tassa/metodo/fonte/note informativi, `modificato_manualmente` + `netto_originale`. Solo anni
+  < `PRIMO_ANNO_HOTELOS` (2026): gli anni di HotelOS non vengono mai salvati qui.
+- `services/wave.py` (puro): `PERIODI` (inizio = apr+mag, giugno…settembre), `valori_per_periodo()`,
+  `riferimenti(valori_anni, anno)` (migliore degli anni < anno; a parità vale il più vecchio),
+  `riferimento_stagione()` (somma dei migliori), `riferimento_settimana(rif, week_start)` (quota giornaliera del
+  riferimento del mese per i giorni di giugno–settembre; apr/mag esclusi → None), `wave()`.
+- `services/wave_import.py::parse_storico()` — foglio "Storico", colonne per intestazione; ignorate con avviso righe
+  2026+, mesi fuori apr–set, strutture sconosciute, netto vuoto; errore su foglio/colonne mancanti o doppioni.
+- `services/wave_dati.py`: `valori_mensili(db, oggi)` (storico + `report_fatturati()` arrangiamenti ÷ 1,10 per ogni
+  anno dal 2026; `in_corso` se oggi ≤ `fine_stagione()` = `hotel_seasons.close_date`, MMS → DPH, BON → INT,
+  default 30/9), `riferimento_anno(db, anno, oggi)`.
+- Router `routers/wave.py` (prefix `/wave`, lettura `richiedi_utente_attivo`, scrittura `richiedi_admin`):
+  `GET /storico`, `POST /storico/import?conferma=false|true` (anteprima e conferma con lo stesso upload; righe
+  corrette a mano mai toccate → `bloccate`), `POST /storico` (mese mancante a mano), `PUT /storico/{id}`
+  (`netto` / `note` / `ripristina`), `DELETE /storico/{id}?conferma=true`, `GET /riferimento?anno=`.
+- Admin → Revenue → "Indice WAVE — storico" (`?s=wave-storico`, `pages/admin/AdminWave.jsx`).
+- Test `tests/test_wave.py` (16). Sul file reale: 79 righe, riferimenti di stagione identici al foglio "Riferimento
+  WAVE" (DPH 482.310, CLB 624.823, INT 555.209, MMS 80.620, BON 57.908).
+- Anteprima sul DB reale (Corrispettivi, quindi fatturato — il WAVE ufficiale della Fase 2 userà i dati Revenue):
+  stagione 2026 DPH 482.278 € (100%), CLB 533.128 (85%), INT 495.533 (89%), MMS 79.544 (99%), BON 73.262 (127%).
+  Record 2026 che entrano nel riferimento 2027: DPH inizio e settembre, CLB inizio, INT giugno, MMS inizio e giugno,
+  BON tutti tranne giugno.
 
 Decisioni (31/10/2026, oltre a quelle della specifica):
 - Storico importato così com'è (anche le 5 differenze tra file segnalate nel foglio Note), correzioni da Admin.

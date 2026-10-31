@@ -7,6 +7,7 @@ import AdminCruscottoSoglie from './admin/AdminCruscottoSoglie.jsx'
 import AdminUiKit from './admin/AdminUiKit.jsx'
 import AdminUsaliCategorieKpi from './admin/AdminUsaliCategorieKpi.jsx'
 import AdminBudgetPrevisione from './admin/AdminBudgetPrevisione.jsx'
+import AdminWave from './admin/AdminWave.jsx'
 import AdminUsaliFnb from './admin/AdminUsaliFnb.jsx'
 import {
   AdminTesoreriaCategorie, AdminTesoreriaConti, AdminTesoreriaRegole, AdminTesoreriaSoglie,
@@ -40,6 +41,7 @@ const SEZIONI = [
     voci: [
       { id: 'revenue-import', label: 'Import massivo' },
       { id: 'revenue-test',   label: 'Dati di test' },
+      { id: 'wave-storico',   label: 'Indice WAVE — storico' },
     ],
   },
   {
@@ -203,6 +205,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'revenue-import') return <RevenueImportMassivo />
   if (sezione === 'revenue-test')  return <RevenueDatiTest />
   if (sezione === 'budget-previsione') return <AdminBudgetPrevisione />
+  if (sezione === 'wave-storico') return <AdminWave />
   if (sezione === 'dip-cc')           return <DipCentriDiCosto />
   if (sezione === 'dip-colori')       return <DipColoriCC />
   if (sezione === 'dip-test')         return <DipDatiTest />
