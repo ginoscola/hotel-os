@@ -166,7 +166,7 @@ function IntestazioneGiorni() {
   return (
     <thead>
       <tr>
-        <Th>Giorno</Th><Th num>Cam. vend.</Th><Th num>PAX</Th><Th num>Occup.</Th><Th num>ADR</Th>
+        <Th>Giorno</Th><Th num>Cam. vend.</Th><Th num>PAX</Th><Th num>Occup.</Th><Th num>ADR PMS</Th>
         <Th num>RMC</Th><Th num>RevPAR</Th><Th num>TRevPAR</Th><Th num>Rev. Camere</Th>
         <Th num>Rev. F&B</Th><Th num>Rev. Extra</Th><Th num tot>Rev. Totale</Th>
       </tr>
@@ -196,7 +196,7 @@ function IntestazioneAggregati({ prima }) {
   return (
     <thead>
       <tr>
-        <Th>{prima}</Th><Th num>Gg.</Th><Th num>Cam. vend.</Th><Th num>Occup. %</Th><Th num>ADR</Th>
+        <Th>{prima}</Th><Th num>Gg.</Th><Th num>Cam. vend.</Th><Th num>Occup. %</Th><Th num>ADR PMS</Th>
         <Th num>RMC</Th><Th num>RevPAR</Th><Th num>TRevPAR</Th><Th num>Inc. Rooms</Th>
         <Th num>Inc. F&B</Th><Th num>Inc. Extra</Th><Th num tot>Rev. Totale</Th>
         <Th num>WAVE <SpiegazioneWave /></Th>
@@ -673,7 +673,7 @@ function valoriProduzione(riga) {
 }
 
 /**
- * Grafico ADR e card "Valore per camera venduta", con lo stesso toggle giornaliero/settimanale.
+ * Grafico ADR da Statistiche Produzione + retta media e card "Valore per camera venduta", con lo stesso toggle giornaliero/settimanale.
  * I valori di Statistiche valgono solo sui giorni già trascorsi alla snapshot e con righe importate;
  * in settimana le camere vendute si sommano sugli stessi giorni dei ricavi.
  * La retta media (RMC) non dipende da come Welcome divide il pacchetto: i confronti stanno su di essa.
@@ -744,7 +744,6 @@ function GraficiValoreCamera({
       })),
       datiSettimane: settimane.map(s => ({
         week_start: s.week_start,
-        adr: s.adr,
         rmc: s.rmc,
         rmc_comp: comp[s.week_start]?.rmc ?? null,
         ...(perSettimana[s.week_start] ? perCamera(perSettimana[s.week_start]) : {}),
@@ -765,7 +764,7 @@ function GraficiValoreCamera({
 
   return (
     <>
-      <Card title={`ADR e retta media ${settimanale ? 'settimanali' : 'giornalieri'} — intera stagione`}
+      <Card title={`ADR da Statistiche Produzione e retta media ${settimanale ? 'settimanali' : 'giornalieri'} — intera stagione`}
         style={{ marginBottom: 24 }}
         actions={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -776,11 +775,12 @@ function GraficiValoreCamera({
         }>
         <div className="ui-text-muted" style={{ marginBottom: 8 }}>
           <strong>Retta media</strong> = ricavo totale ÷ camere vendute: copre anche il prenotato e non dipende da come
-          Welcome divide il pacchetto, quindi i confronti sono su questa linea. <strong>ADR</strong> = prezzo meno i
-          pasti al valore fisso di Welcome, che cambia ogni anno: non confrontarlo tra anni.{' '}
-          <strong>Camera da Statistiche</strong> = alloggio ÷ camere vendute, solo sui giorni già trascorsi.
+          Welcome divide il pacchetto, quindi è il riferimento stabile nel tempo e i confronti sono su questa linea.{' '}
+          <strong>ADR da Statistiche Produzione</strong> = alloggio ÷ camere vendute, solo sui giorni già trascorsi: resta
+          confrontabile tra anni finché non cambiano le quote pasti di Welcome. È diverso dall'<strong>ADR PMS</strong> delle
+          tessere e delle tabelle, che toglie i pasti al valore fisso di Welcome e non va confrontato tra anni.
           Spiaggia e parcheggio prenotati con Mr Preno risultano spesso sulla prima notte: nel giornaliero creano picchi
-          agli arrivi, nel settimanale si assorbono quasi del tutto.
+          agli arrivi nella retta media, nel settimanale si assorbono quasi del tutto.
         </div>
         {erroreProduzione && (
           <Messaggio tipo="warn">Dati di Statistiche non disponibili: {erroreProduzione}</Messaggio>
@@ -799,9 +799,8 @@ function GraficiValoreCamera({
                   label={{ value: 'Sett. rif.', position: 'insideTopLeft', fontSize: 9, fill: colors.info }} />
               : areaRif(true)}
             <Line type="monotone" dataKey="rmc" stroke={coloreSerie(4)} dot={settimanale} name="Retta media" strokeWidth={2} />
-            <Line type="monotone" dataKey="adr" stroke={coloreSerie(2)} dot={settimanale} name="ADR" strokeWidth={2} />
             <Line type="monotone" dataKey="camera" stroke={coloreSerie(3)} dot={settimanale}
-              name="Camera da Statistiche" strokeWidth={2} />
+              name="ADR da Statistiche Produzione" strokeWidth={2} />
             {compLabel && (
               <Line type="monotone" dataKey="rmc_comp" stroke={coloreSerie(4)} dot={false}
                 name={`Retta media ${compLabel}`} {...STILE_CONFRONTO} />
@@ -811,7 +810,7 @@ function GraficiValoreCamera({
       </Card>
 
       {stagione && (
-        <Card title="Valore per camera venduta (Statistiche)" style={{ marginBottom: 24 }} actions={toggleVista}>
+        <Card title="Valore per camera venduta (Statistiche Produzione)" style={{ marginBottom: 24 }} actions={toggleVista}>
           <div className="ui-text-muted" style={{ marginBottom: 8 }}>
             Ricavi di Statistiche Produzione (IVA inclusa) ÷ camere vendute, solo sui giorni già trascorsi con dati
             importati. F&amp;B = pasti e bar; Extra = spiaggia, parcheggio e altri servizi. La divisione del pacchetto è
@@ -933,7 +932,7 @@ function ContenutoDashboard({
           {[
             ['Camere vendute', 'rooms_sold', formatN],
             ['Occupazione', 'occupancy', formatPerc],
-            ['ADR', 'adr', formatEuro],
+            ['ADR PMS', 'adr', formatEuro],
             ['RMC', 'rmc', formatEuro],
             ['RevPAR', 'revpar', formatEuro],
             ['TRevPAR', 'trevpar', formatEuro],

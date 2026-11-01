@@ -413,7 +413,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
         {[
           ['Camere vendute', 'rooms_sold', formatN],
           ['Occupazione', 'occupancy', formatPerc],
-          ['ADR Gruppo', 'adr', formatEuro],
+          ['ADR PMS Gruppo', 'adr', formatEuro],
           ['RevPAR', 'revpar', formatEuro],
           ['TRevPAR', 'trevpar', formatEuro],
           ['RMC', 'rmc', formatEuro],
@@ -455,7 +455,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
               <tr>
                 <Th>Hotel</Th>
                 <Th num>Cam. vend.</Th><Th num>Cam. disp.</Th><Th num>Occup.</Th>
-                <Th num>ADR</Th><Th num>RevPAR</Th>
+                <Th num>ADR PMS</Th><Th num>RevPAR</Th>
                 <Th num>Rev. Camere</Th><Th num>Rev. F&B</Th><Th num>Rev. Extra</Th>
                 <Th num tot>Rev. Totale</Th><Th num>% Gruppo</Th>
               </tr>
@@ -555,7 +555,7 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
               <tr>
                 <Th>Settimana</Th>
                 <Th>Hotel</Th><Th num>Cam. vend.</Th><Th num>Occup.</Th>
-                <Th num>ADR</Th><Th num>RevPAR</Th><Th num>TRevPAR</Th>
+                <Th num>ADR PMS</Th><Th num>RevPAR</Th><Th num>TRevPAR</Th>
                 <Th num>Rev. Camere</Th><Th num>Rev. F&B</Th><Th num>Rev. Extra</Th><Th num tot>Rev. Totale</Th>
               </tr>
             </thead>
