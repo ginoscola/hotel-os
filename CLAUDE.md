@@ -508,6 +508,7 @@ stessa fonte `prod_righe` ma per scopi diversi: non collegati tra loro.
 - `kpi_periodo` = KPI solo sulla settimana di riferimento; evidenziata in grafici (ReferenceArea) e tabella.
 - Confronto snapshot precedente (mutuamente esclusivo con anno precedente, offset 364gg ±30gg tolleranza).
 - Revenue giornaliero: senza confronto → BarChart impilato (Camere/F&B/Extra); con confronto → LineChart `revenue_total` corrente vs confronto.
+- Grafico **ADR giornaliero** (v4.9.4) sotto Occupazione giornaliera: stessi confronti (snapshot precedente / anno precedente, `adr_comp` in `mergeConfrontoGiorni`), scala automatica non da zero.
 - Dati giornalieri: collassabili, stato solo in-memory (`useState`), **sempre compresso all'apertura
   della pagina**, come i blocchi "Dati mensili" (non più persistito in localStorage).
 - **Sezione "Dati mensili"** (`SezioneDatiMensili` + helper `aggregaGiorniPerMese` in `DashboardHotel.jsx`,

@@ -136,6 +136,7 @@ function mergeConfrontoGiorni(giorni, giorniComp, isAnnoPrecedente) {
     return {
       ...g,
       occupancy_comp: comp?.occupancy ?? null,
+      adr_comp: comp?.adr ?? null,
       revenue_rooms_comp: comp?.revenue_rooms ?? null,
       revenue_fnb_comp: comp?.revenue_fnb ?? null,
       revenue_extra_comp: comp?.revenue_extra ?? null,
@@ -791,6 +792,28 @@ function ContenutoDashboard({
             {datiComp && (
               <Line type="monotone" dataKey="occupancy_comp" stroke={colors.info} dot={false}
                 name={`Occup. ${compLabel}`} {...STILE_CONFRONTO} />
+            )}
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* Grafico ADR giornaliero — intera stagione */}
+      <Card title="ADR giornaliero — intera stagione" style={{ marginBottom: 24 }}
+        actions={<ExportMenu url={exportGiorn} nome={`${hotel}_giornaliero`} snapshot={snapDate} />}>
+        <ResponsiveContainer width="100%" height={240}>
+          <LineChart data={giorniMerged} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="data" tickFormatter={tickFormatterSabato} interval={0} tick={{ fontSize: 10 }} />
+            <YAxis tickFormatter={v => `${v} €`} domain={['auto', 'auto']} width={52} />
+            <Tooltip labelFormatter={labelDataTooltip}
+              formatter={(v, n) => [v != null ? formatEuro(v) : '—', n]} />
+            <Legend />
+            {pastReferenceArea(giorniMerged, 'data', null, currentSnap?.snapshot_date)}
+            {areaRif(true)}
+            <Line type="monotone" dataKey="adr" stroke={coloreSerie(2)} dot={false} name="ADR" strokeWidth={2} />
+            {datiComp && (
+              <Line type="monotone" dataKey="adr_comp" stroke={coloreSerie(2)} dot={false}
+                name={`ADR ${compLabel}`} {...STILE_CONFRONTO} />
             )}
           </LineChart>
         </ResponsiveContainer>
