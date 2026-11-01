@@ -3289,6 +3289,13 @@ Fasi: 1 storico + riferimento · 2 Dashboard Hotel · 3 Gruppo + Home · 4 ritmo
   `wave`): barre = incassato − 100% della settimana (verde/rosso, prima barra = blocco aprile+maggio), linea = scarto
   accumulato da inizio stagione (ultimo punto = scarto di stagione), confronto tratteggiato. 2026: CLB scende a
   −82k, INT a −62k (il buco si apre ad agosto), DPH oscilla tra −6k e +20k.
+- **v4.9.3 — consuntivo e prenotato distinti nei grafici** (`separaPrenotato()` in `DashboardHotel.jsx`): il riferimento è
+  sempre il risultato finale, quindi le settimane future (prenotato) sono basse per costruzione. Settimana "futura" =
+  non finita prima della data della snapshot: barre più chiare e linea progressiva/scarto tratteggiata (parte dall'ultimo
+  punto chiuso). Tessere invariate. **Da fare nella Fase 4** (deciso con l'utente, 01/11/2026): toggle del grafico
+  Risultato finale (default) / Alla stessa data, stima `riferimento finale × (prenotato 2026 alla stessa data ÷ finale
+  2026)` per settimana e hotel, etichettata come stima sul ritmo 2026 e chiamata "Ritmo vs riferimento", non WAVE; le
+  settimane chiuse non cambiano. Utile solo dalle snapshot di metà marzo 2027 (2022–2025 non hanno snapshot).
 - Confronto anno precedente: nel 2026 non disponibile (nessuna snapshot 2025, scelta dell'utente: niente dato 2025
   dallo storico); funzionerà dal 2027.
 - Dati reali 2026 (snapshot 21/09): DPH 98,7%, CLB 86,8%, INT 88,8%. Limite noto: il riferimento settimanale è la

@@ -389,6 +389,25 @@ function CardCorrispettivi({ hotel, data }) {
 }
 
 /**
+ * Separa consuntivo e prenotato alla data della snapshot: una settimana è `futura` se non è ancora finita prima di
+ * quella data (contiene prenotato). I valori di `chiave` delle future passano in `{chiave}_fut` (linea tratteggiata),
+ * che parte dall'ultimo punto chiuso per non lasciare un buco tra le due linee.
+ */
+function separaPrenotato(righe, chiave, snapshotDate) {
+  const out = righe.map(r => {
+    const futura = !!snapshotDate && (r.fine ?? addDays(r.week_start, 6)) >= snapshotDate
+    return { ...r, futura, [chiave]: futura ? null : r[chiave], [`${chiave}_fut`]: futura ? r[chiave] : null }
+  })
+  const primaFutura = out.findIndex(r => r.futura && r[`${chiave}_fut`] != null)
+  if (primaFutura > 0) {
+    for (let i = primaFutura - 1; i >= 0; i--) {
+      if (out[i][chiave] != null) { out[i][`${chiave}_fut`] = out[i][chiave]; break }
+    }
+  }
+  return out
+}
+
+/**
  * Scarto in euro dal 100% WAVE: una riga per il blocco "Inizio stagione" (apr+mag) + una per ogni settimana di
  * giugno–settembre; `cumulato` = scarto accumulato da inizio stagione (ultimo punto = scarto di stagione).
  */
@@ -399,7 +418,7 @@ function righeScartoWave(wave) {
   const inizio = wave.periodi.find(p => p.periodo === 'inizio')
   if (inizio?.riferimento != null) {
     cum = (inizio.valore ?? 0) - inizio.riferimento
-    righe.push({ week_start: `${wave.anno}-05-01`, label: 'Apr+mag', scarto: cum, cumulato: cum })
+    righe.push({ week_start: `${wave.anno}-05-01`, label: 'Apr+mag', fine: `${wave.anno}-05-31`, scarto: cum, cumulato: cum })
   }
   for (const s of wave.settimane) {
     if (s.riferimento == null) continue
@@ -418,20 +437,22 @@ function GraficoScartoWave({ wave, waveComp, compLabel, isAnnoPrecedente, snapsh
       comp[k] = r.cumulato
     }
     const fmt = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
-    return righeScartoWave(wave).map(r => ({
+    return separaPrenotato(righeScartoWave(wave).map(r => ({
       ...r, label: r.label ?? `${fmt(r.week_start)}–${fmt(addDays(r.week_start, 6))}`,
       cumulato_comp: comp[r.label ? 'inizio' : r.week_start] ?? null,
-    }))
-  }, [wave, waveComp, isAnnoPrecedente])
+    })), 'cumulato', snapshotDate)
+  }, [wave, waveComp, isAnnoPrecedente, snapshotDate])
   if (!dati.length) return null
-  const finale = dati[dati.length - 1].cumulato
+  const ultima = dati[dati.length - 1]
+  const finale = ultima.cumulato ?? ultima.cumulato_fut
+  const conPrenotato = dati.some(r => r.futura)
   const euroK = v => `${(v / 1000).toFixed(0)}k`
   return (
     <Card style={{ marginBottom: 24 }}
       title={<span>Distanza dal 100% WAVE, in euro <SpiegazioneWave /></span>}>
       <div className="ui-text-muted" style={{ marginBottom: 8 }}>
         Barre = incassato − 100% WAVE di ogni settimana (verde sopra, rosso sotto); la prima è il blocco aprile+maggio.
-        Linea = scarto accumulato da inizio stagione: a fine stagione{' '}
+        Linea = scarto accumulato da inizio stagione{conPrenotato ? ', tratteggiata e barre chiare = con il prenotato di questa snapshot, non un risultato: il calo si riduce con le nuove prenotazioni' : ''}: {conPrenotato ? 'con il prenotato' : 'a fine stagione'}{' '}
         <strong style={{ color: finale >= 0 ? colors.success : colors.danger }}>
           {finale > 0 ? '+' : ''}{formatEuro(finale)}
         </strong>. Importi netti IVA, senza tassa di soggiorno.
@@ -446,9 +467,13 @@ function GraficoScartoWave({ wave, waveComp, compLabel, isAnnoPrecedente, snapsh
           {pastReferenceArea(dati, 'week_start', 'label', snapshotDate)}
           <ReferenceLine y={0} stroke={colors.textMuted} />
           <Bar dataKey="scarto" name="Scarto della settimana" legendType="none">
-            {dati.map(r => <Cell key={r.week_start} fill={r.scarto >= 0 ? colors.success : colors.danger} fillOpacity={0.55} />)}
+            {dati.map(r => <Cell key={r.week_start} fill={r.scarto >= 0 ? colors.success : colors.danger} fillOpacity={r.futura ? 0.2 : 0.55} />)}
           </Bar>
           <Line dataKey="cumulato" name="Scarto accumulato" stroke={colors.text} strokeWidth={3} dot={{ r: 2 }} />
+          {conPrenotato && (
+            <Line dataKey="cumulato_fut" name="Con il prenotato" stroke={colors.text} strokeWidth={2}
+              strokeDasharray="5 4" dot={false} />
+          )}
           {waveComp && (
             <Line dataKey="cumulato_comp" name={`Scarto accumulato ${compLabel}`} stroke={colors.text} dot={false}
               connectNulls {...STILE_CONFRONTO} />
@@ -693,13 +718,14 @@ function ContenutoDashboard({
     const ws = new Set([...settimane.map(s => s.week_start), ...(dati.wave?.settimane || []).map(s => s.week_start)])
     const w = Object.fromEntries((dati.wave?.settimane || []).map(s => [s.week_start, s]))
     const fmt = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
-    return [...ws].sort().map(k => ({
+    return separaPrenotato([...ws].sort().map(k => ({
       week_start: k, label: occ[k]?.label ?? `${fmt(k)}–${fmt(addDays(k, 6))}`,
       occupancy: occ[k]?.occupancy ?? null,
       wave: w[k]?.wave ?? null, progressivo: w[k]?.progressivo ?? null,
       progressivo_comp: comp[k]?.progressivo ?? null,
-    }))
-  }, [settimane, dati.wave, datiComp, isAnnoPrecedente])
+    })), 'progressivo', currentSnap?.snapshot_date)
+  }, [settimane, dati.wave, datiComp, isAnnoPrecedente, currentSnap?.snapshot_date])
+  const waveConPrenotato = settimaneWave.some(s => s.progressivo_fut != null)
   const maxWave = Math.max(100, ...settimaneWave.flatMap(s => [s.wave ?? 0, s.progressivo_comp ?? 0, s.occupancy ?? 0]))
   const totSettimane = useMemo(() => totaliAggregati(settimane), [settimane])
 
@@ -780,6 +806,7 @@ function ContenutoDashboard({
             totale del 100% fino a lì (inizio stagione compreso): l'ultimo punto è il WAVE di stagione
             ({fmtWave(waveStagione)}). Le barre sono le singole settimane, solo come dettaglio: pesano tutte uguale a
             vista, ma agosto vale molti più euro di settembre. Aprile e maggio senza barre (contano come blocco).
+            {waveConPrenotato && ' Linea tratteggiata e barre chiare = settimane non ancora finite alla data della snapshot: confrontano il prenotato con un risultato finale, quindi sono basse per costruzione e salgono con le nuove prenotazioni.'}
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={settimaneWave} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
@@ -790,10 +817,16 @@ function ContenutoDashboard({
               <Legend />
               {pastReferenceArea(settimaneWave, 'week_start', 'label', currentSnap?.snapshot_date)}
               <ReferenceLine y={100} stroke={colors.textMuted} strokeDasharray="2 2" />
-              <Bar dataKey="wave" name="WAVE settimana %" fill={COLORE_WAVE} fillOpacity={0.3} />
+              <Bar dataKey="wave" name="WAVE settimana %" fill={COLORE_WAVE} fillOpacity={0.3}>
+                {settimaneWave.map(s => <Cell key={s.week_start} fill={COLORE_WAVE} fillOpacity={s.futura ? 0.12 : 0.3} />)}
+              </Bar>
               <Line dataKey="occupancy" name="Occupazione %" stroke={colors.info} dot={false} strokeWidth={1.5} />
               <Line dataKey="progressivo" name="WAVE stagione progressivo %" stroke={COLORE_WAVE} strokeWidth={3}
                 dot={{ r: 2 }} connectNulls />
+              {waveConPrenotato && (
+                <Line dataKey="progressivo_fut" name="Con il prenotato %" stroke={COLORE_WAVE} strokeWidth={2}
+                  strokeDasharray="5 4" dot={false} connectNulls />
+              )}
               {datiComp && (
                 <Line dataKey="progressivo_comp" name={`WAVE progressivo ${compLabel}`} stroke={COLORE_WAVE}
                   dot={false} connectNulls {...STILE_CONFRONTO} />
