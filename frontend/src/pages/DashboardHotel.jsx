@@ -659,6 +659,120 @@ function SezioneDatiMensili({ mesi, refStart, refEnd, hotel, snapParam, snapDate
   )
 }
 
+/**
+ * ADR della stagione, giornaliero o settimanale, con la linea di confronto "Alloggio da Produzione".
+ * Il settimanale usa l'ADR già calcolato dal backend sui totali della settimana.
+ * Alloggio da Produzione: solo giorni già trascorsi alla snapshot e con righe importate;
+ * in settimana, camere vendute sommate sugli stessi giorni dei ricavi.
+ */
+function GraficoAdr({
+  hotel, giorni, settimane, settimaneComp, isAnnoPrecedente, compLabel, snapDate, refStart, areaRif,
+  exportGiorn, exportSett,
+}) {
+  const [vista, setVista] = useState(() => localStorage.getItem('hotel_adr_vista') || 'giornaliero')
+  const [alloggio, setAlloggio] = useState({})
+  const [erroreAlloggio, setErroreAlloggio] = useState(null)
+
+  const dataDa = giorni[0]?.data
+  const dataA = giorni[giorni.length - 1]?.data
+
+  useEffect(() => {
+    if (!dataDa || !dataA) return
+    let annullato = false
+    setAlloggio({})
+    setErroreAlloggio(null)
+    api.get('/produzione/report/giornaliero', {
+      params: { data_da: dataDa, data_a: dataA, struttura_code: hotel, categoria_code: 'alloggio' },
+    })
+      .then(({ data }) => {
+        if (!annullato) setAlloggio(Object.fromEntries(data.map(r => [r.data, r.totale.lordo])))
+      })
+      .catch(err => { if (!annullato) setErroreAlloggio(mostraErrore(err)) })
+    return () => { annullato = true }
+  }, [hotel, dataDa, dataA])
+
+  function cambiaVista(v) {
+    setVista(v)
+    localStorage.setItem('hotel_adr_vista', v)
+  }
+
+  const conAlloggio = g => alloggio[g.data] != null && g.rooms_sold > 0 && (!snapDate || g.data < snapDate)
+
+  const datiGiorni = useMemo(
+    () => giorni.map(g => ({ ...g, adr_alloggio: conAlloggio(g) ? alloggio[g.data] / g.rooms_sold : null })),
+    [giorni, alloggio, snapDate]
+  )
+
+  const datiSettimane = useMemo(() => {
+    const comp = {}
+    for (const c of settimaneComp || []) comp[isAnnoPrecedente ? addDays(c.week_start, 364) : c.week_start] = c
+    const inizi = settimane.map(s => s.week_start)
+    const somme = {}
+    for (const g of giorni) {
+      if (!conAlloggio(g)) continue
+      const ws = inizi.filter(i => i <= g.data).pop()
+      if (!ws) continue
+      somme[ws] = somme[ws] || { ricavi: 0, camere: 0 }
+      somme[ws].ricavi += alloggio[g.data]
+      somme[ws].camere += g.rooms_sold
+    }
+    return settimane.map(s => ({
+      week_start: s.week_start,
+      adr: s.adr,
+      adr_comp: comp[s.week_start]?.adr ?? null,
+      adr_alloggio: somme[s.week_start] ? somme[s.week_start].ricavi / somme[s.week_start].camere : null,
+    }))
+  }, [settimane, settimaneComp, isAnnoPrecedente, giorni, alloggio, snapDate])
+
+  const settimanale = vista === 'settimanale'
+  const dati = settimanale ? datiSettimane : datiGiorni
+  const chiave = settimanale ? 'week_start' : 'data'
+
+  return (
+    <Card title={`ADR ${settimanale ? 'settimanale' : 'giornaliero'} — intera stagione`} style={{ marginBottom: 24 }}
+      actions={
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <SegmentedControl value={vista} onChange={cambiaVista}
+            options={[{ value: 'giornaliero', label: 'Giornaliero' }, { value: 'settimanale', label: 'Settimanale' }]} />
+          <ExportMenu url={settimanale ? exportSett : exportGiorn}
+            nome={`${hotel}_${settimanale ? 'settimanale' : 'giornaliero'}`} snapshot={snapDate} />
+        </div>
+      }>
+      <div className="ui-text-muted" style={{ marginBottom: 8 }}>
+        Spiaggia e parcheggio prenotati con Mr Preno risultano sulla prima notte: nella vista giornaliera creano picchi
+        agli arrivi, in quella settimanale sono spalmati sulla settimana ma restano inclusi nell'ADR.
+        La linea <strong>Alloggio da Produzione</strong> è alloggio ÷ camere vendute, solo sui giorni già trascorsi con
+        dati importati: può differire dall'ADR anche per il modo in cui Welcome divide i pacchetti.
+      </div>
+      {erroreAlloggio && (
+        <Messaggio tipo="warn">Linea Alloggio da Produzione non disponibile: {erroreAlloggio}</Messaggio>
+      )}
+      <ResponsiveContainer width="100%" height={240}>
+        <LineChart data={dati} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey={chiave} tickFormatter={tickFormatterSabato} interval={0} tick={{ fontSize: 10 }} />
+          <YAxis tickFormatter={v => `${v} €`} domain={['auto', 'auto']} width={52} />
+          <Tooltip labelFormatter={v => (settimanale ? `Settimana dal ${labelDataTooltip(v)}` : labelDataTooltip(v))}
+            formatter={(v, n) => [v != null ? formatEuro(v) : '—', n]} />
+          <Legend />
+          {pastReferenceArea(dati, chiave, null, snapDate)}
+          {settimanale
+            ? refStart && <ReferenceLine x={refStart} stroke={colors.info} strokeDasharray="3 3"
+                label={{ value: 'Sett. rif.', position: 'insideTopLeft', fontSize: 9, fill: colors.info }} />
+            : areaRif(true)}
+          <Line type="monotone" dataKey="adr" stroke={coloreSerie(2)} dot={settimanale} name="ADR" strokeWidth={2} />
+          <Line type="monotone" dataKey="adr_alloggio" stroke={coloreSerie(3)} dot={settimanale}
+            name="Alloggio da Produzione" strokeWidth={2} />
+          {compLabel && (
+            <Line type="monotone" dataKey="adr_comp" stroke={coloreSerie(2)} dot={false}
+              name={`ADR ${compLabel}`} {...STILE_CONFRONTO} />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+    </Card>
+  )
+}
+
 function ContenutoDashboard({
   dati, datiComp, compLabel, isAnnoPrecedente,
   hotel, currentSnap, giornalieriEspansi, onToggleGiornalieri,
@@ -797,27 +911,10 @@ function ContenutoDashboard({
         </ResponsiveContainer>
       </Card>
 
-      {/* Grafico ADR giornaliero — intera stagione */}
-      <Card title="ADR giornaliero — intera stagione" style={{ marginBottom: 24 }}
-        actions={<ExportMenu url={exportGiorn} nome={`${hotel}_giornaliero`} snapshot={snapDate} />}>
-        <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={giorniMerged} margin={{ top: 4, right: 20, bottom: 4, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="data" tickFormatter={tickFormatterSabato} interval={0} tick={{ fontSize: 10 }} />
-            <YAxis tickFormatter={v => `${v} €`} domain={['auto', 'auto']} width={52} />
-            <Tooltip labelFormatter={labelDataTooltip}
-              formatter={(v, n) => [v != null ? formatEuro(v) : '—', n]} />
-            <Legend />
-            {pastReferenceArea(giorniMerged, 'data', null, currentSnap?.snapshot_date)}
-            {areaRif(true)}
-            <Line type="monotone" dataKey="adr" stroke={coloreSerie(2)} dot={false} name="ADR" strokeWidth={2} />
-            {datiComp && (
-              <Line type="monotone" dataKey="adr_comp" stroke={coloreSerie(2)} dot={false}
-                name={`ADR ${compLabel}`} {...STILE_CONFRONTO} />
-            )}
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>
+      {/* Grafico ADR — intera stagione, giornaliero o settimanale */}
+      <GraficoAdr hotel={hotel} giorni={giorniMerged} settimane={settimane} settimaneComp={datiComp?.settimane}
+        isAnnoPrecedente={isAnnoPrecedente} compLabel={datiComp ? compLabel : null} snapDate={snapDate}
+        refStart={refStart} areaRif={areaRif} exportGiorn={exportGiorn} exportSett={exportSett} />
 
       {/* WAVE settimanale: barre WAVE + linea occupazione sulla stessa scala % */}
       {dati.wave && (

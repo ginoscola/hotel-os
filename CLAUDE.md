@@ -509,6 +509,8 @@ stessa fonte `prod_righe` ma per scopi diversi: non collegati tra loro.
 - Confronto snapshot precedente (mutuamente esclusivo con anno precedente, offset 364gg ±30gg tolleranza).
 - Revenue giornaliero: senza confronto → BarChart impilato (Camere/F&B/Extra); con confronto → LineChart `revenue_total` corrente vs confronto.
 - Grafico **ADR giornaliero** (v4.9.4) sotto Occupazione giornaliera: stessi confronti (snapshot precedente / anno precedente, `adr_comp` in `mergeConfrontoGiorni`), scala automatica non da zero.
+  Toggle **Giornaliero/Settimanale** (v4.9.5, `GraficoAdr`, `localStorage('hotel_adr_vista')`): il settimanale usa `settimane[].adr` (totali sab–ven), stessi confronti abbinati per settimana. Linea **Alloggio da Produzione** = categoria `alloggio` di `GET /produzione/report/giornaliero` ÷ camere vendute Revenue, solo giorni prima della snapshot con dati importati; non sostituisce l'ADR ufficiale.
+  ⚠️ **Mr Preno mette spiaggia e parcheggio sulla prima notte** (non evitabile): picchi agli arrivi nell'ADR giornaliero, soprattutto Club. Inoltre, 1/6–15/9/2026, ricavi camere Revenue sotto l'alloggio di Produzione: Club 67,8 vs 84,5 €, International 72,4 vs 88,3 €, Du Parc allineato (127,7 vs 128,9 €), con totali quasi uguali; causa dello scarto non accertata, da verificare su una prenotazione All-Inclusive.
 - Dati giornalieri: collassabili, stato solo in-memory (`useState`), **sempre compresso all'apertura
   della pagina**, come i blocchi "Dati mensili" (non più persistito in localStorage).
 - **Sezione "Dati mensili"** (`SezioneDatiMensili` + helper `aggregaGiorniPerMese` in `DashboardHotel.jsx`,
