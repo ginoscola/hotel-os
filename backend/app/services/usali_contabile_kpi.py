@@ -23,7 +23,7 @@ from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from app.models.revenue import DailyRevenue, Hotel, HotelSeason
-from app.models.usali_contabile import UsaliCategoriaKpi
+from app.models.usali_contabile import UsaliCategoriaKpi, UsaliRiga
 
 CATEGORIE_KPI = ("personale", "food", "beverage", "commissioni", "utenze", "altro")
 
@@ -58,6 +58,13 @@ def categoria_di(riga, mappa: dict):
     nome = str(_a(riga, "conto_nome")).strip().lower()
     rep = (_a(riga, "reparto") or "").strip().lower()
     return mappa.get((nome, rep)) or mappa.get((nome, ""))
+
+
+def risultato_per_mese(db: Session, anno: int) -> dict:
+    """{mese: risultato netto contabile di tutte le strutture}, usato da Tesoreria per stimare le imposte."""
+    righe = db.query(UsaliRiga.mese, func.sum(UsaliRiga.importo)).filter(UsaliRiga.anno == anno) \
+        .group_by(UsaliRiga.mese).all()
+    return dict(righe)
 
 
 def produzione_mensile(db: Session, struttura: str, anno: int) -> dict:

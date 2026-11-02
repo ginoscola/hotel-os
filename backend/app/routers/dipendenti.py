@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import richiedi_admin, richiedi_utente_attivo
@@ -712,6 +713,23 @@ def _costo_lavoro_per_struttura(import_ids: list[int], db: Session) -> dict[str,
         s['costo_aziendale'] = round(s['costo_aziendale'], 2)
         s['n_dipendenti'] = len(s.pop('dipendenti_set'))
     return totali
+
+
+# Voci del cedolino versate con l'F24 del mese dopo (l'INAIL ha scadenze proprie)
+VOCI_F24 = ("irpef", "contr_prev_dip", "contr_prev_az", "altri_enti")
+
+
+def costi_f24_per_mese(db: Session) -> dict:
+    """{(anno, mese di paga): Decimal} dovuto con l'F24 secondo i cedolini, usato da Tesoreria."""
+    righe = (
+        db.query(PayrollImport.anno, PayrollImport.mese, func.sum(PayrollEntry.importo))
+        .join(PayrollEntry, PayrollEntry.import_id == PayrollImport.id)
+        .join(PayrollCostType, PayrollCostType.id == PayrollEntry.cost_type_id)
+        .filter(PayrollImport.is_test.is_(False), PayrollCostType.code.in_(VOCI_F24))
+        .group_by(PayrollImport.anno, PayrollImport.mese)
+        .all()
+    )
+    return {(anno, mese): totale for anno, mese, totale in righe}
 
 
 def _arricchisci_parent_code(righe: list[dict], db: Session) -> list[dict]:

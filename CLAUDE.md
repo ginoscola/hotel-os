@@ -2433,7 +2433,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
-| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⏳ dati raccolti e strategia presentata (30/10/2026); codice non iniziato, serve ok |
+| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⏳ blocco A fatto (02/11/2026, solo backend); blocchi B–D da fare, serve ok per ognuno |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
@@ -3142,6 +3142,37 @@ Risposte dell'utente:
    Mare Mosso e Buona Onda (lavoro nel modulo Budget, fuori dalla Tesoreria, con strategia propria).
 4. **Avvio del blocco A: in attesa** — l'utente ha chiesto di aspettare.
 
+### Fase 3 — Blocco A fatto (02/11/2026)
+Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
+- Tabella `tesoreria_impegni` (`tes008_2026`, applicata al DB reale): unica per fisco e, dai blocchi successivi,
+  affitti/mutuo/interventi (la specifica ne prevedeva una solo fiscale). `codice` stabile: generando di nuovo si
+  aggiornano solo stima e base, mai `importo_confermato`, date spostate (`data_manuale`), pagati, avvisi, manuali.
+- `services/tesoreria_calendario.py` (puro): `scadenza_legale()` (festivi con Pasquetta, proroga dal 1° al 20 agosto →
+  20/8), `genera_scadenze()`, `simula_credito()` (ordine di scadenza; prima della dichiarazione al massimo 5.000 €),
+  `abbina_gruppo()` (un addebito chiude più F24 della stessa scadenza; automatico solo con importo esatto).
+- `routers/tesoreria_impegni.py`: `GET|POST /impegni`, `PUT|DELETE /impegni/{id}` (il calendario non si elimina),
+  `GET|PUT /impegni/parametri`, `POST /impegni/genera`, `POST /impegni/abbina`, `POST /impegni/{id}/abbinamento`
+  (conferma|scarta|annulla, su tutto il gruppo), `POST /impegni/tari/anteprima|conferma`
+  (`services/tesoreria_tari_parser.py`: rata unica se presente; scansione → errore, importi a mano).
+- **Dati reali in `app_config['tesoreria_fiscale_parametri']`**, non in git: imposte da dichiarazione, IVA di agosto
+  versata, totali TARI, F24 storici 2025 dalle quietanze, tributi fissi, tranche del credito IVA (12.379,13 € di
+  residuo + 57.266 € 2026 **stimati** come l'anno prima, dal 16/04/2027). Caricati il 02/11/2026 con 35 scadenze e
+  l'avviso TARI n. 4553.
+- Decisioni accolte dall'utente: tassa di soggiorno il 15 del mese dopo il trimestre; IVA solo agosto; 1040 a mano;
+  1075/4731 fuori; acconti il 20/7 modificabili; registro ERICE nel calendario.
+- **Collaudo sul 2026** (quietanze e banca): date degli F24 tutte corrette; cedolini vs dovuto gen–set 89.322 € contro
+  92.781 € (−3,7%; luglio −4.061 €, gennaio −1.929 €, gli altri entro ±1.309 €); 6099 usato 44.886,87 € ✓;
+  tassa T3 30.616 € contro 30.030,50 € versati.
+- ⚠️ **Stima IVA da vendite e acquisti scartata dopo il collaudo**: agosto 2026 dava 23.140 € contro 5.281,61 € versati
+  (non vede il credito del mese prima né l'IVA degli affitti di agosto). Si usa l'ultimo importo versato.
+- ⚠️ **Gli F24 oltre al credito IVA hanno altri crediti non stimati** (1701, 1704, 1631, 1627: 26.090 € nel 2026, 28.554 €
+  nel 2025, fino a 9.157 € al mese d'estate): la previsione degli F24 è il dovuto lordo, quindi prudente di circa 26.000 €
+  l'anno. Da decidere se modellarli.
+- ⚠️ **IRES 2026 stimata 18.179 €** (reddito ~75.700 €: gen–set contabili + ott–dic alla media gen–mar) contro 3.773 € del
+  2025: senza concordato, ma stima grezza che pesa su saldo e acconti 2027 finché non c'è la dichiarazione.
+- Mancano: chiamata automatica di `abbina_impegni()` dopo l'import degli estratti conto (ora da endpoint);
+  aggiornamento di `crediti_iva` quando arriva la dichiarazione IVA.
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
@@ -3156,6 +3187,9 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **Corrispettivi → tassa di soggiorno incassata**: `report_fatturati()` di `routers/corrispettivi_report.py`
   (`mesi[].per_struttura[].tassa_soggiorno`, annullati esclusi) in `_tassa_incassata_per_mese()` di
   `routers/tesoreria_kpi.py`.
+- **Dipendenti → F24**: `costi_f24_per_mese()` di `routers/dipendenti.py` (voci `VOCI_F24`) in `dati_fiscali()` di
+  `routers/tesoreria_impegni.py`. **Contabilità USALI → IRES**: `risultato_per_mese()` di `services/usali_contabile_kpi.py`.
+  **Corrispettivi → tassa di soggiorno futura**: `_tassa_incassata_per_mese()` di `tesoreria_kpi.py`.
 - **Tesoreria interna**: `tesoreria_import.conferma_import`/`elimina_import` chiamano
   `ricalcola_abbinamenti()` di `tesoreria_abbinamenti.py` (gli estratti conto cambiano gli abbinamenti).
 - **Corrispettivi → export**: `_risposta_tabella()` di `routers/corrispettivi_documenti.py` (xlsx/csv/pdf
@@ -3245,6 +3279,9 @@ esistenti, mai query duplicate sulle loro tabelle.
   blocco A** (tabelle `tesoreria_impegni` + calendario fiscale + lettore avviso TARI + collaudo sul 2026) —
   l'utente ha detto "domani partiremo"; confermare comunque con lui prima di scrivere codice, e prima del
   blocco C verificare che il Budget includa i ristoranti.
+- **02/11/2026** — Fase 3, blocco A fatto (solo backend, vedi sezione). Collaudo sul 2026 con quietanze e banca; dati
+  fiscali reali e avviso TARI caricati. **Serve il riavvio del backend** per gli endpoint. **Prossimo passo**: blocco B
+  (affitti, mutuo con `xlrd`, ricorrenti, interventi, carte), con strategia e ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

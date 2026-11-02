@@ -284,3 +284,40 @@ class TesoreriaFornitoreBanca(Base):
     created_at       = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (UniqueConstraint("codice_fornitore", "nome_banca", name="uq_tesoreria_fornitore_banca"),)
+
+
+TIPI_IMPEGNO = ("f24_dipendenti", "iva", "ires", "irap", "tassa_soggiorno", "tari", "tributo_fisso", "altro")
+FONTI_IMPEGNO = ("calendario", "avviso", "manuale")
+STATI_IMPEGNO = ("stimato", "confermato", "pagato")
+ABBINAMENTI_IMPEGNO = ("automatico", "proposto", "confermato", "scartato")
+
+
+class TesoreriaImpegno(Base):
+    """Uscita futura certa o stimata (Fase 3): oggi calendario fiscale, poi affitti, mutuo, interventi.
+
+    `codice` identifica la scadenza tra una generazione e l'altra: generando di nuovo si aggiornano solo
+    stima e base di calcolo, mai `importo_confermato` né una data spostata a mano (`data_manuale`).
+    `coperto_credito` è ricalcolato dalla simulazione del credito IVA; da pagare in banca = importo − coperto."""
+    __tablename__ = "tesoreria_impegni"
+
+    id                 = Column(Integer, primary_key=True, autoincrement=True)
+    codice             = Column(String(80), nullable=False, unique=True)   # es. 'f24_dipendenti:2026-10'
+    tipo               = Column(String(20), nullable=False, index=True)    # TIPI_IMPEGNO
+    fonte              = Column(String(12), nullable=False)                # FONTI_IMPEGNO
+    descrizione        = Column(String(200), nullable=False)
+    competenza         = Column(String(20), nullable=True)                 # '2026-10', '2026-T3', '2026'
+    data_scadenza      = Column(Date, nullable=False, index=True)
+    data_manuale       = Column(Boolean, nullable=False, default=False, server_default="false")
+    importo_stimato    = Column(Numeric(14, 2), nullable=False, default=0, server_default="0")
+    importo_confermato = Column(Numeric(14, 2), nullable=True)             # vince sulla stima
+    base_stima         = Column(String(255), nullable=True)                # da dove viene la stima
+    compensabile       = Column(Boolean, nullable=False, default=True, server_default="true")
+    coperto_credito    = Column(Numeric(14, 2), nullable=False, default=0, server_default="0")
+    stato              = Column(String(12), nullable=False, default="stimato", server_default="stimato")  # STATI_IMPEGNO
+    movimento_id       = Column(Integer, ForeignKey("tesoreria_movimenti.id", ondelete="SET NULL"), nullable=True,
+                                index=True)
+    abbinamento        = Column(String(12), nullable=True)                 # ABBINAMENTI_IMPEGNO
+    nota               = Column(String(255), nullable=True)
+    utente_id          = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at         = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at         = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
