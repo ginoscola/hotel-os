@@ -3167,7 +3167,7 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
   (non vede il credito del mese prima né l'IVA degli affitti di agosto). Si usa l'ultimo importo versato.
 - ⚠️ **Gli F24 oltre al credito IVA hanno altri crediti non stimati** (1701, 1704, 1631, 1627: 26.090 € nel 2026, 28.554 €
   nel 2025, fino a 9.157 € al mese d'estate): la previsione degli F24 è il dovuto lordo, quindi prudente di circa 26.000 €
-  l'anno. Da decidere se modellarli.
+  l'anno. **Decisione dell'utente (02/11/2026): nel blocco C stimarli, con base i mesi dell'anno prima.**
 - ⚠️ **IRES 2026 stimata 18.179 €** (reddito ~75.700 €: gen–set contabili + ott–dic alla media gen–mar) contro 3.773 € del
   2025: senza concordato, ma stima grezza che pesa su saldo e acconti 2027 finché non c'è la dichiarazione.
 - Mancano: chiamata automatica di `abbina_impegni()` dopo l'import degli estratti conto (ora da endpoint);
