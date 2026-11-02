@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.tesoreria import (
     STATI_INTERVENTO, TesoreriaCategoria, TesoreriaConto, TesoreriaContrattoAffitto, TesoreriaImpegno,
-    TesoreriaIntervento, TesoreriaRataAffitto, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
+    TesoreriaIntervento, TesoreriaInterventoScadenza, TesoreriaRataAffitto, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
 )
 from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno
 from app.routers.tesoreria_report import _addebiti_candidati
@@ -82,14 +82,27 @@ def _previsti_ricorrenti(db: Session, oggi: date, orizzonte: date) -> list:
     return out
 
 
+def _fatture_collegate(db: Session, intervento_id: int) -> list:
+    return db.query(TesoreriaInterventoScadenza).filter(TesoreriaInterventoScadenza.intervento_id == intervento_id).all()
+
+
+def residuo_intervento(db: Session, i: TesoreriaIntervento) -> Optional[Decimal]:
+    """Stima meno le fatture collegate, già tra le uscite certe dello scadenzario. Mai sotto zero."""
+    if i.importo_stimato is None:
+        return None
+    collegato = sum((f.importo for f in _fatture_collegate(db, i.id)), Decimal(0))
+    return max(i.importo_stimato - collegato, Decimal(0))
+
+
 def _previsti_interventi(db: Session) -> list:
-    return [
-        dict(codice=f"intervento:{i.id}", tipo="intervento", competenza=i.mese_previsto.strftime("%Y-%m"),
-             descrizione=f"Intervento: {i.descrizione}", data=fine_mese(i.mese_previsto), importo=i.importo_stimato,
-             base=f"Intervento ({i.stato})", stato="stimato")
-        for i in db.query(TesoreriaIntervento).filter(TesoreriaIntervento.inclusa_in_previsione.is_(True))
-        if i.importo_stimato is not None and i.mese_previsto is not None and i.stato != "pagato"
-    ]
+    out = []
+    for i in db.query(TesoreriaIntervento).filter(TesoreriaIntervento.inclusa_in_previsione.is_(True)):
+        residuo = residuo_intervento(db, i)
+        if residuo and i.mese_previsto is not None and i.stato != "pagato":
+            out.append(dict(codice=f"intervento:{i.id}", tipo="intervento", competenza=i.mese_previsto.strftime("%Y-%m"),
+                            descrizione=f"Intervento: {i.descrizione}", data=fine_mese(i.mese_previsto), importo=residuo,
+                            base=f"Intervento ({i.stato})", stato="stimato"))
+    return out
 
 
 def _previsti_carte(db: Session, oggi: date) -> list:

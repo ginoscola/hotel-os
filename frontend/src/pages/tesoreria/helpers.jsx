@@ -29,6 +29,8 @@ export function permessiTesoreria() {
   return { puo_vedere: !!p.puo_vedere, puo_modificare: !!p.puo_modificare, puo_importare: !!p.puo_importare }
 }
 
+export const MESI_BREVI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
+
 /** Data locale in formato ISO (mai toISOString: in Italia la mezzanotte diventa il giorno prima in UTC). */
 export function isoLocale(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

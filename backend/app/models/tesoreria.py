@@ -404,3 +404,29 @@ class TesoreriaIntervento(Base):
     stato           = Column(String(12), nullable=False, default="idea", server_default="idea")  # STATI_INTERVENTO
     inclusa_in_previsione = Column(Boolean, nullable=False, default=False, server_default="false")
     nota            = Column(String(255), nullable=True)
+
+
+class TesoreriaPrevisioneSalvata(Base):
+    """Fotografia di una previsione, da confrontare con il reale nella Fase 4."""
+    __tablename__ = "tesoreria_previsioni_salvate"
+
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    data_riferimento = Column(Date, nullable=False)
+    nota             = Column(String(255), nullable=True)
+    dati             = Column(JSON, nullable=False)                    # risposta completa di GET /previsione
+    utente_id        = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class TesoreriaInterventoScadenza(Base):
+    """Fattura dello scadenzario collegata a un intervento: riduce la stima dell'intervento di quell'importo.
+    Per chiave, con i dati copiati: resta anche quando la scadenza sparisce dalle fotografie."""
+    __tablename__ = "tesoreria_intervento_scadenze"
+
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    intervento_id    = Column(Integer, ForeignKey("tesoreria_interventi.id", ondelete="CASCADE"), nullable=False, index=True)
+    chiave           = Column(String(160), nullable=False, unique=True)
+    fornitore        = Column(String(200), nullable=False)
+    data_scadenza    = Column(Date, nullable=False)
+    numero_documento = Column(String(30), nullable=True)
+    importo          = Column(Numeric(14, 2), nullable=False)

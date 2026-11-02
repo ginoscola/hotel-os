@@ -193,3 +193,52 @@ def test_permessi(client):
     utente_corrente["u"] = VIEWER
     assert client.get("/tesoreria/previsione/parametri").status_code == 200
     assert client.put("/tesoreria/previsione/parametri", json={}).status_code == 403
+
+
+def test_applica_prova_sposta_e_toglie_senza_alterare_l_originale():
+    from app.services.tesoreria_previsione import applica_prova
+    a = Certa(date(2027, 1, 31), D("100"), "affitti", None, 1, "affitto:DPH:1")
+    b = Certa(date(2027, 3, 31), D("50"), "interventi", None, 2, "intervento:9")
+    nuove = applica_prova([a, b], {1: date(2027, 9, 1)}, {"intervento:9"}, [Certa(date(2027, 2, 28), D("7"), "interventi")])
+    assert [c.data for c in nuove] == [date(2027, 9, 1), date(2027, 2, 28)]
+    assert a.data == date(2027, 1, 31)
+
+
+def _rata_manuale(client, giorno, importo=1000):
+    return client.post("/tesoreria/impegni", json={"descrizione": "Rata", "data_scadenza": giorno, "importo": importo}).json()
+
+
+def test_prova_cambia_il_risultato_ma_non_salva(client):
+    anno = date.today().year + 1
+    client.put("/tesoreria/impegni/parametri", json={"orizzonte": f"{anno}-12-31"})
+    i = _rata_manuale(client, f"{anno}-01-15")
+    base = client.get("/tesoreria/previsione").json()
+    r = client.post("/tesoreria/previsione/prova", json={"sposta": {str(i["id"]): f"{anno}-10-15"}})
+    assert r.status_code == 200, r.text
+    gennaio = lambda d: next(x for x in d["scenari"]["realista"] if (x["anno"], x["mese"]) == (anno, 1))
+    assert gennaio(base)["totale_certe"] == 1000 and gennaio(r.json())["totale_certe"] == 0
+    assert client.get("/tesoreria/impegni").json()["impegni"][0]["data_scadenza"] == f"{anno}-01-15"
+
+
+def test_salva_elenca_elimina(client, test_engine):
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_previsioni_salvate RESTART IDENTITY"))
+    client.put("/tesoreria/impegni/parametri", json={"orizzonte": f"{date.today().year + 1}-12-31"})
+    s = client.post("/tesoreria/previsione/salva", json={"nota": " prima "})
+    assert s.status_code == 200, s.text
+    assert s.json()["nota"] == "prima"
+    assert len(client.get("/tesoreria/previsione/salvate").json()) == 1
+    assert "scenari" in client.get(f"/tesoreria/previsione/salvate/{s.json()['id']}").json()["dati"]
+    utente_corrente["u"] = VIEWER
+    assert client.post("/tesoreria/previsione/salva", json={}).status_code == 403
+    utente_corrente["u"] = ADMIN
+    assert client.delete(f"/tesoreria/previsione/salvate/{s.json()['id']}").status_code == 200
+    assert client.get("/tesoreria/previsione/salvate").json() == []
+
+
+@pytest.mark.parametrize("formato", ["xlsx", "csv", "pdf"])
+def test_export(client, formato):
+    client.put("/tesoreria/impegni/parametri", json={"orizzonte": f"{date.today().year + 1}-03-31"})
+    r = client.get(f"/tesoreria/previsione/export?scenario=pessimista&formato={formato}")
+    assert r.status_code == 200 and len(r.content) > 100
+    assert client.get("/tesoreria/previsione/export?scenario=boh").status_code == 400

@@ -82,6 +82,18 @@ class Certa:
     importo: Decimal
     gruppo: str                      # fisco, affitti, mutuo, ricorrenti, interventi, carte, fornitori
     categoria: Optional[str] = None  # per sottrarla dalla stima (RAI da utenze, BCC da fornitori_sdd...)
+    ident: Optional[int] = None      # id dell'impegno: serve alle prove
+    codice: Optional[str] = None
+
+
+def applica_prova(certe: list, sposta: dict, togli: set, aggiungi: list) -> list:
+    """Prova "cosa succede se": date spostate {id impegno: data}, codici tolti, voci aggiunte. Non cambia nulla."""
+    out = []
+    for c in certe:
+        if c.codice in togli:
+            continue
+        out.append(Certa(sposta.get(c.ident, c.data), c.importo, c.gruppo, c.categoria, c.ident, c.codice))
+    return out + list(aggiungi)
 
 
 @dataclass

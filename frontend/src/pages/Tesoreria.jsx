@@ -4,10 +4,12 @@
 import { useState } from 'react'
 import { PageHeader, Tabs } from '../components/ui'
 import TabConsuntivo from './tesoreria/TabConsuntivo.jsx'
+import TabImpegni from './tesoreria/TabImpegni.jsx'
 import TabImport from './tesoreria/TabImport.jsx'
 import TabKpi from './tesoreria/TabKpi.jsx'
 import TabMovimenti from './tesoreria/TabMovimenti.jsx'
 import TabPosizione from './tesoreria/TabPosizione.jsx'
+import TabPrevisione from './tesoreria/TabPrevisione.jsx'
 import TabScadenzario from './tesoreria/TabScadenzario.jsx'
 import { permessiTesoreria, useAnagrafiche } from './tesoreria/helpers.jsx'
 
@@ -17,6 +19,8 @@ const TABS = [
   { id: 'posizione', label: 'Posizione' },
   { id: 'consuntivo', label: 'Consuntivo' },
   { id: 'kpi', label: 'KPI' },
+  { id: 'previsione', label: 'Previsione' },
+  { id: 'impegni', label: 'Impegni' },
   { id: 'movimenti', label: 'Movimenti' },
   { id: 'scadenzario', label: 'Scadenzario' },
   { id: 'import', label: 'Import e saldi' },
@@ -47,6 +51,8 @@ export default function Tesoreria() {
       {tab === 'posizione' && <TabPosizione key={versione} onVaiA={vaiA} />}
       {tab === 'consuntivo' && <TabConsuntivo key={versione} conti={conti} />}
       {tab === 'kpi' && <TabKpi key={versione} />}
+      {tab === 'previsione' && <TabPrevisione key={versione} permessi={permessi} />}
+      {tab === 'impegni' && <TabImpegni key={versione} permessi={permessi} />}
       {tab === 'movimenti' && (
         <TabMovimenti key={versione} conti={conti} categorie={categorie} permessi={permessi}
           filtroIniziale={filtroMovimenti} />

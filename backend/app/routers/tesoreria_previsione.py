@@ -6,25 +6,33 @@ import json
 from datetime import date
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.revenue import AppConfig
+from app.models.revenue import User
 from app.models.tesoreria import (
-    TesoreriaCategoria, TesoreriaConto, TesoreriaImpegno, TesoreriaMovimento, TesoreriaRicorrente,
+    TesoreriaCategoria, TesoreriaConto, TesoreriaImpegno, TesoreriaIntervento, TesoreriaMovimento,
+    TesoreriaPrevisioneSalvata, TesoreriaRicorrente,
 )
+from app.routers.corrispettivi_documenti import _risposta_tabella
 from app.routers.budget import ricavi_budget_anno, ricavi_consuntivo_anno
 from app.routers.corrispettivi_report import report_fatturati
 from app.routers.tesoreria_impegni import leggi_parametri as leggi_parametri_fiscali
 from app.routers.tesoreria_impegni_abbina import importo_impegno
 from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
-from app.routers.tesoreria_shared import euro, puo_modificare, puo_vedere
+from app.routers.tesoreria_piani import residuo_intervento
+from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, puo_vedere
 from app.services.budget_ristoranti import totale_budget_anno
 from app.services.tesoreria_previsione import (
-    GRUPPI_CRESCITA, SCENARI, TIPI_FISCO, Certa, DatiPrevisione, calcola_scenario, fattore_budget, parametri_default,
+    GRUPPI_CRESCITA, SCENARI, TIPI_FISCO, Certa, DatiPrevisione, applica_prova, calcola_scenario, fattore_budget, fine_mese,
+    mesi_tra, parametri_default,
 )
 from app.services.tesoreria_saldi import saldo_a_data
 
@@ -109,7 +117,7 @@ def _certe(db: Session, oggi: date) -> list:
             categoria = categorie.get(ricorrenti.get(int(i.codice.split(":")[1])))
         elif i.tipo == "carta":
             categoria = "carte"
-        out.append(Certa(i.data_scadenza, da_pagare, gruppo, categoria))
+        out.append(Certa(i.data_scadenza, da_pagare, gruppo, categoria, i.id, i.codice))
     for s in stato_scadenze(db, oggi)["scadenze"]:
         if s["stato"] in STATI_SCADENZA_APERTA and s["aperto"] > 0:
             out.append(Certa(s["data_scadenza"], Decimal(str(s["aperto"])), "fornitori", "fornitori_bonifici"))
@@ -140,20 +148,127 @@ def _riga_json(r: dict) -> dict:
     }
 
 
-@router.get("/previsione")
-def previsione(db: Session = Depends(get_db), _=Depends(puo_vedere)):
-    oggi = date.today()
-    d = dati_previsione(db, oggi)
+def _storico_saldi(db: Session, oggi: date, n_mesi: int = 12) -> list:
+    """Saldo reale dei conti a fine mese, ultimi `n_mesi` mesi conclusi."""
+    conti = db.query(TesoreriaConto).filter(TesoreriaConto.tipo.in_(TIPI_BANCA), TesoreriaConto.attivo.is_(True)).all()
+    saldi, movimenti = _saldi_e_movimenti(db, [c.id for c in conti])
+    y, m = oggi.year, oggi.month
+    inizio = (y - 1, m) if m > 1 else (y - 2, 12)
+    out = []
+    for a, me in mesi_tra(date(inizio[0], inizio[1], 1), oggi)[:n_mesi]:
+        fine = fine_mese(a, me)
+        if fine >= oggi:
+            continue
+        valori = [saldo_a_data(fine, saldi[c.id], movimenti[c.id]) for c in conti]
+        if all(v is None for v in valori):
+            continue
+        out.append({"anno": a, "mese": me, "saldo": euro(sum((v or Decimal(0) for v in valori), Decimal(0)))})
+    return out
+
+
+def _risposta(d: DatiPrevisione, db: Session) -> dict:
     scenari = {nome: [_riga_json(r) for r in calcola_scenario(d, nome)] for nome in SCENARI}
     minimi = {nome: min(righe, key=lambda r: r["saldo_finale"]) for nome, righe in scenari.items()}
     anno_budget = max(d.budget) if d.budget else None
     return {
-        "oggi": oggi.isoformat(), "saldo_iniziale": euro(d.saldo_iniziale),
+        "oggi": d.oggi.isoformat(), "saldo_iniziale": euro(d.saldo_iniziale),
         "budget": {str(a): euro(v) for a, v in d.budget.items()}, "ricavi": {str(a): euro(v) for a, v in d.ricavi.items()},
         "fattore_budget": round(float(fattore_budget(anno_budget, d.budget, d.ricavi)), 4) if anno_budget else None,
-        "parametri": d.parametri, "scenari": scenari,
+        "parametri": d.parametri, "scenari": scenari, "storico": _storico_saldi(db, d.oggi),
         "minimi": {nome: {"anno": r["anno"], "mese": r["mese"], "saldo": r["saldo_finale"], "stato": r["stato"]} for nome, r in minimi.items()},
     }
+
+
+class ProvaIn(BaseModel):
+    sposta: dict[int, date] = {}            # {id impegno: nuova data}
+    interventi_on: list[int] = []
+    interventi_off: list[int] = []
+
+
+class SalvaIn(BaseModel):
+    nota: Optional[str] = None
+
+
+@router.get("/previsione")
+def previsione(db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    return _risposta(dati_previsione(db, date.today()), db)
+
+
+@router.post("/previsione/prova")
+def prova(corpo: ProvaIn, db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    """Previsione con date spostate o interventi accesi/spenti, senza salvare nulla."""
+    d = dati_previsione(db, date.today())
+    aggiungi = []
+    for intervento in db.query(TesoreriaIntervento).filter(TesoreriaIntervento.id.in_(corpo.interventi_on or [0])):
+        residuo = residuo_intervento(db, intervento)
+        if residuo and intervento.mese_previsto and not intervento.inclusa_in_previsione:
+            aggiungi.append(Certa(fine_mese(intervento.mese_previsto.year, intervento.mese_previsto.month), residuo, "interventi"))
+    d.certe = applica_prova(d.certe, corpo.sposta, {f"intervento:{i}" for i in corpo.interventi_off}, aggiungi)
+    return _risposta(d, db)
+
+
+@router.post("/previsione/salva")
+def salva(corpo: SalvaIn, db: Session = Depends(get_db), utente: User = Depends(puo_modificare)):
+    oggi = date.today()
+    s = TesoreriaPrevisioneSalvata(data_riferimento=oggi, nota=(corpo.nota or "").strip()[:255] or None,
+                                   dati=_risposta(dati_previsione(db, oggi), db), utente_id=getattr(utente, "id", None))
+    db.add(s)
+    db.commit()
+    return _salvata_json(s)
+
+
+def _salvata_json(s: TesoreriaPrevisioneSalvata) -> dict:
+    return {"id": s.id, "data_riferimento": s.data_riferimento.isoformat(), "nota": s.nota, "minimi": s.dati.get("minimi")}
+
+
+@router.get("/previsione/salvate")
+def lista_salvate(db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    righe = db.query(TesoreriaPrevisioneSalvata).order_by(TesoreriaPrevisioneSalvata.id.desc()).all()
+    return [_salvata_json(s) for s in righe]
+
+
+@router.get("/previsione/salvate/{salvata_id}")
+def dettaglio_salvata(salvata_id: int, db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    s = db.get(TesoreriaPrevisioneSalvata, salvata_id)
+    if s is None:
+        raise HTTPException(404, "Previsione salvata non trovata")
+    return {**_salvata_json(s), "dati": s.dati}
+
+
+@router.delete("/previsione/salvate/{salvata_id}")
+def elimina_salvata(salvata_id: int, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    s = db.get(TesoreriaPrevisioneSalvata, salvata_id)
+    if s is None:
+        raise HTTPException(404, "Previsione salvata non trovata")
+    db.delete(s)
+    db.commit()
+    return {"ok": True}
+
+
+COLONNE_CERTE = (("fisco", "Fisco"), ("affitti", "Affitti"), ("mutuo", "Mutuo"), ("ricorrenti", "Ricorrenti"),
+                 ("interventi", "Interventi"), ("carte", "Carte (estratti)"), ("fornitori", "Fornitori (scadenzario)"))
+COLONNE_STIMATE = (("fornitori", "Fornitori stimati"), ("personale", "Personale"), ("utenze", "Utenze"),
+                   ("marketing", "Marketing"), ("carte", "Carte stimate"), ("altre", "Altre"))
+
+
+@router.get("/previsione/export")
+def export(scenario: str = Query("realista"), formato: str = Query("xlsx"), db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    if scenario not in SCENARI:
+        raise HTTPException(400, "Scenario non valido")
+    righe_calc = calcola_scenario(dati_previsione(db, date.today()), scenario)
+    intestazioni = (["Mese", "Saldo iniziale", "Entrate (stima)"] + [n for _k, n in COLONNE_CERTE]
+                    + [n for _k, n in COLONNE_STIMATE] + ["Saldo finale", "Cassa libera a 90 gg"])
+    righe = []
+    for r in righe_calc:
+        righe.append([
+            f"{r['mese']:02d}/{r['anno']}", cella_importo(r["saldo_iniziale"], formato), cella_importo(r["entrate"], formato),
+            *[cella_importo(r["uscite_certe"].get(k, 0), formato) for k, _n in COLONNE_CERTE],
+            *[cella_importo(r["uscite_stimate"].get(k, 0), formato) for k, _n in COLONNE_STIMATE],
+            cella_importo(r["saldo_finale"], formato), cella_importo(r["cassa_libera"], formato),
+        ])
+    n = len(intestazioni)
+    return _risposta_tabella(formato, f"previsione_{scenario}", f"Previsione di cassa, scenario {scenario} (stima)", intestazioni, righe,
+                             larghezze_pdf=[1.2] + [1] * (n - 1), numeriche_pdf=tuple(range(1, n)))
 
 
 @router.get("/previsione/parametri")

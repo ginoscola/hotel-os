@@ -229,6 +229,7 @@ def lista_impegni(data_da: Optional[date] = Query(None), data_a: Optional[date] 
     righe = q.order_by(TesoreriaImpegno.data_scadenza, TesoreriaImpegno.codice).all()
     return {
         "impegni": [_json(i) for i in righe],
+        "credito_iva_previsto": euro(sum((_dec(c["importo"]) for c in leggi_parametri(db)["crediti_iva"]), ZERO)),
         "totale": euro(sum((importo_impegno(i) for i in righe), ZERO)),
         "coperto_credito": euro(sum((i.coperto_credito for i in righe), ZERO)),
         "coperto_altri": euro(sum((i.coperto_altri for i in righe), ZERO)),
