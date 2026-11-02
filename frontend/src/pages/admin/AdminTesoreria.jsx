@@ -1,5 +1,5 @@
 // Admin → Tesoreria: conti (fido e scadenza), categorie (colore, operative o no), regole di
-// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza, piano affitti, interventi.
+// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza, piano affitti, interventi, parametri della previsione.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import api from '../../api/client.js'
 import { formatEuro, formatData, mostraErrore } from '../../utils/format.js'
@@ -580,5 +580,88 @@ export function AdminTesoreriaInterventi() {
         <Button onClick={aggiungi} disabled={!nuovo.trim()}>Aggiungi</Button>
       </div>
     </Card>
+  )
+}
+
+// ── Parametri della previsione ──────────────────────────────────────────────────
+
+const GRUPPI_CRESCITA = [
+  { key: 'fornitori', label: 'Spese F&B e fornitori' },
+  { key: 'marketing', label: 'Marketing e OTA' },
+  { key: 'carte', label: 'Carte di credito' },
+  { key: 'personale', label: 'Personale' },
+  { key: 'utenze', label: 'Utenze' },
+  { key: 'altre', label: 'Altre (spiagge, auto, banca)' },
+]
+const SCENARI_PREVISIONE = { pessimista: 'Pessimista', realista: 'Realista', ottimista: 'Ottimista' }
+
+export function AdminTesoreriaPrevisione() {
+  const [parametri, setParametri] = useState(null)
+  const [crescita, setCrescita] = useState({})
+  const [scenari, setScenari] = useState({})
+  const avvisi = useAvvisi()
+
+  useEffect(() => {
+    api.get('/tesoreria/previsione/parametri').then(r => setParametri(r.data)).catch(e => avvisi.errore(mostraErrore(e)))
+  }, [avvisi])
+
+  const numero = v => Number(String(v).replace(',', '.'))
+  const modificato = Object.keys(crescita).length > 0 || Object.keys(scenari).length > 0
+
+  async function salva() {
+    const corpoCrescita = Object.fromEntries(Object.entries(crescita).map(([k, v]) => [k, v === '' ? null : numero(v)]))
+    const corpoScenari = Object.fromEntries(Object.entries(scenari).map(([nome, valori]) => [
+      nome, Object.fromEntries(Object.entries(valori).map(([k, v]) => [k, numero(v)])),
+    ]))
+    if ([...Object.values(corpoCrescita), ...Object.values(corpoScenari).flatMap(Object.values)].some(v => v !== null && Number.isNaN(v))) {
+      avvisi.errore('Inserire solo numeri'); return
+    }
+    try {
+      setParametri((await api.put('/tesoreria/previsione/parametri', { crescita: corpoCrescita, scenari: corpoScenari })).data)
+      setCrescita({}); setScenari({}); avvisi.successo('Parametri salvati')
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  if (!parametri) return <Loading />
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Card title="Crescita delle uscite rispetto all'anno prima">
+        <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+          Percentuale per gruppo, anche negativa. Campo vuoto = cresce come il Budget rispetto ai ricavi dell'anno prima.
+          Vale per le uscite stimate degli anni futuri, non per quelle già certe (scadenzario, affitti, fisco).
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 420 }}>
+          {GRUPPI_CRESCITA.map(g => {
+            const v = g.key in crescita ? crescita[g.key] : parametri.crescita[g.key] ?? ''
+            return (
+              <Field key={g.key} label={g.label}>
+                <Input value={v} inputMode="decimal" placeholder="come il Budget" modificato={g.key in crescita} style={{ width: 130 }}
+                  onChange={e => setCrescita({ ...crescita, [g.key]: e.target.value })} />
+              </Field>
+            )
+          })}
+        </div>
+      </Card>
+      <Card title="Scenari">
+        <p className="ui-text-muted" style={{ marginBottom: 8 }}>Variazioni percentuali applicate a incassi e uscite stimate.</p>
+        <Table compact>
+          <thead><tr><Th>Scenario</Th><Th num>Incassi %</Th><Th num>Uscite stimate %</Th></tr></thead>
+          <tbody>
+            {Object.entries(SCENARI_PREVISIONE).map(([nome, label]) => (
+              <tr key={nome}>
+                <Td>{label}</Td>
+                {['incassi_pct', 'uscite_stimate_pct'].map(k => (
+                  <Td num key={k}>
+                    <Input value={scenari[nome]?.[k] ?? parametri.scenari[nome][k]} inputMode="decimal" modificato={k in (scenari[nome] || {})} style={{ width: 80 }}
+                      onChange={e => setScenari({ ...scenari, [nome]: { ...(scenari[nome] || {}), [k]: e.target.value } })} />
+                  </Td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
+      <div><Button onClick={salva} disabled={!modificato}>Salva</Button></div>
+    </div>
   )
 }

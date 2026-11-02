@@ -21,6 +21,12 @@ RISTORANTI = {'MMS': 'Mare Mosso — clienti esterni', 'BON': 'Buona Onda'}
 SOGLIA_TREND = 0.05  # stessa soglia della proiezione hotel
 
 
+def totale_budget_anno(db: Session, anno: int, version: str = "v1") -> Decimal:
+    """Incasso a budget dei ristoranti dell'anno, IVA inclusa, usato dalla previsione di cassa della Tesoreria."""
+    return db.query(func.coalesce(func.sum(BudgetRistorante.importo), 0)).filter(
+        BudgetRistorante.season_year == anno, BudgetRistorante.version == version).scalar()
+
+
 def consuntivo_settimanale(anno: int, db: Session) -> dict:
     """{(struttura, week_start): incasso lordo} per le settimane che iniziano nell'anno."""
     righe = (

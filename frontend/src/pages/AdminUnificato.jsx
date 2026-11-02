@@ -10,7 +10,7 @@ import AdminBudgetPrevisione from './admin/AdminBudgetPrevisione.jsx'
 import AdminWave from './admin/AdminWave.jsx'
 import AdminUsaliFnb from './admin/AdminUsaliFnb.jsx'
 import {
-  AdminTesoreriaAffitti, AdminTesoreriaCategorie, AdminTesoreriaConti, AdminTesoreriaInterventi, AdminTesoreriaRegole,
+  AdminTesoreriaAffitti, AdminTesoreriaCategorie, AdminTesoreriaConti, AdminTesoreriaInterventi, AdminTesoreriaPrevisione, AdminTesoreriaRegole,
   AdminTesoreriaSoglie,
 } from './admin/AdminTesoreria.jsx'
 import api from '../api/client.js'
@@ -94,6 +94,7 @@ const SEZIONI = [
       { id: 'tes-soglie',    label: 'Soglie avvisi' },
       { id: 'tes-affitti',   label: 'Piano affitti' },
       { id: 'tes-interventi', label: 'Interventi' },
+      { id: 'tes-previsione', label: 'Parametri previsione' },
     ],
   },
   {
@@ -229,6 +230,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'tes-soglie')           return <AdminTesoreriaSoglie />
   if (sezione === 'tes-affitti')          return <AdminTesoreriaAffitti />
   if (sezione === 'tes-interventi')       return <AdminTesoreriaInterventi />
+  if (sezione === 'tes-previsione')       return <AdminTesoreriaPrevisione />
   if (sezione === 'sistema-debug')        return <SistemaDebug />
   if (sezione === 'backup')               return <AdminBackup />
   if (sezione === 'ui-kit')               return <AdminUiKit />

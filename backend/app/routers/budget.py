@@ -34,6 +34,7 @@ import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from openpyxl.styles import Font
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
 
@@ -784,6 +785,20 @@ def confronto_mensile(
         'version': version,
         'mesi': risultato,
     }
+
+
+def ricavi_budget_anno(db: Session, anno: int, version: str = "v1") -> Decimal:
+    """Ricavi totali a budget degli hotel, usato dalla previsione di cassa della Tesoreria."""
+    return db.query(func.coalesce(func.sum(BudgetEntry.revenue_total_budget), 0)).filter(
+        BudgetEntry.season_year == anno, BudgetEntry.version == version).scalar()
+
+
+def ricavi_consuntivo_anno(db: Session, anno: int) -> Decimal:
+    """Ricavi totali degli hotel dell'anno, snapshot più recente per ogni data."""
+    ultimi = db.query(DailyRevenue.revenue_total).distinct(DailyRevenue.hotel_code, DailyRevenue.data).filter(
+        DailyRevenue.data >= date(anno, 1, 1), DailyRevenue.data <= date(anno, 12, 31),
+    ).order_by(DailyRevenue.hotel_code, DailyRevenue.data, DailyRevenue.snapshot_date.desc()).all()
+    return sum((Decimal(str(r[0] or 0)) for r in ultimi), Decimal(0))
 
 
 def _proiezione_hotel(hotel: Hotel, season_year: int, version: str, db: Session,

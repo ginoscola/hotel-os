@@ -130,7 +130,7 @@ def abbina_impegni(db: Session) -> dict:
         finestra = FINESTRA_TASSA if categoria == "tassa_soggiorno" else FINESTRA_F24
         candidati = [(m.id, -m.importo, abs((m.data_contabile - giorno).days))
                      for m in _movimenti(db, TesoreriaCategoria.codice == categoria, giorno, finestra) if m.id not in usati]
-        da_pagare = sum((max(importo_impegno(i) - i.coperto_credito, ZERO) for i in impegni), ZERO)
+        da_pagare = sum((max(importo_impegno(i) - i.coperto_credito - i.coperto_altri, ZERO) for i in impegni), ZERO)
         scelta = abbina_gruppo(da_pagare, candidati) if da_pagare > 0 else None
         if scelta:
             usati.add(scelta[0])

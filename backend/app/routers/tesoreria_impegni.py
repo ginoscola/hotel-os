@@ -31,6 +31,7 @@ from app.services.tesoreria_calendario import (
     ZERO, DatiFiscali, TrancheCredito, genera_scadenze, reddito_anno_stimato, simula_credito,
 )
 from app.services.tesoreria_parser import ErroreImportTesoreria
+from app.services.tesoreria_previsione import stima_altri_crediti
 from app.services.tesoreria_tari_parser import parse_avviso_tari
 from app.services.usali_contabile_kpi import risultato_per_mese
 
@@ -49,6 +50,7 @@ PARAMETRI_DEFAULT = {
     "f24_storico": {},                     # {'AAAA-MM' mese di paga: dovuto lordo dalle quietanze}
     "fissi": [],                           # [{codice, descrizione, mese, giorno, importo}]
     "crediti_iva": [],                     # [{importo, disponibile_dal, anticipabile_dal?}]
+    "altri_crediti_f24": {},               # {'AAAA-MM' di versamento: 1701, 1704, 1631... dalle quietanze}
 }
 
 
@@ -114,10 +116,20 @@ def _tranche(parametri: dict) -> list:
 
 def ricalcola_credito(db: Session, oggi: date) -> Optional[Decimal]:
     """Riassegna il credito IVA agli impegni non pagati da oggi in poi. Non fa commit. Restituisce il residuo."""
+    parametri = leggi_parametri(db)
     impegni = db.query(TesoreriaImpegno).filter(TesoreriaImpegno.stato != "pagato",
                                                 TesoreriaImpegno.data_scadenza >= oggi).all()
+    storico = {(int(k[:4]), int(k[5:7])): _dec(v) for k, v in parametri["altri_crediti_f24"].items()}
+    usati = {}
+    for i in sorted(impegni, key=lambda x: (x.data_scadenza, x.codice)):
+        i.coperto_altri = ZERO
+        if i.tipo == "f24_dipendenti" and i.compensabile:
+            chiave = (i.data_scadenza.year, i.data_scadenza.month)
+            disponibile = stima_altri_crediti(storico, *chiave) - usati.get(chiave, ZERO)
+            i.coperto_altri = max(min(importo_impegno(i), disponibile), ZERO)
+            usati[chiave] = usati.get(chiave, ZERO) + i.coperto_altri
     coperti, residuo = simula_credito(
-        [(i.id, i.data_scadenza, importo_impegno(i), i.compensabile) for i in impegni], _tranche(leggi_parametri(db)),
+        [(i.id, i.data_scadenza, importo_impegno(i) - i.coperto_altri, i.compensabile) for i in impegni], _tranche(parametri),
     )
     for i in impegni:
         i.coperto_credito = coperti.get(i.id, ZERO)
@@ -126,13 +138,13 @@ def ricalcola_credito(db: Session, oggi: date) -> Optional[Decimal]:
 
 def _json(i: TesoreriaImpegno) -> dict:
     importo = importo_impegno(i)
-    coperto = i.stato != "pagato" and importo > 0 and i.coperto_credito >= importo
+    coperto = i.stato != "pagato" and importo > 0 and i.coperto_credito + i.coperto_altri >= importo
     return {
         "id": i.id, "codice": i.codice, "tipo": i.tipo, "fonte": i.fonte, "descrizione": i.descrizione,
         "competenza": i.competenza, "data_scadenza": i.data_scadenza.isoformat(), "data_manuale": i.data_manuale,
         "importo_stimato": euro(i.importo_stimato), "importo_confermato": euro(i.importo_confermato),
-        "importo": euro(importo), "coperto_credito": euro(i.coperto_credito),
-        "da_pagare": euro(max(importo - i.coperto_credito, ZERO)), "base_stima": i.base_stima,
+        "importo": euro(importo), "coperto_credito": euro(i.coperto_credito), "coperto_altri": euro(i.coperto_altri),
+        "da_pagare": euro(max(importo - i.coperto_credito - i.coperto_altri, ZERO)), "base_stima": i.base_stima,
         "compensabile": i.compensabile, "stato": i.stato, "stato_vista": "coperto" if coperto else i.stato,
         "movimento_id": i.movimento_id, "abbinamento": i.abbinamento, "nota": i.nota,
     }
@@ -219,7 +231,8 @@ def lista_impegni(data_da: Optional[date] = Query(None), data_a: Optional[date] 
         "impegni": [_json(i) for i in righe],
         "totale": euro(sum((importo_impegno(i) for i in righe), ZERO)),
         "coperto_credito": euro(sum((i.coperto_credito for i in righe), ZERO)),
-        "da_pagare": euro(sum((max(importo_impegno(i) - i.coperto_credito, ZERO) for i in righe), ZERO)),
+        "coperto_altri": euro(sum((i.coperto_altri for i in righe), ZERO)),
+        "da_pagare": euro(sum((max(importo_impegno(i) - i.coperto_credito - i.coperto_altri, ZERO) for i in righe), ZERO)),
     }
 
 

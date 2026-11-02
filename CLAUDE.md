@@ -156,7 +156,7 @@ inesistente e non aveva mai funzionato.
 **USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura), `usali-fnb` (reparti cedolini → punto vendita della scheda Food & Beverage)
 **Budget**: `budget-previsione` (AdminBudgetPrevisione — correttivi e parametri della proiezione fine stagione)
 **Statistiche Produzione**: `prod-categorie` (ProdCategorie), `prod-mapping` (ProdMappingDettagli — mapping testo Welcome→categoria)
-**Tesoreria**: `tes-conti`, `tes-categorie`, `tes-regole`, `tes-soglie`, `tes-affitti` (rate in data e %), `tes-interventi` (tutti in `pages/admin/AdminTesoreria.jsx`)
+**Tesoreria**: `tes-conti`, `tes-categorie`, `tes-regole`, `tes-soglie`, `tes-affitti` (rate in data e %), `tes-interventi`, `tes-previsione` (crescita uscite e scenari) (tutti in `pages/admin/AdminTesoreria.jsx`)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
 Dati test: flag `is_test`; `GET|DELETE /admin/test-stats|test-data`, `GET|DELETE /dipendenti/admin/test-stats|test-data`.
 
@@ -2433,7 +2433,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
-| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⏳ blocchi A e B fatti (02/11/2026, v4.11.0); blocchi C–D da fare, serve ok per ognuno |
+| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⏳ blocchi A, B e C fatti (02/11/2026, v4.12.0); blocco D (schede Previsione e Impegni) da fare, serve ok |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
@@ -3200,6 +3200,27 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
   **Non straordinari**: Castellana (ordinario) e il **canone annuo del gestionale** (5.496,10 € il 07/10/2026, "licenze
   stagione 2027"): resta nello storico di `fornitori_bonifici`, così il blocco C lo ritrova a ottobre 2027.
 
+### Fase 3 — Blocco C fatto (02/11/2026, v4.12.0)
+Motore in `services/tesoreria_previsione.py`, dati in `routers/tesoreria_previsione.py`: `GET /tesoreria/previsione`,
+`GET|PUT /tesoreria/previsione/parametri` (Admin `?s=tes-previsione`). Calcolato alla richiesta: Budget e impegni modificati
+valgono subito. Grafico e schede nel blocco D.
+- **Entrate** = entrate in banca del mese di riferimento × Budget dell'anno ÷ ricavi dell'anno prima (hotel + ristoranti, IVA
+  inclusa): il Budget dice quanto, la banca quando. Oggi il ritmo è solo 2026 (nov–dic dal 2025); con più anni si potrà mediare.
+- **Anno di riferimento unico per tutte le categorie**: una categoria senza spese nel mese vale zero. ⚠️ Bug trovato sui dati:
+  cercandolo per categoria, gli assegni di gennaio ripescavano il 2025 (fornitori gennaio 2027 78.664 € invece di 7.782 €).
+- **Uscite stimate** = stesso mese di riferimento senza straordinari, × crescita del gruppo solo negli anni futuri. Crescita in
+  Admin per gruppo (scelta dell'utente): vuoto = come il Budget (default fornitori, marketing, carte), personale/utenze/altre 0%.
+  Escluse perché coperte: affitti, f24, tassa di soggiorno, mutuo, assicurazioni; compensi del marchio esclusi (nessuna data).
+  Si sottraggono scadenzario, ricorrenti, estratti carta e, nel mese in corso, quanto già avvenuto.
+- **Altri crediti F24**: `app_config` `altri_crediti_f24` (dalle quietanze), stesso mese dell'anno prima, colonna
+  `tesoreria_impegni.coperto_altri` (`tes010_2026`), scalati prima del credito IVA.
+- Scenari (Admin): pessimista −10% incassi +5% uscite stimate, ottimista +5% incassi. Fido solo fino a scadenza (30/09/2027).
+- **Collaudo sul 2026** (dati 2025, impegni = movimenti reali, ricavi non scalati): scarto saldo gen–ott da −99.020 € a
+  +25.917 €, a ottobre −85.946 €: **prudente in inverno e autunno** (gennaio 2025 aveva 57.000 € di assegni, ottobre 2025 uscite
+  più alte). Non misura la bontà del Budget. Da rivedere in Fase 4.
+- Previsione reale al 02/11/2026: realista minimo −70.766 € ad aprile 2027, negativo gennaio–maggio; pessimista −97.318 € ad
+  aprile; a dicembre 2027 pessimista −134.547 € **sotto soglia perché il fido scade il 30/09/2027**.
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
@@ -3311,6 +3332,8 @@ esistenti, mai query duplicate sulle loro tabelle.
   (affitti, mutuo con `xlrd`, ricorrenti, interventi, carte), con strategia e ok dell'utente.
 - **02/11/2026 (2)** — Fase 3, blocco B fatto (v4.11.0). **Prossimo passo**: blocco C (motore di previsione, incassi da
   Budget, scenari, altri crediti F24 dalla base dell'anno prima, sottrazione dei ricorrenti dalla stima), con ok dell'utente.
+- **02/11/2026 (3)** — Fase 3, blocco C fatto (v4.12.0). **Prossimo passo**: blocco D (schede Previsione e Impegni, ricorrenti e
+  mutuo in Admin, salva previsione, collegamento interventi–scadenzario), con strategia e ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

@@ -299,7 +299,8 @@ class TesoreriaImpegno(Base):
 
     `codice` identifica la scadenza tra una generazione e l'altra: generando di nuovo si aggiornano solo
     stima e base di calcolo, mai `importo_confermato` né una data spostata a mano (`data_manuale`).
-    `coperto_credito` è ricalcolato dalla simulazione del credito IVA; da pagare in banca = importo − coperto."""
+    `coperto_altri` (stima degli altri crediti degli F24) e `coperto_credito` (simulazione del credito IVA) sono
+    ricalcolati; da pagare in banca = importo − coperti."""
     __tablename__ = "tesoreria_impegni"
 
     id                 = Column(Integer, primary_key=True, autoincrement=True)
@@ -315,6 +316,7 @@ class TesoreriaImpegno(Base):
     base_stima         = Column(String(255), nullable=True)                # da dove viene la stima
     compensabile       = Column(Boolean, nullable=False, default=True, server_default="true")
     coperto_credito    = Column(Numeric(14, 2), nullable=False, default=0, server_default="0")
+    coperto_altri      = Column(Numeric(14, 2), nullable=False, default=0, server_default="0")   # F24: 1701, 1704, 1631...
     stato              = Column(String(12), nullable=False, default="stimato", server_default="stimato")  # STATI_IMPEGNO
     movimento_id       = Column(Integer, ForeignKey("tesoreria_movimenti.id", ondelete="SET NULL"), nullable=True,
                                 index=True)
