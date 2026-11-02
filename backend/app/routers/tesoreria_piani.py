@@ -25,6 +25,7 @@ from app.routers.tesoreria_shared import euro, puo_importare, puo_modificare, pu
 from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_piani import (
     TOLLERANZA_PERCENTUALE, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, nome_corrisponde, parse_piano_mutuo,
+    percentuali_effettive,
 )
 from app.services.tesoreria_report import stato_carta
 
@@ -57,11 +58,19 @@ def _previsti_affitti(db: Session) -> list:
             .order_by(TesoreriaRataAffitto.anno_competenza, TesoreriaRataAffitto.data_prevista, TesoreriaRataAffitto.id).all()
         for anno in sorted({r.anno_competenza for r in rate}):
             dell_anno = [r for r in rate if r.anno_competenza == anno]
-            for r, importo in zip(dell_anno, importi_rate(c.canone_annuo, [x.percentuale for x in dell_anno])):
+            percentuali = _percentuali_anno(db, c, dell_anno)
+            for r, p, importo in zip(dell_anno, percentuali, importi_rate(c.canone_annuo, percentuali)):
                 out.append(dict(codice=f"affitto:{c.codice}:{r.id}", tipo="affitto", competenza=str(anno),
                                 descrizione=f"Affitto {c.codice} canone {anno}", data=r.data_prevista, importo=importo,
-                                base=f"{r.percentuale.normalize():f}% del canone", stato="confermato"))
+                                base=f"{p.normalize():f}% del canone", stato="confermato"))
     return out
+
+
+def _percentuali_anno(db: Session, c, dell_anno: list) -> list:
+    """`dell_anno` in ordine di data. La percentuale salvata dell'ultima rata resta in tabella: torna valida se se ne aggiunge una dopo."""
+    ultima = dell_anno[-1]
+    bloccata = ultima.id is not None and (i := _impegno_rata(db, c, ultima.id)) is not None and i.stato == "pagato"
+    return percentuali_effettive([r.percentuale for r in dell_anno], bloccata)
 
 
 def _previsti_mutuo(db: Session, orizzonte: date) -> list:
@@ -198,12 +207,18 @@ def _impegno_rata(db, contratto, rata_id) -> Optional[TesoreriaImpegno]:
     return db.query(TesoreriaImpegno).filter(TesoreriaImpegno.codice == f"affitto:{contratto.codice}:{rata_id}").first()
 
 
-def _verifica_percentuali(db, contratto_id, anno, percentuale, escludi=None):
-    altre = db.query(TesoreriaRataAffitto).filter(TesoreriaRataAffitto.contratto_id == contratto_id,
-                                                  TesoreriaRataAffitto.anno_competenza == anno)
-    totale = sum((r.percentuale for r in altre if r.id != escludi), Decimal(0)) + percentuale
-    if percentuale <= 0 or totale > CENTO + TOLLERANZA_PERCENTUALE:
-        raise HTTPException(400, f"Le rate del canone {anno} supererebbero il 100% ({totale.normalize():f}%)")
+def _verifica_percentuali(db, c, anno, data_rata, percentuale, escludi=None):
+    """Controlla il piano dell'anno come sarà dopo la modifica, con l'ultima rata automatica."""
+    if percentuale <= 0:
+        raise HTTPException(400, "La percentuale deve essere maggiore di zero")
+    altre = [r for r in db.query(TesoreriaRataAffitto).filter(TesoreriaRataAffitto.contratto_id == c.id,
+                                                              TesoreriaRataAffitto.anno_competenza == anno)
+             if r.id != escludi]
+    prova = TesoreriaRataAffitto(id=escludi, data_prevista=data_rata, percentuale=percentuale)
+    piano = sorted([*altre, prova], key=lambda r: (r.data_prevista, r.id if r.id is not None else float("inf")))
+    effettive = _percentuali_anno(db, c, piano)
+    if min(effettive) <= 0 or sum(effettive) > CENTO + TOLLERANZA_PERCENTUALE:
+        raise HTTPException(400, f"Le rate del canone {anno} prima dell'ultima arrivano già al 100%: ridurle, oppure eliminare l'ultima e reinserirla")
 
 
 def _contratto_json(db, c: TesoreriaContrattoAffitto) -> dict:
@@ -214,15 +229,17 @@ def _contratto_json(db, c: TesoreriaContrattoAffitto) -> dict:
     for anno in sorted({r.anno_competenza for r in rate}):
         dell_anno = [r for r in rate if r.anno_competenza == anno]
         pagato = Decimal(0)
-        for r, importo in zip(dell_anno, importi_rate(c.canone_annuo, [x.percentuale for x in dell_anno])):
+        percentuali = _percentuali_anno(db, c, dell_anno)
+        for n, (r, p, importo) in enumerate(zip(dell_anno, percentuali, importi_rate(c.canone_annuo, percentuali))):
             i = _impegno_rata(db, c, r.id)
             effettivo = importo_impegno(i) if i else importo
             if i and i.stato == "pagato":
                 pagato += effettivo
             righe.append({"id": r.id, "anno_competenza": anno, "data_prevista": (i.data_scadenza if i else r.data_prevista).isoformat(),
-                          "percentuale": float(r.percentuale), "importo": euro(effettivo), "nota": r.nota,
-                          "stato": i.stato if i else "stimato", "abbinamento": i.abbinamento if i else None})
-        pianificato = sum((x.percentuale for x in dell_anno), Decimal(0))
+                          "percentuale": float(p), "automatica": n == len(dell_anno) - 1 and n > 0 and not (i and i.stato == "pagato"),
+                          "importo": euro(effettivo), "nota": r.nota, "stato": i.stato if i else "stimato",
+                          "abbinamento": i.abbinamento if i else None})
+        pianificato = sum(percentuali, Decimal(0))
         anni.append({"anno": anno, "canone": euro(c.canone_annuo), "pagato": euro(pagato), "residuo": euro(c.canone_annuo - pagato),
                      "percentuale_pianificata": float(pianificato),
                      "da_pianificare": euro(max(c.canone_annuo * (CENTO - pianificato) / CENTO, Decimal(0)))})
@@ -289,7 +306,7 @@ def crea_rata(contratto_id: int, corpo: RataIn, db: Session = Depends(get_db), _
     if corpo.anno_competenza is None or corpo.data_prevista is None or corpo.percentuale is None:
         raise HTTPException(400, "Anno, data e percentuale sono obbligatori")
     percentuale = _decimale(corpo.percentuale, "Percentuale")
-    _verifica_percentuali(db, c.id, corpo.anno_competenza, percentuale)
+    _verifica_percentuali(db, c, corpo.anno_competenza, corpo.data_prevista, percentuale)
     db.add(TesoreriaRataAffitto(contratto_id=c.id, anno_competenza=corpo.anno_competenza, data_prevista=corpo.data_prevista,
                                 percentuale=percentuale, nota=corpo.nota))
     db.flush()
@@ -304,9 +321,10 @@ def modifica_rata(rata_id: int, corpo: RataIn, db: Session = Depends(get_db), _=
     i = _impegno_rata(db, c, r.id)
     if i and i.stato == "pagato":
         raise HTTPException(409, "Rata già pagata: annullare prima l'abbinamento con la banca")
-    if corpo.percentuale is not None:
-        percentuale = _decimale(corpo.percentuale, "Percentuale")
-        _verifica_percentuali(db, c.id, r.anno_competenza, percentuale, escludi=r.id)
+    if corpo.percentuale is not None or corpo.data_prevista is not None:
+        percentuale = _decimale(corpo.percentuale, "Percentuale") if corpo.percentuale is not None else r.percentuale
+        with db.no_autoflush:
+            _verifica_percentuali(db, c, r.anno_competenza, corpo.data_prevista or r.data_prevista, percentuale, escludi=r.id)
         r.percentuale = percentuale
     if corpo.data_prevista is not None:
         r.data_prevista = corpo.data_prevista

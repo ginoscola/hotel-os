@@ -153,11 +153,31 @@ def test_rate_in_percentuale_generano_impegni_e_data_si_sposta(client):
     assert i["data_scadenza"] == f"{FUTURO}-03-15" and i["importo"] == 79300 and i["compensabile"] is False
 
 
-def test_percentuali_oltre_il_100_rifiutate(client):
+def test_ultima_rata_automatica_chiude_il_100(client):
+    c = _contratto(client)
+    r = _rata(client, c["id"], f"{FUTURO}-01-31", "30").json()
+    # Una rata sola resta com'è: il resto è da pianificare
+    assert r["rate"][0]["percentuale"] == 30 and r["rate"][0]["automatica"] is False
+    assert r["anni"][0]["da_pianificare"] == pytest.approx(111020, abs=0.01)
+    r = _rata(client, c["id"], f"{FUTURO}-03-31", "20").json()
+    assert [x["percentuale"] for x in r["rate"]] == [30, 70] and r["rate"][1]["automatica"] is True
+    assert r["anni"][0]["da_pianificare"] == 0 and sum(x["importo"] for x in r["rate"]) == 158600
+    # Una rata successiva diventa l'ultima: la precedente torna alla percentuale inserita
+    r = _rata(client, c["id"], f"{FUTURO}-06-30", "10").json()
+    assert [x["percentuale"] for x in r["rate"]] == [30, 20, 50]
+    assert [x["automatica"] for x in r["rate"]] == [False, False, True]
+    # Anche spostando la data: chi diventa ultima chiude il totale
+    r = client.put(f"/tesoreria/piani/affitti/rate/{r['rate'][2]['id']}", json={"data_prevista": f"{FUTURO}-02-15"}).json()
+    assert [x["percentuale"] for x in r["rate"]] == [30, 10, 60]
+    assert r["rate"][1]["data_prevista"] == f"{FUTURO}-02-15"
+
+
+def test_percentuali_che_arrivano_al_100_prima_dell_ultima_rifiutate(client):
     c = _contratto(client)
     assert _rata(client, c["id"], f"{FUTURO}-01-31", "60").status_code == 200
-    assert _rata(client, c["id"], f"{FUTURO}-02-28", "41").status_code == 400
-    assert _rata(client, c["id"], f"{FUTURO}-02-28", "40", anno=FUTURO + 1).status_code == 200
+    assert _rata(client, c["id"], f"{FUTURO}-02-28", "41").status_code == 200
+    assert _rata(client, c["id"], f"{FUTURO}-03-31", "10").status_code == 400
+    assert _rata(client, c["id"], f"{FUTURO}-01-15", "101", anno=FUTURO + 1).status_code == 400
 
 
 def test_abbinamento_con_vecchia_ragione_sociale_e_blocco_rata_pagata(client, test_engine):

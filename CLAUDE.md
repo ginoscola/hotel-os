@@ -3178,6 +3178,7 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
   `/piani/interventi`), `services/tesoreria_piani.py`, `routers/tesoreria_impegni_abbina.py` (`abbina_impegni()`, chiamata
   anche da conferma ed eliminazione degli estratti conto). I piani generano impegni di fonte `piano` con
   `sincronizza_piani()`: correzioni sull'impegno e pagati restano, il resto segue il piano.
+- **Ultima rata automatica** (v4.14.2, richiesta dell'utente): con almeno 2 rate nello stesso anno di canone l'ultima per data chiude il 100% (`percentuali_effettive()`); la % salvata resta in tabella e torna valida se se ne aggiunge una dopo. Una rata sola o un'ultima già pagata restano come sono.
 - **Affitti: ogni rata = data + % del canone dell'anno di competenza** (Admin `?s=tes-affitti`; scelta dell'utente per
   Du Parc, dove le date si decidono in base alla liquidità). Somma per anno ≤ 100%, sotto il 100% la differenza è «da
   pianificare» e non entra in previsione; a 100% l'ultima rata assorbe l'arrotondamento. Date Club/International

@@ -431,7 +431,11 @@ function ContrattoAffitto({ contratto, onAggiorna }) {
                 <tr key={r.id} className={bozze[r.id] ? 'ui-riga-modificata' : undefined}>
                   <Td>{r.anno_competenza}</Td>
                   <Td><Input type="date" value={v.data_prevista} disabled={pagata} onChange={e => modifica(r.id, { data_prevista: e.target.value })} /></Td>
-                  <Td num><Input value={v.percentuale} inputMode="decimal" disabled={pagata} style={{ width: 100 }} onChange={e => modifica(r.id, { percentuale: e.target.value })} /></Td>
+                  <Td num>
+                    <Input value={r.automatica ? r.percentuale : v.percentuale} inputMode="decimal" disabled={pagata || r.automatica} title={r.automatica ? 'Automatica: chiude il 100% del canone' : undefined}
+                      style={{ width: 100 }} onChange={e => modifica(r.id, { percentuale: e.target.value })} />
+                    {r.automatica && <div className="ui-text-muted">automatica</div>}
+                  </Td>
                   <Td num>{formatEuro(r.importo)}</Td>
                   <Td><Badge tono={pagata ? 'ok' : 'neutral'}>{ETICHETTE_STATO_RATA[r.stato] || r.stato}{r.abbinamento === 'proposto' ? ' · da confermare' : ''}</Badge></Td>
                   <Td style={{ whiteSpace: 'nowrap' }}>
@@ -481,8 +485,8 @@ export function AdminTesoreriaAffitti() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <p className="ui-text-muted">
         Ogni rata ha una data e una percentuale del canone dell'anno: modificandole cambia subito la previsione.
-        Le percentuali di un anno non possono superare il 100%; se restano sotto, la differenza è «da pianificare» e non
-        entra in previsione. Una rata pagata in banca non si modifica più.
+        Con almeno due rate nello stesso anno, l'ultima in ordine di data è automatica e chiude il 100%. Con una rata sola
+        la differenza è «da pianificare» e non entra in previsione. Una rata pagata in banca non si modifica più.
       </p>
       {contratti.length === 0 && <StatoVuoto>Nessun contratto</StatoVuoto>}
       {contratti.map(c => (

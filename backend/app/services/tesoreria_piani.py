@@ -27,6 +27,14 @@ def importi_rate(canone: Decimal, percentuali: list) -> list:
     return importi
 
 
+def percentuali_effettive(percentuali: list, ultima_bloccata: bool = False) -> list:
+    """Percentuali in ordine di data. Con almeno due rate l'ultima è automatica e chiude il 100%; una rata sola resta
+    com'è (il resto è da pianificare), e così l'ultima se già pagata."""
+    if len(percentuali) < 2 or ultima_bloccata:
+        return list(percentuali)
+    return [*percentuali[:-1], CENTO - sum(percentuali[:-1])]
+
+
 def _giorno_nel_mese(anno: int, mese: int, giorno: int) -> date:
     return date(anno, mese, min(giorno, calendar.monthrange(anno, mese)[1]))
 
