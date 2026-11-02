@@ -31,49 +31,52 @@ const etichetta = (a, m) => `${MESI_BREVI[m - 1]} ${String(a).slice(2)}`
 const fineMese = (a, m) => isoLocale(new Date(a, m, 0))
 const nomeMese = r => etichetta(r.anno, r.mese)
 
-function datiGrafico(d) {
+function datiGrafico(d, scenario) {
   const passato = d.storico.map(s => ({ label: etichetta(s.anno, s.mese), data: fineMese(s.anno, s.mese), reale: s.saldo }))
   const futuro = d.scenari.realista.map((r, i) => ({
-    label: nomeMese(r), data: fineMese(r.anno, r.mese), realista: r.saldo_finale,
+    label: nomeMese(r), data: fineMese(r.anno, r.mese), previsto: d.scenari[scenario][i].saldo_finale, realista: r.saldo_finale,
     pessimista: d.scenari.pessimista[i].saldo_finale, ottimista: d.scenari.ottimista[i].saldo_finale,
     fascia: [d.scenari.pessimista[i].saldo_finale, d.scenari.ottimista[i].saldo_finale], soglia: -r.fido,
   }))
   // Le due linee si toccano nell'ultimo mese reale, così il grafico non ha un vuoto
-  if (passato.length && futuro.length) passato[passato.length - 1].realista = passato[passato.length - 1].reale
+  if (passato.length && futuro.length) passato[passato.length - 1].previsto = passato[passato.length - 1].reale
   return [...passato, ...futuro]
 }
 
-function TooltipSaldo({ active, payload, label }) {
+function TooltipSaldo({ active, payload, label, scenario }) {
   if (!active || !payload?.length) return null
   const p = payload[0].payload
-  const riga = (nome, v) => v != null && <div>{nome}: <strong>{formatEuroIntero(v)}</strong></div>
+  const riga = (nome, v, chiave) => v != null && (
+    <div style={chiave === scenario ? { color: COLORE_SALDO, fontWeight: 600 } : undefined}>{nome}: <strong>{formatEuroIntero(v)}</strong></div>
+  )
   return (
     <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 6, padding: 8, fontSize: 12 }}>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
       {riga('Saldo reale', p.fascia ? null : p.reale)}
-      {riga('Ottimista', p.ottimista)}
-      {riga('Realista', p.fascia ? p.realista : null)}
-      {riga('Pessimista', p.pessimista)}
+      {riga('Ottimista', p.ottimista, 'ottimista')}
+      {riga('Realista', p.realista, 'realista')}
+      {riga('Pessimista', p.pessimista, 'pessimista')}
       {riga('Soglia fido', p.soglia)}
     </div>
   )
 }
 
-function GraficoSaldo({ d }) {
-  const dati = useMemo(() => datiGrafico(d), [d])
+function GraficoSaldo({ d, scenario }) {
+  const dati = useMemo(() => datiGrafico(d, scenario), [d, scenario])
+  const nomeScenario = SCENARI.find(s => s.value === scenario).label
   return (
     <ResponsiveContainer width="100%" height={320}>
       <ComposedChart data={dati} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 12, fill: colors.textMuted }} interval={1} />
         <YAxis tickFormatter={v => `${Math.round(v / 1000)}k`} width={56} tick={{ fontSize: 12, fill: colors.textMuted }} />
-        <Tooltip content={<TooltipSaldo />} />
+        <Tooltip content={<TooltipSaldo scenario={scenario} />} />
         <Legend formatter={legendaNeutra} />
         {pastReferenceArea(dati, 'data', 'label', d.oggi)}
         <ReferenceLine y={0} stroke={colors.textMuted} />
         <Area dataKey="fascia" name="Da pessimista a ottimista" stroke="none" fill={COLORE_SALDO} fillOpacity={0.15} connectNulls={false} isAnimationActive={false} />
         <Line dataKey="reale" name="Saldo reale" stroke={colors.text} strokeWidth={2} dot={false} isAnimationActive={false} />
-        <Line dataKey="realista" name="Realista" stroke={COLORE_SALDO} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+        <Line dataKey="previsto" name={nomeScenario} stroke={COLORE_SALDO} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
         <Line dataKey="soglia" name="Soglia del fido" stroke={colors.danger} strokeWidth={2} strokeDasharray="6 4" dot={false} type="stepAfter" isAnimationActive={false} />
       </ComposedChart>
     </ResponsiveContainer>
@@ -285,7 +288,7 @@ export default function TabPrevisione({ permessi }) {
       </div>
 
       <Card title="Saldo dei conti a fine mese">
-        <GraficoSaldo d={d} />
+        <GraficoSaldo d={d} scenario={scenario} />
       </Card>
 
       <Card title="Mese per mese" actions={<ExportMenu url={`/tesoreria/previsione/export?scenario=${scenario}`} nome={`previsione_${scenario}`} />}>

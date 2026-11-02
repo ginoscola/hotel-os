@@ -3222,7 +3222,7 @@ valgono subito. Grafico e schede nel blocco D.
   aprile; a dicembre 2027 pessimista −134.547 € **sotto soglia perché il fido scade il 30/09/2027**.
 
 ### Fase 3 — Blocco D fatto (02/11/2026, v4.13.0–4.14.0) — Fase 3 chiusa
-- Schede **Previsione** (`pages/tesoreria/TabPrevisione.jsx`: grafico per mese con saldo reale, realista, fascia pessimista–ottimista,
+- Schede **Previsione** (`pages/tesoreria/TabPrevisione.jsx`: grafico per mese con saldo reale, linea dello scenario scelto nella tabella, fascia pessimista–ottimista,
   soglia del fido, un solo asse; tabella per scenario in `localStorage('tesoreria_previsione_scenario')`; clic sul mese → Drawer;
   export) e **Impegni** (`TabImpegni.jsx`: conferme, voci a mano, abbinamenti proposti, avviso TARI).
 - **Prove**: `POST /tesoreria/previsione/prova` (`sposta`, `interventi_on`, `interventi_off`), `applica_prova()`: ricalcola senza scrivere.
