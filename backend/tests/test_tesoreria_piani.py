@@ -242,6 +242,45 @@ def test_mutuo_da_file_salta_pagate_e_ricarica(client, test_engine):
     assert piano["debito_residuo"] == 150
 
 
+def _scadenza(test_engine, chiave="K1", importo=8000):
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_scadenze, tesoreria_scad_import, tesoreria_intervento_scadenze RESTART IDENTITY CASCADE"))
+        conn.execute(text("""INSERT INTO tesoreria_scad_import (data_fotografia, nome_file, sha256, n_righe, totale, anno_contabile)
+                             VALUES (:d, 'f.xml', 'x', 1, :i, :a)"""), {"d": date.today(), "i": importo, "a": date.today().year})
+        conn.execute(text("""INSERT INTO tesoreria_scadenze (import_id, chiave, data_scadenza, tipo_pagamento, codice_fornitore, fornitore, importo, pareggio)
+                             VALUES (1, :c, :d, 'BONIFICO', 'F1', 'PISCINE SRL', :i, false)"""),
+                     {"c": chiave, "d": date.today() + timedelta(days=30), "i": importo})
+
+
+def test_fattura_collegata_riduce_la_stima_e_si_scollega(client, test_engine):
+    _scadenza(test_engine)
+    client.put("/tesoreria/impegni/parametri", json={"orizzonte": f"{FUTURO}-12-31"})
+    i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Piscina", "fornitore": "PISCINE SRL", "importo_stimato": "10000",
+                                                        "mese_previsto": f"{FUTURO}-03", "inclusa_in_previsione": True}).json()
+    f = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()
+    assert f["candidate"][0]["suggerita"] is True
+    r = client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture", json={"chiave": "K1"})
+    assert r.status_code == 200, r.text
+    assert r.json()["residuo"] == 2000
+    assert _impegni(client)[f"intervento:{i['id']}"]["importo"] == 2000
+    assert client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture", json={"chiave": "K1"}).status_code == 409
+    fid = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["collegate"][0]["id"]
+    assert client.delete(f"/tesoreria/piani/interventi/fatture/{fid}").status_code == 200
+    assert _impegni(client)[f"intervento:{i['id']}"]["importo"] == 10000
+
+
+def test_intervento_pagato_quando_la_fattura_esce_dallo_scadenzario(client, test_engine):
+    _scadenza(test_engine, importo=10000)
+    i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Piscina", "importo_stimato": "10000",
+                                                        "mese_previsto": f"{FUTURO}-03", "inclusa_in_previsione": True}).json()
+    client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture", json={"chiave": "K1"})
+    assert client.get("/tesoreria/piani/interventi").json()[0]["stato"] != "pagato"
+    with test_engine.begin() as conn:
+        conn.execute(text("DELETE FROM tesoreria_scadenze"))
+    client.post("/tesoreria/impegni/genera")
+    assert client.get("/tesoreria/piani/interventi").json()[0]["stato"] == "pagato"
+
+
 def test_permessi_viewer(client):
     utente_corrente["u"] = VIEWER
     assert client.get("/tesoreria/piani/affitti").status_code == 200

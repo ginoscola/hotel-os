@@ -20,10 +20,11 @@ from app.models.tesoreria import (
 )
 from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno
 from app.routers.tesoreria_report import _addebiti_candidati
+from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.routers.tesoreria_shared import euro, puo_importare, puo_modificare, puo_vedere
 from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_piani import (
-    TOLLERANZA_PERCENTUALE, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, parse_piano_mutuo,
+    TOLLERANZA_PERCENTUALE, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, nome_corrisponde, parse_piano_mutuo,
 )
 from app.services.tesoreria_report import stato_carta
 
@@ -122,8 +123,27 @@ def _previsti_carte(db: Session, oggi: date) -> list:
     return out
 
 
+STATI_PAGATA = ("pagata_banca", "pagata_manuale")
+
+
+def _aggiorna_interventi_pagati(db: Session, oggi: date) -> None:
+    """Intervento pagato: fatture a coprire tutta la stima, tutte pagate o uscite dallo scadenzario."""
+    collegati = db.query(TesoreriaIntervento).join(
+        TesoreriaInterventoScadenza, TesoreriaInterventoScadenza.intervento_id == TesoreriaIntervento.id,
+    ).filter(TesoreriaIntervento.stato != "pagato").distinct().all()
+    if not collegati:
+        return
+    aperte = {s["chiave"]: s["stato"] for s in stato_scadenze(db, oggi)["scadenze"]}
+    for i in collegati:
+        fatture = _fatture_collegate(db, i.id)
+        pagate = all(f.chiave not in aperte or aperte[f.chiave] in STATI_PAGATA for f in fatture)
+        if pagate and residuo_intervento(db, i) == 0:
+            i.stato = "pagato"
+
+
 def sincronizza_piani(db: Session, oggi: date) -> dict:
     """Allinea gli impegni di fonte 'piano' ai piani. Non fa commit."""
+    _aggiorna_interventi_pagati(db, oggi)
     orizzonte = _orizzonte(db)
     previsti = (_previsti_affitti(db) + _previsti_mutuo(db, orizzonte) + _previsti_ricorrenti(db, oggi, orizzonte)
                 + _previsti_interventi(db) + _previsti_carte(db, oggi))
@@ -453,10 +473,12 @@ class InterventoIn(BaseModel):
     nota: Optional[str] = None
 
 
-def _intervento_json(i: TesoreriaIntervento) -> dict:
+def _intervento_json(db: Session, i: TesoreriaIntervento) -> dict:
+    fatture = _fatture_collegate(db, i.id)
     return {"id": i.id, "descrizione": i.descrizione, "struttura_code": i.struttura_code, "fornitore": i.fornitore,
             "importo_stimato": euro(i.importo_stimato), "mese_previsto": i.mese_previsto.strftime("%Y-%m") if i.mese_previsto else None,
-            "stato": i.stato, "inclusa_in_previsione": i.inclusa_in_previsione, "nota": i.nota}
+            "stato": i.stato, "inclusa_in_previsione": i.inclusa_in_previsione, "nota": i.nota, "n_fatture": len(fatture),
+            "fatture_collegate": euro(sum((f.importo for f in fatture), Decimal(0))), "residuo": euro(residuo_intervento(db, i))}
 
 
 def _applica_intervento(i: TesoreriaIntervento, corpo: InterventoIn):
@@ -481,7 +503,7 @@ def _applica_intervento(i: TesoreriaIntervento, corpo: InterventoIn):
 
 @router.get("/piani/interventi")
 def lista_interventi(db: Session = Depends(get_db), _=Depends(puo_vedere)):
-    return [_intervento_json(i) for i in db.query(TesoreriaIntervento).order_by(TesoreriaIntervento.id)]
+    return [_intervento_json(db, i) for i in db.query(TesoreriaIntervento).order_by(TesoreriaIntervento.id)]
 
 
 @router.post("/piani/interventi")
@@ -493,7 +515,7 @@ def crea_intervento(corpo: InterventoIn, db: Session = Depends(get_db), _=Depend
     db.add(i)
     db.flush()
     _applica(db)
-    return _intervento_json(i)
+    return _intervento_json(db, i)
 
 
 @router.put("/piani/interventi/{intervento_id}")
@@ -504,7 +526,7 @@ def modifica_intervento(intervento_id: int, corpo: InterventoIn, db: Session = D
     _applica_intervento(i, corpo)
     db.flush()
     _applica(db)
-    return _intervento_json(i)
+    return _intervento_json(db, i)
 
 
 @router.delete("/piani/interventi/{intervento_id}")
@@ -513,6 +535,63 @@ def elimina_intervento(intervento_id: int, db: Session = Depends(get_db), _=Depe
     if i is None:
         raise HTTPException(404, "Intervento non trovato")
     db.delete(i)
+    db.flush()
+    _applica(db)
+    return {"ok": True}
+
+
+# ── Fatture collegate agli interventi ───────────────────────────────────────────
+
+class FatturaIn(BaseModel):
+    chiave: str
+
+
+def _fattura_json(f: TesoreriaInterventoScadenza) -> dict:
+    return {"id": f.id, "chiave": f.chiave, "fornitore": f.fornitore, "data_scadenza": f.data_scadenza.isoformat(),
+            "numero_documento": f.numero_documento, "importo": euro(f.importo)}
+
+
+@router.get("/piani/interventi/{intervento_id}/fatture")
+def fatture_intervento(intervento_id: int, db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    """Collegate e collegabili: le scadenze aperte, prima quelle del fornitore previsto."""
+    i = db.get(TesoreriaIntervento, intervento_id)
+    if i is None:
+        raise HTTPException(404, "Intervento non trovato")
+    gia = {c for (c,) in db.query(TesoreriaInterventoScadenza.chiave)}
+    candidate = []
+    for s in stato_scadenze(db, date.today())["scadenze"]:
+        if s["chiave"] in gia or s["stato"] in ("pareggio", "residuo") or s["importo"] <= 0:
+            continue
+        candidate.append({"chiave": s["chiave"], "fornitore": s["fornitore"], "data_scadenza": s["data_scadenza"].isoformat(),
+                          "numero_documento": s.get("numero_documento"), "importo": euro(Decimal(str(s["importo"]))),
+                          "suggerita": bool(i.fornitore) and nome_corrisponde(s["fornitore"], [i.fornitore])})
+    candidate.sort(key=lambda c: (not c["suggerita"], c["fornitore"], c["data_scadenza"]))
+    return {"collegate": [_fattura_json(f) for f in _fatture_collegate(db, i.id)], "candidate": candidate[:300]}
+
+
+@router.post("/piani/interventi/{intervento_id}/fatture")
+def collega_fattura(intervento_id: int, corpo: FatturaIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    i = db.get(TesoreriaIntervento, intervento_id)
+    if i is None:
+        raise HTTPException(404, "Intervento non trovato")
+    if db.query(TesoreriaInterventoScadenza).filter(TesoreriaInterventoScadenza.chiave == corpo.chiave).first():
+        raise HTTPException(409, "Fattura già collegata a un intervento")
+    s = next((x for x in stato_scadenze(db, date.today())["scadenze"] if x["chiave"] == corpo.chiave), None)
+    if s is None:
+        raise HTTPException(404, "Scadenza non trovata nello scadenzario attuale")
+    db.add(TesoreriaInterventoScadenza(intervento_id=i.id, chiave=s["chiave"], fornitore=s["fornitore"], data_scadenza=s["data_scadenza"],
+                                       numero_documento=s.get("numero_documento"), importo=Decimal(str(s["importo"]))))
+    db.flush()
+    _applica(db)
+    return _intervento_json(db, i)
+
+
+@router.delete("/piani/interventi/fatture/{fattura_id}")
+def scollega_fattura(fattura_id: int, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    f = db.get(TesoreriaInterventoScadenza, fattura_id)
+    if f is None:
+        raise HTTPException(404, "Collegamento non trovato")
+    db.delete(f)
     db.flush()
     _applica(db)
     return {"ok": True}

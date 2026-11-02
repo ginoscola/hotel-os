@@ -156,7 +156,7 @@ inesistente e non aveva mai funzionato.
 **USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura), `usali-fnb` (reparti cedolini → punto vendita della scheda Food & Beverage)
 **Budget**: `budget-previsione` (AdminBudgetPrevisione — correttivi e parametri della proiezione fine stagione)
 **Statistiche Produzione**: `prod-categorie` (ProdCategorie), `prod-mapping` (ProdMappingDettagli — mapping testo Welcome→categoria)
-**Tesoreria**: `tes-conti`, `tes-categorie`, `tes-regole`, `tes-soglie`, `tes-affitti` (rate in data e %), `tes-interventi`, `tes-previsione` (crescita uscite e scenari) (tutti in `pages/admin/AdminTesoreria.jsx`)
+**Tesoreria**: `tes-conti`, `tes-categorie`, `tes-regole`, `tes-soglie`, `tes-affitti` (rate in data e %), `tes-interventi`, `tes-ricorrenti`, `tes-mutuo`, `tes-fiscale`, `tes-previsione` (crescita uscite e scenari) (tutti in `pages/admin/AdminTesoreria.jsx`)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
 Dati test: flag `is_test`; `GET|DELETE /admin/test-stats|test-data`, `GET|DELETE /dipendenti/admin/test-stats|test-data`.
 
@@ -2433,7 +2433,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
-| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⏳ blocchi A, B e C fatti (02/11/2026, v4.12.0); blocco D (schede Previsione e Impegni) da fare, serve ok |
+| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ✅ v4.14.0 (02/11/2026) — blocchi A–D; ora uso con dati reali, poi Fase 4 (dopo ~1 mese, serve ok) |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
@@ -3221,6 +3221,23 @@ valgono subito. Grafico e schede nel blocco D.
 - Previsione reale al 02/11/2026: realista minimo −70.766 € ad aprile 2027, negativo gennaio–maggio; pessimista −97.318 € ad
   aprile; a dicembre 2027 pessimista −134.547 € **sotto soglia perché il fido scade il 30/09/2027**.
 
+### Fase 3 — Blocco D fatto (02/11/2026, v4.13.0–4.14.0) — Fase 3 chiusa
+- Schede **Previsione** (`pages/tesoreria/TabPrevisione.jsx`: grafico per mese con saldo reale, realista, fascia pessimista–ottimista,
+  soglia del fido, un solo asse; tabella per scenario in `localStorage('tesoreria_previsione_scenario')`; clic sul mese → Drawer;
+  export) e **Impegni** (`TabImpegni.jsx`: conferme, voci a mano, abbinamenti proposti, avviso TARI).
+- **Prove**: `POST /tesoreria/previsione/prova` (`sposta`, `interventi_on`, `interventi_off`), `applica_prova()`: ricalcola senza scrivere.
+  Rate Du Parc e interventi. Valgono solo sugli impegni, non rifanno credito e altri crediti (affitti e interventi non sono compensabili).
+- **Salva previsione**: `POST /previsione/salva`, `GET /previsione/salvate[/{id}]`, `DELETE`, tabella `tesoreria_previsioni_salvate`
+  (`tes011_2026`, risposta intera in JSON) per il confronto della Fase 4.
+- **Fatture e interventi**: `tesoreria_intervento_scadenze` (per chiave, dati copiati), `GET|POST /piani/interventi/{id}/fatture`,
+  `DELETE /piani/interventi/fatture/{id}`. La stima si riduce delle fatture collegate; intervento «pagato» quando coprono tutta la
+  stima e sono pagate o uscite dallo scadenzario (`_aggiorna_interventi_pagati()`).
+- **KPI**: `previsione` in `GET /tesoreria/kpi` solo per l'anno corrente: mesi di autonomia = mesi pieni prima che il saldo
+  realista vada sotto zero (senza fido né contanti), cassa libera a 90 giorni, debito del mutuo. La vecchia stima resta nella nota.
+- Admin: `tes-ricorrenti`, `tes-mutuo`, `tes-fiscale` (dati in `app_config`, al salvataggio rigenera il calendario).
+- ⚠️ Schermate non aperte a video da Claude (nessun browser sul server): solo build, controllo identificatori e test API.
+- Non fatti: "slittamento apertura stagione" e scenari manuali salvati della specifica (la prova copre il caso Du Parc).
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
@@ -3334,6 +3351,9 @@ esistenti, mai query duplicate sulle loro tabelle.
   Budget, scenari, altri crediti F24 dalla base dell'anno prima, sottrazione dei ricorrenti dalla stima), con ok dell'utente.
 - **02/11/2026 (3)** — Fase 3, blocco C fatto (v4.12.0). **Prossimo passo**: blocco D (schede Previsione e Impegni, ricorrenti e
   mutuo in Admin, salva previsione, collegamento interventi–scadenzario), con strategia e ok dell'utente.
+- **02/11/2026 (4) — PUNTO DI RIPRESA.** Fase 3 chiusa (v4.14.0). Da verificare a video le schede nuove. Rate modificate
+  dall'utente: Du Parc canone 2026 al 50% (79.300 € da pianificare, fuori previsione), International 33,3% × 3 (99,9%).
+  **Prossimo passo**: uso reale, poi Fase 4 solo con ok dell'utente (strategia prima).
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

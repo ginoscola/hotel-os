@@ -1,13 +1,15 @@
 // Admin → Tesoreria: conti (fido e scadenza), categorie (colore, operative o no), regole di
-// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza, piano affitti, interventi, parametri della previsione.
+// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza, piano affitti, interventi, ricorrenti, mutuo, dati fiscali,
+// parametri della previsione.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import api from '../../api/client.js'
 import { formatEuro, formatData, mostraErrore } from '../../utils/format.js'
 import {
-  Badge, Button, Card, Checkbox, Field, Input, Loading, Select, StatoVuoto, Table, Td, Th, useAvvisi, useConferma,
+  Badge, Button, Card, Checkbox, Field, FileButton, Input, Loading, Modal, Select, StatoVuoto, Table, Td, Th, useAvvisi, useConferma,
 } from '../../components/ui'
 import { ETICHETTE_SEGNO, ETICHETTE_TIPO_CONTO, ModaleRegola } from '../tesoreria/helpers.jsx'
 
+const oggi = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const TIPI_CATEGORIA = { entrata: 'Entrata', uscita: 'Uscita', neutra: 'Neutra' }
 
 function SceltaColore({ value, onChange }) {
@@ -499,6 +501,7 @@ const STRUTTURE_INTERVENTO = ['DPH', 'CLB', 'INT', 'BON']
 export function AdminTesoreriaInterventi() {
   const [interventi, setInterventi] = useState(null)
   const [nuovo, setNuovo] = useState('')
+  const [fatture, setFatture] = useState(null)
   const { bozze, modifica, scarta } = useBozze()
   const avvisi = useAvvisi()
   const conferma = useConferma()
@@ -534,12 +537,13 @@ export function AdminTesoreriaInterventi() {
     <Card title="Interventi straordinari">
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
         Un intervento entra in previsione solo con «In previsione» attivo, importo e mese: l'uscita è messa a fine mese.
-        Finché mancano le cifre può restare qui come promemoria.
+        Finché mancano le cifre può restare qui come promemoria. Collegando le fatture dello scadenzario la stima si riduce
+        (sono già tra le uscite certe); quando sono tutte pagate e coprono la stima, l'intervento diventa «Pagato».
       </p>
       {interventi.length === 0 ? <StatoVuoto>Nessun intervento</StatoVuoto> : (
         <Table compact>
           <thead>
-            <tr><Th>Descrizione</Th><Th>Struttura</Th><Th>Fornitore</Th><Th num>Importo (€)</Th><Th>Mese</Th><Th>Stato</Th><Th center>In previsione</Th><Th></Th></tr>
+            <tr><Th>Descrizione</Th><Th>Struttura</Th><Th>Fornitore</Th><Th num>Importo (€)</Th><Th>Mese</Th><Th>Stato</Th><Th center>In previsione</Th><Th num>Ancora da fatturare</Th><Th></Th></tr>
           </thead>
           <tbody>
             {interventi.map(i => {
@@ -563,7 +567,9 @@ export function AdminTesoreriaInterventi() {
                     </Select>
                   </Td>
                   <Td center><Checkbox checked={v.inclusa_in_previsione} onChange={x => set({ inclusa_in_previsione: x })} /></Td>
+                  <Td num>{i.residuo != null ? formatEuro(i.residuo) : '—'}</Td>
                   <Td style={{ whiteSpace: 'nowrap' }}>
+                    <Button size="sm" variant="secondary" onClick={() => setFatture(i)}>Fatture ({i.n_fatture})</Button>{' '}
                     {bozze[i.id] ? <>
                       <Button size="sm" onClick={() => salva(i)}>Salva</Button>{' '}
                       <Button size="sm" variant="ghost" onClick={() => scarta(i.id)}>Annulla</Button>
@@ -579,7 +585,56 @@ export function AdminTesoreriaInterventi() {
         <Field label="Nuovo intervento"><Input value={nuovo} style={{ width: 260 }} onChange={e => setNuovo(e.target.value)} /></Field>
         <Button onClick={aggiungi} disabled={!nuovo.trim()}>Aggiungi</Button>
       </div>
+      {fatture && <ModaleFatture intervento={fatture} onChiudi={() => { setFatture(null); carica() }} />}
     </Card>
+  )
+}
+
+function ModaleFatture({ intervento, onChiudi }) {
+  const [dati, setDati] = useState(null)
+  const [scelta, setScelta] = useState('')
+  const avvisi = useAvvisi()
+  const carica = useCallback(async () => {
+    try { setDati((await api.get(`/tesoreria/piani/interventi/${intervento.id}/fatture`)).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }, [intervento.id, avvisi])
+  useEffect(() => { carica() }, [carica])
+
+  async function collega() {
+    try { await api.post(`/tesoreria/piani/interventi/${intervento.id}/fatture`, { chiave: scelta }); setScelta(''); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  async function scollega(f) {
+    try { await api.delete(`/tesoreria/piani/interventi/fatture/${f.id}`); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  return (
+    <Modal titolo={`Fatture — ${intervento.descrizione}`} onChiudi={onChiudi} larghezza={640} footer={<Button onClick={onChiudi}>Chiudi</Button>}>
+      {!dati ? <Loading /> : <>
+        {dati.collegate.length === 0 ? <StatoVuoto>Nessuna fattura collegata.</StatoVuoto> : (
+          <Table compact>
+            <thead><tr><Th>Fornitore</Th><Th>N.</Th><Th>Scadenza</Th><Th num>Importo</Th><Th></Th></tr></thead>
+            <tbody>
+              {dati.collegate.map(f => (
+                <tr key={f.id}>
+                  <Td>{f.fornitore}</Td><Td>{f.numero_documento || '—'}</Td><Td>{formatData(f.data_scadenza)}</Td><Td num>{formatEuro(f.importo)}</Td>
+                  <Td><Button size="sm" variant="ghost" onClick={() => scollega(f)}>Togli</Button></Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
+          <Field label="Scadenza dello scadenzario (prima quelle del fornitore previsto)" style={{ flex: 1 }}>
+            <Select value={scelta} onChange={e => setScelta(e.target.value)}>
+              <option value="">—</option>
+              {dati.candidate.map(c => (
+                <option key={c.chiave} value={c.chiave}>{c.fornitore} · {c.numero_documento || 's.n.'} · {formatData(c.data_scadenza)} · {formatEuro(c.importo)}</option>
+              ))}
+            </Select>
+          </Field>
+          <Button onClick={collega} disabled={!scelta}>Collega</Button>
+        </div>
+      </>}
+    </Modal>
   )
 }
 
@@ -662,6 +717,233 @@ export function AdminTesoreriaPrevisione() {
         </Table>
       </Card>
       <div><Button onClick={salva} disabled={!modificato}>Salva</Button></div>
+    </div>
+  )
+}
+
+// ── Ricorrenti ──────────────────────────────────────────────────────────────────
+
+const VUOTO_RICORRENTE = { descrizione: '', categoria_id: '', importo: '', giorno: 1, mesi: '' }
+const mesiDaTesto = t => String(t).split(/[\s,;]+/).filter(Boolean).map(Number)
+
+export function AdminTesoreriaRicorrenti() {
+  const [ricorrenti, setRicorrenti] = useState(null)
+  const [categorie, setCategorie] = useState([])
+  const [nuovo, setNuovo] = useState(VUOTO_RICORRENTE)
+  const { bozze, modifica, scarta } = useBozze()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
+
+  const carica = useCallback(async () => {
+    try {
+      const [r, c] = await Promise.all([api.get('/tesoreria/piani/ricorrenti'), api.get('/tesoreria/categorie')])
+      setRicorrenti(r.data); setCategorie(c.data.filter(x => x.tipo !== 'entrata'))
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }, [avvisi])
+  useEffect(() => { carica() }, [carica])
+
+  function corpo(b) {
+    const out = { ...b }
+    if ('importo' in out) out.importo = String(out.importo).replace(',', '.')
+    if ('mesi' in out) out.mesi = mesiDaTesto(out.mesi)
+    if ('giorno' in out) out.giorno = Number(out.giorno)
+    if ('categoria_id' in out) out.categoria_id = Number(out.categoria_id)
+    return out
+  }
+  async function salva(r) {
+    try { await api.put(`/tesoreria/piani/ricorrenti/${r.id}`, corpo(bozze[r.id])); scarta(r.id); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  async function aggiungi() {
+    try { await api.post('/tesoreria/piani/ricorrenti', corpo(nuovo)); setNuovo(VUOTO_RICORRENTE); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  async function elimina(r) {
+    if (!await conferma({ titolo: 'Eliminare il ricorrente?', messaggio: r.descrizione, pericolo: true })) return
+    try { await api.delete(`/tesoreria/piani/ricorrenti/${r.id}`); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  if (!ricorrenti) return <Loading />
+  const SelectCat = ({ value, onChange }) => (
+    <Select value={value ?? ''} onChange={e => onChange(e.target.value)}>
+      <option value="">—</option>
+      {categorie.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+    </Select>
+  )
+  return (
+    <Card title="Uscite ricorrenti fuori dallo scadenzario">
+      <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+        Mesi separati da virgola (es. 1, 7). La categoria serve a togliere l'importo dalla stima storica, così non conta due volte.
+      </p>
+      <Table compact>
+        <thead><tr><Th>Descrizione</Th><Th>Categoria</Th><Th num>Importo (€)</Th><Th num>Giorno</Th><Th>Mesi</Th><Th center>Attivo</Th><Th></Th></tr></thead>
+        <tbody>
+          {ricorrenti.map(r => {
+            const v = { ...r, ...(bozze[r.id] || {}) }
+            const set = patch => modifica(r.id, patch)
+            return (
+              <tr key={r.id} className={bozze[r.id] ? 'ui-riga-modificata' : undefined}>
+                <Td><Input value={v.descrizione} style={{ width: 300 }} onChange={e => set({ descrizione: e.target.value })} /></Td>
+                <Td><SelectCat value={v.categoria_id} onChange={x => set({ categoria_id: x })} /></Td>
+                <Td num><Input value={v.importo} inputMode="decimal" style={{ width: 90 }} onChange={e => set({ importo: e.target.value })} /></Td>
+                <Td num><Input type="number" min={1} max={31} value={v.giorno} style={{ width: 60 }} onChange={e => set({ giorno: e.target.value })} /></Td>
+                <Td><Input value={Array.isArray(v.mesi) ? v.mesi.join(', ') : v.mesi} style={{ width: 80 }} onChange={e => set({ mesi: e.target.value })} /></Td>
+                <Td center><Checkbox checked={v.attivo} onChange={x => set({ attivo: x })} /></Td>
+                <Td style={{ whiteSpace: 'nowrap' }}>
+                  {bozze[r.id] ? <>
+                    <Button size="sm" onClick={() => salva(r)}>Salva</Button>{' '}
+                    <Button size="sm" variant="ghost" onClick={() => scarta(r.id)}>Annulla</Button>
+                  </> : <Button size="sm" variant="danger-soft" onClick={() => elimina(r)}>Elimina</Button>}
+                </Td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </Table>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12, flexWrap: 'wrap' }}>
+        <Field label="Descrizione"><Input value={nuovo.descrizione} style={{ width: 240 }} onChange={e => setNuovo({ ...nuovo, descrizione: e.target.value })} /></Field>
+        <Field label="Categoria"><SelectCat value={nuovo.categoria_id} onChange={x => setNuovo({ ...nuovo, categoria_id: x })} /></Field>
+        <Field label="Importo (€)"><Input value={nuovo.importo} inputMode="decimal" style={{ width: 90 }} onChange={e => setNuovo({ ...nuovo, importo: e.target.value })} /></Field>
+        <Field label="Giorno"><Input type="number" min={1} max={31} value={nuovo.giorno} style={{ width: 60 }} onChange={e => setNuovo({ ...nuovo, giorno: e.target.value })} /></Field>
+        <Field label="Mesi"><Input value={nuovo.mesi} style={{ width: 80 }} onChange={e => setNuovo({ ...nuovo, mesi: e.target.value })} /></Field>
+        <Button onClick={aggiungi} disabled={!nuovo.descrizione.trim() || !nuovo.categoria_id || !nuovo.importo || !nuovo.mesi}>Aggiungi</Button>
+      </div>
+    </Card>
+  )
+}
+
+// ── Mutuo ───────────────────────────────────────────────────────────────────────
+
+export function AdminTesoreriaMutuo() {
+  const [piano, setPiano] = useState(null)
+  const avvisi = useAvvisi()
+  const carica = useCallback(async () => {
+    try { setPiano((await api.get('/tesoreria/piani/mutuo')).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }, [avvisi])
+  useEffect(() => { carica() }, [carica])
+
+  async function caricaFile(file) {
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const r = (await api.post('/tesoreria/piani/mutuo', fd)).data
+      avvisi.successo(`Piano caricato: ${r.n_rate} rate, ${r.n_pagate} già pagate`); carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  if (!piano) return <Loading />
+  return (
+    <Card title="Piano di ammortamento" actions={<FileButton accept=".xls" onFile={caricaFile}>Carica piano (.xls della banca)</FileButton>}>
+      <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+        Il tasso è variabile: ricaricando il piano si aggiornano le rate da pagare, quelle pagate restano. Debito residuo: <strong>{formatEuro(piano.debito_residuo)}</strong>.
+      </p>
+      {piano.rate.length === 0 ? <StatoVuoto>Nessun piano caricato.</StatoVuoto> : (
+        <Table compact maxHeight="60vh">
+          <thead><tr><Th num>N.</Th><Th>Scadenza</Th><Th num>Capitale</Th><Th num>Interessi</Th><Th num>Rata</Th><Th num>Spese</Th><Th num>Residuo</Th><Th>Pagata</Th></tr></thead>
+          <tbody>
+            {piano.rate.map(r => (
+              <tr key={`${r.finanziamento}-${r.numero}`} className={r.pagata_il ? 'ui-riga-attenuata' : undefined}>
+                <Td num>{r.numero}</Td><Td>{formatData(r.data_scadenza)}</Td><Td num>{formatEuro(r.capitale)}</Td><Td num>{formatEuro(r.interessi)}</Td>
+                <Td num>{formatEuro(r.importo)}</Td><Td num>{formatEuro(r.spese)}</Td><Td num>{r.residuo != null ? formatEuro(r.residuo) : '—'}</Td>
+                <Td>{r.pagata_il ? formatData(r.pagata_il) : '—'}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </Card>
+  )
+}
+
+// ── Dati fiscali ────────────────────────────────────────────────────────────────
+
+function MappaImporti({ titolo, nota, etichetta, valori, onChange }) {
+  const [chiave, setChiave] = useState('')
+  const voci = Object.entries(valori || {}).sort(([a], [b]) => a.localeCompare(b))
+  return (
+    <Card title={titolo}>
+      {nota && <p className="ui-text-muted" style={{ marginBottom: 8 }}>{nota}</p>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
+        {voci.map(([k, v]) => (
+          <Field key={k} label={k}>
+            <Input value={v} inputMode="decimal" style={{ width: 100 }} onChange={e => onChange({ ...valori, [k]: e.target.value })} />
+          </Field>
+        ))}
+        <Field label={`Aggiungi ${etichetta}`}><Input value={chiave} style={{ width: 100 }} onChange={e => setChiave(e.target.value)} /></Field>
+        <Button size="sm" variant="secondary" disabled={!chiave.trim()} onClick={() => { onChange({ ...valori, [chiave.trim()]: 0 }); setChiave('') }}>Aggiungi</Button>
+      </div>
+    </Card>
+  )
+}
+
+export function AdminTesoreriaFiscale() {
+  const [p, setP] = useState(null)
+  const [modificato, setModificato] = useState(false)
+  const avvisi = useAvvisi()
+
+  useEffect(() => {
+    api.get('/tesoreria/impegni/parametri').then(r => setP(r.data)).catch(e => avvisi.errore(mostraErrore(e)))
+  }, [avvisi])
+
+  const aggiorna = patch => { setP({ ...p, ...patch }); setModificato(true) }
+  const numeri = mappa => Object.fromEntries(Object.entries(mappa).map(([k, v]) => [k, Number(String(v).replace(',', '.'))]))
+
+  async function salva() {
+    const corpo = {
+      ...p,
+      giorno_tassa_soggiorno: Number(p.giorno_tassa_soggiorno), acconti_mese: Number(p.acconti_mese), acconti_giorno: Number(p.acconti_giorno),
+      imposte: { ires: numeri(p.imposte.ires || {}), irap: numeri(p.imposte.irap || {}) },
+      iva_agosto: numeri(p.iva_agosto), tari_totali: numeri(p.tari_totali), altri_crediti_f24: numeri(p.altri_crediti_f24), f24_storico: numeri(p.f24_storico),
+      crediti_iva: p.crediti_iva.map(c => ({ ...c, importo: Number(String(c.importo).replace(',', '.')), anticipabile_dal: c.anticipabile_dal || undefined })),
+    }
+    try {
+      await api.put('/tesoreria/impegni/parametri', corpo)
+      await api.post('/tesoreria/impegni/genera')
+      setModificato(false); avvisi.successo('Dati salvati e calendario aggiornato')
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  if (!p) return <Loading />
+  const setCredito = (i, patch) => aggiorna({ crediti_iva: p.crediti_iva.map((c, n) => (n === i ? { ...c, ...patch } : c)) })
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <Button onClick={salva} disabled={!modificato}>Salva e aggiorna il calendario</Button>
+        <span className="ui-text-muted">Questi dati restano solo nel database.</span>
+      </div>
+      <Card title="Date">
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <Field label="Previsione fino al"><Input type="date" value={p.orizzonte} onChange={e => aggiorna({ orizzonte: e.target.value })} /></Field>
+          <Field label="Giorno tassa di soggiorno"><Input type="number" min={1} max={31} value={p.giorno_tassa_soggiorno} style={{ width: 80 }} onChange={e => aggiorna({ giorno_tassa_soggiorno: e.target.value })} /></Field>
+          <Field label="1° acconto: mese"><Input type="number" min={1} max={12} value={p.acconti_mese} style={{ width: 80 }} onChange={e => aggiorna({ acconti_mese: e.target.value })} /></Field>
+          <Field label="1° acconto: giorno"><Input type="number" min={1} max={31} value={p.acconti_giorno} style={{ width: 80 }} onChange={e => aggiorna({ acconti_giorno: e.target.value })} /></Field>
+        </div>
+      </Card>
+      <Card title="Credito IVA">
+        <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+          Una riga per credito. «Intero dal» = dopo la dichiarazione; «5.000 € dal» = quota usabile prima. Aggiornare quando arriva la dichiarazione IVA.
+        </p>
+        <Table compact>
+          <thead><tr><Th num>Importo (€)</Th><Th>Intero dal</Th><Th>5.000 € dal</Th><Th></Th></tr></thead>
+          <tbody>
+            {p.crediti_iva.map((c, i) => (
+              <tr key={i}>
+                <Td num><Input value={c.importo} inputMode="decimal" style={{ width: 110 }} onChange={e => setCredito(i, { importo: e.target.value })} /></Td>
+                <Td><Input type="date" value={c.disponibile_dal} onChange={e => setCredito(i, { disponibile_dal: e.target.value })} /></Td>
+                <Td><Input type="date" value={c.anticipabile_dal || ''} onChange={e => setCredito(i, { anticipabile_dal: e.target.value })} /></Td>
+                <Td><Button size="sm" variant="danger-soft" onClick={() => aggiorna({ crediti_iva: p.crediti_iva.filter((_, n) => n !== i) })}>Togli</Button></Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        <div style={{ marginTop: 8 }}>
+          <Button size="sm" variant="secondary" onClick={() => aggiorna({ crediti_iva: [...p.crediti_iva, { importo: 0, disponibile_dal: oggi() }] })}>Aggiungi credito</Button>
+        </div>
+      </Card>
+      <MappaImporti titolo="IRES da dichiarazione" etichetta="anno" valori={p.imposte.ires} onChange={v => aggiorna({ imposte: { ...p.imposte, ires: v } })} />
+      <MappaImporti titolo="IRAP da dichiarazione" etichetta="anno" valori={p.imposte.irap} onChange={v => aggiorna({ imposte: { ...p.imposte, irap: v } })} />
+      <MappaImporti titolo="IVA di agosto versata" etichetta="anno" valori={p.iva_agosto} onChange={v => aggiorna({ iva_agosto: v })} />
+      <MappaImporti titolo="TARI: totale dell'anno" etichetta="anno" valori={p.tari_totali} onChange={v => aggiorna({ tari_totali: v })} />
+      <MappaImporti titolo="Altri crediti F24 (1701, 1704, 1631, 1627)" nota="Per mese di versamento, dalle quietanze." etichetta="AAAA-MM" valori={p.altri_crediti_f24} onChange={v => aggiorna({ altri_crediti_f24: v })} />
+      <MappaImporti titolo="F24 dipendenti storici" nota="Per mese di paga, dalle quietanze: si usano dove mancano i cedolini." etichetta="AAAA-MM" valori={p.f24_storico} onChange={v => aggiorna({ f24_storico: v })} />
     </div>
   )
 }

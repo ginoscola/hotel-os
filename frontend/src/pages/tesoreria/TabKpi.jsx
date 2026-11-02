@@ -54,6 +54,8 @@ export default function TabKpi() {
 
 function Contenuto({ d }) {
   const a = d.autonomia
+  const pv = d.previsione
+  const meseAnno = x => `${String(x.mese).padStart(2, '0')}/${x.anno}`
   const minimo = d.minimo.anno
   const minimoAp = d.minimo.ap_stesso_periodo
   const costo = d.costo_incassi
@@ -63,8 +65,16 @@ function Contenuto({ d }) {
   return (
     <>
       <div className="ui-kpi-row">
-        <KpiTile size="lg" label="Mesi di autonomia" value={a.mesi != null ? `${a.mesi.toFixed(1).replace('.', ',')} mesi` : '—'}
-          sub={a.data_esaurimento ? `liquidità fino a ~${formatDataIt(a.data_esaurimento)}` : 'in inverno la cassa non cala'} />
+        {pv ? (
+          <KpiTile size="lg" label="Mesi di autonomia (previsione)"
+            value={pv.mesi_autonomia != null ? `${pv.mesi_autonomia} mesi` : 'oltre l\'orizzonte'}
+            sub={pv.primo_mese_negativo ? `saldo previsto sotto zero a fine ${meseAnno(pv.primo_mese_negativo)}` : `saldo positivo fino a ${meseAnno(pv.fino_a)}`} />
+        ) : (
+          <KpiTile size="lg" label="Mesi di autonomia" value={a.mesi != null ? `${a.mesi.toFixed(1).replace('.', ',')} mesi` : '—'}
+            sub={a.data_esaurimento ? `liquidità fino a ~${formatDataIt(a.data_esaurimento)}` : 'in inverno la cassa non cala'} />
+        )}
+        {pv && <KpiTile label="Cassa libera a 90 giorni" value={formatEuro(pv.cassa_libera_90)} colore={pv.cassa_libera_90 < 0 ? colors.danger : undefined} sub="saldo di fine mese meno gli impegni dei 90 giorni dopo" />}
+        {pv && <KpiTile label="Debito residuo del mutuo" value={formatEuro(pv.debito_mutuo)} />}
         <KpiTile label={`Punto più basso ${d.anno}`} value={minimo ? formatEuro(minimo.saldo) : '—'}
           colore={minimo && minimo.saldo < 0 ? colors.danger : undefined}
           sub={minimo ? formatDataIt(minimo.data) : null}
@@ -87,8 +97,8 @@ function Contenuto({ d }) {
       <p className="ui-text-muted">
         Autonomia: liquidità netta di oggi ({formatEuro(a.liquidita_netta)}) divisa per il consumo medio di cassa dei
         mesi senza stagione ({formatDataIt(a.inverno_da)} – {formatDataIt(a.inverno_a)}
-        {a.consumo_mensile != null && <>: {formatEuro(a.consumo_mensile)} al mese</>}). È una stima dallo storico:
-        con la previsione (Fase 3) diventerà il saldo previsto mese per mese.
+        {a.consumo_mensile != null && <>: {formatEuro(a.consumo_mensile)} al mese</>}), stima dallo storico: {a.mesi != null ? `${a.mesi.toFixed(1).replace('.', ',')} mesi` : 'n.d.'}.
+        {pv && ' La tessera usa invece il saldo previsto mese per mese (scenario realista, senza fido e senza contanti): i mesi pieni prima che vada sotto zero.'}
         {!a.inverno_completo && ' Estratti conto incompleti per quel periodo: stima poco affidabile.'}
       </p>
 

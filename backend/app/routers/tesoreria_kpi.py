@@ -61,6 +61,25 @@ def _tassa_incassata_per_mese(db: Session, anno: int) -> dict:
             for m in r["mesi"]}
 
 
+def _kpi_previsione(db: Session, oggi: date) -> Optional[dict]:
+    """Autonomia sul saldo previsto (scenario realista), cassa libera a 90 giorni, debito residuo del mutuo."""
+    # Import qui: la previsione usa gli impegni, che a loro volta leggono la tassa di soggiorno da questo modulo
+    from app.routers.tesoreria_piani import piano_mutuo
+    from app.routers.tesoreria_previsione import dati_previsione
+    from app.services.tesoreria_previsione import calcola_scenario
+    righe = calcola_scenario(dati_previsione(db, oggi), "realista")
+    if not righe:
+        return None
+    negativo = next((i for i, r in enumerate(righe) if r["saldo_finale"] < 0), None)
+    return {
+        "mesi_autonomia": negativo,
+        "primo_mese_negativo": {"anno": righe[negativo]["anno"], "mese": righe[negativo]["mese"]} if negativo is not None else None,
+        "fino_a": {"anno": righe[-1]["anno"], "mese": righe[-1]["mese"]},
+        "cassa_libera_90": euro(righe[0]["cassa_libera"]),
+        "debito_mutuo": piano_mutuo(db=db, _=None)["debito_residuo"],
+    }
+
+
 @router.get("/kpi")
 def kpi(anno: Optional[int] = Query(None, ge=2020, le=2100), db: Session = Depends(get_db), _=Depends(puo_vedere)):
     oggi = date.today()
@@ -194,6 +213,7 @@ def kpi(anno: Optional[int] = Query(None, ge=2020, le=2100), db: Session = Depen
                    "ap_intero": _minimo(serie_ap)},
         "fido": fido,
         "autonomia": autonomia,
+        "previsione": _kpi_previsione(db, oggi) if anno == oggi.year else None,
         "costo_incassi": costo_incassi,
         "peso_uscite": peso,
         "tassa_soggiorno": tassa,
