@@ -3188,9 +3188,12 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
 - Mutuo: `parse_piano_mutuo()` con `xlrd`, importo + 1,50 € di spese (verificato sulle prime 3 rate). Ricaricando il
   piano le rate pagate restano. Impegni fino all'orizzonte, debito residuo su tutto il piano (137.231,22 €). Upload solo
   da endpoint per ora (schermata nel blocco D).
-- Ricorrenti caricati (categoria per il blocco C: **RAI e SIAE sono in `utenze`, BCC in `fornitori_sdd`, da sottrarre
-  dalla stima storica di quelle categorie**): SIAE 2.958,10 € è l'importo 2025, nel 2026 non risulta in banca; polizze
-  Arturo Mancini marzo e aprile 2026 forse una tantum, da verificare. Schermata Admin nel blocco D.
+- Ricorrenti caricati (categoria per il blocco C: **RAI è in `utenze`, BCC in `fornitori_sdd`, da sottrarre dalla stima
+  storica di quelle categorie**). Assicurazioni = **Unipol di Andrea Mancini** ("MANCINI ASSICURAZIONI DI MANCINI ANDREA");
+  **Arturo Mancini Srl è un fornitore di merce (DDT), non un'assicurazione**: tolto dalla regola 21 sul DB reale (il seme
+  di `tes001_2026` lo contiene ancora: su un'installazione nuova va tolto). **SIAE non è un ricorrente**: nel 2026
+  pagata probabilmente con carta (non risulta in banca), quindi è già nella stima delle carte del blocco C.
+  Schermata Admin nel blocco D.
 - Interventi: piscina, parcheggio, cella frigorifera inseriti senza importo e fuori previsione (Admin `?s=tes-interventi`).
   Collegamento con lo scadenzario nel blocco D.
 - **Straordinari marcati (7 movimenti, −54.271,98 €)**: Palazzi, Gianni Gianmarco, Design Color, CHS. Non marcati Castellana
