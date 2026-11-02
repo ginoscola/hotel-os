@@ -3189,7 +3189,7 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
   piano le rate pagate restano. Impegni fino all'orizzonte, debito residuo su tutto il piano (137.231,22 €). Upload solo
   da endpoint per ora (schermata nel blocco D).
 - Ricorrenti caricati (categoria per il blocco C: **RAI e SIAE sono in `utenze`, BCC in `fornitori_sdd`, da sottrarre
-  dalla stima storica di quelle categorie**): SIAE 2,958,10 € è l'importo 2025, nel 2026 non risulta in banca; polizze
+  dalla stima storica di quelle categorie**): SIAE 2.958,10 € è l'importo 2025, nel 2026 non risulta in banca; polizze
   Arturo Mancini marzo e aprile 2026 forse una tantum, da verificare. Schermata Admin nel blocco D.
 - Interventi: piscina, parcheggio, cella frigorifera inseriti senza importo e fuori previsione (Admin `?s=tes-interventi`).
   Collegamento con lo scadenzario nel blocco D.
