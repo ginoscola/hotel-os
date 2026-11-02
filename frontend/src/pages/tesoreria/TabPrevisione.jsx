@@ -137,12 +137,14 @@ function DettaglioMese({ riga, onChiudi }) {
 function PannelloProva({ onProva, attiva, onTogli }) {
   const [rate, setRate] = useState(null)
   const [interventi, setInterventi] = useState([])
+  const [rateInterventi, setRateInterventi] = useState([])
   const [sposta, setSposta] = useState({})
   const [accesi, setAccesi] = useState({})
   const avvisi = useAvvisi()
 
   useEffect(() => {
-    Promise.all([api.get('/tesoreria/impegni?tipo=affitto'), api.get('/tesoreria/piani/interventi')]).then(([a, b]) => {
+    Promise.all([api.get('/tesoreria/impegni?tipo=affitto'), api.get('/tesoreria/piani/interventi'), api.get('/tesoreria/impegni?tipo=intervento')]).then(([a, b, c]) => {
+      setRateInterventi(c.data.impegni.filter(i => i.stato !== 'pagato'))
       setRate(a.data.impegni.filter(i => i.codice.startsWith('affitto:DPH:') && i.stato !== 'pagato'))
       setInterventi(b.data)
     }).catch(e => avvisi.errore(mostraErrore(e)))
@@ -165,7 +167,7 @@ function PannelloProva({ onProva, attiva, onTogli }) {
   return (
     <Card title="Prova: cosa succede se">
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
-        Sposta le rate Du Parc o accendi e spegni gli interventi: grafico e tabella si ricalcolano, ma <strong>nulla viene salvato</strong>.
+        Sposta le rate Du Parc e quelle degli interventi in previsione, o accendi e spegni gli interventi: grafico e tabella si ricalcolano, ma <strong>nulla viene salvato</strong>.
         Se la prova ti convince, cambia la rata in Admin → Tesoreria → Piano affitti.
       </p>
       <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -184,15 +186,22 @@ function PannelloProva({ onProva, attiva, onTogli }) {
           <strong>Interventi</strong>
           {interventi.length === 0 && <StatoVuoto>Nessun intervento.</StatoVuoto>}
           {interventi.map(i => {
-            const usabile = i.importo_stimato != null && i.mese_previsto
+            const usabile = i.importo_stimato != null && i.rate.length > 0
             return (
               <div key={i.id} style={{ marginTop: 6 }}>
-                <Checkbox label={`${i.descrizione}${usabile ? ` (${formatEuroIntero(i.importo_stimato)}, ${i.mese_previsto})` : ' — senza importo o mese'}`}
+                <Checkbox label={`${i.descrizione}${usabile ? ` (${formatEuroIntero(i.importo_stimato)}, ${i.rate.length === 1 ? formatData(i.rate[0].data_prevista) : `${i.rate.length} rate`})` : ' — senza importo o rate'}`}
                   checked={i.id in accesi ? accesi[i.id] : i.inclusa_in_previsione}
                   onChange={x => usabile && setAccesi({ ...accesi, [i.id]: x })} />
               </div>
             )
           })}
+          {rateInterventi.map(r => (
+            <div key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+              <span style={{ width: 240 }}>{r.descrizione.replace('Intervento: ', '')} · {formatEuroIntero(r.da_pagare)}</span>
+              <Input type="date" value={sposta[r.id] || r.data_scadenza} modificato={r.id in sposta}
+                onChange={e => setSposta({ ...sposta, [r.id]: e.target.value })} />
+            </div>
+          ))}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>

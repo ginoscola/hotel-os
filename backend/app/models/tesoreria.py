@@ -392,7 +392,7 @@ class TesoreriaRicorrente(Base):
 
 
 class TesoreriaIntervento(Base):
-    """Intervento straordinario: entra in previsione solo se incluso e con importo e mese."""
+    """Intervento straordinario: entra in previsione solo se incluso e con importo e almeno una rata."""
     __tablename__ = "tesoreria_interventi"
 
     id              = Column(Integer, primary_key=True, autoincrement=True)
@@ -400,10 +400,19 @@ class TesoreriaIntervento(Base):
     struttura_code  = Column(String(10), nullable=True)
     fornitore       = Column(String(200), nullable=True)
     importo_stimato = Column(Numeric(14, 2), nullable=True)
-    mese_previsto   = Column(Date, nullable=True)                        # primo giorno del mese
     stato           = Column(String(12), nullable=False, default="idea", server_default="idea")  # STATI_INTERVENTO
     inclusa_in_previsione = Column(Boolean, nullable=False, default=False, server_default="false")
     nota            = Column(String(255), nullable=True)
+
+
+class TesoreriaRataIntervento(Base):
+    """Pagamento previsto di un intervento: data e percentuale della stima. L'ultima per data chiude sempre il 100%."""
+    __tablename__ = "tesoreria_rate_intervento"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    intervento_id = Column(Integer, ForeignKey("tesoreria_interventi.id", ondelete="CASCADE"), nullable=False, index=True)
+    data_prevista = Column(Date, nullable=False)
+    percentuale   = Column(Numeric(9, 6), nullable=False)
 
 
 class TesoreriaPrevisioneSalvata(Base):

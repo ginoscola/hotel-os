@@ -506,6 +506,7 @@ export function AdminTesoreriaInterventi() {
   const [interventi, setInterventi] = useState(null)
   const [nuovo, setNuovo] = useState('')
   const [fatture, setFatture] = useState(null)
+  const [rateDi, setRateDi] = useState(null)
   const { bozze, modifica, scarta } = useBozze()
   const avvisi = useAvvisi()
   const conferma = useConferma()
@@ -540,14 +541,14 @@ export function AdminTesoreriaInterventi() {
   return (
     <Card title="Interventi straordinari">
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
-        Un intervento entra in previsione solo con «In previsione» attivo, importo e mese: l'uscita è messa a fine mese.
-        Finché mancano le cifre può restare qui come promemoria. Collegando le fatture dello scadenzario la stima si riduce
-        (sono già tra le uscite certe); quando sono tutte pagate e coprono la stima, l'intervento diventa «Pagato».
+        Un intervento entra in previsione solo con «In previsione» attivo, importo e almeno una rata (data e percentuale; l'ultima chiude il 100%).
+        Finché mancano le cifre può restare qui come promemoria. A un lavoro puoi collegare più fatture dello scadenzario: la stima si riduce
+        partendo dalla prima rata (le fatture sono già tra le uscite certe); quando sono tutte pagate e coprono la stima, l'intervento diventa «Pagato».
       </p>
       {interventi.length === 0 ? <StatoVuoto>Nessun intervento</StatoVuoto> : (
         <Table compact>
           <thead>
-            <tr><Th>Descrizione</Th><Th>Struttura</Th><Th>Fornitore</Th><Th num>Importo (€)</Th><Th>Mese</Th><Th>Stato</Th><Th center>In previsione</Th><Th num>Ancora da fatturare</Th><Th></Th></tr>
+            <tr><Th>Descrizione</Th><Th>Struttura</Th><Th>Fornitore</Th><Th num>Importo (€)</Th><Th>Pagamenti</Th><Th>Stato</Th><Th center>In previsione</Th><Th num>Ancora da fatturare</Th><Th></Th></tr>
           </thead>
           <tbody>
             {interventi.map(i => {
@@ -564,7 +565,10 @@ export function AdminTesoreriaInterventi() {
                   </Td>
                   <Td><Input value={v.fornitore || ''} style={{ width: 150 }} onChange={e => set({ fornitore: e.target.value })} /></Td>
                   <Td num><Input value={v.importo_stimato ?? ''} inputMode="decimal" style={{ width: 100 }} onChange={e => set({ importo_stimato: e.target.value })} /></Td>
-                  <Td><Input type="month" value={v.mese_previsto || ''} onChange={e => set({ mese_previsto: e.target.value })} /></Td>
+                  <Td style={{ whiteSpace: 'nowrap' }}>
+                    <Button size="sm" variant="secondary" onClick={() => setRateDi(i.id)}>Rate ({i.rate.length})</Button>
+                    {i.rate.length > 0 && <div className="ui-text-muted">{formatData(i.rate[0].data_prevista)}{i.rate.length > 1 ? ` → ${formatData(i.rate.at(-1).data_prevista)}` : ''}</div>}
+                  </Td>
                   <Td>
                     <Select value={v.stato} onChange={e => set({ stato: e.target.value })}>
                       {Object.entries(STATI_INTERVENTO).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -590,7 +594,63 @@ export function AdminTesoreriaInterventi() {
         <Button onClick={aggiungi} disabled={!nuovo.trim()}>Aggiungi</Button>
       </div>
       {fatture && <ModaleFatture intervento={fatture} onChiudi={() => { setFatture(null); carica() }} />}
+      {rateDi && interventi.some(i => i.id === rateDi) && (
+        <ModaleRateIntervento intervento={interventi.find(i => i.id === rateDi)} onChiudi={() => setRateDi(null)}
+          onAggiorna={nuovo => setInterventi(lista => lista.map(x => (x.id === nuovo.id ? nuovo : x)))} />
+      )}
     </Card>
+  )
+}
+
+function ModaleRateIntervento({ intervento, onChiudi, onAggiorna }) {
+  const [data, setData] = useState('')
+  const [percentuali, setPercentuali] = useState({})
+  const avvisi = useAvvisi()
+
+  async function esegui(chiamata) {
+    try { onAggiorna((await chiamata()).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  const aggiungi = () => esegui(() => api.post(`/tesoreria/piani/interventi/${intervento.id}/rate`, { data_prevista: data })).then(() => setData(''))
+  const salvaData = (r, valore) => valore && esegui(() => api.put(`/tesoreria/piani/interventi/rate/${r.id}`, { data_prevista: valore }))
+  const elimina = r => esegui(() => api.delete(`/tesoreria/piani/interventi/rate/${r.id}`))
+
+  async function salvaPercentuale(r) {
+    const valore = percentuali[r.id]
+    if (valore === undefined) return
+    await esegui(() => api.put(`/tesoreria/piani/interventi/rate/${r.id}`, { percentuale: String(valore).replace(',', '.') }))
+    setPercentuali(({ [r.id]: _, ...resto }) => resto)
+  }
+
+  return (
+    <Modal titolo={`Rate — ${intervento.descrizione}`} onChiudi={onChiudi} larghezza={640} footer={<Button onClick={onChiudi}>Chiudi</Button>}>
+      <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+        Con una rata sola il pagamento è unico. Una nuova rata divide a metà la quota dell'ultima: correggi poi le percentuali; l'ultima per data chiude da sola il 100%.
+      </p>
+      {intervento.rate.length === 0 ? <StatoVuoto>Nessuna rata: l'intervento non entra in previsione.</StatoVuoto> : (
+        <Table compact>
+          <thead><tr><Th>Data</Th><Th num>%</Th><Th num>Importo</Th><Th num>Da fatturare</Th><Th></Th></tr></thead>
+          <tbody>
+            {intervento.rate.map(r => (
+              <tr key={r.id}>
+                <Td><Input type="date" value={r.data_prevista} onChange={e => salvaData(r, e.target.value)} /></Td>
+                <Td num>
+                  <Input value={r.automatica ? r.percentuale : (percentuali[r.id] ?? r.percentuale)} inputMode="decimal" disabled={r.automatica} style={{ width: 90 }}
+                    onChange={e => setPercentuali({ ...percentuali, [r.id]: e.target.value })} onBlur={() => salvaPercentuale(r)} />
+                  {r.automatica && <div className="ui-text-muted">automatica</div>}
+                </Td>
+                <Td num>{r.importo != null ? formatEuro(r.importo) : '—'}</Td>
+                <Td num>{r.da_fatturare != null ? formatEuro(r.da_fatturare) : '—'}</Td>
+                <Td><Button size="sm" variant="danger-soft" onClick={() => elimina(r)}>Elimina</Button></Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
+        <Field label="Data della nuova rata"><Input type="date" value={data} onChange={e => setData(e.target.value)} /></Field>
+        <Button onClick={aggiungi} disabled={!data}>Aggiungi rata</Button>
+      </div>
+    </Modal>
   )
 }
 

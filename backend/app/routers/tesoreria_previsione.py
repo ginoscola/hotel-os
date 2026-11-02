@@ -27,7 +27,7 @@ from app.routers.tesoreria_impegni import leggi_parametri as leggi_parametri_fis
 from app.routers.tesoreria_impegni_abbina import importo_impegno
 from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
-from app.routers.tesoreria_piani import residuo_intervento
+from app.routers.tesoreria_piani import rate_intervento
 from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, puo_vedere
 from app.services.budget_ristoranti import totale_budget_anno
 from app.services.tesoreria_previsione import (
@@ -200,10 +200,10 @@ def prova(corpo: ProvaIn, db: Session = Depends(get_db), _=Depends(puo_vedere)):
     d = dati_previsione(db, date.today())
     aggiungi = []
     for intervento in db.query(TesoreriaIntervento).filter(TesoreriaIntervento.id.in_(corpo.interventi_on or [0])):
-        residuo = residuo_intervento(db, intervento)
-        if residuo and intervento.mese_previsto and not intervento.inclusa_in_previsione:
-            aggiungi.append(Certa(fine_mese(intervento.mese_previsto.year, intervento.mese_previsto.month), residuo, "interventi"))
-    d.certe = applica_prova(d.certe, corpo.sposta, {f"intervento:{i}" for i in corpo.interventi_off}, aggiungi)
+        if not intervento.inclusa_in_previsione:
+            aggiungi += [Certa(r.data_prevista, residuo, "interventi") for r, _, residuo in rate_intervento(db, intervento) if residuo > 0]
+    togli = {c.codice for c in d.certe if c.codice and any(c.codice.startswith(f"intervento:{i}:") for i in corpo.interventi_off)}
+    d.certe = applica_prova(d.certe, corpo.sposta, togli, aggiungi)
     return _risposta(d, db)
 
 

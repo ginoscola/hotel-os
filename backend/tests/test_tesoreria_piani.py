@@ -224,14 +224,59 @@ def test_ricorrente_genera_per_ogni_mese_e_si_cancella(client, test_engine):
     assert not _impegni(client)
 
 
-def test_intervento_senza_importo_fuori_previsione(client):
+def _rata_intervento(client, intervento_id, data):
+    r = client.post(f"/tesoreria/piani/interventi/{intervento_id}/rate", json={"data_prevista": data})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _impegni_intervento(client):
+    return sorted((v for k, v in _impegni(client).items() if k.startswith("intervento:")), key=lambda x: x["data_scadenza"])
+
+
+def test_intervento_senza_importo_o_rate_fuori_previsione(client):
     i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Piscina", "struttura_code": "DPH", "inclusa_in_previsione": True}).json()
     assert i["importo_stimato"] is None and not _impegni(client)
-    client.put(f"/tesoreria/piani/interventi/{i['id']}", json={"importo_stimato": "25000", "mese_previsto": f"{FUTURO}-03"})
-    assert _impegni(client)[f"intervento:{i['id']}"]["data_scadenza"] == f"{FUTURO}-03-31"
+    client.put(f"/tesoreria/piani/interventi/{i['id']}", json={"importo_stimato": "25000"})
+    assert not _impegni(client)
+    _rata_intervento(client, i["id"], f"{FUTURO}-03-15")
+    impegni = _impegni_intervento(client)
+    assert impegni[0]["data_scadenza"] == f"{FUTURO}-03-15" and impegni[0]["importo"] == 25000
     client.put(f"/tesoreria/piani/interventi/{i['id']}", json={"inclusa_in_previsione": False})
     assert not _impegni(client)
     assert client.put(f"/tesoreria/piani/interventi/{i['id']}", json={"stato": "boh"}).status_code == 400
+
+
+def test_intervento_a_rate_l_ultima_chiude_il_100(client):
+    i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Piscina", "importo_stimato": "10000", "inclusa_in_previsione": True}).json()
+    r = _rata_intervento(client, i["id"], f"{FUTURO}-01-10")
+    assert [x["percentuale"] for x in r["rate"]] == [100] and r["rate"][0]["automatica"] is True
+    r = _rata_intervento(client, i["id"], f"{FUTURO}-03-10")
+    assert [x["percentuale"] for x in r["rate"]] == [50, 50]
+    r = client.put(f"/tesoreria/piani/interventi/rate/{r['rate'][0]['id']}", json={"percentuale": "30"}).json()
+    assert [x["percentuale"] for x in r["rate"]] == [30, 70]
+    assert [x["importo"] for x in r["rate"]] == [3000, 7000]
+    assert [(x["data_scadenza"], x["importo"]) for x in _impegni_intervento(client)] == [(f"{FUTURO}-01-10", 3000), (f"{FUTURO}-03-10", 7000)]
+    # L'ultima resta automatica anche se le si scrive una percentuale
+    r = client.put(f"/tesoreria/piani/interventi/rate/{r['rate'][1]['id']}", json={"percentuale": "10"}).json()
+    assert [x["percentuale"] for x in r["rate"]] == [30, 70]
+    assert client.put(f"/tesoreria/piani/interventi/rate/{r['rate'][0]['id']}", json={"percentuale": "100"}).status_code == 400
+    # Spostando le date cambia chi è l'ultima, il totale resta il 100%
+    r = client.put(f"/tesoreria/piani/interventi/rate/{r['rate'][0]['id']}", json={"data_prevista": f"{FUTURO}-05-10"}).json()
+    assert [x["percentuale"] for x in r["rate"]] == [70, 30]
+    r = client.delete(f"/tesoreria/piani/interventi/rate/{r['rate'][1]['id']}").json()
+    assert [x["percentuale"] for x in r["rate"]] == [100]
+
+
+def test_prova_accende_e_spegne_interventi_a_rate(client):
+    acceso = client.post("/tesoreria/piani/interventi", json={"descrizione": "A", "importo_stimato": "1000", "inclusa_in_previsione": True}).json()
+    spento = client.post("/tesoreria/piani/interventi", json={"descrizione": "B", "importo_stimato": "1000"}).json()
+    for i in (acceso, spento):
+        _rata_intervento(client, i["id"], f"{FUTURO}-01-10")
+        _rata_intervento(client, i["id"], f"{FUTURO}-02-10")
+    assert len(_impegni_intervento(client)) == 2
+    r = client.post("/tesoreria/previsione/prova", json={"interventi_on": [spento["id"]], "interventi_off": [acceso["id"]]})
+    assert r.status_code == 200, r.text
 
 
 def test_estratto_carta_da_addebitare_poi_sparisce(client, test_engine):
@@ -276,23 +321,35 @@ def test_fattura_collegata_riduce_la_stima_e_si_scollega(client, test_engine):
     _scadenza(test_engine)
     client.put("/tesoreria/impegni/parametri", json={"orizzonte": f"{FUTURO}-12-31"})
     i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Piscina", "fornitore": "PISCINE SRL", "importo_stimato": "10000",
-                                                        "mese_previsto": f"{FUTURO}-03", "inclusa_in_previsione": True}).json()
+                                                        "inclusa_in_previsione": True}).json()
+    _rata_intervento(client, i["id"], f"{FUTURO}-03-31")
     f = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()
     assert f["candidate"][0]["suggerita"] is True
     r = client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture", json={"chiave": "K1"})
     assert r.status_code == 200, r.text
     assert r.json()["residuo"] == 2000
-    assert _impegni(client)[f"intervento:{i['id']}"]["importo"] == 2000
+    assert _impegni_intervento(client)[0]["importo"] == 2000
     assert client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture", json={"chiave": "K1"}).status_code == 409
     fid = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["collegate"][0]["id"]
     assert client.delete(f"/tesoreria/piani/interventi/fatture/{fid}").status_code == 200
-    assert _impegni(client)[f"intervento:{i['id']}"]["importo"] == 10000
+    assert _impegni_intervento(client)[0]["importo"] == 10000
+
+
+def test_fatture_coprono_prima_le_rate_piu_vicine(client, test_engine):
+    _scadenza(test_engine, importo=4000)
+    i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Piscina", "importo_stimato": "10000", "inclusa_in_previsione": True}).json()
+    _rata_intervento(client, i["id"], f"{FUTURO}-01-10")
+    r = _rata_intervento(client, i["id"], f"{FUTURO}-03-10")
+    client.put(f"/tesoreria/piani/interventi/rate/{r['rate'][0]['id']}", json={"percentuale": "30"})
+    client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture", json={"chiave": "K1"})
+    assert [(x["data_scadenza"], x["importo"]) for x in _impegni_intervento(client)] == [(f"{FUTURO}-03-10", 6000)]
 
 
 def test_intervento_pagato_quando_la_fattura_esce_dallo_scadenzario(client, test_engine):
     _scadenza(test_engine, importo=10000)
     i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Piscina", "importo_stimato": "10000",
-                                                        "mese_previsto": f"{FUTURO}-03", "inclusa_in_previsione": True}).json()
+                                                        "inclusa_in_previsione": True}).json()
+    _rata_intervento(client, i["id"], f"{FUTURO}-03-31")
     client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture", json={"chiave": "K1"})
     assert client.get("/tesoreria/piani/interventi").json()[0]["stato"] != "pagato"
     with test_engine.begin() as conn:

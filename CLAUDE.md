@@ -3196,6 +3196,7 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
   Schermata Admin nel blocco D.
 - Interventi: piscina, parcheggio, cella frigorifera inseriti senza importo e fuori previsione (Admin `?s=tes-interventi`).
   Collegamento con lo scadenzario nel blocco D.
+- **Interventi a rate** (v4.15.0, `tes012_2026`, tolto `mese_previsto`): `tesoreria_rate_intervento` (data + %), `POST /piani/interventi/{id}/rate`, `PUT|DELETE /piani/interventi/rate/{id}`; ogni rata è un impegno `intervento:{id}:{rata}`. L'ultima per data chiude il 100% (`_chiudi_al_100()`, salvata in tabella), una sola = pagamento unico; una nuova rata dimezza la quota dell'ultima. Più fatture per lavoro: coprono prima le rate più vicine (`importi_rate_intervento()`).
 - **Straordinari marcati (7 movimenti, −51.275,88 €)**: Palazzi, Design Color, CHS, SG Informatica/Gianni Gianmarco
   dell'avvio del gestionale (acconto 2.500 € del 17/09/2025, saldo 3.600 € del 19/11/2025, FT 6.734,40 € del 15/06/2026).
   **Non straordinari**: Castellana (ordinario) e il **canone annuo del gestionale** (5.496,10 € il 07/10/2026, "licenze

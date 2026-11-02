@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.tesoreria import (
     STATI_INTERVENTO, TesoreriaCategoria, TesoreriaConto, TesoreriaContrattoAffitto, TesoreriaImpegno,
-    TesoreriaIntervento, TesoreriaInterventoScadenza, TesoreriaRataAffitto, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
+    TesoreriaIntervento, TesoreriaInterventoScadenza, TesoreriaRataAffitto, TesoreriaRataIntervento, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
 )
 from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno
 from app.routers.tesoreria_report import _addebiti_candidati
@@ -24,7 +24,7 @@ from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.routers.tesoreria_shared import euro, puo_importare, puo_modificare, puo_vedere
 from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_piani import (
-    TOLLERANZA_PERCENTUALE, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, nome_corrisponde, parse_piano_mutuo,
+    TOLLERANZA_PERCENTUALE, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, importi_rate_intervento, nome_corrisponde, parse_piano_mutuo,
     percentuali_effettive,
 )
 from app.services.tesoreria_report import stato_carta
@@ -104,14 +104,33 @@ def residuo_intervento(db: Session, i: TesoreriaIntervento) -> Optional[Decimal]
     return max(i.importo_stimato - collegato, Decimal(0))
 
 
+def _rate_dell_intervento(db: Session, intervento_id: int) -> list:
+    return db.query(TesoreriaRataIntervento).filter(TesoreriaRataIntervento.intervento_id == intervento_id) \
+        .order_by(TesoreriaRataIntervento.data_prevista, TesoreriaRataIntervento.id).all()
+
+
+def rate_intervento(db: Session, i: TesoreriaIntervento) -> list:
+    """[(rata, importo, da fatturare)] in ordine di data; vuota senza importo stimato."""
+    rate = _rate_dell_intervento(db, i.id)
+    if i.importo_stimato is None or not rate:
+        return []
+    fatturato = sum((f.importo for f in _fatture_collegate(db, i.id)), Decimal(0))
+    calcolate = importi_rate_intervento(i.importo_stimato, [r.percentuale for r in rate], fatturato)
+    return [(r, importo, residuo) for r, (importo, residuo) in zip(rate, calcolate)]
+
+
 def _previsti_interventi(db: Session) -> list:
     out = []
     for i in db.query(TesoreriaIntervento).filter(TesoreriaIntervento.inclusa_in_previsione.is_(True)):
-        residuo = residuo_intervento(db, i)
-        if residuo and i.mese_previsto is not None and i.stato != "pagato":
-            out.append(dict(codice=f"intervento:{i.id}", tipo="intervento", competenza=i.mese_previsto.strftime("%Y-%m"),
-                            descrizione=f"Intervento: {i.descrizione}", data=fine_mese(i.mese_previsto), importo=residuo,
-                            base=f"Intervento ({i.stato})", stato="stimato"))
+        if i.stato == "pagato":
+            continue
+        rate = rate_intervento(db, i)
+        for n, (r, _, residuo) in enumerate(rate, 1):
+            if residuo > 0:
+                rata = f" (rata {n} di {len(rate)})" if len(rate) > 1 else ""
+                out.append(dict(codice=f"intervento:{i.id}:{r.id}", tipo="intervento", competenza=r.data_prevista.strftime("%Y-%m"),
+                                descrizione=f"Intervento: {i.descrizione}{rata}", data=r.data_prevista, importo=residuo,
+                                base=f"Intervento ({i.stato})", stato="stimato"))
     return out
 
 
@@ -485,16 +504,23 @@ class InterventoIn(BaseModel):
     struttura_code: Optional[str] = None
     fornitore: Optional[str] = None
     importo_stimato: Optional[str] = None
-    mese_previsto: Optional[str] = None     # 'AAAA-MM'; '' lo toglie
     stato: Optional[str] = None
     inclusa_in_previsione: Optional[bool] = None
     nota: Optional[str] = None
 
 
+def _rate_json(db: Session, i: TesoreriaIntervento) -> list:
+    rate = _rate_dell_intervento(db, i.id)
+    calcolate = {r.id: (importo, residuo) for r, importo, residuo in rate_intervento(db, i)}
+    return [{"id": r.id, "data_prevista": r.data_prevista.isoformat(), "percentuale": float(r.percentuale), "automatica": n == len(rate) - 1,
+             "importo": euro(calcolate[r.id][0]) if r.id in calcolate else None,
+             "da_fatturare": euro(calcolate[r.id][1]) if r.id in calcolate else None} for n, r in enumerate(rate)]
+
+
 def _intervento_json(db: Session, i: TesoreriaIntervento) -> dict:
     fatture = _fatture_collegate(db, i.id)
     return {"id": i.id, "descrizione": i.descrizione, "struttura_code": i.struttura_code, "fornitore": i.fornitore,
-            "importo_stimato": euro(i.importo_stimato), "mese_previsto": i.mese_previsto.strftime("%Y-%m") if i.mese_previsto else None,
+            "importo_stimato": euro(i.importo_stimato), "rate": _rate_json(db, i),
             "stato": i.stato, "inclusa_in_previsione": i.inclusa_in_previsione, "nota": i.nota, "n_fatture": len(fatture),
             "fatture_collegate": euro(sum((f.importo for f in fatture), Decimal(0))), "residuo": euro(residuo_intervento(db, i))}
 
@@ -512,11 +538,6 @@ def _applica_intervento(i: TesoreriaIntervento, corpo: InterventoIn):
             setattr(i, campo, valore or None)
     if corpo.importo_stimato is not None:
         i.importo_stimato = _decimale(corpo.importo_stimato, "Importo") if corpo.importo_stimato != "" else None
-    if corpo.mese_previsto is not None:
-        try:
-            i.mese_previsto = date.fromisoformat(f"{corpo.mese_previsto}-01") if corpo.mese_previsto else None
-        except ValueError:
-            raise HTTPException(400, "Mese non valido (AAAA-MM)")
 
 
 @router.get("/piani/interventi")
@@ -556,6 +577,74 @@ def elimina_intervento(intervento_id: int, db: Session = Depends(get_db), _=Depe
     db.flush()
     _applica(db)
     return {"ok": True}
+
+
+# ── Rate degli interventi ───────────────────────────────────────────────────────
+
+class RataInterventoIn(BaseModel):
+    data_prevista: Optional[date] = None
+    percentuale: Optional[str] = None
+
+
+def _intervento_o_404(db: Session, intervento_id: int) -> TesoreriaIntervento:
+    i = db.get(TesoreriaIntervento, intervento_id)
+    if i is None:
+        raise HTTPException(404, "Intervento non trovato")
+    return i
+
+
+def _chiudi_al_100(db: Session, intervento_id: int) -> None:
+    """L'ultima rata per data prende quanto manca al 100%: una rata sola vale tutta la stima."""
+    db.flush()
+    rate = _rate_dell_intervento(db, intervento_id)
+    if rate:
+        ultima = CENTO - sum((r.percentuale for r in rate[:-1]), Decimal(0))
+        if ultima <= 0 or any(r.percentuale <= 0 for r in rate[:-1]):
+            raise HTTPException(400, "Le percentuali delle rate devono essere maggiori di zero e lasciare una quota all'ultima")
+        rate[-1].percentuale = ultima
+
+
+@router.post("/piani/interventi/{intervento_id}/rate")
+def crea_rata_intervento(intervento_id: int, corpo: RataInterventoIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    """La nuova rata divide a metà la quota dell'ultima; le percentuali si correggono poi rata per rata."""
+    i = _intervento_o_404(db, intervento_id)
+    if corpo.data_prevista is None:
+        raise HTTPException(400, "La data è obbligatoria")
+    rate = _rate_dell_intervento(db, i.id)
+    quota = CENTO
+    if rate:
+        quota = rate[-1].percentuale / 2
+        rate[-1].percentuale = quota
+    db.add(TesoreriaRataIntervento(intervento_id=i.id, data_prevista=corpo.data_prevista, percentuale=quota))
+    _chiudi_al_100(db, i.id)
+    _applica(db)
+    return _intervento_json(db, i)
+
+
+@router.put("/piani/interventi/rate/{rata_id}")
+def modifica_rata_intervento(rata_id: int, corpo: RataInterventoIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    r = db.get(TesoreriaRataIntervento, rata_id)
+    if r is None:
+        raise HTTPException(404, "Rata non trovata")
+    if corpo.percentuale is not None:
+        r.percentuale = _decimale(corpo.percentuale, "Percentuale")
+    if corpo.data_prevista is not None:
+        r.data_prevista = corpo.data_prevista
+    _chiudi_al_100(db, r.intervento_id)
+    _applica(db)
+    return _intervento_json(db, _intervento_o_404(db, r.intervento_id))
+
+
+@router.delete("/piani/interventi/rate/{rata_id}")
+def elimina_rata_intervento(rata_id: int, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    r = db.get(TesoreriaRataIntervento, rata_id)
+    if r is None:
+        raise HTTPException(404, "Rata non trovata")
+    intervento_id = r.intervento_id
+    db.delete(r)
+    _chiudi_al_100(db, intervento_id)
+    _applica(db)
+    return _intervento_json(db, _intervento_o_404(db, intervento_id))
 
 
 # ── Fatture collegate agli interventi ───────────────────────────────────────────

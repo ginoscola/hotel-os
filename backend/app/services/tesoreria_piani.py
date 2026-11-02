@@ -35,6 +35,16 @@ def percentuali_effettive(percentuali: list, ultima_bloccata: bool = False) -> l
     return [*percentuali[:-1], CENTO - sum(percentuali[:-1])]
 
 
+def importi_rate_intervento(stima: Decimal, percentuali: list, fatturato: Decimal) -> list:
+    """[(importo della rata, quanto ne resta da fatturare)] in ordine di data: le fatture collegate coprono prima le rate più vicine."""
+    out = []
+    for importo in importi_rate(stima, percentuali):
+        coperto = min(importo, fatturato)
+        fatturato -= coperto
+        out.append((importo, importo - coperto))
+    return out
+
+
 def _giorno_nel_mese(anno: int, mese: int, giorno: int) -> date:
     return date(anno, mese, min(giorno, calendar.monthrange(anno, mese)[1]))
 
