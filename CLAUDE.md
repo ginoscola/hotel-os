@@ -3181,8 +3181,7 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
 - **Affitti: ogni rata = data + % del canone dell'anno di competenza** (Admin `?s=tes-affitti`; scelta dell'utente per
   Du Parc, dove le date si decidono in base alla liquidità). Somma per anno ≤ 100%, sotto il 100% la differenza è «da
   pianificare» e non entra in previsione; a 100% l'ultima rata assorbe l'arrotondamento. Date Club/International
-  contrattuali (scelta dell'utente). **Du Parc: 31/01/2027 è una data provvisoria** ("la prima rata la farò più tardi"),
-  da impostare in Admin. Riaddebito del 13/7/2026 escluso, una tantum.
+  contrattuali (scelta dell'utente). **Du Parc: prima rata il 31/01/2027, confermata dall'utente.** Riaddebito del 13/7/2026 escluso, una tantum.
 - Abbinamento affitti su `nomi_banca` (Du Parc: **S.N.C., già S.A.S.**, cambio di ragione sociale), importo esatto →
   automatico, solo nome → proposto; un nome diverso non abbina mai.
 - Mutuo: `parse_piano_mutuo()` con `xlrd`, importo + 1,50 € di spese (verificato sulle prime 3 rate). Ricaricando il
@@ -3196,8 +3195,10 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
   Schermata Admin nel blocco D.
 - Interventi: piscina, parcheggio, cella frigorifera inseriti senza importo e fuori previsione (Admin `?s=tes-interventi`).
   Collegamento con lo scadenzario nel blocco D.
-- **Straordinari marcati (7 movimenti, −54.271,98 €)**: Palazzi, Gianni Gianmarco, Design Color, CHS. Non marcati Castellana
-  (l'utente lo considera ordinario) e SG Informatica di Gianni Gianmarco (2.500 €, 17/09/2025, non elencato all'utente).
+- **Straordinari marcati (7 movimenti, −51.275,88 €)**: Palazzi, Design Color, CHS, SG Informatica/Gianni Gianmarco
+  dell'avvio del gestionale (acconto 2.500 € del 17/09/2025, saldo 3.600 € del 19/11/2025, FT 6.734,40 € del 15/06/2026).
+  **Non straordinari**: Castellana (ordinario) e il **canone annuo del gestionale** (5.496,10 € il 07/10/2026, "licenze
+  stagione 2027"): resta nello storico di `fornitori_bonifici`, così il blocco C lo ritrova a ottobre 2027.
 
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
