@@ -96,7 +96,7 @@ function DettaglioMese({ riga, onChiudi }) {
     api.get(`/tesoreria/impegni?data_da=${primo}&data_a=${fineMese(riga.anno, riga.mese)}`).then(r => setImpegni(r.data.impegni)).catch(() => setImpegni([]))
   }, [riga])
   return (
-    <Drawer titolo={`Dettaglio ${nomeMese(riga)}`} sottotitolo={`Entrate stimate ${formatEuro(riga.entrate)}`} onChiudi={onChiudi} larghezza={560}>
+    <Drawer titolo={`Dettaglio ${nomeMese(riga)}`} sottotitolo={`Entrate stimate ${formatEuro(riga.entrate)}`} onChiudi={onChiudi} larghezza={760}>
       <h4 style={{ margin: '0 0 6px' }}><Badge tono="info">Certe</Badge> {formatEuro(riga.totale_certe)}</h4>
       {Object.entries(riga.uscite_certe).map(([k, v]) => <div key={k}>{NOMI_CERTE[k] || k}: {formatEuro(v)}</div>)}
       <h4 style={{ margin: '12px 0 6px' }}><Badge>Stimate</Badge> {formatEuro(riga.totale_stimate)}</h4>
@@ -104,9 +104,22 @@ function DettaglioMese({ riga, onChiudi }) {
       <h4 style={{ margin: '12px 0 6px' }}>Impegni del mese</h4>
       {!impegni ? <Loading /> : impegni.length === 0 ? <StatoVuoto>Nessun impegno.</StatoVuoto> : (
         <Table compact>
-          <thead><tr><Th>Data</Th><Th>Voce</Th><Th num>Da pagare</Th></tr></thead>
+          <thead><tr><Th>Data</Th><Th>Voce</Th><Th num>Dovuto</Th><Th num>Compensato con credito IVA</Th><Th num>Compensato con altri crediti F24</Th><Th num>Da pagare</Th></tr></thead>
           <tbody>
-            {impegni.map(i => <tr key={i.id}><Td>{formatData(i.data_scadenza)}</Td><Td>{i.descrizione}</Td><Td num>{formatEuro(i.da_pagare)}</Td></tr>)}
+            {impegni.map(i => (
+              <tr key={i.id}>
+                <Td>{formatData(i.data_scadenza)}</Td><Td>{i.descrizione}</Td><Td num>{formatEuro(i.importo)}</Td>
+                <Td num>{i.coperto_credito > 0 ? formatEuro(i.coperto_credito) : '—'}</Td>
+                <Td num>{i.coperto_altri > 0 ? formatEuro(i.coperto_altri) : '—'}</Td>
+                <Td num>{formatEuro(i.da_pagare)}</Td>
+              </tr>
+            ))}
+            <tr className="ui-riga-totale">
+              <Td>Totale</Td><Td></Td>
+              {['importo', 'coperto_credito', 'coperto_altri', 'da_pagare'].map(k => (
+                <Td num key={k}>{formatEuro(impegni.reduce((s, i) => s + i[k], 0))}</Td>
+              ))}
+            </tr>
           </tbody>
         </Table>
       )}
