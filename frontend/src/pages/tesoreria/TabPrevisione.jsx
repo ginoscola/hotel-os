@@ -96,7 +96,7 @@ function DettaglioMese({ riga, onChiudi }) {
     api.get(`/tesoreria/impegni?data_da=${primo}&data_a=${fineMese(riga.anno, riga.mese)}`).then(r => setImpegni(r.data.impegni)).catch(() => setImpegni([]))
   }, [riga])
   return (
-    <Drawer titolo={`Dettaglio ${nomeMese(riga)}`} sottotitolo={`Entrate stimate ${formatEuro(riga.entrate)}`} onChiudi={onChiudi} larghezza={760}>
+    <Drawer titolo={`Dettaglio ${nomeMese(riga)}`} sottotitolo={`Entrate stimate ${formatEuro(riga.entrate)}`} onChiudi={onChiudi} larghezza={640}>
       <h4 style={{ margin: '0 0 6px' }}><Badge tono="info">Certe</Badge> {formatEuro(riga.totale_certe)}</h4>
       {Object.entries(riga.uscite_certe).map(([k, v]) => <div key={k}>{NOMI_CERTE[k] || k}: {formatEuro(v)}</div>)}
       <h4 style={{ margin: '12px 0 6px' }}><Badge>Stimate</Badge> {formatEuro(riga.totale_stimate)}</h4>
@@ -104,7 +104,14 @@ function DettaglioMese({ riga, onChiudi }) {
       <h4 style={{ margin: '12px 0 6px' }}>Impegni del mese</h4>
       {!impegni ? <Loading /> : impegni.length === 0 ? <StatoVuoto>Nessun impegno.</StatoVuoto> : (
         <Table compact>
-          <thead><tr><Th>Data</Th><Th>Voce</Th><Th num>Dovuto</Th><Th num>Compensato con credito IVA</Th><Th num>Compensato con altri crediti F24</Th><Th num>Da pagare</Th></tr></thead>
+          <thead>
+            <tr>
+              <Th>Data</Th><Th>Voce</Th><Th num>Dovuto</Th>
+              <Th num style={{ whiteSpace: 'normal', width: 90 }}>Compensato con credito IVA</Th>
+              <Th num style={{ whiteSpace: 'normal', width: 90 }}>Compensato con altri crediti F24</Th>
+              <Th num style={{ whiteSpace: 'normal', width: 70 }}>Da pagare</Th>
+            </tr>
+          </thead>
           <tbody>
             {impegni.map(i => (
               <tr key={i.id}>
