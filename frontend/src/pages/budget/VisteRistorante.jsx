@@ -6,11 +6,11 @@ import {
 import api from '../../api/client.js'
 import pastReferenceArea from '../../components/PastReferenceArea.jsx'
 import {
-  Badge, Card, KpiTile, Loading, SegmentedControl, StatoVuoto, Table, Td, Th,
+  Badge, Card, KpiTile, Loading, SectionTitle, SegmentedControl, StatoVuoto, Table, Td, Th,
 } from '../../components/ui'
 import { colors } from '../../styles/tokens.js'
 import { formatEuro } from '../../utils/format.js'
-import { COLORE_ACTUAL, COLORE_BUDGET, TREND, coloreSegno, conSegno, labelSettimana } from './helpers.js'
+import { COLORE_ACTUAL, COLORE_BUDGET, NOTA_MESI, TREND, coloreSegno, conSegno, labelSettimana } from './helpers.js'
 
 const MESI = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
   'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
@@ -189,6 +189,38 @@ export function ProiezioneRistorante({ codice, anno, version }) {
         {codice === 'MMS' && ' Mare Mosso: solo clienti esterni, gli ospiti sono nel F&B del Du Parc.'}
       </p>
 
+      <SectionTitle>Per mese</SectionTitle>
+      <p className="ui-text-muted" style={{ marginTop: 0 }}>{NOTA_MESI}</p>
+      <Table compact style={{ marginBottom: 20 }}>
+        <thead>
+          <tr>
+            <Th>Mese</Th><Th num>Budget</Th><Th num>Consuntivo</Th><Th num>Consuntivo / Proiezione</Th><Th num>Δ€ vs budget</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {dati.mesi.map(m => ({ ...m[codice], chiave: `${m.anno}-${m.mese}`, mese: m.mese })).filter(m => m.budget || m.consuntivo).map(m => {
+            const delta = m.proiezione - m.budget
+            return (
+              <tr key={m.chiave}>
+                <Td>{MESI[m.mese]}</Td>
+                <Td num>{formatEuro(m.budget)}</Td>
+                <Td num>{m.consuntivo ? formatEuro(m.consuntivo) : '—'}</Td>
+                <Td num>{formatEuro(m.proiezione)}</Td>
+                <Td num style={{ color: coloreSegno(delta) }}>{conSegnoEuro(delta)}</Td>
+              </tr>
+            )
+          })}
+          <tr className="ui-riga-totale">
+            <Td>TOTALE</Td>
+            <Td num>{formatEuro(tot.budget)}</Td>
+            <Td num>{formatEuro(tot.consuntivo)}</Td>
+            <Td num>{formatEuro(tot.proiezione)}</Td>
+            <Td num>{conSegnoEuro(tot.proiezione - tot.budget)}</Td>
+          </tr>
+        </tbody>
+      </Table>
+
+      <SectionTitle>Per settimana</SectionTitle>
       <Table compact>
         <thead>
           <tr>

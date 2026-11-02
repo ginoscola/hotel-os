@@ -10,10 +10,10 @@ import { ExportMenu } from '../components/ExportMenu.jsx'
 import SpiegazionePrevisione from '../components/SpiegazionePrevisione.jsx'
 import TabRistoranti from './budget/TabRistoranti.jsx'
 import { ConfrontoRistorante, ProiezioneRistorante } from './budget/VisteRistorante.jsx'
-import { COLORE_ACTUAL, COLORE_BUDGET, TREND, coloreSegno, conSegno, labelSettimana } from './budget/helpers.js'
+import { COLORE_ACTUAL, COLORE_BUDGET, NOTA_MESI, TREND, calcolaMeseContabile, coloreSegno, conSegno, labelSettimana, perMeseContabile } from './budget/helpers.js'
 import {
   Badge, Button, Card, Field, FileButton, HotelTag, Input, KpiTile, Loading, Messaggio, Modal,
-  PageHeader, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
+  PageHeader, SectionTitle, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
 } from '../components/ui'
 import { colors } from '../styles/tokens.js'
 
@@ -54,21 +54,6 @@ function calcolaKpiFrontend(occupancy, adr, adrFnb, adrExtra, roomsAvail) {
   }
 }
 
-// Speculare a calcola_mese_contabile() in Python:
-// restituisce {mese (1-12), anno} del mese con più giorni nella settimana.
-function calcolaMeseContabile(ws) {
-  const conteggi = {}
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(ws + 'T00:00:00')
-    d.setDate(d.getDate() + i)
-    const k = `${d.getFullYear()}-${d.getMonth() + 1}`
-    conteggi[k] = (conteggi[k] || 0) + 1
-  }
-  const [best] = Object.entries(conteggi).sort((a, b) => b[1] - a[1])
-  const [anno, mese] = best[0].split('-').map(Number)
-  return { mese, anno }
-}
-
 // Camere disponibili per una settimana dalla stagione già caricata.
 function roomsAvailabileSettimana(ws, stagione) {
   if (!stagione) return null
@@ -98,6 +83,47 @@ function valoriRiga(s, edit, stagione) {
   return { occupancy, adr, adrFnb, adrExtra, ra, kpi }
 }
 
+// Somme delle settimane e KPI sui totali (mai media delle settimane)
+function aggregaInserimento(settimane, localEdit, stagione) {
+  const t = { ra: 0, rs: 0, rooms: 0, fnb: 0, extra: 0, tot: 0 }
+  for (const s of settimane) {
+    const { ra, kpi } = valoriRiga(s, localEdit[s.week_start] || {}, stagione)
+    t.ra += ra || 0
+    if (kpi.rooms_sold == null) continue
+    t.rs += kpi.rooms_sold
+    t.rooms += kpi.revenue_rooms
+    t.fnb += kpi.revenue_fnb
+    t.extra += kpi.revenue_extra
+    t.tot += kpi.revenue_total
+  }
+  const sd = (n, d) => d ? n / d : null
+  return {
+    ...t,
+    occupancy: sd(t.rs * 100, t.ra),
+    adr: sd(t.rooms, t.rs),
+    adrFnb: sd(t.fnb, t.rs),
+    adrExtra: sd(t.extra, t.rs),
+    incFnb: sd(t.fnb * 100, t.tot),
+    revpar: sd(t.rooms, t.ra),
+    trevpar: sd(t.tot, t.ra),
+  }
+}
+
+// Riga di sola lettura della tabella mensile e della riga TOTALE
+function CelleAggregato({ t }) {
+  return <>
+    <Td num>{t.ra ? formatN(t.ra) : '—'}</Td>
+    <Td num>{t.occupancy != null ? formatPerc(t.occupancy) : '—'}</Td>
+    <Td num>{t.adr != null ? formatEuro(t.adr) : '—'}</Td>
+    <Td num>{t.adrFnb != null ? formatEuro(t.adrFnb) : '—'}</Td>
+    <Td num>{t.adrExtra != null ? formatEuro(t.adrExtra) : '—'}</Td>
+    <Td num>{t.rs ? formatN(t.rs) : '—'}</Td>
+    <Td num>{t.incFnb != null ? formatPerc(t.incFnb) : '—'}</Td>
+    <Td num>{t.revpar != null ? formatEuro(t.revpar) : '—'}</Td>
+    <Td num>{t.trevpar != null ? formatEuro(t.trevpar) : '—'}</Td>
+    <Td num>{t.tot ? formatEuro(t.tot) : '—'}</Td>
+  </>
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB 1 — Inserimento Budget
@@ -278,31 +304,15 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
     }
   }
 
-  // Riga TOTALE: somme sulla stagione, KPI sui totali (mai media delle settimane)
-  const totali = useMemo(() => {
-    const t = { ra: 0, rs: 0, rooms: 0, fnb: 0, extra: 0, tot: 0 }
-    for (const s of tutteLeSettimane) {
-      const { ra, kpi } = valoriRiga(s, localEdit[s.week_start] || {}, stagione)
-      t.ra += ra || 0
-      if (kpi.rooms_sold == null) continue
-      t.rs += kpi.rooms_sold
-      t.rooms += kpi.revenue_rooms
-      t.fnb += kpi.revenue_fnb
-      t.extra += kpi.revenue_extra
-      t.tot += kpi.revenue_total
-    }
-    const sd = (n, d) => d ? n / d : null
-    return {
-      ...t,
-      occupancy: sd(t.rs * 100, t.ra),
-      adr: sd(t.rooms, t.rs),
-      adrFnb: sd(t.fnb, t.rs),
-      adrExtra: sd(t.extra, t.rs),
-      incFnb: sd(t.fnb * 100, t.tot),
-      revpar: sd(t.rooms, t.ra),
-      trevpar: sd(t.tot, t.ra),
-    }
-  }, [tutteLeSettimane, localEdit, stagione])
+  const totali = useMemo(
+    () => aggregaInserimento(tutteLeSettimane, localEdit, stagione),
+    [tutteLeSettimane, localEdit, stagione],
+  )
+  const perMese = useMemo(
+    () => perMeseContabile(tutteLeSettimane, s => s.week_start)
+      .map(m => ({ ...m, ...aggregaInserimento(m.settimane, localEdit, stagione) })),
+    [tutteLeSettimane, localEdit, stagione],
+  )
 
   // Intestazioni delle colonne editabili: azzurrine per distinguerle da quelle calcolate
   const thInput = { color: colors.infoBg }
@@ -399,16 +409,7 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
               <tr className="ui-riga-totale">
                 <Td>TOTALE</Td>
                 <Td></Td>
-                <Td num>{totali.ra ? formatN(totali.ra) : '—'}</Td>
-                <Td num>{totali.occupancy != null ? formatPerc(totali.occupancy) : '—'}</Td>
-                <Td num>{totali.adr != null ? formatEuro(totali.adr) : '—'}</Td>
-                <Td num>{totali.adrFnb != null ? formatEuro(totali.adrFnb) : '—'}</Td>
-                <Td num>{totali.adrExtra != null ? formatEuro(totali.adrExtra) : '—'}</Td>
-                <Td num>{totali.rs ? formatN(totali.rs) : '—'}</Td>
-                <Td num>{totali.incFnb != null ? formatPerc(totali.incFnb) : '—'}</Td>
-                <Td num>{totali.revpar != null ? formatEuro(totali.revpar) : '—'}</Td>
-                <Td num>{totali.trevpar != null ? formatEuro(totali.trevpar) : '—'}</Td>
-                <Td num>{totali.tot ? formatEuro(totali.tot) : '—'}</Td>
+                <CelleAggregato t={totali} />
                 <Td></Td>
               </tr>
             </tbody>
@@ -416,6 +417,29 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
           <div className="ui-text-muted" style={{ marginTop: 6 }}>
             * celle editabili — ADR F&B e ADR Extra sono € per camera venduta — modifiche salvate automaticamente
           </div>
+
+          <SectionTitle>Per mese</SectionTitle>
+          <p className="ui-text-muted" style={{ marginTop: 0 }}>{NOTA_MESI} Sola lettura: si aggiorna con la tabella sopra.</p>
+          <Table compact>
+            <thead>
+              <tr>
+                <Th>Mese</Th><Th num>Sett.</Th><Th num>Cam.Disp.</Th><Th num>Occup%</Th><Th num>ADR Cam.</Th><Th num>ADR F&B</Th><Th num>ADR Extra</Th>
+                <Th num>Cam.Vend.</Th><Th num>Inc.F&B%</Th><Th num>RevPAR</Th><Th num>TrevPAR</Th><Th num>Rev.Totale</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {perMese.map(m => (
+                <tr key={m.chiave}>
+                  <Td>{MESI_IT[m.mese - 1]}</Td><Td num>{m.settimane.length}</Td>
+                  <CelleAggregato t={m} />
+                </tr>
+              ))}
+              <tr className="ui-riga-totale">
+                <Td>TOTALE</Td><Td num>{tutteLeSettimane.length}</Td>
+                <CelleAggregato t={totali} />
+              </tr>
+            </tbody>
+          </Table>
         </>
       )}
 
@@ -630,6 +654,31 @@ const titoloFonte = (r) => {
   return 'Dati Revenue definitivi'
 }
 
+// Somme delle settimane di proiezione. OTB solo delle settimane non chiuse, come nella tabella settimanale.
+function aggregaProiezione(righe) {
+  const t = { budget: 0, otb: null, valore: 0, chiuse: 0 }
+  for (const r of righe) {
+    t.budget += r.budget?.revenue_total || 0
+    t.valore += r.actual_o_proiezione?.revenue_total || 0
+    if (r.tipo === 'consuntivo') t.chiuse += 1
+    else if (r.otb != null) t.otb = (t.otb || 0) + (r.otb.revenue_total || 0)
+  }
+  return { ...t, delta: t.valore - t.budget }
+}
+
+function RigaMeseProiezione({ etichetta, n, t, className }) {
+  return (
+    <tr className={className}>
+      <Td>{etichetta}</Td>
+      <Td num>{t.chiuse} su {n}</Td>
+      <Td num>{formatEuro(t.budget)}</Td>
+      <Td num>{t.otb != null ? formatEuro(t.otb) : '—'}</Td>
+      <Td num>{formatEuro(t.valore)}</Td>
+      <Td num style={className ? undefined : { color: coloreSegno(t.delta) }}>{conSegno(t.delta, formatEuro)}</Td>
+    </tr>
+  )
+}
+
 function TabProiezione({ hotel, anno, version }) {
   const [dati, setDati] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -651,6 +700,9 @@ function TabProiezione({ hotel, anno, version }) {
   const scostPct = bud.revenue_total ? (scostRev / bud.revenue_total * 100) : null
   const trend = TREND[dati.trend] ?? { label: dati.trend, colore: colors.textMuted, tono: 'neutral' }
   const pct = dati.pct_stagione_completata || 0
+  const dettaglio = dati.dettaglio || []
+  const mesi = perMeseContabile(dettaglio, r => r.week_start).map(m => ({ ...m, ...aggregaProiezione(m.settimane) }))
+  const totaleMesi = aggregaProiezione(dettaglio)
 
   return (
     <div>
@@ -721,7 +773,21 @@ function TabProiezione({ hotel, anno, version }) {
         <KpiTile label="Rev. F&B Budget" value={formatEuro(bud.revenue_fnb)} sub={`→ ${formatEuro(proj.revenue_fnb)}`} minWidth={170} />
       </div>
 
-      {/* Tabella dettaglio */}
+      <SectionTitle>Per mese</SectionTitle>
+      <p className="ui-text-muted" style={{ marginTop: 0 }}>{NOTA_MESI}</p>
+      <Table compact style={{ marginBottom: 20 }}>
+        <thead>
+          <tr>
+            <Th>Mese</Th><Th num>Settimane chiuse</Th><Th num>Budget</Th><Th num>OTB</Th><Th num>Consuntivo / Proiezione</Th><Th num>Δ€ vs budget</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {mesi.map(m => <RigaMeseProiezione key={m.chiave} etichetta={MESI_IT[m.mese - 1]} n={m.settimane.length} t={m} />)}
+          <RigaMeseProiezione etichetta="TOTALE" n={dettaglio.length} t={totaleMesi} className="ui-riga-totale" />
+        </tbody>
+      </Table>
+
+      <SectionTitle>Per settimana</SectionTitle>
       <Table compact>
         <thead>
           <tr>
@@ -734,7 +800,7 @@ function TabProiezione({ hotel, anno, version }) {
           </tr>
         </thead>
         <tbody>
-          {(dati.dettaglio || []).map((r, i) => {
+          {dettaglio.map((r, i) => {
             const bRev = r.budget?.revenue_total
             const aRev = r.actual_o_proiezione?.revenue_total
             const delta = (bRev != null && aRev != null) ? aRev - bRev : null

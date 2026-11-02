@@ -1649,6 +1649,7 @@ reimportabile: l'import accetta solo xlsx.
 `calcola_kpi_budget()` usa `math.floor(x + 0.5)`, uguale a `Math.round()` della tab. Fino alla v3.24.0 usava
 `round()` di Python (arrotonda al pari, 150,5 → 150) e la tab mostrava 1 camera in più di quanto salvato/
 esportato; corretto in v3.24.1 (nessuna riga in DB era a ,5, nessun ricalcolo necessario). Mai `round()` qui.
+**Tabelle per mese** (v4.17.0, solo frontend): in Inserimento e Proiezione, hotel e ristoranti, sola lettura; ogni settimana intera nel mese con la maggioranza dei giorni, regola del mese contabile (`perMeseContabile()` in `pages/budget/helpers.js`), KPI sui totali. Inserimento si aggiorna mentre si digita.
 **Budget ristoranti** (v4.6.0, 30/10/2026, scheda "Ristoranti" → `pages/budget/TabRistoranti.jsx`): tabella
 `budget_ristoranti` (`budgetrist001_2026`; struttura MMS|BON, anno, settimana, versione, importo, note), non
 righe in `hotels`/`budget_entries` (Dashboard e Forecast iterano `hotels`; occupazione/ADR non hanno senso).
