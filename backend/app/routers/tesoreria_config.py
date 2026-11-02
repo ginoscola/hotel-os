@@ -63,7 +63,7 @@ def _conto_json(c: TesoreriaConto, ultimo: Optional[TesoreriaSaldo] = None) -> d
     return {
         "id": c.id, "codice": c.codice, "nome": c.nome, "banca": c.banca, "tipo": c.tipo, "iban": c.iban,
         "fido": euro(c.fido), "fido_scadenza": c.fido_scadenza.isoformat() if c.fido_scadenza else None,
-        "ha_import": c.ha_import, "testo_addebito": c.testo_addebito, "colore": c.colore, "ordine": c.ordine, "attivo": c.attivo, "note": c.note,
+        "ha_import": c.ha_import, "testo_addebito": c.testo_addebito, "giorno_addebito": c.giorno_addebito, "colore": c.colore, "ordine": c.ordine, "attivo": c.attivo, "note": c.note,
         "ultimo_saldo": (
             {"data": ultimo.data.isoformat(), "saldo": euro(ultimo.saldo), "origine": ultimo.origine}
             if ultimo else None
@@ -102,6 +102,14 @@ def _applica_conto(c: TesoreriaConto, body: dict, db: Session):
         c.fido = _decimale(body["fido"] or 0, "Fido")
         if c.fido < 0:
             raise HTTPException(400, "Il fido non può essere negativo")
+    if "giorno_addebito" in body:
+        giorno = body["giorno_addebito"]
+        if giorno in (None, ""):
+            c.giorno_addebito = None
+        elif not str(giorno).isdigit() or not 1 <= int(giorno) <= 31:
+            raise HTTPException(400, "Giorno di addebito non valido (1–31)")
+        else:
+            c.giorno_addebito = int(giorno)
     if "testo_addebito" in body:
         c.testo_addebito = (body["testo_addebito"] or "").strip()[:100] or None
     if "fido_scadenza" in body:

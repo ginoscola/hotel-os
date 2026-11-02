@@ -1,0 +1,122 @@
+"""Tesoreria — calcoli dei piani (Fase 3, blocco B): importi delle rate d'affitto, date dei ricorrenti, degli
+interventi e degli addebiti carta, lettura del piano di ammortamento. Nessun accesso al DB."""
+
+import calendar
+import re
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Optional
+
+import xlrd
+
+from app.services.tesoreria_calendario import primo_lavorativo
+from app.services.tesoreria_parser import ErroreImportTesoreria
+
+CENT = Decimal("0.01")
+CENTO = Decimal(100)
+TOLLERANZA_PERCENTUALE = Decimal("0.001")
+
+
+def importi_rate(canone: Decimal, percentuali: list) -> list:
+    """Importo di ogni rata in ordine. Se le percentuali fanno 100 l'ultima assorbe l'arrotondamento: il totale
+    torna sempre uguale al canone."""
+    importi = [(canone * p / CENTO).quantize(CENT, rounding=ROUND_HALF_UP) for p in percentuali]
+    if importi and abs(sum(percentuali) - CENTO) <= TOLLERANZA_PERCENTUALE:
+        importi[-1] = canone - sum(importi[:-1])
+    return importi
+
+
+def _giorno_nel_mese(anno: int, mese: int, giorno: int) -> date:
+    return date(anno, mese, min(giorno, calendar.monthrange(anno, mese)[1]))
+
+
+def date_ricorrente(da: date, a: date, giorno: int, mesi: list, data_da: Optional[date], data_a: Optional[date]) -> list:
+    """Date lavorative del ricorrente in [da, a], rispettando il suo periodo di validità."""
+    out = []
+    for anno in range(da.year, a.year + 1):
+        for mese in sorted(mesi):
+            d = primo_lavorativo(_giorno_nel_mese(anno, mese, giorno))
+            if da <= d <= a and (not data_da or d >= data_da) and (not data_a or d <= data_a):
+                out.append(d)
+    return out
+
+
+def fine_mese(primo: date) -> date:
+    return _giorno_nel_mese(primo.year, primo.month, 31)
+
+
+def data_addebito_carta(chiusura: date, giorno: Optional[int], oggi: date) -> date:
+    """Primo `giorno` del mese dopo la chiusura dell'estratto (AMEX chiude il 6 e addebita il 27, BCC chiude il 28 e
+    addebita il 26 del mese dopo). Senza giorno: 30 giorni dopo la chiusura. Mai prima di oggi."""
+    if giorno is None:
+        d = chiusura + timedelta(days=30)
+    else:
+        d = _giorno_nel_mese(chiusura.year, chiusura.month, giorno)
+        if d <= chiusura:
+            anno, mese = (chiusura.year, chiusura.month + 1) if chiusura.month < 12 else (chiusura.year + 1, 1)
+            d = _giorno_nel_mese(anno, mese, giorno)
+    return max(primo_lavorativo(d), oggi)
+
+
+def normalizza_nome(testo: str) -> str:
+    return re.sub(r"[^A-Z0-9]", "", (testo or "").upper())
+
+
+def nome_corrisponde(controparte: str, nomi: list) -> bool:
+    """I nomi configurati ('HOTEL DU PARC SNC', 'HOTEL DU PARC S.A.S.') a confronto senza punti né spazi. La banca
+    tronca i nomi lunghi: basta che uno sia l'inizio dell'altro, con almeno 8 caratteri."""
+    c = normalizza_nome(controparte)
+    for n in map(normalizza_nome, nomi or []):
+        if n and len(c) >= 8 and (c.startswith(n) or n.startswith(c)):
+            return True
+    return False
+
+
+# ── Piano di ammortamento (.xls della banca) ──────────────────────────────────
+
+@dataclass
+class RataPiano:
+    numero: int
+    scadenza: date
+    capitale: Decimal
+    interessi: Decimal
+    importo: Decimal
+    residuo: Optional[Decimal]
+    pagata_il: Optional[date]
+
+
+def _num(testo) -> Optional[Decimal]:
+    testo = str(testo or "").strip()
+    return Decimal(testo.replace(".", "").replace(",", ".")) if testo else None
+
+
+def parse_piano_mutuo(contenuto: bytes) -> list:
+    """Foglio "Lista rate mutuo": Nr. rata, Scadenza, Capitale, Interessi, Importo, Cap. residuo, Note ("Pagata il …").
+    Il residuo manca sulle rate già pagate. Controlla che capitale + interessi = importo."""
+    try:
+        foglio = xlrd.open_workbook(file_contents=contenuto).sheet_by_index(0)
+    except Exception as e:
+        raise ErroreImportTesoreria(f"File .xls non leggibile: {e}")
+    intestazione = next((r for r in range(min(foglio.nrows, 10)) if str(foglio.cell_value(r, 0)).strip() == "Nr. rata"), None)
+    if intestazione is None:
+        raise ErroreImportTesoreria("Non sembra un piano di ammortamento: manca la colonna «Nr. rata»")
+    rate = []
+    for r in range(intestazione + 1, foglio.nrows):
+        riga = foglio.row_values(r)
+        if riga[0] in ("", None):
+            continue
+        try:
+            nota = re.search(r"Pagata il (\d{2}/\d{2}/\d{4})", str(riga[6]))
+            rata = RataPiano(
+                int(float(riga[0])), datetime.strptime(str(riga[1]).strip(), "%d/%m/%Y").date(), _num(riga[2]), _num(riga[3]),
+                _num(riga[4]), _num(riga[5]), datetime.strptime(nota.group(1), "%d/%m/%Y").date() if nota else None,
+            )
+        except (ValueError, ArithmeticError, IndexError) as e:
+            raise ErroreImportTesoreria(f"Riga {r + 1} non leggibile: {e}")
+        if rata.capitale + rata.interessi != rata.importo:
+            raise ErroreImportTesoreria(f"Rata {rata.numero}: capitale + interessi diversi dall'importo")
+        rate.append(rata)
+    if not rate:
+        raise ErroreImportTesoreria("Nessuna rata trovata nel piano")
+    return rate

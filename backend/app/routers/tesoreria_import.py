@@ -27,6 +27,7 @@ from app.database import get_db
 from app.models.revenue import User
 from app.models.tesoreria import TesoreriaConto, TesoreriaImport, TesoreriaMovimento, TesoreriaSaldo
 from app.routers.tesoreria_abbinamenti import ricalcola_abbinamenti
+from app.routers.tesoreria_impegni_abbina import abbina_impegni
 from app.routers.tesoreria_shared import (
     categoria_automatica, euro, id_ripiego, mappa_categorie, nome_sicuro, puo_importare, puo_vedere,
     regole_attive, ricalcola_categorie, storage_dir,
@@ -246,6 +247,7 @@ def conferma_import(
         imp.percorso = str(copiato)
         db.flush()
         abbinamenti = ricalcola_abbinamenti(db)     # nuove uscite: scadenze Passcom pagate
+        abbina_impegni(db)                          # ... e impegni (F24, affitti, mutuo, ricorrenti)
         db.commit()
     except Exception:
         db.rollback()
@@ -322,6 +324,7 @@ def elimina_import(
     db.delete(imp)
     db.flush()
     ricalcola_abbinamenti(db)       # gli abbinamenti con i movimenti eliminati spariscono
+    abbina_impegni(db)
     db.commit()
     if percorso:
         Path(percorso).unlink(missing_ok=True)

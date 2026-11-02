@@ -156,7 +156,7 @@ inesistente e non aveva mai funzionato.
 **USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura), `usali-fnb` (reparti cedolini → punto vendita della scheda Food & Beverage)
 **Budget**: `budget-previsione` (AdminBudgetPrevisione — correttivi e parametri della proiezione fine stagione)
 **Statistiche Produzione**: `prod-categorie` (ProdCategorie), `prod-mapping` (ProdMappingDettagli — mapping testo Welcome→categoria)
-**Tesoreria**: `tes-conti`, `tes-categorie`, `tes-regole`, `tes-soglie` (tutti in `pages/admin/AdminTesoreria.jsx`)
+**Tesoreria**: `tes-conti`, `tes-categorie`, `tes-regole`, `tes-soglie`, `tes-affitti` (rate in data e %), `tes-interventi` (tutti in `pages/admin/AdminTesoreria.jsx`)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
 Dati test: flag `is_test`; `GET|DELETE /admin/test-stats|test-data`, `GET|DELETE /dipendenti/admin/test-stats|test-data`.
 
@@ -2433,7 +2433,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 |---|---|---|
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
-| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⏳ blocco A fatto (02/11/2026, solo backend); blocchi B–D da fare, serve ok per ognuno |
+| 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ⏳ blocchi A e B fatti (02/11/2026, v4.11.0); blocchi C–D da fare, serve ok per ognuno |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
@@ -3173,6 +3173,29 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
 - Mancano: chiamata automatica di `abbina_impegni()` dopo l'import degli estratti conto (ora da endpoint);
   aggiornamento di `crediti_iva` quando arriva la dichiarazione IVA.
 
+### Fase 3 — Blocco B fatto (02/11/2026, v4.11.0)
+- Migrazione `tes009_2026`; `routers/tesoreria_piani.py` (`/piani/affitti`, `/piani/mutuo`, `/piani/ricorrenti`,
+  `/piani/interventi`), `services/tesoreria_piani.py`, `routers/tesoreria_impegni_abbina.py` (`abbina_impegni()`, chiamata
+  anche da conferma ed eliminazione degli estratti conto). I piani generano impegni di fonte `piano` con
+  `sincronizza_piani()`: correzioni sull'impegno e pagati restano, il resto segue il piano.
+- **Affitti: ogni rata = data + % del canone dell'anno di competenza** (Admin `?s=tes-affitti`; scelta dell'utente per
+  Du Parc, dove le date si decidono in base alla liquidità). Somma per anno ≤ 100%, sotto il 100% la differenza è «da
+  pianificare» e non entra in previsione; a 100% l'ultima rata assorbe l'arrotondamento. Date Club/International
+  contrattuali (scelta dell'utente). **Du Parc: 31/01/2027 è una data provvisoria** ("la prima rata la farò più tardi"),
+  da impostare in Admin. Riaddebito del 13/7/2026 escluso, una tantum.
+- Abbinamento affitti su `nomi_banca` (Du Parc: **S.N.C., già S.A.S.**, cambio di ragione sociale), importo esatto →
+  automatico, solo nome → proposto; un nome diverso non abbina mai.
+- Mutuo: `parse_piano_mutuo()` con `xlrd`, importo + 1,50 € di spese (verificato sulle prime 3 rate). Ricaricando il
+  piano le rate pagate restano. Impegni fino all'orizzonte, debito residuo su tutto il piano (137.231,22 €). Upload solo
+  da endpoint per ora (schermata nel blocco D).
+- Ricorrenti caricati (categoria per il blocco C: **RAI e SIAE sono in `utenze`, BCC in `fornitori_sdd`, da sottrarre
+  dalla stima storica di quelle categorie**): SIAE 2,958,10 € è l'importo 2025, nel 2026 non risulta in banca; polizze
+  Arturo Mancini marzo e aprile 2026 forse una tantum, da verificare. Schermata Admin nel blocco D.
+- Interventi: piscina, parcheggio, cella frigorifera inseriti senza importo e fuori previsione (Admin `?s=tes-interventi`).
+  Collegamento con lo scadenzario nel blocco D.
+- **Straordinari marcati (7 movimenti, −54.271,98 €)**: Palazzi, Gianni Gianmarco, Design Color, CHS. Non marcati Castellana
+  (l'utente lo considera ordinario) e SG Informatica di Gianni Gianmarco (2.500 €, 17/09/2025, non elencato all'utente).
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
@@ -3282,6 +3305,8 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **02/11/2026** — Fase 3, blocco A fatto (solo backend, vedi sezione). Collaudo sul 2026 con quietanze e banca; dati
   fiscali reali e avviso TARI caricati. **Serve il riavvio del backend** per gli endpoint. **Prossimo passo**: blocco B
   (affitti, mutuo con `xlrd`, ricorrenti, interventi, carte), con strategia e ok dell'utente.
+- **02/11/2026 (2)** — Fase 3, blocco B fatto (v4.11.0). **Prossimo passo**: blocco C (motore di previsione, incassi da
+  Budget, scenari, altri crediti F24 dalla base dell'anno prima, sottrazione dei ricorrenti dalla stima), con ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

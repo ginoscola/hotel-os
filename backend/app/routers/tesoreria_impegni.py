@@ -10,7 +10,7 @@ import hashlib
 import json
 import shutil
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 
@@ -20,13 +20,15 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.revenue import AppConfig, User
-from app.models.tesoreria import TesoreriaCategoria, TesoreriaImpegno, TesoreriaMovimento
+from app.models.tesoreria import TesoreriaImpegno
 from app.routers.dipendenti import costi_f24_per_mese
+from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno
 from app.routers.tesoreria_import import _leggi_anteprima, _pulisci_anteprime_scadute
 from app.routers.tesoreria_kpi import _tassa_incassata_per_mese
+from app.routers.tesoreria_piani import sincronizza_piani
 from app.routers.tesoreria_shared import euro, nome_sicuro, puo_importare, puo_modificare, puo_vedere, storage_dir
 from app.services.tesoreria_calendario import (
-    ZERO, DatiFiscali, TrancheCredito, abbina_gruppo, genera_scadenze, reddito_anno_stimato, simula_credito,
+    ZERO, DatiFiscali, TrancheCredito, genera_scadenze, reddito_anno_stimato, simula_credito,
 )
 from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_tari_parser import parse_avviso_tari
@@ -48,9 +50,6 @@ PARAMETRI_DEFAULT = {
     "fissi": [],                           # [{codice, descrizione, mese, giorno, importo}]
     "crediti_iva": [],                     # [{importo, disponibile_dal, anticipabile_dal?}]
 }
-FINESTRA_F24 = (1, 5)                      # l'addebito arriva fino a qualche giorno dopo la scadenza
-FINESTRA_TASSA = (20, 20)                  # bonifico al Comune, senza data fissa
-CATEGORIE_ABBINAMENTO = {"f24": FINESTRA_F24, "tassa_soggiorno": FINESTRA_TASSA}
 
 
 def leggi_parametri(db: Session) -> dict:
@@ -103,10 +102,6 @@ def dati_fiscali(db: Session, parametri: dict, anno_fine: int) -> DatiFiscali:
         _, anno, fase, *_ = codice.split(":")
         dati.tari_avvisi.add((int(anno), fase))
     return dati
-
-
-def importo_impegno(i: TesoreriaImpegno) -> Decimal:
-    return i.importo_confermato if i.importo_confermato is not None else i.importo_stimato
 
 
 def _tranche(parametri: dict) -> list:
@@ -178,47 +173,6 @@ def genera_impegni(db: Session, oggi: date) -> dict:
     residuo = ricalcola_credito(db, oggi)
     return {"n_nuovi": n_nuovi, "n_aggiornati": n_aggiornati, "n_rimossi": n_rimossi,
             "credito_residuo": euro(residuo)}
-
-
-# ── Abbinamento con la banca ────────────────────────────────────────────────────
-
-def abbina_impegni(db: Session) -> dict:
-    """Propone il movimento bancario per gli impegni scaduti; le scelte dell'utente non cambiano. Non fa commit."""
-    aperti = db.query(TesoreriaImpegno).filter(
-        TesoreriaImpegno.stato != "pagato",
-        TesoreriaImpegno.abbinamento.is_(None) | (TesoreriaImpegno.abbinamento == "proposto"),
-    ).all()
-    for i in aperti:
-        if i.abbinamento == "proposto":
-            i.movimento_id, i.abbinamento = None, None
-    usati = {m for (m,) in db.query(TesoreriaImpegno.movimento_id).filter(TesoreriaImpegno.movimento_id.isnot(None))}
-    gruppi = {}
-    for i in aperti:
-        categoria = "tassa_soggiorno" if i.tipo == "tassa_soggiorno" else "f24"
-        gruppi.setdefault((categoria, i.data_scadenza), []).append(i)
-    esito = {"automatici": 0, "proposti": 0}
-    for (categoria, giorno), impegni in sorted(gruppi.items(), key=lambda g: g[0][1]):
-        prima, dopo = CATEGORIE_ABBINAMENTO[categoria]
-        movimenti = db.query(TesoreriaMovimento).join(
-            TesoreriaCategoria, TesoreriaCategoria.id == TesoreriaMovimento.categoria_id,
-        ).filter(
-            TesoreriaCategoria.codice == categoria, TesoreriaMovimento.importo < 0,
-            TesoreriaMovimento.data_contabile >= giorno - timedelta(days=prima),
-            TesoreriaMovimento.data_contabile <= giorno + timedelta(days=dopo),
-        ).all()
-        candidati = [(m.id, -m.importo, abs((m.data_contabile - giorno).days)) for m in movimenti if m.id not in usati]
-        da_pagare = sum((max(importo_impegno(i) - i.coperto_credito, ZERO) for i in impegni), ZERO)
-        scelta = abbina_gruppo(da_pagare, candidati) if da_pagare > 0 else None
-        if scelta is None:
-            continue
-        movimento_id, tipo = scelta
-        usati.add(movimento_id)
-        for i in impegni:
-            i.movimento_id, i.abbinamento = movimento_id, tipo
-            if tipo == "automatico":
-                i.stato = "pagato"
-        esito["automatici" if tipo == "automatico" else "proposti"] += len(impegni)
-    return esito
 
 
 # ── Endpoint ────────────────────────────────────────────────────────────────────
@@ -293,6 +247,7 @@ def put_parametri(corpo: dict, db: Session = Depends(get_db), _=Depends(puo_modi
 def genera(db: Session = Depends(get_db), _=Depends(puo_modificare)):
     oggi = date.today()
     esito = genera_impegni(db, oggi)
+    esito["piani"] = sincronizza_piani(db, oggi)
     esito["abbinamenti"] = abbina_impegni(db)
     db.commit()
     return esito
@@ -355,8 +310,8 @@ def modifica_impegno(impegno_id: int, corpo: ImpegnoModifica, db: Session = Depe
 @router.delete("/impegni/{impegno_id}")
 def elimina_impegno(impegno_id: int, db: Session = Depends(get_db), _=Depends(puo_modificare)):
     i = _impegno_o_404(db, impegno_id)
-    if i.fonte == "calendario":
-        raise HTTPException(400, "Le scadenze del calendario non si eliminano: correggere importo o data")
+    if i.fonte in ("calendario", "piano"):
+        raise HTTPException(400, "Le scadenze del calendario e dei piani non si eliminano: correggere importo o data")
     db.delete(i)
     db.flush()
     ricalcola_credito(db, date.today())

@@ -1,8 +1,8 @@
 // Admin → Tesoreria: conti (fido e scadenza), categorie (colore, operative o no), regole di
-// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza.
+// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza, piano affitti, interventi.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import api from '../../api/client.js'
-import { mostraErrore } from '../../utils/format.js'
+import { formatEuro, formatData, mostraErrore } from '../../utils/format.js'
 import {
   Badge, Button, Card, Checkbox, Field, Input, Loading, Select, StatoVuoto, Table, Td, Th, useAvvisi, useConferma,
 } from '../../components/ui'
@@ -71,7 +71,7 @@ export function AdminTesoreriaConti() {
         <thead>
           <tr>
             <Th>Codice</Th><Th>Nome</Th><Th>Tipo</Th><Th>Banca</Th><Th>IBAN</Th><Th num>Fido (€)</Th>
-            <Th>Scadenza fido</Th><Th>Testo addebito in banca</Th><Th center>Import</Th><Th>Colore</Th><Th num>Ordine</Th><Th center>Attivo</Th><Th></Th>
+            <Th>Scadenza fido</Th><Th>Testo addebito in banca</Th><Th num>Giorno addebito</Th><Th center>Import</Th><Th>Colore</Th><Th num>Ordine</Th><Th center>Attivo</Th><Th></Th>
           </tr>
         </thead>
         <tbody>
@@ -94,6 +94,11 @@ export function AdminTesoreriaConti() {
                 <Td>
                   {v.tipo === 'carta_credito'
                     ? <Input value={v.testo_addebito || ''} style={{ width: 200 }} onChange={e => set({ testo_addebito: e.target.value })} />
+                    : <span className="ui-text-muted">—</span>}
+                </Td>
+                <Td num>
+                  {v.tipo === 'carta_credito'
+                    ? <Input type="number" min={1} max={31} value={v.giorno_addebito ?? ''} style={{ width: 60 }} onChange={e => set({ giorno_addebito: e.target.value })} />
                     : <span className="ui-text-muted">—</span>}
                 </Td>
                 <Td center><Checkbox checked={v.ha_import} onChange={x => set({ ha_import: x })} /></Td>
@@ -353,6 +358,226 @@ export function AdminTesoreriaSoglie() {
           </Field>
         ))}
         <div><Button onClick={salva} disabled={!Object.keys(bozza).length}>Salva</Button></div>
+      </div>
+    </Card>
+  )
+}
+
+// ── Piano affitti ───────────────────────────────────────────────────────────────
+
+const ETICHETTE_STATO_RATA = { stimato: 'Prevista', confermato: 'Prevista', pagato: 'Pagata' }
+
+function ContrattoAffitto({ contratto, onAggiorna }) {
+  const annoIniziale = contratto.anni.at(-1)?.anno ?? new Date().getFullYear()
+  const [nuova, setNuova] = useState({ anno_competenza: annoIniziale, data_prevista: '', percentuale: '' })
+  const [canone, setCanone] = useState(null)
+  const { bozze, modifica, scarta } = useBozze()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
+
+  async function salvaRata(r) {
+    try {
+      const b = { ...bozze[r.id] }
+      if ('percentuale' in b) b.percentuale = String(b.percentuale)
+      onAggiorna((await api.put(`/tesoreria/piani/affitti/rate/${r.id}`, b)).data)
+      scarta(r.id)
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  async function aggiungi() {
+    try {
+      onAggiorna((await api.post(`/tesoreria/piani/affitti/${contratto.id}/rate`, { ...nuova, percentuale: String(nuova.percentuale) })).data)
+      setNuova({ ...nuova, data_prevista: '', percentuale: '' })
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  async function elimina(r) {
+    const ok = await conferma({
+      titolo: 'Eliminare la rata?', messaggio: `Rata del ${formatData(r.data_prevista)} da ${formatEuro(r.importo)}`, pericolo: true,
+    })
+    if (!ok) return
+    try { onAggiorna((await api.delete(`/tesoreria/piani/affitti/rate/${r.id}`)).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  async function salvaCanone() {
+    try {
+      onAggiorna((await api.put(`/tesoreria/piani/affitti/${contratto.id}`, { canone_annuo: String(canone) })).data)
+      setCanone(null); avvisi.successo('Canone salvato')
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  return (
+    <Card title={`${contratto.codice} — ${contratto.controparte}`}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' }}>
+        <Field label="Canone annuo, IVA inclusa (€)">
+          <Input value={canone ?? contratto.canone_annuo} inputMode="decimal" modificato={canone !== null} style={{ width: 130 }}
+            onChange={e => setCanone(e.target.value)} />
+        </Field>
+        {canone !== null && <Button size="sm" onClick={salvaCanone}>Salva</Button>}
+        <span className="ui-text-muted">Nomi in banca: {(contratto.nomi_banca || []).join(' · ')}</span>
+      </div>
+      {contratto.rate.length === 0 ? <StatoVuoto>Nessuna rata pianificata</StatoVuoto> : (
+        <Table compact>
+          <thead>
+            <tr><Th>Canone</Th><Th>Data</Th><Th num>%</Th><Th num>Importo</Th><Th>Stato</Th><Th></Th></tr>
+          </thead>
+          <tbody>
+            {contratto.rate.map(r => {
+              const v = { ...r, ...(bozze[r.id] || {}) }
+              const pagata = r.stato === 'pagato'
+              return (
+                <tr key={r.id} className={bozze[r.id] ? 'ui-riga-modificata' : undefined}>
+                  <Td>{r.anno_competenza}</Td>
+                  <Td><Input type="date" value={v.data_prevista} disabled={pagata} onChange={e => modifica(r.id, { data_prevista: e.target.value })} /></Td>
+                  <Td num><Input value={v.percentuale} inputMode="decimal" disabled={pagata} style={{ width: 100 }} onChange={e => modifica(r.id, { percentuale: e.target.value })} /></Td>
+                  <Td num>{formatEuro(r.importo)}</Td>
+                  <Td><Badge tono={pagata ? 'ok' : 'neutral'}>{ETICHETTE_STATO_RATA[r.stato] || r.stato}{r.abbinamento === 'proposto' ? ' · da confermare' : ''}</Badge></Td>
+                  <Td style={{ whiteSpace: 'nowrap' }}>
+                    {bozze[r.id] ? <>
+                      <Button size="sm" onClick={() => salvaRata(r)}>Salva</Button>{' '}
+                      <Button size="sm" variant="ghost" onClick={() => scarta(r.id)}>Annulla</Button>
+                    </> : !pagata && <Button size="sm" variant="danger-soft" onClick={() => elimina(r)}>Elimina</Button>}
+                  </Td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </Table>
+      )}
+      {contratto.anni.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          {contratto.anni.map(a => (
+            <div key={a.anno} className="ui-text-muted">
+              Canone {a.anno}: pagato {formatEuro(a.pagato)}, residuo {formatEuro(a.residuo)}
+              {a.da_pianificare > 0.01 ? ` — da pianificare ${formatEuro(a.da_pianificare)} (${(100 - a.percentuale_pianificata).toFixed(2)}%)` : ''}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12, flexWrap: 'wrap' }}>
+        <Field label="Canone dell'anno">
+          <Input type="number" value={nuova.anno_competenza} style={{ width: 80 }} onChange={e => setNuova({ ...nuova, anno_competenza: Number(e.target.value) })} />
+        </Field>
+        <Field label="Data"><Input type="date" value={nuova.data_prevista} onChange={e => setNuova({ ...nuova, data_prevista: e.target.value })} /></Field>
+        <Field label="% del canone"><Input value={nuova.percentuale} inputMode="decimal" style={{ width: 100 }} onChange={e => setNuova({ ...nuova, percentuale: e.target.value })} /></Field>
+        <Button onClick={aggiungi} disabled={!nuova.data_prevista || !nuova.percentuale}>Aggiungi rata</Button>
+      </div>
+    </Card>
+  )
+}
+
+export function AdminTesoreriaAffitti() {
+  const [contratti, setContratti] = useState(null)
+  const avvisi = useAvvisi()
+
+  useEffect(() => {
+    api.get('/tesoreria/piani/affitti').then(r => setContratti(r.data)).catch(e => avvisi.errore(mostraErrore(e)))
+  }, [avvisi])
+
+  if (!contratti) return <Loading />
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <p className="ui-text-muted">
+        Ogni rata ha una data e una percentuale del canone dell'anno: modificandole cambia subito la previsione.
+        Le percentuali di un anno non possono superare il 100%; se restano sotto, la differenza è «da pianificare» e non
+        entra in previsione. Una rata pagata in banca non si modifica più.
+      </p>
+      {contratti.length === 0 && <StatoVuoto>Nessun contratto</StatoVuoto>}
+      {contratti.map(c => (
+        <ContrattoAffitto key={c.id} contratto={c}
+          onAggiorna={nuovo => setContratti(lista => lista.map(x => (x.id === nuovo.id ? nuovo : x)))} />
+      ))}
+    </div>
+  )
+}
+
+// ── Interventi ──────────────────────────────────────────────────────────────────
+
+const STATI_INTERVENTO = { idea: 'Idea', approvato: 'Approvato', ordinato: 'Ordinato', fatturato: 'Fatturato', pagato: 'Pagato' }
+const STRUTTURE_INTERVENTO = ['DPH', 'CLB', 'INT', 'BON']
+
+export function AdminTesoreriaInterventi() {
+  const [interventi, setInterventi] = useState(null)
+  const [nuovo, setNuovo] = useState('')
+  const { bozze, modifica, scarta } = useBozze()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
+
+  const carica = useCallback(async () => {
+    try { setInterventi((await api.get('/tesoreria/piani/interventi')).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }, [avvisi])
+  useEffect(() => { carica() }, [carica])
+
+  async function salva(i) {
+    try {
+      const b = { ...bozze[i.id] }
+      if ('importo_stimato' in b) b.importo_stimato = String(b.importo_stimato ?? '').replace(',', '.')
+      await api.put(`/tesoreria/piani/interventi/${i.id}`, b)
+      scarta(i.id); carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  async function aggiungi() {
+    try {
+      await api.post('/tesoreria/piani/interventi', { descrizione: nuovo.trim() })
+      setNuovo(''); carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  async function elimina(i) {
+    if (!await conferma({ titolo: 'Eliminare l\'intervento?', messaggio: i.descrizione, pericolo: true })) return
+    try { await api.delete(`/tesoreria/piani/interventi/${i.id}`); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  if (!interventi) return <Loading />
+  return (
+    <Card title="Interventi straordinari">
+      <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+        Un intervento entra in previsione solo con «In previsione» attivo, importo e mese: l'uscita è messa a fine mese.
+        Finché mancano le cifre può restare qui come promemoria.
+      </p>
+      {interventi.length === 0 ? <StatoVuoto>Nessun intervento</StatoVuoto> : (
+        <Table compact>
+          <thead>
+            <tr><Th>Descrizione</Th><Th>Struttura</Th><Th>Fornitore</Th><Th num>Importo (€)</Th><Th>Mese</Th><Th>Stato</Th><Th center>In previsione</Th><Th></Th></tr>
+          </thead>
+          <tbody>
+            {interventi.map(i => {
+              const v = { ...i, ...(bozze[i.id] || {}) }
+              const set = patch => modifica(i.id, patch)
+              return (
+                <tr key={i.id} className={bozze[i.id] ? 'ui-riga-modificata' : undefined}>
+                  <Td><Input value={v.descrizione} style={{ width: 220 }} onChange={e => set({ descrizione: e.target.value })} /></Td>
+                  <Td>
+                    <Select value={v.struttura_code || ''} onChange={e => set({ struttura_code: e.target.value })}>
+                      <option value="">—</option>
+                      {STRUTTURE_INTERVENTO.map(s => <option key={s} value={s}>{s}</option>)}
+                    </Select>
+                  </Td>
+                  <Td><Input value={v.fornitore || ''} style={{ width: 150 }} onChange={e => set({ fornitore: e.target.value })} /></Td>
+                  <Td num><Input value={v.importo_stimato ?? ''} inputMode="decimal" style={{ width: 100 }} onChange={e => set({ importo_stimato: e.target.value })} /></Td>
+                  <Td><Input type="month" value={v.mese_previsto || ''} onChange={e => set({ mese_previsto: e.target.value })} /></Td>
+                  <Td>
+                    <Select value={v.stato} onChange={e => set({ stato: e.target.value })}>
+                      {Object.entries(STATI_INTERVENTO).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                    </Select>
+                  </Td>
+                  <Td center><Checkbox checked={v.inclusa_in_previsione} onChange={x => set({ inclusa_in_previsione: x })} /></Td>
+                  <Td style={{ whiteSpace: 'nowrap' }}>
+                    {bozze[i.id] ? <>
+                      <Button size="sm" onClick={() => salva(i)}>Salva</Button>{' '}
+                      <Button size="sm" variant="ghost" onClick={() => scarta(i.id)}>Annulla</Button>
+                    </> : <Button size="sm" variant="danger-soft" onClick={() => elimina(i)}>Elimina</Button>}
+                  </Td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </Table>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
+        <Field label="Nuovo intervento"><Input value={nuovo} style={{ width: 260 }} onChange={e => setNuovo(e.target.value)} /></Field>
+        <Button onClick={aggiungi} disabled={!nuovo.trim()}>Aggiungi</Button>
       </div>
     </Card>
   )

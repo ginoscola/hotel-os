@@ -47,6 +47,7 @@ class TesoreriaConto(Base):
     ha_import     = Column(Boolean, nullable=False, default=False, server_default="false")
     # Carte di credito: testo dell'addebito nell'estratto conto bancario (riconosce il pagamento)
     testo_addebito = Column(String(100), nullable=True)
+    giorno_addebito = Column(Integer, nullable=True)                    # carte: giorno del mese dell'addebito in banca
     colore        = Column(String(7), nullable=True)
     ordine        = Column(Integer, nullable=False, default=0, server_default="0")
     attivo        = Column(Boolean, nullable=False, default=True, server_default="true")
@@ -286,8 +287,9 @@ class TesoreriaFornitoreBanca(Base):
     __table_args__ = (UniqueConstraint("codice_fornitore", "nome_banca", name="uq_tesoreria_fornitore_banca"),)
 
 
-TIPI_IMPEGNO = ("f24_dipendenti", "iva", "ires", "irap", "tassa_soggiorno", "tari", "tributo_fisso", "altro")
-FONTI_IMPEGNO = ("calendario", "avviso", "manuale")
+TIPI_IMPEGNO = ("f24_dipendenti", "iva", "ires", "irap", "tassa_soggiorno", "tari", "tributo_fisso", "altro",
+                "affitto", "mutuo", "ricorrente", "intervento", "carta")
+FONTI_IMPEGNO = ("calendario", "piano", "avviso", "manuale")
 STATI_IMPEGNO = ("stimato", "confermato", "pagato")
 ABBINAMENTI_IMPEGNO = ("automatico", "proposto", "confermato", "scartato")
 
@@ -321,3 +323,82 @@ class TesoreriaImpegno(Base):
     utente_id          = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at         = Column(DateTime(timezone=True), server_default=func.now())
     updated_at         = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+STATI_INTERVENTO = ("idea", "approvato", "ordinato", "fatturato", "pagato")
+
+
+class TesoreriaContrattoAffitto(Base):
+    """Affitto di una struttura: canone annuo IVA inclusa e nomi con cui la controparte compare in banca."""
+    __tablename__ = "tesoreria_contratti_affitto"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    codice         = Column(String(10), nullable=False, unique=True)     # 'DPH', 'CLB', 'INT'
+    controparte    = Column(String(200), nullable=False)
+    nomi_banca     = Column(JSON, nullable=False, default=list)          # es. S.N.C. e la vecchia S.A.S.
+    canone_annuo   = Column(Numeric(14, 2), nullable=False)
+    note           = Column(String(255), nullable=True)
+    attivo         = Column(Boolean, nullable=False, default=True, server_default="true")
+
+
+class TesoreriaRataAffitto(Base):
+    """Rata pianificata: data e percentuale del canone dell'anno di competenza, modificabili da Admin."""
+    __tablename__ = "tesoreria_rate_affitto"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    contratto_id    = Column(Integer, ForeignKey("tesoreria_contratti_affitto.id", ondelete="CASCADE"), nullable=False,
+                             index=True)
+    anno_competenza = Column(Integer, nullable=False)
+    data_prevista   = Column(Date, nullable=False)
+    percentuale     = Column(Numeric(9, 6), nullable=False)
+    nota            = Column(String(255), nullable=True)
+
+
+class TesoreriaRataMutuo(Base):
+    """Rata del piano di ammortamento della banca. `importo` esclude le spese, addebitate a parte nella stessa rata."""
+    __tablename__ = "tesoreria_rate_mutuo"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    finanziamento  = Column(String(30), nullable=False)
+    numero         = Column(Integer, nullable=False)
+    data_scadenza  = Column(Date, nullable=False)
+    capitale       = Column(Numeric(14, 2), nullable=False)
+    interessi      = Column(Numeric(14, 2), nullable=False)
+    importo        = Column(Numeric(14, 2), nullable=False)
+    spese          = Column(Numeric(14, 2), nullable=False, default=0, server_default="0")
+    residuo        = Column(Numeric(14, 2), nullable=True)
+    pagata_il      = Column(Date, nullable=True)
+
+    __table_args__ = (UniqueConstraint("finanziamento", "numero", name="uq_tesoreria_rata_mutuo"),)
+
+
+class TesoreriaRicorrente(Base):
+    """Uscita ricorrente fuori dallo scadenzario (assicurazioni, canone RAI, SIAE). La categoria serve al blocco C
+    per togliere questi importi dalla stima storica."""
+    __tablename__ = "tesoreria_ricorrenti"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    descrizione  = Column(String(200), nullable=False)
+    categoria_id = Column(Integer, ForeignKey("tesoreria_categorie.id", ondelete="RESTRICT"), nullable=False)
+    importo      = Column(Numeric(14, 2), nullable=False)
+    giorno       = Column(Integer, nullable=False, default=1)
+    mesi         = Column(JSON, nullable=False, default=list)            # [1, 7]
+    data_da      = Column(Date, nullable=True)
+    data_a       = Column(Date, nullable=True)
+    nota         = Column(String(255), nullable=True)
+    attivo       = Column(Boolean, nullable=False, default=True, server_default="true")
+
+
+class TesoreriaIntervento(Base):
+    """Intervento straordinario: entra in previsione solo se incluso e con importo e mese."""
+    __tablename__ = "tesoreria_interventi"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    descrizione     = Column(String(200), nullable=False)
+    struttura_code  = Column(String(10), nullable=True)
+    fornitore       = Column(String(200), nullable=True)
+    importo_stimato = Column(Numeric(14, 2), nullable=True)
+    mese_previsto   = Column(Date, nullable=True)                        # primo giorno del mese
+    stato           = Column(String(12), nullable=False, default="idea", server_default="idea")  # STATI_INTERVENTO
+    inclusa_in_previsione = Column(Boolean, nullable=False, default=False, server_default="false")
+    nota            = Column(String(255), nullable=True)

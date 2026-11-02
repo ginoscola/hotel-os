@@ -9,6 +9,7 @@
 - tesoreria_abbinamenti.py → abbinamento scadenze ↔ banca, conferme, pagate a mano (Fase 2)
 - tesoreria_scadenzario_report.py → stato delle scadenze, dettaglio fornitore, export per lo studio
 - tesoreria_impegni.py    → impegni futuri: calendario fiscale, credito IVA, avviso TARI (Fase 3)
+- tesoreria_piani.py      → affitti, mutuo, ricorrenti, interventi, carte: generano gli impegni (Fase 3)
 Costanti e helper comuni in tesoreria_shared.py (permessi per modulo, classificazione).
 """
 
@@ -16,7 +17,7 @@ from fastapi import APIRouter
 
 from app.routers import (
     tesoreria_config, tesoreria_import, tesoreria_kpi, tesoreria_movimenti, tesoreria_report, tesoreria_scadenzario,
-    tesoreria_abbinamenti, tesoreria_impegni, tesoreria_scadenzario_report,
+    tesoreria_abbinamenti, tesoreria_impegni, tesoreria_piani, tesoreria_scadenzario_report,
 )
 
 router = APIRouter(prefix="/tesoreria", tags=["tesoreria"])
@@ -29,3 +30,4 @@ router.include_router(tesoreria_scadenzario.router)
 router.include_router(tesoreria_abbinamenti.router)
 router.include_router(tesoreria_scadenzario_report.router)
 router.include_router(tesoreria_impegni.router)
+router.include_router(tesoreria_piani.router)
