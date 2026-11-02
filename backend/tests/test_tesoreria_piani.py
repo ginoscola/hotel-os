@@ -103,7 +103,7 @@ def pulisci(test_engine):
     utente_corrente["u"] = ADMIN
     with test_engine.begin() as conn:
         conn.execute(text("TRUNCATE tesoreria_impegni, tesoreria_contratti_affitto, tesoreria_rate_affitto, tesoreria_rate_mutuo, "
-                          "tesoreria_ricorrenti, tesoreria_interventi, tesoreria_movimenti, tesoreria_saldi, tesoreria_categorie, "
+                          "tesoreria_ricorrenti, tesoreria_interventi, tesoreria_compensi, tesoreria_movimenti, tesoreria_saldi, tesoreria_categorie, "
                           "tesoreria_conti, app_config, user_module_permissions, module_permissions, modules, users RESTART IDENTITY CASCADE"))
         conn.execute(text("INSERT INTO modules (code, name, ordine, attivo) VALUES ('tesoreria', 'TESORERIA', 30, true)"))
         conn.execute(text("""
@@ -111,7 +111,7 @@ def pulisci(test_engine):
             VALUES ('tesoreria', 'admin', true, true, true), ('tesoreria', 'viewer', true, false, false)
         """))
         conn.execute(text("INSERT INTO tesoreria_conti (codice, nome, tipo) VALUES ('C', 'Conto', 'conto')"))
-        for c in ("affitti", "mutuo_rate", "assicurazioni"):
+        for c in ("affitti", "mutuo_rate", "assicurazioni", "soci_marchio", "soci_amministratori", "personale"):
             conn.execute(text("INSERT INTO tesoreria_categorie (codice, nome, tipo) VALUES (:c, :c, 'uscita')"), {"c": c})
 
 
@@ -277,6 +277,70 @@ def test_prova_accende_e_spegne_interventi_a_rate(client):
     assert len(_impegni_intervento(client)) == 2
     r = client.post("/tesoreria/previsione/prova", json={"interventi_on": [spento["id"]], "interventi_off": [acceso["id"]]})
     assert r.status_code == 200, r.text
+
+
+def _compenso(client, voce="marchio", anno=FUTURO, importo="60000"):
+    r = client.post("/tesoreria/piani/compensi", json={"voce": voce, "anno_competenza": anno, "importo": importo})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _rata_compenso(client, compenso_id, data):
+    r = client.post(f"/tesoreria/piani/compensi/{compenso_id}/rate", json={"data_prevista": data})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _impegni_compenso(client):
+    return sorted((v for k, v in _impegni(client).items() if k.startswith("compenso:")), key=lambda x: x["data_scadenza"])
+
+
+def test_compenso_a_rate_entra_negli_impegni(client):
+    c = _compenso(client)
+    assert not _impegni_compenso(client)              # senza rate nessuna uscita
+    assert client.post("/tesoreria/piani/compensi", json={"voce": "marchio", "anno_competenza": FUTURO, "importo": "1"}).status_code == 409
+    assert client.post("/tesoreria/piani/compensi", json={"voce": "boh", "anno_competenza": FUTURO, "importo": "1"}).status_code == 400
+    r = _rata_compenso(client, c["id"], f"{FUTURO}-01-08")
+    assert [x["percentuale"] for x in r["rate"]] == [100]
+    r = _rata_compenso(client, c["id"], f"{FUTURO}-06-23")
+    r = client.put(f"/tesoreria/piani/compensi/rate/{r['rate'][0]['id']}", json={"percentuale": "25"}).json()
+    assert [x["percentuale"] for x in r["rate"]] == [25, 75]
+    impegni = _impegni_compenso(client)
+    assert [(x["data_scadenza"], x["importo"]) for x in impegni] == [(f"{FUTURO}-01-08", 15000), (f"{FUTURO}-06-23", 45000)]
+    assert impegni[0]["tipo"] == "compenso" and impegni[0]["compensabile"] is False
+    # L'importo si decide ogni anno: cambiandolo, le rate seguono
+    client.put(f"/tesoreria/piani/compensi/{c['id']}", json={"importo": "40000"})
+    assert [x["importo"] for x in _impegni_compenso(client)] == [10000, 30000]
+    # Voci diverse, stesso anno: non si sommano
+    a = _compenso(client, "amministratori", importo="12000")
+    _rata_compenso(client, a["id"], f"{FUTURO}-12-15")
+    assert len(_impegni_compenso(client)) == 3
+    assert client.delete(f"/tesoreria/piani/compensi/{a['id']}").status_code == 200
+    assert len(_impegni_compenso(client)) == 2
+
+
+def test_compenso_due_bonifici_stesso_giorno_chiudono_la_rata(client, test_engine):
+    giorno = date.today() + timedelta(days=5)
+    c = _compenso(client, importo="16000")
+    r = _rata_compenso(client, c["id"], giorno.isoformat())
+    _movimento(test_engine, "soci_marchio", giorno, D("-8000.00"), "GINO")
+    _movimento(test_engine, "soci_marchio", giorno, D("-8000.00"), "ELISA")
+    assert client.post("/tesoreria/impegni/abbina").json()["automatici"] == 1
+    d = client.get("/tesoreria/piani/compensi").json()[0]
+    assert d["pagato"] == 16000 and d["rate"][0]["pagata"] is True and d["rate"][0]["automatica"] is False
+    assert client.put(f"/tesoreria/piani/compensi/rate/{r['rate'][0]['id']}", json={"percentuale": "50"}).status_code == 409
+    assert client.delete(f"/tesoreria/piani/compensi/{c['id']}").status_code == 409
+
+
+def test_compenso_altra_voce_e_personale_non_abbinano(client, test_engine):
+    giorno = date.today() + timedelta(days=5)
+    c = _compenso(client, "amministratori", importo="5000")
+    _rata_compenso(client, c["id"], giorno.isoformat())
+    _movimento(test_engine, "soci_marchio", giorno, D("-5000.00"), "GINO")
+    _movimento(test_engine, "personale", giorno, D("-5000.00"), "BONIFICI")
+    assert client.post("/tesoreria/impegni/abbina").json() == {"automatici": 0, "proposti": 0}
+    _movimento(test_engine, "soci_amministratori", giorno, D("-4000.00"), "GINO")
+    assert client.post("/tesoreria/impegni/abbina").json() == {"automatici": 0, "proposti": 1}
 
 
 def test_estratto_carta_da_addebitare_poi_sparisce(client, test_engine):

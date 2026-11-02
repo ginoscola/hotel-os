@@ -3202,6 +3202,9 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
   **Non straordinari**: Castellana (ordinario) e il **canone annuo del gestionale** (5.496,10 € il 07/10/2026, "licenze
   stagione 2027"): resta nello storico di `fornitori_bonifici`, così il blocco C lo ritrova a ottobre 2027.
 
+### Compensi soci (02/11/2026, v4.16.0)
+Admin `?s=tes-compensi`, `tes013_2026`: `tesoreria_compensi` (voce marchio|amministratori, anno, importo **netto**, UNIQUE voce+anno) + `tesoreria_rate_compenso` (data + %, l'ultima chiude il 100% salvo se pagata), impegni `compenso:{voce}:{anno}:{rata}`, gruppo "Compensi soci" in previsione. Decisi ogni anno: nessuna stima automatica (`GRUPPI_STIMA` non li contiene). Amministratori: bonifico fuori dagli stipendi (scelta dell'utente), categoria `soci_amministratori` separata da `personale`, regola sulla descrizione; nel 2025–2026 nessun bonifico trovato. Abbinamento su somma dei bonifici dello stesso giorno nella categoria (Gino + Elisa), `movimento_id` = primo del giorno. Ritenute a parte, voci a mano in Impegni.
+
 ### Fase 3 — Blocco C fatto (02/11/2026, v4.12.0)
 Motore in `services/tesoreria_previsione.py`, dati in `routers/tesoreria_previsione.py`: `GET /tesoreria/previsione`,
 `GET|PUT /tesoreria/previsione/parametri` (Admin `?s=tes-previsione`). Calcolato alla richiesta: Budget e impegni modificati

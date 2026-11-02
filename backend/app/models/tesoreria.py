@@ -288,7 +288,7 @@ class TesoreriaFornitoreBanca(Base):
 
 
 TIPI_IMPEGNO = ("f24_dipendenti", "iva", "ires", "irap", "tassa_soggiorno", "tari", "tributo_fisso", "altro",
-                "affitto", "mutuo", "ricorrente", "intervento", "carta")
+                "affitto", "mutuo", "ricorrente", "intervento", "carta", "compenso")
 FONTI_IMPEGNO = ("calendario", "piano", "avviso", "manuale")
 STATI_IMPEGNO = ("stimato", "confermato", "pagato")
 ABBINAMENTI_IMPEGNO = ("automatico", "proposto", "confermato", "scartato")
@@ -411,6 +411,31 @@ class TesoreriaRataIntervento(Base):
 
     id            = Column(Integer, primary_key=True, autoincrement=True)
     intervento_id = Column(Integer, ForeignKey("tesoreria_interventi.id", ondelete="CASCADE"), nullable=False, index=True)
+    data_prevista = Column(Date, nullable=False)
+    percentuale   = Column(Numeric(9, 6), nullable=False)
+
+
+VOCI_COMPENSO = ("marchio", "amministratori")
+
+
+class TesoreriaCompenso(Base):
+    """Compenso dei soci deciso per un anno: importo netto, quello che esce dalla banca. Nessuna stima automatica."""
+    __tablename__ = "tesoreria_compensi"
+    __table_args__ = (UniqueConstraint("voce", "anno_competenza", name="uq_tesoreria_compenso_voce_anno"),)
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    voce            = Column(String(20), nullable=False)                 # VOCI_COMPENSO
+    anno_competenza = Column(Integer, nullable=False)
+    importo         = Column(Numeric(14, 2), nullable=False)
+    nota            = Column(String(255), nullable=True)
+
+
+class TesoreriaRataCompenso(Base):
+    """Pagamento previsto di un compenso: data e percentuale. L'ultima per data chiude il 100%, se non è già pagata."""
+    __tablename__ = "tesoreria_rate_compenso"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    compenso_id   = Column(Integer, ForeignKey("tesoreria_compensi.id", ondelete="CASCADE"), nullable=False, index=True)
     data_prevista = Column(Date, nullable=False)
     percentuale   = Column(Numeric(9, 6), nullable=False)
 

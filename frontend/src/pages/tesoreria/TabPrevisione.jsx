@@ -20,7 +20,7 @@ const SCENARI = [
   { value: 'pessimista', label: 'Pessimista' }, { value: 'realista', label: 'Realista' }, { value: 'ottimista', label: 'Ottimista' },
 ]
 const NOMI_CERTE = {
-  fisco: 'Fisco', affitti: 'Affitti', mutuo: 'Mutuo', ricorrenti: 'Ricorrenti', interventi: 'Interventi',
+  fisco: 'Fisco', affitti: 'Affitti', mutuo: 'Mutuo', ricorrenti: 'Ricorrenti', interventi: 'Interventi', compensi: 'Compensi soci',
   carte: 'Estratti carte', fornitori: 'Fornitori (scadenzario)', altri_impegni: 'Altri impegni',
 }
 const NOMI_STIMATE = { fornitori: 'Fornitori', personale: 'Personale', utenze: 'Utenze', marketing: 'Marketing', carte: 'Carte', altre: 'Altre' }
@@ -138,13 +138,15 @@ function PannelloProva({ onProva, attiva, onTogli }) {
   const [rate, setRate] = useState(null)
   const [interventi, setInterventi] = useState([])
   const [rateInterventi, setRateInterventi] = useState([])
+  const [rateCompensi, setRateCompensi] = useState([])
   const [sposta, setSposta] = useState({})
   const [accesi, setAccesi] = useState({})
   const avvisi = useAvvisi()
 
   useEffect(() => {
-    Promise.all([api.get('/tesoreria/impegni?tipo=affitto'), api.get('/tesoreria/piani/interventi'), api.get('/tesoreria/impegni?tipo=intervento')]).then(([a, b, c]) => {
+    Promise.all([api.get('/tesoreria/impegni?tipo=affitto'), api.get('/tesoreria/piani/interventi'), api.get('/tesoreria/impegni?tipo=intervento'), api.get('/tesoreria/impegni?tipo=compenso')]).then(([a, b, c, d]) => {
       setRateInterventi(c.data.impegni.filter(i => i.stato !== 'pagato'))
+      setRateCompensi(d.data.impegni.filter(i => i.stato !== 'pagato'))
       setRate(a.data.impegni.filter(i => i.codice.startsWith('affitto:DPH:') && i.stato !== 'pagato'))
       setInterventi(b.data)
     }).catch(e => avvisi.errore(mostraErrore(e)))
@@ -167,7 +169,7 @@ function PannelloProva({ onProva, attiva, onTogli }) {
   return (
     <Card title="Prova: cosa succede se">
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
-        Sposta le rate Du Parc e quelle degli interventi in previsione, o accendi e spegni gli interventi: grafico e tabella si ricalcolano, ma <strong>nulla viene salvato</strong>.
+        Sposta le rate Du Parc, degli interventi in previsione e dei compensi, o accendi e spegni gli interventi: grafico e tabella si ricalcolano, ma <strong>nulla viene salvato</strong>.
         Se la prova ti convince, cambia la rata in Admin → Tesoreria → Piano affitti.
       </p>
       <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -203,6 +205,18 @@ function PannelloProva({ onProva, attiva, onTogli }) {
             </div>
           ))}
         </div>
+        {rateCompensi.length > 0 && (
+          <div>
+            <strong>Compensi soci</strong>
+            {rateCompensi.map(r => (
+              <div key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                <span style={{ width: 240 }}>{r.descrizione} · {formatEuroIntero(r.da_pagare)}</span>
+                <Input type="date" value={sposta[r.id] || r.data_scadenza} modificato={r.id in sposta}
+                  onChange={e => setSposta({ ...sposta, [r.id]: e.target.value })} />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <Button onClick={prova}>Prova</Button>

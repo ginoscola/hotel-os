@@ -10,7 +10,7 @@ import AdminBudgetPrevisione from './admin/AdminBudgetPrevisione.jsx'
 import AdminWave from './admin/AdminWave.jsx'
 import AdminUsaliFnb from './admin/AdminUsaliFnb.jsx'
 import {
-  AdminTesoreriaAffitti, AdminTesoreriaCategorie, AdminTesoreriaConti, AdminTesoreriaFiscale, AdminTesoreriaInterventi, AdminTesoreriaMutuo,
+  AdminTesoreriaAffitti, AdminTesoreriaCategorie, AdminTesoreriaCompensi, AdminTesoreriaConti, AdminTesoreriaFiscale, AdminTesoreriaInterventi, AdminTesoreriaMutuo,
   AdminTesoreriaPrevisione, AdminTesoreriaRegole, AdminTesoreriaRicorrenti, AdminTesoreriaSoglie,
 } from './admin/AdminTesoreria.jsx'
 import api from '../api/client.js'
@@ -94,6 +94,7 @@ const SEZIONI = [
       { id: 'tes-soglie',    label: 'Soglie avvisi' },
       { id: 'tes-affitti',   label: 'Piano affitti' },
       { id: 'tes-interventi', label: 'Interventi' },
+      { id: 'tes-compensi',  label: 'Compensi soci' },
       { id: 'tes-ricorrenti', label: 'Ricorrenti' },
       { id: 'tes-mutuo',     label: 'Mutuo' },
       { id: 'tes-fiscale',   label: 'Dati fiscali' },
@@ -233,6 +234,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'tes-soglie')           return <AdminTesoreriaSoglie />
   if (sezione === 'tes-affitti')          return <AdminTesoreriaAffitti />
   if (sezione === 'tes-interventi')       return <AdminTesoreriaInterventi />
+  if (sezione === 'tes-compensi')         return <AdminTesoreriaCompensi />
   if (sezione === 'tes-previsione')       return <AdminTesoreriaPrevisione />
   if (sezione === 'tes-ricorrenti')       return <AdminTesoreriaRicorrenti />
   if (sezione === 'tes-mutuo')            return <AdminTesoreriaMutuo />

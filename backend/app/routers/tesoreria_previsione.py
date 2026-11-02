@@ -39,7 +39,7 @@ from app.services.tesoreria_saldi import saldo_a_data
 router = APIRouter()
 
 CHIAVE_PARAMETRI = "tesoreria_previsione_parametri"
-GRUPPO_DA_TIPO = {"affitto": "affitti", "mutuo": "mutuo", "ricorrente": "ricorrenti", "intervento": "interventi", "carta": "carte"}
+GRUPPO_DA_TIPO = {"affitto": "affitti", "mutuo": "mutuo", "ricorrente": "ricorrenti", "intervento": "interventi", "carta": "carte", "compenso": "compensi"}
 STATI_SCADENZA_APERTA = ("aperta", "scaduta", "da_confermare")
 
 
@@ -246,7 +246,7 @@ def elimina_salvata(salvata_id: int, db: Session = Depends(get_db), _=Depends(pu
 
 
 COLONNE_CERTE = (("fisco", "Fisco"), ("affitti", "Affitti"), ("mutuo", "Mutuo"), ("ricorrenti", "Ricorrenti"),
-                 ("interventi", "Interventi"), ("carte", "Carte (estratti)"), ("fornitori", "Fornitori (scadenzario)"))
+                 ("interventi", "Interventi"), ("compensi", "Compensi soci"), ("carte", "Carte (estratti)"), ("fornitori", "Fornitori (scadenzario)"))
 COLONNE_STIMATE = (("fornitori", "Fornitori stimati"), ("personale", "Personale"), ("utenze", "Utenze"),
                    ("marketing", "Marketing"), ("carte", "Carte stimate"), ("altre", "Altre"))
 

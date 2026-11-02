@@ -595,52 +595,53 @@ export function AdminTesoreriaInterventi() {
       </div>
       {fatture && <ModaleFatture intervento={fatture} onChiudi={() => { setFatture(null); carica() }} />}
       {rateDi && interventi.some(i => i.id === rateDi) && (
-        <ModaleRateIntervento intervento={interventi.find(i => i.id === rateDi)} onChiudi={() => setRateDi(null)}
+        <ModaleRate piano={interventi.find(i => i.id === rateDi)} titolo={interventi.find(i => i.id === rateDi).descrizione} url="/tesoreria/piani/interventi" onChiudi={() => setRateDi(null)}
           onAggiorna={nuovo => setInterventi(lista => lista.map(x => (x.id === nuovo.id ? nuovo : x)))} />
       )}
     </Card>
   )
 }
 
-function ModaleRateIntervento({ intervento, onChiudi, onAggiorna }) {
+function ModaleRate({ piano, titolo, url, onChiudi, onAggiorna }) {
   const [data, setData] = useState('')
   const [percentuali, setPercentuali] = useState({})
   const avvisi = useAvvisi()
+  const conFatture = piano.rate.some(r => 'da_fatturare' in r)
 
   async function esegui(chiamata) {
     try { onAggiorna((await chiamata()).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
-  const aggiungi = () => esegui(() => api.post(`/tesoreria/piani/interventi/${intervento.id}/rate`, { data_prevista: data })).then(() => setData(''))
-  const salvaData = (r, valore) => valore && esegui(() => api.put(`/tesoreria/piani/interventi/rate/${r.id}`, { data_prevista: valore }))
-  const elimina = r => esegui(() => api.delete(`/tesoreria/piani/interventi/rate/${r.id}`))
+  const aggiungi = () => esegui(() => api.post(`${url}/${piano.id}/rate`, { data_prevista: data })).then(() => setData(''))
+  const salvaData = (r, valore) => valore && esegui(() => api.put(`${url}/rate/${r.id}`, { data_prevista: valore }))
+  const elimina = r => esegui(() => api.delete(`${url}/rate/${r.id}`))
 
   async function salvaPercentuale(r) {
     const valore = percentuali[r.id]
     if (valore === undefined) return
-    await esegui(() => api.put(`/tesoreria/piani/interventi/rate/${r.id}`, { percentuale: String(valore).replace(',', '.') }))
+    await esegui(() => api.put(`${url}/rate/${r.id}`, { percentuale: String(valore).replace(',', '.') }))
     setPercentuali(({ [r.id]: _, ...resto }) => resto)
   }
 
   return (
-    <Modal titolo={`Rate — ${intervento.descrizione}`} onChiudi={onChiudi} larghezza={640} footer={<Button onClick={onChiudi}>Chiudi</Button>}>
+    <Modal titolo={`Rate — ${titolo}`} onChiudi={onChiudi} larghezza={640} footer={<Button onClick={onChiudi}>Chiudi</Button>}>
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
         Con una rata sola il pagamento è unico. Una nuova rata divide a metà la quota dell'ultima: correggi poi le percentuali; l'ultima per data chiude da sola il 100%.
       </p>
-      {intervento.rate.length === 0 ? <StatoVuoto>Nessuna rata: l'intervento non entra in previsione.</StatoVuoto> : (
+      {piano.rate.length === 0 ? <StatoVuoto>Nessuna rata: non entra in previsione.</StatoVuoto> : (
         <Table compact>
-          <thead><tr><Th>Data</Th><Th num>%</Th><Th num>Importo</Th><Th num>Da fatturare</Th><Th></Th></tr></thead>
+          <thead><tr><Th>Data</Th><Th num>%</Th><Th num>Importo</Th>{conFatture && <Th num>Da fatturare</Th>}<Th></Th></tr></thead>
           <tbody>
-            {intervento.rate.map(r => (
+            {piano.rate.map(r => (
               <tr key={r.id}>
-                <Td><Input type="date" value={r.data_prevista} onChange={e => salvaData(r, e.target.value)} /></Td>
+                <Td><Input type="date" value={r.data_prevista} disabled={r.pagata} onChange={e => salvaData(r, e.target.value)} /></Td>
                 <Td num>
-                  <Input value={r.automatica ? r.percentuale : (percentuali[r.id] ?? r.percentuale)} inputMode="decimal" disabled={r.automatica} style={{ width: 90 }}
+                  <Input value={r.automatica ? r.percentuale : (percentuali[r.id] ?? r.percentuale)} inputMode="decimal" disabled={r.automatica || r.pagata} style={{ width: 90 }}
                     onChange={e => setPercentuali({ ...percentuali, [r.id]: e.target.value })} onBlur={() => salvaPercentuale(r)} />
                   {r.automatica && <div className="ui-text-muted">automatica</div>}
                 </Td>
                 <Td num>{r.importo != null ? formatEuro(r.importo) : '—'}</Td>
-                <Td num>{r.da_fatturare != null ? formatEuro(r.da_fatturare) : '—'}</Td>
-                <Td><Button size="sm" variant="danger-soft" onClick={() => elimina(r)}>Elimina</Button></Td>
+                {conFatture && <Td num>{r.da_fatturare != null ? formatEuro(r.da_fatturare) : '—'}</Td>}
+                <Td>{r.pagata ? <Badge tono="ok">Pagata</Badge> : <Button size="sm" variant="danger-soft" onClick={() => elimina(r)}>Elimina</Button>}</Td>
               </tr>
             ))}
           </tbody>
@@ -651,6 +652,97 @@ function ModaleRateIntervento({ intervento, onChiudi, onAggiorna }) {
         <Button onClick={aggiungi} disabled={!data}>Aggiungi rata</Button>
       </div>
     </Modal>
+  )
+}
+
+// ── Compensi dei soci ───────────────────────────────────────────────────────────
+
+const VOCI_COMPENSO = { marchio: 'Marchio', amministratori: 'Amministratori' }
+
+export function AdminTesoreriaCompensi() {
+  const [compensi, setCompensi] = useState(null)
+  const [nuovo, setNuovo] = useState({ voce: 'marchio', anno_competenza: new Date().getFullYear() + 1, importo: '' })
+  const [rateDi, setRateDi] = useState(null)
+  const { bozze, modifica, scarta } = useBozze()
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
+
+  const carica = useCallback(async () => {
+    try { setCompensi((await api.get('/tesoreria/piani/compensi')).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }, [avvisi])
+  useEffect(() => { carica() }, [carica])
+
+  async function aggiungi() {
+    try {
+      await api.post('/tesoreria/piani/compensi', { ...nuovo, importo: String(nuovo.importo).replace(',', '.') })
+      setNuovo({ ...nuovo, importo: '' }); carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  async function salva(c) {
+    try {
+      const b = { ...bozze[c.id] }
+      if ('importo' in b) b.importo = String(b.importo).replace(',', '.')
+      await api.put(`/tesoreria/piani/compensi/${c.id}`, b)
+      scarta(c.id); carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  async function elimina(c) {
+    if (!await conferma({ titolo: 'Eliminare il compenso?', messaggio: `${VOCI_COMPENSO[c.voce]} ${c.anno_competenza}`, pericolo: true })) return
+    try { await api.delete(`/tesoreria/piani/compensi/${c.id}`); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  if (!compensi) return <Loading />
+  const inRate = compensi.find(c => c.id === rateDi)
+  return (
+    <Card title="Compensi dei soci">
+      <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+        Da decidere ogni anno: marchio e amministratori, separati dagli stipendi. Inserisci l'importo <strong>netto</strong>, cioè quello che esce dalla banca;
+        eventuali ritenute vanno a parte in Impegni. Entra in previsione solo con importo e almeno una rata: nessuna stima automatica dagli anni precedenti.
+      </p>
+      {compensi.length === 0 ? <StatoVuoto>Nessun compenso deciso</StatoVuoto> : (
+        <Table compact>
+          <thead><tr><Th>Anno</Th><Th>Voce</Th><Th num>Importo netto (€)</Th><Th>Pagamenti</Th><Th num>Pagato</Th><Th>Nota</Th><Th></Th></tr></thead>
+          <tbody>
+            {compensi.map(c => {
+              const v = { ...c, ...(bozze[c.id] || {}) }
+              return (
+                <tr key={c.id} className={bozze[c.id] ? 'ui-riga-modificata' : undefined}>
+                  <Td>{c.anno_competenza}</Td><Td>{VOCI_COMPENSO[c.voce] || c.voce}</Td>
+                  <Td num><Input value={v.importo} inputMode="decimal" style={{ width: 110 }} onChange={e => modifica(c.id, { importo: e.target.value })} /></Td>
+                  <Td style={{ whiteSpace: 'nowrap' }}>
+                    <Button size="sm" variant="secondary" onClick={() => setRateDi(c.id)}>Rate ({c.rate.length})</Button>
+                    {c.rate.length > 0 && <div className="ui-text-muted">{formatData(c.rate[0].data_prevista)}{c.rate.length > 1 ? ` → ${formatData(c.rate.at(-1).data_prevista)}` : ''}</div>}
+                    {c.da_pianificare > 0.01 && <div className="ui-text-muted">da pianificare {formatEuro(c.da_pianificare)}</div>}
+                  </Td>
+                  <Td num>{formatEuro(c.pagato)}</Td>
+                  <Td><Input value={v.nota || ''} style={{ width: 180 }} onChange={e => modifica(c.id, { nota: e.target.value })} /></Td>
+                  <Td style={{ whiteSpace: 'nowrap' }}>
+                    {bozze[c.id] ? <>
+                      <Button size="sm" onClick={() => salva(c)}>Salva</Button>{' '}
+                      <Button size="sm" variant="ghost" onClick={() => scarta(c.id)}>Annulla</Button>
+                    </> : <Button size="sm" variant="danger-soft" onClick={() => elimina(c)}>Elimina</Button>}
+                  </Td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </Table>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12, flexWrap: 'wrap' }}>
+        <Field label="Anno"><Input type="number" value={nuovo.anno_competenza} style={{ width: 80 }} onChange={e => setNuovo({ ...nuovo, anno_competenza: Number(e.target.value) })} /></Field>
+        <Field label="Voce">
+          <Select value={nuovo.voce} onChange={e => setNuovo({ ...nuovo, voce: e.target.value })}>
+            {Object.entries(VOCI_COMPENSO).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </Select>
+        </Field>
+        <Field label="Importo netto (€)"><Input value={nuovo.importo} inputMode="decimal" style={{ width: 110 }} onChange={e => setNuovo({ ...nuovo, importo: e.target.value })} /></Field>
+        <Button onClick={aggiungi} disabled={!nuovo.importo}>Aggiungi</Button>
+      </div>
+      {inRate && (
+        <ModaleRate piano={inRate} titolo={`${VOCI_COMPENSO[inRate.voce]} ${inRate.anno_competenza}`} url="/tesoreria/piani/compensi" onChiudi={() => setRateDi(null)}
+          onAggiorna={nuovo => setCompensi(lista => lista.map(x => (x.id === nuovo.id ? nuovo : x)))} />
+      )}
+    </Card>
   )
 }
 

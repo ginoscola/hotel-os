@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.tesoreria import (
-    STATI_INTERVENTO, TesoreriaCategoria, TesoreriaConto, TesoreriaContrattoAffitto, TesoreriaImpegno,
-    TesoreriaIntervento, TesoreriaInterventoScadenza, TesoreriaRataAffitto, TesoreriaRataIntervento, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
+    STATI_INTERVENTO, VOCI_COMPENSO, TesoreriaCategoria, TesoreriaCompenso, TesoreriaConto, TesoreriaContrattoAffitto, TesoreriaImpegno,
+    TesoreriaIntervento, TesoreriaInterventoScadenza, TesoreriaRataAffitto, TesoreriaRataCompenso, TesoreriaRataIntervento, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
 )
 from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno
 from app.routers.tesoreria_report import _addebiti_candidati
@@ -134,6 +134,23 @@ def _previsti_interventi(db: Session) -> list:
     return out
 
 
+def _rate_del_compenso(db: Session, compenso_id: int) -> list:
+    return db.query(TesoreriaRataCompenso).filter(TesoreriaRataCompenso.compenso_id == compenso_id) \
+        .order_by(TesoreriaRataCompenso.data_prevista, TesoreriaRataCompenso.id).all()
+
+
+def _previsti_compensi(db: Session) -> list:
+    out = []
+    for c in db.query(TesoreriaCompenso):
+        rate = _rate_del_compenso(db, c.id)
+        for n, (r, importo) in enumerate(zip(rate, importi_rate(c.importo, [x.percentuale for x in rate])), 1):
+            rata = f" (rata {n} di {len(rate)})" if len(rate) > 1 else ""
+            out.append(dict(codice=f"compenso:{c.voce}:{c.anno_competenza}:{r.id}", tipo="compenso", competenza=str(c.anno_competenza),
+                            descrizione=f"Compensi {c.voce} {c.anno_competenza}{rata}", data=r.data_prevista, importo=importo,
+                            base=f"{r.percentuale.normalize():f}% del compenso deciso", stato="confermato"))
+    return out
+
+
 def _previsti_carte(db: Session, oggi: date) -> list:
     """L'ultimo estratto inserito e non ancora addebitato è un'uscita certa. I mesi dopo li stima il blocco C."""
     out = []
@@ -174,7 +191,7 @@ def sincronizza_piani(db: Session, oggi: date) -> dict:
     _aggiorna_interventi_pagati(db, oggi)
     orizzonte = _orizzonte(db)
     previsti = (_previsti_affitti(db) + _previsti_mutuo(db, orizzonte) + _previsti_ricorrenti(db, oggi, orizzonte)
-                + _previsti_interventi(db) + _previsti_carte(db, oggi))
+                + _previsti_interventi(db) + _previsti_compensi(db) + _previsti_carte(db, oggi))
     esistenti = {i.codice: i for i in db.query(TesoreriaImpegno).filter(TesoreriaImpegno.fonte == "piano")}
     n_nuovi = n_aggiornati = 0
     for p in previsti:
@@ -645,6 +662,164 @@ def elimina_rata_intervento(rata_id: int, db: Session = Depends(get_db), _=Depen
     _chiudi_al_100(db, intervento_id)
     _applica(db)
     return _intervento_json(db, _intervento_o_404(db, intervento_id))
+
+
+# ── Compensi dei soci ───────────────────────────────────────────────────────────
+
+class CompensoIn(BaseModel):
+    voce: Optional[str] = None
+    anno_competenza: Optional[int] = None
+    importo: Optional[str] = None
+    nota: Optional[str] = None
+
+
+def _impegno_compenso(db: Session, c: TesoreriaCompenso, rata_id: int) -> Optional[TesoreriaImpegno]:
+    return db.query(TesoreriaImpegno).filter(TesoreriaImpegno.codice == f"compenso:{c.voce}:{c.anno_competenza}:{rata_id}").first()
+
+
+def _rata_pagata(db: Session, c: TesoreriaCompenso, rata_id: int) -> bool:
+    i = _impegno_compenso(db, c, rata_id)
+    return i is not None and i.stato == "pagato"
+
+
+def _compenso_json(db: Session, c: TesoreriaCompenso) -> dict:
+    rate = _rate_del_compenso(db, c.id)
+    righe = []
+    pagato = Decimal(0)
+    for n, (r, importo) in enumerate(zip(rate, importi_rate(c.importo, [x.percentuale for x in rate]))):
+        i = _impegno_compenso(db, c, r.id)
+        pagata = i is not None and i.stato == "pagato"
+        effettivo = importo_impegno(i) if i else importo
+        if pagata:
+            pagato += effettivo
+        righe.append({"id": r.id, "data_prevista": (i.data_scadenza if i else r.data_prevista).isoformat(), "percentuale": float(r.percentuale),
+                      "automatica": n == len(rate) - 1 and not pagata, "importo": euro(effettivo), "pagata": pagata,
+                      "abbinamento": i.abbinamento if i else None})
+    pianificato = sum((r.percentuale for r in rate), Decimal(0))
+    return {"id": c.id, "voce": c.voce, "anno_competenza": c.anno_competenza, "importo": euro(c.importo), "nota": c.nota, "rate": righe,
+            "pagato": euro(pagato), "da_pianificare": euro(max(c.importo * (CENTO - pianificato) / CENTO, Decimal(0)))}
+
+
+def _compenso_o_404(db: Session, compenso_id: int) -> TesoreriaCompenso:
+    c = db.get(TesoreriaCompenso, compenso_id)
+    if c is None:
+        raise HTTPException(404, "Compenso non trovato")
+    return c
+
+
+def _rata_compenso_modificabile(db: Session, rata_id: int) -> tuple:
+    r = db.get(TesoreriaRataCompenso, rata_id)
+    if r is None:
+        raise HTTPException(404, "Rata non trovata")
+    c = _compenso_o_404(db, r.compenso_id)
+    if _rata_pagata(db, c, r.id):
+        raise HTTPException(409, "Rata già pagata: annullare prima l'abbinamento con la banca")
+    return r, c
+
+
+def _chiudi_compenso_al_100(db: Session, c: TesoreriaCompenso) -> None:
+    """L'ultima rata prende quanto manca al 100%. Se è già pagata non cambia: il resto è da pianificare."""
+    db.flush()
+    rate = _rate_del_compenso(db, c.id)
+    if not rate:
+        return
+    prima = sum((r.percentuale for r in rate[:-1]), Decimal(0))
+    if any(r.percentuale <= 0 for r in rate):
+        raise HTTPException(400, "Le percentuali delle rate devono essere maggiori di zero")
+    if _rata_pagata(db, c, rate[-1].id):
+        if prima + rate[-1].percentuale > CENTO + TOLLERANZA_PERCENTUALE:
+            raise HTTPException(400, "Le rate supererebbero il 100%")
+    elif prima >= CENTO:
+        raise HTTPException(400, "Le rate prima dell'ultima arrivano già al 100%")
+    else:
+        rate[-1].percentuale = CENTO - prima
+
+
+@router.get("/piani/compensi")
+def lista_compensi(db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    compensi = db.query(TesoreriaCompenso).order_by(TesoreriaCompenso.anno_competenza.desc(), TesoreriaCompenso.voce).all()
+    return [_compenso_json(db, c) for c in compensi]
+
+
+@router.post("/piani/compensi")
+def crea_compenso(corpo: CompensoIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    if corpo.voce not in VOCI_COMPENSO or corpo.anno_competenza is None or corpo.importo is None:
+        raise HTTPException(400, "Voce, anno e importo sono obbligatori")
+    if db.query(TesoreriaCompenso).filter(TesoreriaCompenso.voce == corpo.voce, TesoreriaCompenso.anno_competenza == corpo.anno_competenza).first():
+        raise HTTPException(409, f"Compensi {corpo.voce} {corpo.anno_competenza} già presenti")
+    c = TesoreriaCompenso(voce=corpo.voce, anno_competenza=corpo.anno_competenza, importo=_decimale(corpo.importo, "Importo"), nota=corpo.nota or None)
+    db.add(c)
+    db.commit()
+    return _compenso_json(db, c)
+
+
+@router.put("/piani/compensi/{compenso_id}")
+def modifica_compenso(compenso_id: int, corpo: CompensoIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    c = _compenso_o_404(db, compenso_id)
+    if corpo.importo is not None:
+        c.importo = _decimale(corpo.importo, "Importo")
+    if corpo.nota is not None:
+        c.nota = corpo.nota or None
+    db.flush()
+    _applica(db)
+    return _compenso_json(db, c)
+
+
+@router.delete("/piani/compensi/{compenso_id}")
+def elimina_compenso(compenso_id: int, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    c = _compenso_o_404(db, compenso_id)
+    if any(_rata_pagata(db, c, r.id) for r in _rate_del_compenso(db, c.id)):
+        raise HTTPException(409, "Ci sono rate già pagate: il compenso non si elimina")
+    db.delete(c)
+    db.flush()
+    _applica(db)
+    return {"ok": True}
+
+
+@router.post("/piani/compensi/{compenso_id}/rate")
+def crea_rata_compenso(compenso_id: int, corpo: RataInterventoIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    """Come per gli interventi, la nuova rata divide a metà la quota dell'ultima; se è pagata prende il resto da pianificare."""
+    c = _compenso_o_404(db, compenso_id)
+    if corpo.data_prevista is None:
+        raise HTTPException(400, "La data è obbligatoria")
+    rate = _rate_del_compenso(db, c.id)
+    if not rate:
+        quota = CENTO
+    elif _rata_pagata(db, c, rate[-1].id):
+        quota = CENTO - sum((r.percentuale for r in rate), Decimal(0))
+    else:
+        quota = rate[-1].percentuale / 2
+        rate[-1].percentuale = quota
+    if quota <= 0:
+        raise HTTPException(400, "Le rate coprono già il 100% del compenso")
+    db.add(TesoreriaRataCompenso(compenso_id=c.id, data_prevista=corpo.data_prevista, percentuale=quota))
+    _chiudi_compenso_al_100(db, c)
+    _applica(db)
+    return _compenso_json(db, c)
+
+
+@router.put("/piani/compensi/rate/{rata_id}")
+def modifica_rata_compenso(rata_id: int, corpo: RataInterventoIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    r, c = _rata_compenso_modificabile(db, rata_id)
+    if corpo.percentuale is not None:
+        r.percentuale = _decimale(corpo.percentuale, "Percentuale")
+    if corpo.data_prevista is not None:
+        r.data_prevista = corpo.data_prevista
+        i = _impegno_compenso(db, c, r.id)
+        if i:
+            i.data_manuale = False      # da Admin vale la data del piano
+    _chiudi_compenso_al_100(db, c)
+    _applica(db)
+    return _compenso_json(db, c)
+
+
+@router.delete("/piani/compensi/rate/{rata_id}")
+def elimina_rata_compenso(rata_id: int, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    r, c = _rata_compenso_modificabile(db, rata_id)
+    db.delete(r)
+    _chiudi_compenso_al_100(db, c)
+    _applica(db)
+    return _compenso_json(db, c)
 
 
 # ── Fatture collegate agli interventi ───────────────────────────────────────────

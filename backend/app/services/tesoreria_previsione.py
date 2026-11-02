@@ -18,7 +18,7 @@ CENTO = Decimal(100)
 GIORNI_CASSA_LIBERA = 90
 
 # Categoria → gruppo di stima. Fuori dall'elenco: coperte da impegni (affitti, f24, tassa_soggiorno, mutuo_rate,
-# assicurazioni), non operative, e compensi del marchio (nessuna data prevista).
+# assicurazioni), non operative, e compensi dei soci (decisi ogni anno in Admin, entrano come impegni).
 GRUPPI_STIMA = {
     "fornitori_riba": "fornitori", "fornitori_bonifici": "fornitori", "fornitori_sdd": "fornitori", "assegni": "fornitori",
     "personale": "personale", "utenze": "utenze", "ota_marketing": "marketing", "carte": "carte",
@@ -80,7 +80,7 @@ def stima_altri_crediti(storico: dict, y: int, m: int) -> Decimal:
 class Certa:
     data: date
     importo: Decimal
-    gruppo: str                      # fisco, affitti, mutuo, ricorrenti, interventi, carte, fornitori
+    gruppo: str                      # fisco, affitti, mutuo, ricorrenti, interventi, compensi, carte, fornitori
     categoria: Optional[str] = None  # per sottrarla dalla stima (RAI da utenze, BCC da fornitori_sdd...)
     ident: Optional[int] = None      # id dell'impegno: serve alle prove
     codice: Optional[str] = None

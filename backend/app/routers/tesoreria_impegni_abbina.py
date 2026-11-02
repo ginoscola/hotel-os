@@ -3,6 +3,7 @@
 - Fiscali: un addebito "Delega Unificata" chiude tutti gli F24 con la stessa scadenza.
 - Tassa di soggiorno: bonifico al Comune senza data fissa.
 - Affitti: controparte e importo esatto chiudono da soli; solo uno dei due → proposto (pagamenti parziali o nomi diversi).
+- Compensi dei soci: di solito due bonifici lo stesso giorno, quindi conta la somma del giorno.
 - Mutuo: importo esatto vicino alla scadenza. Ricorrenti: stessa categoria, sempre proposti se l'importo varia.
 Chiude da solo solo l'importo esatto: le stime non coincidono quasi mai. Le scelte dell'utente non cambiano.
 """
@@ -23,6 +24,8 @@ FINESTRA_TASSA = (20, 20)            # bonifico al Comune, senza data fissa
 FINESTRA_AFFITTO = (45, 60)          # pagamenti spesso spostati rispetto al contratto
 FINESTRA_MUTUO = (3, 5)
 FINESTRA_RICORRENTE = (20, 20)
+FINESTRA_COMPENSO = (30, 45)
+CATEGORIA_COMPENSO = {"marchio": "soci_marchio", "amministratori": "soci_amministratori"}
 TIPI_SINGOLI = {"affitto", "mutuo", "ricorrente"}
 TIPI_SENZA_BANCA = {"intervento", "carta"}   # interventi dallo scadenzario, carte dallo stato dell'estratto
 
@@ -93,6 +96,24 @@ def _abbina_ricorrente(db, i, ricorrenti, usati, esito):
         _segna([i], scelta[0], scelta[1], esito)
 
 
+def _abbina_compenso(db, i, usati, esito):
+    categoria = CATEGORIA_COMPENSO.get(i.codice.split(":")[1])
+    importo = importo_impegno(i)
+    giorni_usati = {m.data_contabile for m in db.query(TesoreriaMovimento).filter(TesoreriaMovimento.id.in_(usati or {0}))}
+    per_giorno = {}
+    for m in _movimenti(db, TesoreriaCategoria.codice == categoria, i.data_scadenza, FINESTRA_COMPENSO):
+        if m.data_contabile not in giorni_usati:
+            per_giorno.setdefault(m.data_contabile, []).append(m)
+    if not per_giorno:
+        return
+    # Abbinato al primo bonifico del giorno: l'esclusione per giorno evita che l'altro chiuda una seconda rata
+    candidati = [(g, -sum(m.importo for m in ms), abs((g - i.data_scadenza).days)) for g, ms in per_giorno.items()]
+    giorno, tipo = abbina_gruppo(importo, candidati)
+    scelto = per_giorno[giorno][0]
+    usati.add(scelto.id)
+    _segna([i], scelto.id, tipo, esito)
+
+
 def abbina_impegni(db: Session) -> dict:
     """Propone il movimento bancario per gli impegni aperti. Non fa commit."""
     # Movimento eliminato (FK SET NULL): l'impegno torna aperto
@@ -122,6 +143,8 @@ def abbina_impegni(db: Session) -> dict:
             _abbina_mutuo(db, i, usati, esito)
         elif i.tipo == "ricorrente":
             _abbina_ricorrente(db, i, ricorrenti, usati, esito)
+        elif i.tipo == "compenso":
+            _abbina_compenso(db, i, usati, esito)
         elif i.tipo not in TIPI_SENZA_BANCA:
             categoria = "tassa_soggiorno" if i.tipo == "tassa_soggiorno" else "f24"
             gruppi.setdefault((categoria, i.data_scadenza), []).append(i)
