@@ -2435,7 +2435,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ✅ v4.14.0 (02/11/2026) — blocchi A–D; ora uso con dati reali, poi Fase 4 (dopo ~1 mese, serve ok) |
-| 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⏳ A caparre ✅ v4.21.0, B stipendi ✅ v4.22.0 (03/11/2026); C tempi, D verifica: serve ok |
+| 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⏳ A caparre ✅ v4.21.0, B stipendi ✅ v4.22.0 (03/11/2026); C tempi e D verifica **in attesa di dati** (vedi sotto) |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
 
@@ -3356,6 +3356,22 @@ valgono subito. Grafico e schede nel blocco D.
   precedenti) → avviso in Previsione (`avvisi` nella risposta) e in Posizione (arancione, tipo `cedolini`).
 - Effetto: solo sul mese dopo l'ultimo cedolino importato (in inverno pochi €, in estate 50–67.000 € al mese).
 
+### Fase 4 — Blocchi C e D rimandati per mancanza di dati (03/11/2026, decisione dell'utente)
+Verificato sui dati reali prima di scrivere codice:
+- **C (tempi di pagamento per fornitore)**: solo **17 abbinamenti** scadenza↔banca (MARR, SGR, Radio Bakery, IGEA,
+  Sogeal, Castellana…), quasi tutti pagati alla scadenza (0–5 gg): lo studio registra quasi tutti i pagamenti come
+  pareggi, quindi le scadenze escono da Passcom prima di poterle abbinare. Il file Passcom delle **rate pagate**
+  (stato P, 7.630 righe) **non è utilizzabile**: la "data pagamento" è la data di chiusura contabile della partita,
+  non del pagamento (MARR in media 187 gg *prima* della scadenza, Google Commerce 943 gg prima).
+  Lo "scaduto" del 03/11 (74.347 €) era quasi tutto Ri.Ba. del 31/10 con l'estratto conto non ancora caricato: è
+  freschezza dei dati, non un ritardo. La base esiste già (abbinamenti + `tempi_pagamento()` della Fase 2).
+- **D (verifica delle previsioni)**: nessuna previsione salvata al 03/11/2026. Consigliato all'utente: "Salva
+  previsione" ora e poi una volta al mese.
+- **Quando riprendere** (l'utente ha chiesto di ricordarglielo): C quando ci sono **almeno ~60 abbinamenti
+  automatici/confermati su almeno 10 fornitori** (`SELECT count(*), count(DISTINCT codice_fornitore) FROM
+  tesoreria_abbinamenti WHERE stato IN ('automatico','confermato')`); D quando ci sono **almeno 3 previsioni salvate
+  distanti almeno un mese** e con mesi già chiusi da confrontare (`tesoreria_previsioni_salvate`).
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**
@@ -3489,7 +3505,9 @@ esistenti, mai query duplicate sulle loro tabelle.
   **Prossimo passo**: uso reale, poi Fase 4 solo con ok dell'utente (strategia prima).
 - **03/11/2026 — PUNTO DI RIPRESA.** Fase 3 chiusa (lasciate fuori due voci, vedi decisioni Fase 4). Fase 4
   avviata: **blocco A caparre fatto (v4.20.0–4.21.0)**, **blocco B stipendi netti fatto (v4.22.0)**. Serve il riavvio
-  del backend. **Prossimo passo**: blocco C (tempi di pagamento per fornitore) con strategia e ok dell'utente.
+  del backend. Blocchi C e D **rimandati finché non ci sono dati** (criteri nella sezione "Blocchi C e D rimandati"):
+  a ogni sessione sulla Tesoreria controllarli e, se soddisfatti, ricordarlo all'utente. Fase 5 (fatture XML) solo
+  con ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.
