@@ -692,7 +692,7 @@ def test_caparra_letta_all_import(client):
     r = client.get("/tesoreria/caparre", params={"anno": 2026}).json()
     luglio = next(x for x in r["mesi"] if x["mese"] == 7)
     assert luglio["quest_anno"]["per_struttura"]["CLB"] == 500
-    assert r["bonifici"] == {"n": 1, "n_letti": 1, "n_esclusi": 0, "n_coda": 0}
+    assert r["bonifici"] == {"n": 1, "n_letti": 1, "n_welcome": 0, "n_senza_periodo": 0, "n_esclusi": 0, "n_coda": 0}
     pos = client.get("/tesoreria/posizione", params={"giorno": "2026-03-05"}).json()["caparre_future"]
     assert pos["totale"] == 500 and pos["per_mese"][0]["mese"] == 7 and pos["n_coda"] == 0
 
@@ -719,3 +719,16 @@ def test_cambio_categoria_toglie_l_arrivo(client):
     assert _caparra(client)["arrivo"] is None
     r = client.get("/tesoreria/caparre", params={"anno": 2026}).json()
     assert r["bonifici"]["n"] == 0
+
+
+def test_caparra_senza_periodo(client):
+    _importa(client)
+    mid = _caparra(client)["id"]
+    r = client.post("/tesoreria/caparre/segna", json={"ids": [mid], "stato": "senza_periodo"})
+    assert r.status_code == 200 and r.json() == {"n": 1}
+    r = client.get("/tesoreria/caparre", params={"anno": 2026}).json()
+    assert r["senza_periodo"]["quest_anno"]["totale"] == 500
+    assert r["totali"]["quest_anno"]["totale"] == 500
+    assert r["bonifici"]["n_senza_periodo"] == 1 and r["coda"] == [] and len(r["sistemati"]) == 1
+    assert client.post("/tesoreria/caparre/segna", json={"ids": [mid], "stato": "altro"}).status_code == 400
+    assert client.post("/tesoreria/caparre/segna", json={"ids": [999999], "stato": "escluso"}).status_code == 404

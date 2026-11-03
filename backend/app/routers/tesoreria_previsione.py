@@ -28,7 +28,7 @@ from app.routers.tesoreria_impegni_abbina import importo_impegno
 from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.routers.tesoreria_piani import rate_intervento
-from app.routers.tesoreria_caparre import caparre_db
+from app.routers.tesoreria_caparre import caparre_db, caparre_per_mese, senza_periodo_db
 from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, puo_vedere
 from app.services.budget_ristoranti import totale_budget_anno
 from app.services.tesoreria_previsione import (
@@ -152,13 +152,14 @@ def _caparre(db: Session, oggi: date, orizzonte: date) -> dict:
     vale solo se gli estratti conto partono almeno da gennaio di due anni prima dell'arrivo (le caparre arrivano
     fino a ~18 mesi prima)."""
     primo = db.query(func.min(TesoreriaMovimento.data_contabile)).scalar()
-    caparre = caparre_db(db)
+    caparre, senza = caparre_db(db), senza_periodo_db(db)
     ap = anno_prima(oggi)
+    stagioni = {}
     out = {}
     for y, m in mesi_tra(oggi, orizzonte):
-        ora = sum((i for pag, arr, _, i in caparre if (arr.year, arr.month) == (y, m) and pag <= oggi < arr), Decimal(0))
-        rif = sum((i for pag, arr, _, i in caparre if (arr.year, arr.month) == (y - 1, m) and pag <= ap and pag < arr),
-                  Decimal(0))
+        if y not in stagioni:       # caparre per mese di arrivo, senza periodo comprese (distribuite)
+            stagioni[y] = (caparre_per_mese(caparre, senza, y, oggi), caparre_per_mese(caparre, senza, y - 1, ap))
+        ora, rif = stagioni[y][0].get(m, Decimal(0)), stagioni[y][1].get(m, Decimal(0))
         if ora or rif:
             out[(y, m)] = (ora, rif if primo and primo <= date(y - 2, 1, 31) else None)
     return out

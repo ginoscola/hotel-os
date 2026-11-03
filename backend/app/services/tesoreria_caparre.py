@@ -5,9 +5,12 @@ incasso arrivato in banca prima del giorno di arrivo (caparra, acconto o saldo a
 Formati visti sui bonifici 2025-2026: "DAL 22/08/2026 AL 29/08/2026" (anche "TURRIDAL 25/04", anni scritti male come
 205/225/2052), "dal 13 06 26 al 20", "DAL 30082025", "dal 22 al 29 giugno", "23-26LUG2025", "4.7 18.7.26",
 "PERIOD OF STAY 010826 - 080826", "VOM 25.05.", solo il mese ("caparra agosto 2025").
+Se la causale non ha date, si cerca l'ordinante (o un nome nella causale) tra gli ospiti delle prenotazioni Welcome
+importate nel Forecast: vale solo se tutte le prenotazioni compatibili cadono nello stesso mese e struttura.
 """
 
 import re
+import unicodedata
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
@@ -131,3 +134,56 @@ def future_al(caparre: list, giorno: date) -> dict:
             mese = out.setdefault((arrivo.year, arrivo.month), {})
             mese[struttura or ""] = mese.get(struttura or "", ZERO) + importo
     return out
+
+
+# ── Incrocio con le prenotazioni Welcome ──────────────────────────────────────────
+
+_NON_NOMI = {"CAPARRA", "CAPARRE", "ACCONTO", "SALDO", "SOGGIORNO", "PRENOTAZIONE", "HOTEL", "CLUB", "PARC",
+             "INTERNATIONAL", "PRESSO", "NOME", "PER", "DEL", "DAL", "DELLA", "SRL", "SPA", "SNC", "SAS", "BONIFICO",
+             "FAVORE", "CAMERA", "VACANZA", "GABICCE", "MARE"}
+
+
+def parole_nome(testo: str) -> set:
+    """Parole di almeno 3 lettere, maiuscole e senza accenti, tolte quelle tipiche delle causali."""
+    t = unicodedata.normalize("NFKD", testo or "").encode("ascii", "ignore").decode().upper()
+    return {p for p in re.sub(r"[^A-Z]", " ", t).split() if len(p) >= 3 and p not in _NON_NOMI}
+
+
+def indice_prenotazioni(prenotazioni: list) -> dict:
+    """{parola: [prenotazione]} per `prenotazioni` = [(parole del nome ospite, arrivo, data prenotazione,
+    struttura, codice)]."""
+    indice = {}
+    for p in prenotazioni:
+        for parola in p[0]:
+            indice.setdefault(parola, []).append(p)
+    return indice
+
+
+def abbina_prenotazione(testo: str, pagamento: date, indice: dict) -> Optional[tuple]:
+    """(arrivo, struttura, codice) se l'ordinante o la causale contengono il nome di un ospite (due parole, o una sola
+    di almeno 5 lettere se il nome ne ha una) e tutte le prenotazioni compatibili — fatte prima del pagamento, con
+    arrivo plausibile — cadono nello stesso mese e struttura. Arrivo = il primo di quelle."""
+    parole = parole_nome(testo)
+    visti, candidati = set(), []
+    for parola in parole:
+        for p in indice.get(parola, ()):
+            if id(p) in visti:
+                continue
+            visti.add(id(p))
+            nomi, arrivo, prenotata, _, _ = p
+            comuni = nomi & parole
+            if len(nomi) >= 2 and len(comuni) < 2 or len(nomi) == 1 and len(next(iter(comuni))) < 5:
+                continue
+            if (prenotata is None or prenotata <= pagamento) and \
+                    pagamento - RITARDO_MAX <= arrivo <= pagamento + ANTICIPO_MAX:
+                candidati.append(p)
+    if not candidati or len({(p[1].year, p[1].month, p[3]) for p in candidati}) != 1:
+        return None
+    scelta = min(candidati, key=lambda p: p[1])
+    return scelta[1], scelta[3], scelta[4]
+
+
+def distribuisci(importo: Decimal, pesi: dict) -> dict:
+    """Ripartisce `importo` sulle chiavi in proporzione ai pesi (vuoto se i pesi sono tutti zero)."""
+    totale = sum(pesi.values(), ZERO)
+    return {k: importo * v / totale for k, v in pesi.items() if v} if totale else {}

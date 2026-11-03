@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
 from app.models.prenotazioni import PrenotazioneCancellata, PrenotazioneCancellataImport
+from app.routers.tesoreria_shared import aggiorna_caparre
 from app.services.prenotazioni_parser import parse_csv
 from app.utils.locale_it import MESI_IT
 
@@ -189,6 +190,9 @@ def importa_csv(
             riga_esistente.import_id = imp.id
             n_aggiornate += 1
 
+        db.flush()
+        if not is_test:
+            aggiorna_caparre(db)    # Tesoreria: bonifici da clienti abbinati agli ospiti per mese di arrivo
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -226,6 +230,8 @@ def elimina_import(import_id: int, conferma: bool = Query(False), db: Session = 
     if not imp:
         raise HTTPException(status_code=404, detail="Import non trovato")
     db.delete(imp)
+    db.flush()
+    aggiorna_caparre(db)
     db.commit()
     return {"eliminato": import_id}
 

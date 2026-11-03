@@ -15,7 +15,10 @@ from sqlalchemy.orm import Session
 
 from app.models.tesoreria import TesoreriaCategoria, TesoreriaMovimento, TesoreriaRegola
 from app.permessi import richiedi_permesso
-from app.services.tesoreria_caparre import leggi_arrivo, leggi_struttura
+from app.models.prenotazioni import PrenotazioneCancellata
+from app.services.tesoreria_caparre import (
+    abbina_prenotazione, indice_prenotazioni, leggi_arrivo, leggi_struttura, parole_nome, pulisci,
+)
 from app.services.tesoreria_classificatore import RegolaClassificazione, classifica
 from app.utils.locale_it import formatta_euro_it
 
@@ -83,9 +86,19 @@ def ricalcola_categorie(db: Session, regole: Optional[list] = None) -> dict:
     return {"n_controllati": len(movimenti), "n_cambiati": n_cambiati}
 
 
+def indice_welcome(db: Session) -> dict:
+    """Prenotazioni Welcome non disdette importate nel Forecast, indicizzate per parola del nome dell'ospite."""
+    righe = db.query(
+        PrenotazioneCancellata.cliente, PrenotazioneCancellata.arrivo, PrenotazioneCancellata.data_prenotazione,
+        PrenotazioneCancellata.hotel_code, PrenotazioneCancellata.numero_prenotazione,
+    ).filter(PrenotazioneCancellata.cancellata.is_(False), PrenotazioneCancellata.is_test.is_(False)).all()
+    return indice_prenotazioni([(frozenset(parole_nome(c)), a, d, h, n or "") for c, a, d, h, n in righe])
+
+
 def aggiorna_caparre(db: Session) -> int:
-    """Rilegge l'arrivo del soggiorno dalla causale di tutti i bonifici da clienti in entrata (non corretti a mano)
-    e lo toglie ai movimenti che non lo sono più. Non fa commit. Restituisce quanti hanno un arrivo."""
+    """Rilegge l'arrivo del soggiorno di tutti i bonifici da clienti in entrata (non sistemati a mano): prima dalla
+    causale, poi cercando l'ordinante tra gli ospiti delle prenotazioni Welcome (regola 'welcome:<codice>'); lo toglie
+    ai movimenti che non sono più bonifici da clienti. Non fa commit. Restituisce quanti hanno un arrivo."""
     cat = db.query(TesoreriaCategoria.id).filter(TesoreriaCategoria.codice == CATEGORIA_CAPARRE).first()
     cat_id = cat[0] if cat else None
     da_leggere = and_(TesoreriaMovimento.categoria_id == cat_id, TesoreriaMovimento.importo > 0)
@@ -93,12 +106,19 @@ def aggiorna_caparre(db: Session) -> int:
         TesoreriaMovimento.arrivo_manuale.is_(False),
         or_(da_leggere, TesoreriaMovimento.arrivo.isnot(None), TesoreriaMovimento.arrivo_regola.isnot(None)),
     ).all()
+    indice = None
     n = 0
     for m in movimenti:
         arrivo, regola, struttura = None, None, None
         if m.categoria_id == cat_id and m.importo > 0:
             arrivo, regola = leggi_arrivo(m.descrizione, m.data_contabile)
             struttura = leggi_struttura(m.descrizione) if arrivo else None
+            if arrivo is None:
+                indice = indice_welcome(db) if indice is None else indice
+                trovata = abbina_prenotazione(f"{m.controparte or ''} {pulisci(m.descrizione)}", m.data_contabile, indice)
+                if trovata:
+                    arrivo, struttura, codice = trovata
+                    regola = f"welcome:{codice}"[:20]
         m.arrivo, m.arrivo_regola, m.arrivo_struttura = arrivo, regola, struttura
         n += arrivo is not None
     return n

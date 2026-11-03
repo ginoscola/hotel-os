@@ -87,7 +87,9 @@ export default function TabPosizione({ onVaiA }) {
             </tbody>
           </Table>
           <p className="ui-text-muted" style={{ marginTop: 8 }}>
-            Bonifici da clienti già incassati per soggiorni non ancora iniziati, per mese di arrivo letto dalla causale.
+            {dati.caparre_future.senza_periodo > 0 && <>Nel totale anche {formatEuro(dati.caparre_future.senza_periodo)} di
+              caparre senza periodo, stimate sui mesi di arrivo ancora da venire. </>}
+            Bonifici da clienti già incassati per soggiorni non ancora iniziati, per mese di arrivo.
             Sono soldi in cassa legati a un servizio ancora da dare. Dettaglio e confronto con l'anno prima nella scheda
             Caparre.
           </p>

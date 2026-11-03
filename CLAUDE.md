@@ -264,7 +264,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 915 test verdi (03/11/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 918 test verdi (03/11/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -2435,7 +2435,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ✅ v4.14.0 (02/11/2026) — blocchi A–D; ora uso con dati reali, poi Fase 4 (dopo ~1 mese, serve ok) |
-| 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⏳ blocco A caparre ✅ v4.20.0 (03/11/2026); B stipendi, C tempi, D verifica: serve ok |
+| 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⏳ blocco A caparre ✅ v4.21.0 (03/11/2026); B stipendi, C tempi, D verifica: serve ok |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
 
@@ -3322,9 +3322,24 @@ valgono subito. Grafico e schede nel blocco D.
 - Frontend: scheda **Caparre** (`pages/tesoreria/TabCaparre.jsx`, dopo Impegni; `NavAnno` per stagione, tabella
   mesi × strutture con confronto, coda con data di arrivo + struttura → Salva o "Non è una caparra"), riquadro in
   Posizione. `STRUTTURE` in `helpers.jsx`.
-- Limiti: caparre con carta/POS invisibili; una correzione sbagliata si annulla solo da endpoint
-  (`{automatico: true}`), nessuna vista dei letti/esclusi in UI. Prima coda reale: 3 pagamenti Italcamel (fatture di
-  agosto–settembre) e un rimborso, tutti da marcare "Non è una caparra".
+- Limite: caparre con carta/POS invisibili.
+- **v4.21.0 — incrocio con Welcome e "senza periodo"** (richiesta dell'utente: troppo lungo cercare a mano):
+  - se la causale non ha date, `abbina_prenotazione()` cerca l'ordinante (o un nome nella causale, `parole_nome()`
+    senza le parole tipiche delle causali) tra gli ospiti delle prenotazioni Welcome **non disdette** importate nel
+    Forecast (`indice_welcome()` in `tesoreria_shared.py`): due parole del nome in comune (una sola di ≥ 5 lettere
+    se il nome ne ha una), prenotazione fatta prima del pagamento, arrivo plausibile; vale solo se tutte le
+    prenotazioni compatibili cadono nello **stesso mese e struttura** (arrivo = la prima). Regola `welcome:<codice>`.
+    `aggiorna_caparre()` gira anche dopo import ed eliminazione di un import Welcome (`routers/prenotazioni.py`).
+    ⚠️ "Totale acconti/caparre" di Welcome non è affidabile (a zero anche con caparra pagata): l'incrocio è sul nome.
+  - stato **"caparra senza periodo"** (`arrivo_regola='senza_periodo'`, a mano, anche più bonifici insieme con
+    `POST /tesoreria/caparre/segna {ids, stato: senza_periodo|escluso}`): conta nella stagione del pagamento, riga
+    "Periodo non indicato" nel riepilogo, in Previsione e Posizione distribuita sui mesi di arrivo in proporzione alle
+    caparre note (`caparre_per_mese()`; senza caparre note, come la stagione prima).
+  - Scheda: coda per qualunque stagione con selezione multipla, sezione apribile "Abbinati a Welcome o sistemati a
+    mano" con "Torna automatico" / "Non è una caparra".
+  - Stagione 2025/26 sul DB reale: 1.162 bonifici, 1.050 con arrivo (184 tramite Welcome), 58 "non è una caparra"
+    segnati dall'utente (saldi a fine soggiorno, riaddebiti), 54 da completare. Stagione 2024/25 senza Welcome
+    (nessuna prenotazione 2025 importata): conta solo come anno prima della 2026.
 
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
@@ -3345,8 +3360,10 @@ esistenti, mai query duplicate sulle loro tabelle.
   **Corrispettivi → tassa di soggiorno futura**: `_tassa_incassata_per_mese()` di `tesoreria_kpi.py`.
 - **Tesoreria interna**: `tesoreria_import.conferma_import`/`elimina_import` chiamano
   `ricalcola_abbinamenti()` di `tesoreria_abbinamenti.py` (gli estratti conto cambiano gli abbinamenti).
-- **Tesoreria interna (caparre)**: `caparre_db()` di `tesoreria_caparre.py` usata da `tesoreria_previsione.py`
-  (rettifica) e `caparre_posizione()` da `tesoreria_report.posizione()`.
+- **Tesoreria interna (caparre)**: `caparre_db()`/`senza_periodo_db()`/`caparre_per_mese()` di `tesoreria_caparre.py`
+  usate da `tesoreria_previsione.py` (rettifica) e `caparre_posizione()` da `tesoreria_report.posizione()`.
+- **Forecast → prenotazioni Welcome**: `indice_welcome()` (tesoreria_shared) legge `prenotazioni_cancellate`
+  (non disdette, non test); `routers/prenotazioni.py` chiama `aggiorna_caparre()` dopo import ed eliminazione.
 - **Corrispettivi → export**: `_risposta_tabella()` di `routers/corrispettivi_documenti.py` (xlsx/csv/pdf
   da intestazioni + righe) usata dagli export di Movimenti e Consuntivo.
 

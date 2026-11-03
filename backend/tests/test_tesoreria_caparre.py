@@ -9,7 +9,10 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.services.tesoreria_caparre import future_al, leggi_arrivo, leggi_struttura, per_mese_arrivo  # noqa: E402
+from app.services.tesoreria_caparre import (  # noqa: E402
+    abbina_prenotazione, distribuisci, future_al, indice_prenotazioni, leggi_arrivo, leggi_struttura, parole_nome,
+    per_mese_arrivo,
+)
 from app.services.tesoreria_previsione import DatiPrevisione, calcola_scenario  # noqa: E402
 
 PAG = date(2026, 3, 2)
@@ -125,3 +128,35 @@ def test_rettifica_nulla_senza_storico_dell_anno_prima():
 def test_entrate_mai_negative():
     righe = calcola_scenario(_dati({(2027, 7): (D("9000"), D("0"))}), "realista")
     assert _mese(righe, 2027, 7)["entrate"] == 0
+
+
+
+def _p(nome, arrivo, prenotata, struttura, codice):
+    return (frozenset(parole_nome(nome)), arrivo, prenotata, struttura, codice)
+
+
+PRENOTAZIONI = indice_prenotazioni([
+    _p("Cerchioni Massimo", date(2026, 8, 9), date(2026, 1, 20), "INT", "101"),
+    _p("Ortler Federico", date(2026, 6, 20), date(2026, 1, 30), "CLB", "102"),
+    _p("Ortler Federico", date(2026, 6, 27), date(2026, 1, 30), "CLB", "103"),      # stesso mese: va bene
+    _p("Bianchi Laura", date(2026, 7, 4), date(2026, 2, 1), "DPH", "104"),
+    _p("Bianchi Laura", date(2026, 8, 15), date(2026, 2, 1), "DPH", "105"),         # mesi diversi: ambiguo
+    _p("Verdi Anna", date(2026, 7, 10), date(2026, 3, 15), "DPH", "106"),           # prenotata dopo il bonifico
+    _p("Kemp", date(2026, 9, 4), date(2026, 2, 1), "INT", "107"),
+])
+
+
+def test_abbina_prenotazione_per_nome_ospite():
+    assert abbina_prenotazione("CERCHIONI MASSIMO GUIDOTTI BARBARA CAPARRA", date(2026, 1, 27), PRENOTAZIONI) == \
+        (date(2026, 8, 9), "INT", "101")
+    assert abbina_prenotazione("ORTLER FEDERICO, MESSNER MARIA", date(2026, 2, 3), PRENOTAZIONI) == \
+        (date(2026, 6, 20), "CLB", "102")
+    assert abbina_prenotazione("Sarah Kemp caparra", date(2026, 3, 1), PRENOTAZIONI) is None    # una parola corta
+    assert abbina_prenotazione("BIANCHI LAURA CAPARRA", date(2026, 2, 10), PRENOTAZIONI) is None  # due mesi
+    assert abbina_prenotazione("VERDI ANNA CAPARRA", date(2026, 3, 1), PRENOTAZIONI) is None      # non ancora prenotata
+    assert abbina_prenotazione("CERCHIONI CAPARRA", date(2026, 1, 27), PRENOTAZIONI) is None      # una sola parola
+
+
+def test_distribuisci():
+    assert distribuisci(D("100"), {7: D("300"), 8: D("100")}) == {7: D("75"), 8: D("25")}
+    assert distribuisci(D("100"), {}) == {}
