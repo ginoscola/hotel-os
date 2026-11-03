@@ -3341,6 +3341,14 @@ valgono subito. Grafico e schede nel blocco D.
     segnati dall'utente (saldi a fine soggiorno, riaddebiti), 54 da completare. Stagione 2024/25 senza Welcome
     (nessuna prenotazione 2025 importata): conta solo come anno prima della 2026.
 
+### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
+- **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
+  riferimento (`anno_riferimento()`, il più recente). Con almeno due inverni completi in banca (dalla previsione della
+  stagione 2028: 2025/26 e 2026/27) calcolare per ogni anno la quota della stagione incassata mese per mese, fare la
+  media pesata (più recente 2:1, come il pickup del Budget) e applicarla al totale atteso dal Budget. Possibile
+  anche correggere il ritmo dei mesi futuri quando a metà inverno si è molto avanti o indietro (oggi la rettifica
+  caparre sposta solo sul mese di arrivo).
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
