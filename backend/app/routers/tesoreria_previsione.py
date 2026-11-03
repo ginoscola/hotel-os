@@ -17,7 +17,7 @@ from app.database import get_db
 from app.models.revenue import AppConfig
 from app.models.revenue import User
 from app.models.tesoreria import (
-    TesoreriaCategoria, TesoreriaConto, TesoreriaImpegno, TesoreriaIntervento, TesoreriaMovimento,
+    TesoreriaAdvertising, TesoreriaAdvertisingMese, TesoreriaCategoria, TesoreriaConto, TesoreriaImpegno, TesoreriaIntervento, TesoreriaMovimento,
     TesoreriaPrevisioneSalvata, TesoreriaRicorrente,
 )
 from app.routers.corrispettivi_documenti import _risposta_tabella
@@ -34,12 +34,13 @@ from app.services.tesoreria_previsione import (
     GRUPPI_CRESCITA, SCENARI, TIPI_FISCO, Certa, DatiPrevisione, applica_prova, calcola_scenario, fattore_budget, fine_mese,
     mesi_tra, parametri_default,
 )
+from app.services.tesoreria_piani import advertising_per_addebito
 from app.services.tesoreria_saldi import saldo_a_data
 
 router = APIRouter()
 
 CHIAVE_PARAMETRI = "tesoreria_previsione_parametri"
-GRUPPO_DA_TIPO = {"affitto": "affitti", "mutuo": "mutuo", "ricorrente": "ricorrenti", "intervento": "interventi", "carta": "carte", "compenso": "compensi"}
+GRUPPO_DA_TIPO = {"affitto": "affitti", "mutuo": "mutuo", "ricorrente": "ricorrenti", "intervento": "interventi", "carta": "carte", "compenso": "compensi", "advertising": "advertising"}
 STATI_SCADENZA_APERTA = ("aperta", "scaduta", "da_confermare")
 
 
@@ -124,6 +125,12 @@ def _certe(db: Session, oggi: date) -> list:
     return out
 
 
+def _advertising_addebitato(db: Session) -> dict:
+    righe = db.query(TesoreriaAdvertising.anno, TesoreriaAdvertisingMese.mese, TesoreriaAdvertisingMese.importo).join(
+        TesoreriaAdvertisingMese, TesoreriaAdvertisingMese.advertising_id == TesoreriaAdvertising.id)
+    return advertising_per_addebito([tuple(r) for r in righe])
+
+
 def dati_previsione(db: Session, oggi: date) -> DatiPrevisione:
     orizzonte = date.fromisoformat(leggi_parametri_fiscali(db)["orizzonte"])
     conti = db.query(TesoreriaConto).filter(TesoreriaConto.tipo.in_(TIPI_BANCA), TesoreriaConto.attivo.is_(True)).all()
@@ -134,7 +141,7 @@ def dati_previsione(db: Session, oggi: date) -> DatiPrevisione:
     return DatiPrevisione(
         oggi=oggi, orizzonte=orizzonte, saldo_iniziale=saldo, entrate=entrate, uscite=uscite, certe=_certe(db, oggi),
         budget=budget, ricavi=ricavi, fidi=[(c.fido, c.fido_scadenza) for c in conti if c.fido],
-        parametri=leggi_parametri(db),
+        parametri=leggi_parametri(db), advertising=_advertising_addebitato(db),
     )
 
 
@@ -246,7 +253,7 @@ def elimina_salvata(salvata_id: int, db: Session = Depends(get_db), _=Depends(pu
 
 
 COLONNE_CERTE = (("fisco", "Fisco"), ("affitti", "Affitti"), ("mutuo", "Mutuo"), ("ricorrenti", "Ricorrenti"),
-                 ("interventi", "Interventi"), ("compensi", "Compensi soci"), ("carte", "Carte (estratti)"), ("fornitori", "Fornitori (scadenzario)"))
+                 ("interventi", "Interventi"), ("compensi", "Compensi soci"), ("advertising", "Advertising (carta)"), ("carte", "Carte (estratti)"), ("fornitori", "Fornitori (scadenzario)"))
 COLONNE_STIMATE = (("fornitori", "Fornitori stimati"), ("personale", "Personale"), ("utenze", "Utenze"),
                    ("marketing", "Marketing"), ("carte", "Carte stimate"), ("altre", "Altre"))
 

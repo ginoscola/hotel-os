@@ -60,6 +60,34 @@ def date_ricorrente(da: date, a: date, giorno: int, mesi: list, data_da: Optiona
     return out
 
 
+def data_addebito_advertising(anno: int, mese: int, giorno: Optional[int]) -> date:
+    """La spesa di un mese finisce nell'estratto che si addebita il mese dopo (AMEX chiude il 6 e addebita il 27,
+    BCC chiude il 28 e addebita il 26 del mese dopo). Senza giorno di addebito: fine del mese dopo."""
+    anno, mese = (anno, mese + 1) if mese < 12 else (anno + 1, 1)
+    return primo_lavorativo(_giorno_nel_mese(anno, mese, giorno or 31))
+
+
+def advertising_per_addebito(piani: list) -> dict:
+    """{(anno, mese dell'addebito): importo} da [(anno, mese della spesa, importo)]: quanto degli addebiti carta
+    di quel mese era advertising."""
+    out = {}
+    for anno, mese, importo in piani:
+        chiave = (anno, mese + 1) if mese < 12 else (anno + 1, 1)
+        out[chiave] = out.get(chiave, Decimal(0)) + importo
+    return out
+
+
+def chiudi_totale(totale: Decimal, importi: dict) -> dict:
+    """{mese: importo} con l'ultimo mese che prende quanto manca al totale. Errore se gli altri lo superano."""
+    if not importi:
+        return {}
+    ultimo = max(importi)
+    altri = sum((v for k, v in importi.items() if k != ultimo), Decimal(0))
+    if altri > totale:
+        raise ValueError(f"I mesi prima di {ultimo} superano già il totale di {altri - totale:.2f} €")
+    return {**importi, ultimo: totale - altri}
+
+
 def fine_mese(primo: date) -> date:
     return _giorno_nel_mese(primo.year, primo.month, 31)
 

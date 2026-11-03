@@ -80,7 +80,7 @@ def stima_altri_crediti(storico: dict, y: int, m: int) -> Decimal:
 class Certa:
     data: date
     importo: Decimal
-    gruppo: str                      # fisco, affitti, mutuo, ricorrenti, interventi, compensi, carte, fornitori
+    gruppo: str                      # fisco, affitti, mutuo, ricorrenti, interventi, compensi, advertising, carte, fornitori
     categoria: Optional[str] = None  # per sottrarla dalla stima (RAI da utenze, BCC da fornitori_sdd...)
     ident: Optional[int] = None      # id dell'impegno: serve alle prove
     codice: Optional[str] = None
@@ -108,6 +108,7 @@ class DatiPrevisione:
     ricavi: dict = field(default_factory=dict)        # {anno: Decimal}
     fidi: list = field(default_factory=list)          # [(importo, scadenza o None)]
     parametri: dict = field(default_factory=parametri_default)
+    advertising: dict = field(default_factory=dict)   # {(y, m): Decimal} advertising addebitato dalle carte nel mese
 
 
 def _crescita(gruppo: str, fattore: Decimal, parametri: dict) -> Decimal:
@@ -130,7 +131,11 @@ def stime_mese(d: DatiPrevisione, y: int, m: int) -> dict:
     gruppi = {}
     for categoria, gruppo in GRUPPI_STIMA.items():
         crescita = _crescita(gruppo, fattore, d.parametri) if y > d.oggi.year else UNO
-        gruppi[gruppo] = gruppi.get(gruppo, ZERO) + d.uscite.get(categoria, {}).get((rif, m), ZERO) * crescita
+        storico = d.uscite.get(categoria, {}).get((rif, m), ZERO)
+        if categoria == "carte":
+            # L'advertising è deciso in Admin ed entra come impegno: qui restano solo le altre spese con carta
+            storico = max(storico - d.advertising.get((rif, m), ZERO), ZERO)
+        gruppi[gruppo] = gruppi.get(gruppo, ZERO) + storico * crescita
     return gruppi
 
 

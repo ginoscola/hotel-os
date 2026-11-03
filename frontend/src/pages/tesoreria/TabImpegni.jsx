@@ -11,7 +11,7 @@ import { oggiISO } from './helpers.jsx'
 
 const ETICHETTE_TIPO = {
   f24_dipendenti: 'F24 dipendenti', iva: 'IVA', ires: 'IRES', irap: 'IRAP', tassa_soggiorno: 'Tassa di soggiorno', tari: 'TARI',
-  tributo_fisso: 'Tributi fissi', affitto: 'Affitti', mutuo: 'Mutuo', ricorrente: 'Ricorrenti', intervento: 'Interventi', compenso: 'Compensi soci', carta: 'Estratti carte', altro: 'Altro',
+  tributo_fisso: 'Tributi fissi', affitto: 'Affitti', mutuo: 'Mutuo', ricorrente: 'Ricorrenti', intervento: 'Interventi', compenso: 'Compensi soci', advertising: 'Advertising (carta)', carta: 'Estratti carte', altro: 'Altro',
 }
 const STATI = {
   stimato: ['Stimato', 'neutral'], confermato: ['Confermato', 'info'], pagato: ['Pagato', 'ok'], coperto: ['Coperto da crediti', 'ok'],

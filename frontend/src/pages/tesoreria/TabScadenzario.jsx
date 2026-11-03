@@ -23,6 +23,7 @@ export const STATI_SCADENZA = {
   da_confermare: { label: 'da confermare', tono: 'warn' },
   pagata_banca: { label: 'pagata in banca', tono: 'ok' },
   pagata_manuale: { label: 'pagata a mano', tono: 'ok' },
+  pagata_carta: { label: 'pagata con carta', tono: 'ok' },
   compensata: { label: 'chiusa da pareggio', tono: 'info' },
   residuo: { label: 'residuo', tono: 'neutral' },
   pareggio: { label: 'pareggio', tono: 'info' },
@@ -111,7 +112,7 @@ function TabellaScadenze({ righe, selezione, onSeleziona, mostraFornitore = true
       <tbody>
         {righe.map(r => (
           <tr key={r.chiave} className={r.stato === 'scaduta' ? 'ui-riga-errore'
-            : ['pagata_banca', 'pagata_manuale'].includes(r.stato) ? 'ui-riga-ok'
+            : ['pagata_banca', 'pagata_manuale', 'pagata_carta'].includes(r.stato) ? 'ui-riga-ok'
               : ['compensata', 'pareggio', 'residuo'].includes(r.stato) ? 'ui-riga-attenuata' : undefined}>
             {onSeleziona && (
               <Td>{selezionabile(r) && (

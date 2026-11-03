@@ -1,5 +1,6 @@
 // Admin → Tesoreria: conti (fido e scadenza), categorie (colore, operative o no), regole di
-// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza, piano affitti, interventi, ricorrenti, mutuo, dati fiscali,
+// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza, piano affitti, interventi, advertising e fornitori
+// pagati con carta, ricorrenti, mutuo, dati fiscali,
 // parametri della previsione.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import api from '../../api/client.js'
@@ -743,6 +744,202 @@ export function AdminTesoreriaCompensi() {
           onAggiorna={nuovo => setCompensi(lista => lista.map(x => (x.id === nuovo.id ? nuovo : x)))} />
       )}
     </Card>
+  )
+}
+
+// ── Advertising pagato con carta e fornitori pagati con carta ───────────────────
+
+const MESI_ADV = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
+const numero = v => Number(String(v ?? '').replace(',', '.')) || 0
+
+/** Valori a schermo dei 12 mesi con la bozza applicata: l'ultimo mese compilato prende quanto manca al totale. */
+function mesiConBozza(piano, bozza) {
+  const valori = {}
+  for (const m of piano.mesi) valori[m.mese] = String(m.importo)
+  for (const [m, v] of Object.entries(bozza?.mesi || {})) {
+    if (v === '' || v == null) delete valori[m]; else valori[m] = v
+  }
+  const compilati = Object.keys(valori).map(Number).sort((a, b) => a - b)
+  const ultimo = compilati.at(-1)
+  const totale = numero(bozza?.totale ?? piano.totale)
+  const altri = compilati.slice(0, -1).reduce((x, m) => x + numero(valori[m]), 0)
+  return { valori, ultimo, automatico: compilati.length > 1 ? totale - altri : null }
+}
+
+function PianoAdvertising({ piano, carte, onAggiorna, onElimina }) {
+  const [bozza, setBozza] = useState(null)
+  const avvisi = useAvvisi()
+  const { valori, ultimo, automatico } = mesiConBozza(piano, bozza)
+  const info = new Map(piano.mesi.map(m => [m.mese, m]))
+  const v = { ...piano, ...(bozza || {}) }
+  const modifica = patch => setBozza(b => ({ ...(b || {}), ...patch }))
+  const modificaMese = (m, val) => setBozza(b => ({ ...(b || {}), mesi: { ...(b?.mesi || {}), [m]: val } }))
+
+  async function salva() {
+    try {
+      const corpo = { ...bozza }
+      if ('totale' in corpo) corpo.totale = String(corpo.totale).replace(',', '.')
+      if (corpo.mesi) corpo.mesi = Object.fromEntries(Object.entries(corpo.mesi).map(([m, x]) => [m, x === '' ? null : String(x).replace(',', '.')]))
+      onAggiorna((await api.put(`/tesoreria/piani/advertising/${piano.id}`, corpo)).data)
+      setBozza(null)
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 8 }}>
+        <strong style={{ fontSize: 16, marginRight: 8 }}>{piano.anno}</strong>
+        <Field label="Carta">
+          <Select value={v.conto_id} onChange={e => modifica({ conto_id: Number(e.target.value) })}>
+            {carte.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </Select>
+        </Field>
+        <Field label="Totale dell'anno (€)"><Input value={v.totale} inputMode="decimal" style={{ width: 110 }} onChange={e => modifica({ totale: e.target.value })} /></Field>
+        <Field label="Nota"><Input value={v.nota || ''} style={{ width: 220 }} onChange={e => modifica({ nota: e.target.value })} /></Field>
+        {bozza ? <>
+          <Button onClick={salva}>Salva</Button>
+          <Button variant="ghost" onClick={() => setBozza(null)}>Annulla</Button>
+        </> : <Button variant="danger-soft" onClick={() => onElimina(piano)}>Elimina</Button>}
+      </div>
+      <Table compact>
+        <thead><tr><Th>Mese della spesa</Th><Th num>Spesa (€)</Th><Th>Addebito in banca</Th><Th>Nella previsione</Th></tr></thead>
+        <tbody>
+          {MESI_ADV.map((nome, i) => {
+            const m = i + 1
+            const r = info.get(m)
+            const auto = m === ultimo && automatico != null
+            const modificato = bozza?.mesi && m in bozza.mesi
+            return (
+              <tr key={m} className={modificato ? 'ui-riga-modificata' : undefined}>
+                <Td>{nome}</Td>
+                <Td num>
+                  {auto
+                    ? <span>{formatEuro(automatico)} <span className="ui-text-muted">automatico</span></span>
+                    : <Input value={valori[m] ?? ''} inputMode="decimal" style={{ width: 110 }} placeholder="—" onChange={e => modificaMese(m, e.target.value)} />}
+                </Td>
+                <Td>{r ? formatData(r.data_addebito) : '—'}</Td>
+                <Td>{!r ? '—' : r.in_previsione ? <Badge tono="info">sì</Badge>
+                  : r.addebitato ? <span className="ui-text-muted">già addebitato</span> : <span className="ui-text-muted">nell'estratto inserito</span>}</Td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </Table>
+      <div className="ui-text-muted" style={{ marginTop: 4 }}>In previsione: {formatEuro(piano.in_previsione)}</div>
+    </div>
+  )
+}
+
+function FornitoriCarta() {
+  const [elenco, setElenco] = useState(null)
+  const [fornitori, setFornitori] = useState([])
+  const [scelta, setScelta] = useState('')
+  const avvisi = useAvvisi()
+
+  useEffect(() => {
+    Promise.all([api.get('/tesoreria/scadenzario/fornitori-carta'), api.get('/tesoreria/scadenzario/stato')])
+      .then(([a, b]) => { setElenco(a.data); setFornitori(b.data.fornitori || []) })
+      .catch(e => avvisi.errore(mostraErrore(e)))
+  }, [avvisi])
+
+  async function salva(nuovo) {
+    try { setElenco((await api.put('/tesoreria/scadenzario/fornitori-carta', nuovo)).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  if (!elenco) return <Loading />
+  const presenti = new Set(elenco.map(f => f.codice_fornitore))
+  const disponibili = fornitori.filter(f => !presenti.has(f.codice_fornitore)).sort((a, b) => a.fornitore.localeCompare(b.fornitore))
+  return (
+    <Card title="Fornitori pagati con carta">
+      <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+        Le loro fatture nello scadenzario Passcom risultano <strong>pagate con carta</strong>: non sono da pagare, non sono scadute, non vanno
+        segnalate allo studio e non entrano nella previsione (la spesa è già nell'estratto della carta o nel piano advertising qui sopra).
+      </p>
+      {elenco.length === 0 ? <StatoVuoto>Nessun fornitore</StatoVuoto> : (
+        <Table compact>
+          <thead><tr><Th>Codice Passcom</Th><Th>Fornitore</Th><Th></Th></tr></thead>
+          <tbody>
+            {elenco.map(f => (
+              <tr key={f.codice_fornitore}>
+                <Td>{f.codice_fornitore}</Td><Td>{f.fornitore}</Td>
+                <Td><Button size="sm" variant="ghost" onClick={() => salva(elenco.filter(x => x.codice_fornitore !== f.codice_fornitore))}>Togli</Button></Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
+        <Field label="Fornitore dello scadenzario" style={{ flex: 1 }}>
+          <Select value={scelta} onChange={e => setScelta(e.target.value)}>
+            <option value="">—</option>
+            {disponibili.map(f => <option key={f.codice_fornitore} value={f.codice_fornitore}>{f.fornitore} ({f.codice_fornitore})</option>)}
+          </Select>
+        </Field>
+        <Button disabled={!scelta} onClick={() => {
+          const f = fornitori.find(x => x.codice_fornitore === scelta)
+          salva([...elenco, { codice_fornitore: f.codice_fornitore, fornitore: f.fornitore }]); setScelta('')
+        }}>Aggiungi</Button>
+      </div>
+    </Card>
+  )
+}
+
+export function AdminTesoreriaAdvertising() {
+  const [piani, setPiani] = useState(null)
+  const [carte, setCarte] = useState([])
+  const [nuovo, setNuovo] = useState({ anno: new Date().getFullYear() + 1, conto_id: '', totale: '' })
+  const avvisi = useAvvisi()
+  const conferma = useConferma()
+
+  const carica = useCallback(async () => {
+    try {
+      const [p, c] = await Promise.all([api.get('/tesoreria/piani/advertising'), api.get('/tesoreria/conti')])
+      const soloCarte = c.data.filter(x => x.tipo === 'carta_credito')
+      setPiani(p.data); setCarte(soloCarte)
+      setNuovo(n => ({ ...n, conto_id: n.conto_id || (soloCarte.find(x => x.codice === 'AMEX') || soloCarte[0])?.id || '' }))
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }, [avvisi])
+  useEffect(() => { carica() }, [carica])
+
+  async function aggiungi() {
+    try {
+      await api.post('/tesoreria/piani/advertising', { ...nuovo, totale: String(nuovo.totale).replace(',', '.') })
+      setNuovo({ ...nuovo, totale: '' }); carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  async function elimina(p) {
+    if (!await conferma({ titolo: "Eliminare il piano advertising?", messaggio: `Anno ${p.anno}`, pericolo: true })) return
+    try { await api.delete(`/tesoreria/piani/advertising/${p.id}`); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  if (!piani) return <Loading />
+  return (
+    <>
+      <Card title="Advertising pagato con carta (Google, Meta)">
+        <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+          Spesa di ogni mese decisa da te: esce dalla banca con l'addebito della carta del <strong>mese dopo</strong> (AMEX: estratto chiuso il 6,
+          addebito intorno al 27). L'ultimo mese compilato prende quanto manca al totale dell'anno. In previsione entra come gruppo «Advertising»;
+          la stima «Carte» dello stesso mese dell'anno di riferimento viene ridotta dell'advertising di quell'anno, quindi inserisci anche
+          gli anni passati (sono il riferimento). Un mese il cui estratto è già inserito non entra: lo contiene l'estratto.
+        </p>
+        {piani.length === 0 ? <StatoVuoto>Nessun piano</StatoVuoto> : piani.map(p => (
+          <PianoAdvertising key={p.id} piano={p} carte={carte} onElimina={elimina}
+            onAggiorna={nuovo => setPiani(lista => lista.map(x => (x.id === nuovo.id ? nuovo : x)))} />
+        ))}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12, flexWrap: 'wrap' }}>
+          <Field label="Anno"><Input type="number" value={nuovo.anno} style={{ width: 80 }} onChange={e => setNuovo({ ...nuovo, anno: Number(e.target.value) })} /></Field>
+          <Field label="Carta">
+            <Select value={nuovo.conto_id} onChange={e => setNuovo({ ...nuovo, conto_id: Number(e.target.value) })}>
+              {carte.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </Select>
+          </Field>
+          <Field label="Totale dell'anno (€)"><Input value={nuovo.totale} inputMode="decimal" style={{ width: 110 }} onChange={e => setNuovo({ ...nuovo, totale: e.target.value })} /></Field>
+          <Button onClick={aggiungi} disabled={!nuovo.totale || !nuovo.conto_id}>Aggiungi anno</Button>
+        </div>
+      </Card>
+      <div style={{ height: 16 }} />
+      <FornitoriCarta />
+    </>
   )
 }
 

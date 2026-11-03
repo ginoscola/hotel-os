@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.tesoreria import (
-    STATI_INTERVENTO, VOCI_COMPENSO, TesoreriaCategoria, TesoreriaCompenso, TesoreriaConto, TesoreriaContrattoAffitto, TesoreriaImpegno,
+    STATI_INTERVENTO, VOCI_COMPENSO, TesoreriaAdvertising, TesoreriaAdvertisingMese, TesoreriaCategoria, TesoreriaCompenso, TesoreriaConto, TesoreriaContrattoAffitto, TesoreriaImpegno,
     TesoreriaIntervento, TesoreriaInterventoScadenza, TesoreriaRataAffitto, TesoreriaRataCompenso, TesoreriaRataIntervento, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
 )
 from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno
@@ -24,10 +24,11 @@ from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.routers.tesoreria_shared import euro, puo_importare, puo_modificare, puo_vedere
 from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_piani import (
-    TOLLERANZA_PERCENTUALE, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, importi_rate_intervento, nome_corrisponde, parse_piano_mutuo,
+    TOLLERANZA_PERCENTUALE, chiudi_totale, data_addebito_advertising, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, importi_rate_intervento, nome_corrisponde, parse_piano_mutuo,
     percentuali_effettive,
 )
 from app.services.tesoreria_report import stato_carta
+from app.utils.locale_it import MESI_IT
 
 router = APIRouter()
 
@@ -151,6 +152,28 @@ def _previsti_compensi(db: Session) -> list:
     return out
 
 
+def _mesi_advertising(db: Session, advertising_id: int) -> list:
+    return db.query(TesoreriaAdvertisingMese).filter(TesoreriaAdvertisingMese.advertising_id == advertising_id) \
+        .order_by(TesoreriaAdvertisingMese.mese).all()
+
+
+def _previsti_advertising(db: Session, oggi: date, carte: list) -> list:
+    """Spesa di ogni mese → uscita con l'addebito della carta del mese dopo. Saltata se già addebitata o se l'estratto
+    di quel mese è già inserito (lo contiene già)."""
+    con_estratto = {(p["codice"].split(":")[1], p["data"].year, p["data"].month) for p in carte}
+    out = []
+    for a in db.query(TesoreriaAdvertising):
+        conto = db.get(TesoreriaConto, a.conto_id)
+        for r in _mesi_advertising(db, a.id):
+            data = data_addebito_advertising(a.anno, r.mese, conto.giorno_addebito)
+            if r.importo <= 0 or data < oggi or (conto.codice, data.year, data.month) in con_estratto:
+                continue
+            out.append(dict(codice=f"advertising:{a.anno}:{r.mese}", tipo="advertising", competenza=f"{a.anno}-{r.mese:02d}",
+                            descrizione=f"Advertising {MESI_IT[r.mese - 1]} {a.anno} ({conto.nome})", data=data, importo=r.importo,
+                            base="Spesa decisa in Admin", stato="confermato"))
+    return out
+
+
 def _previsti_carte(db: Session, oggi: date) -> list:
     """L'ultimo estratto inserito e non ancora addebitato è un'uscita certa. I mesi dopo li stima il blocco C."""
     out = []
@@ -168,7 +191,7 @@ def _previsti_carte(db: Session, oggi: date) -> list:
     return out
 
 
-STATI_PAGATA = ("pagata_banca", "pagata_manuale")
+STATI_PAGATA = ("pagata_banca", "pagata_manuale", "pagata_carta")
 
 
 def _aggiorna_interventi_pagati(db: Session, oggi: date) -> None:
@@ -190,8 +213,9 @@ def sincronizza_piani(db: Session, oggi: date) -> dict:
     """Allinea gli impegni di fonte 'piano' ai piani. Non fa commit."""
     _aggiorna_interventi_pagati(db, oggi)
     orizzonte = _orizzonte(db)
+    carte = _previsti_carte(db, oggi)
     previsti = (_previsti_affitti(db) + _previsti_mutuo(db, orizzonte) + _previsti_ricorrenti(db, oggi, orizzonte)
-                + _previsti_interventi(db) + _previsti_compensi(db) + _previsti_carte(db, oggi))
+                + _previsti_interventi(db) + _previsti_compensi(db) + _previsti_advertising(db, oggi, carte) + carte)
     esistenti = {i.codice: i for i in db.query(TesoreriaImpegno).filter(TesoreriaImpegno.fonte == "piano")}
     n_nuovi = n_aggiornati = 0
     for p in previsti:
@@ -820,6 +844,120 @@ def elimina_rata_compenso(rata_id: int, db: Session = Depends(get_db), _=Depends
     _chiudi_compenso_al_100(db, c)
     _applica(db)
     return _compenso_json(db, c)
+
+
+# ── Advertising pagato con carta ────────────────────────────────────────────────
+
+class AdvertisingIn(BaseModel):
+    anno: Optional[int] = None
+    conto_id: Optional[int] = None
+    totale: Optional[str] = None
+    nota: Optional[str] = None
+    mesi: Optional[dict] = None      # {mese: importo o null per toglierlo}
+
+
+def _advertising_json(db: Session, a: TesoreriaAdvertising, oggi: date) -> dict:
+    conto = db.get(TesoreriaConto, a.conto_id)
+    mesi = _mesi_advertising(db, a.id)
+    impegni = {i.codice: i for i in db.query(TesoreriaImpegno).filter(TesoreriaImpegno.codice.like(f"advertising:{a.anno}:%"))}
+    ultimo = mesi[-1].mese if mesi else None
+    righe = []
+    for r in mesi:
+        data = data_addebito_advertising(a.anno, r.mese, conto.giorno_addebito)
+        i = impegni.get(f"advertising:{a.anno}:{r.mese}")
+        righe.append({"mese": r.mese, "importo": euro(r.importo), "automatico": r.mese == ultimo and len(mesi) > 1,
+                      "data_addebito": (i.data_scadenza if i else data).isoformat(),
+                      "in_previsione": i is not None, "addebitato": i is None and data < oggi})
+    return {"id": a.id, "anno": a.anno, "conto_id": a.conto_id, "conto": conto.nome, "totale": euro(a.totale), "nota": a.nota,
+            "mesi": righe, "in_previsione": euro(sum((importo_impegno(i) for i in impegni.values()), Decimal(0)))}
+
+
+def _advertising_o_404(db: Session, advertising_id: int) -> TesoreriaAdvertising:
+    a = db.get(TesoreriaAdvertising, advertising_id)
+    if a is None:
+        raise HTTPException(404, "Piano advertising non trovato")
+    return a
+
+
+def _carta_o_400(db: Session, conto_id: int) -> TesoreriaConto:
+    c = db.get(TesoreriaConto, conto_id)
+    if c is None or c.tipo != "carta_credito":
+        raise HTTPException(400, "Scegliere una carta di credito")
+    return c
+
+
+def _salva_mesi(db: Session, a: TesoreriaAdvertising, nuovi: Optional[dict]) -> None:
+    """Applica i mesi inviati (null = toglie) e fa chiudere il totale all'ultimo mese."""
+    esistenti = {r.mese: r for r in _mesi_advertising(db, a.id)}
+    importi = {m: r.importo for m, r in esistenti.items()}
+    for chiave, valore in (nuovi or {}).items():
+        mese = int(chiave)
+        if not 1 <= mese <= 12:
+            raise HTTPException(400, f"Mese non valido: {chiave}")
+        if valore is None or str(valore).strip() == "":
+            importi.pop(mese, None)
+        else:
+            importo = _decimale(valore, f"Importo di {MESI_IT[mese - 1]}")
+            if importo < 0:
+                raise HTTPException(400, "Gli importi non possono essere negativi")
+            importi[mese] = importo
+    try:
+        importi = chiudi_totale(a.totale, importi)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    for mese, r in esistenti.items():
+        if mese not in importi:
+            db.delete(r)
+    for mese, importo in importi.items():
+        if mese in esistenti:
+            esistenti[mese].importo = importo
+        else:
+            db.add(TesoreriaAdvertisingMese(advertising_id=a.id, mese=mese, importo=importo))
+    db.flush()     # la sessione dell'app non fa autoflush: sincronizza_piani() deve vedere i mesi
+
+
+@router.get("/piani/advertising")
+def lista_advertising(db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    oggi = date.today()
+    return [_advertising_json(db, a, oggi) for a in db.query(TesoreriaAdvertising).order_by(TesoreriaAdvertising.anno.desc())]
+
+
+@router.post("/piani/advertising")
+def crea_advertising(corpo: AdvertisingIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    if corpo.anno is None or corpo.totale is None or corpo.conto_id is None:
+        raise HTTPException(400, "Anno, carta e totale sono obbligatori")
+    if db.query(TesoreriaAdvertising).filter(TesoreriaAdvertising.anno == corpo.anno).first():
+        raise HTTPException(409, f"Advertising {corpo.anno} già presente")
+    _carta_o_400(db, corpo.conto_id)
+    a = TesoreriaAdvertising(anno=corpo.anno, conto_id=corpo.conto_id, totale=_decimale(corpo.totale, "Totale"), nota=corpo.nota or None)
+    db.add(a)
+    db.flush()
+    _salva_mesi(db, a, corpo.mesi)
+    _applica(db)
+    return _advertising_json(db, a, date.today())
+
+
+@router.put("/piani/advertising/{advertising_id}")
+def modifica_advertising(advertising_id: int, corpo: AdvertisingIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    a = _advertising_o_404(db, advertising_id)
+    if corpo.totale is not None:
+        a.totale = _decimale(corpo.totale, "Totale")
+    if corpo.conto_id is not None:
+        a.conto_id = _carta_o_400(db, corpo.conto_id).id
+    if corpo.nota is not None:
+        a.nota = corpo.nota or None
+    db.flush()
+    _salva_mesi(db, a, corpo.mesi)
+    _applica(db)
+    return _advertising_json(db, a, date.today())
+
+
+@router.delete("/piani/advertising/{advertising_id}")
+def elimina_advertising(advertising_id: int, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    db.delete(_advertising_o_404(db, advertising_id))
+    db.flush()
+    _applica(db)
+    return {"ok": True}
 
 
 # ── Fatture collegate agli interventi ───────────────────────────────────────────

@@ -500,3 +500,25 @@ def test_nota_di_credito_senza_fattura_stessa_data_va_sulla_piu_vecchia():
     nov, ott, _ = righe
     assert ott["aperto"] == Decimal("0.00") and ott["stato"] == "compensata"
     assert nov["aperto"] == Decimal("30.00")
+
+
+def test_fornitore_pagato_con_carta(client, test_engine):
+    from app.routers.tesoreria_scadenzario_report import stato_scadenze
+    _uscite(test_engine)
+    _importa(client)
+    with sessionmaker(bind=test_engine)() as db:
+        prima = stato_scadenze(db, oggi=date(2026, 11, 15))
+    riga = next(r for r in prima["scadenze"] if r["stato"] == "da_confermare")
+    r = client.put("/tesoreria/scadenzario/fornitori-carta", json=[{"codice_fornitore": riga["codice_fornitore"], "fornitore": riga["fornitore"]}])
+    assert r.status_code == 200 and r.json()[0]["codice_fornitore"] == riga["codice_fornitore"]
+    with sessionmaker(bind=test_engine)() as db:
+        dopo = stato_scadenze(db, oggi=date(2026, 11, 15))
+    mia = next(x for x in dopo["scadenze"] if x["chiave"] == riga["chiave"])
+    assert mia["stato"] == "pagata_carta" and mia["pagata_come"] == "Carta di credito"
+    # non è più da pagare né da segnalare allo studio, e non viene più proposta con la banca
+    assert dopo["totali"]["da_pagare"]["importo"] == prima["totali"]["da_pagare"]["importo"] - riga["aperto"]
+    assert dopo["totali"]["da_segnalare"] == prima["totali"]["da_segnalare"]
+    assert all(s["chiave"] != riga["chiave"] for a in _abbinamenti(client)["abbinamenti"] for s in a["scadenze"])
+    assert client.put("/tesoreria/scadenzario/fornitori-carta", json=[{"fornitore": "x"}]).status_code == 400
+    utente_corrente["u"] = VIEWER
+    assert client.put("/tesoreria/scadenzario/fornitori-carta", json=[]).status_code == 403

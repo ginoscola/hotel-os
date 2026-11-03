@@ -288,7 +288,7 @@ class TesoreriaFornitoreBanca(Base):
 
 
 TIPI_IMPEGNO = ("f24_dipendenti", "iva", "ires", "irap", "tassa_soggiorno", "tari", "tributo_fisso", "altro",
-                "affitto", "mutuo", "ricorrente", "intervento", "carta", "compenso")
+                "affitto", "mutuo", "ricorrente", "intervento", "carta", "compenso", "advertising")
 FONTI_IMPEGNO = ("calendario", "piano", "avviso", "manuale")
 STATI_IMPEGNO = ("stimato", "confermato", "pagato")
 ABBINAMENTI_IMPEGNO = ("automatico", "proposto", "confermato", "scartato")
@@ -438,6 +438,28 @@ class TesoreriaRataCompenso(Base):
     compenso_id   = Column(Integer, ForeignKey("tesoreria_compensi.id", ondelete="CASCADE"), nullable=False, index=True)
     data_prevista = Column(Date, nullable=False)
     percentuale   = Column(Numeric(9, 6), nullable=False)
+
+
+class TesoreriaAdvertising(Base):
+    """Spesa pubblicitaria pagata con carta (Google, Meta) decisa per un anno. L'ultimo mese inserito chiude il totale."""
+    __tablename__ = "tesoreria_advertising"
+
+    id       = Column(Integer, primary_key=True, autoincrement=True)
+    anno     = Column(Integer, nullable=False, unique=True)
+    conto_id = Column(Integer, ForeignKey("tesoreria_conti.id"), nullable=False)   # carta su cui viene addebitata
+    totale   = Column(Numeric(14, 2), nullable=False)
+    nota     = Column(String(255), nullable=True)
+
+
+class TesoreriaAdvertisingMese(Base):
+    """Spesa di un mese: esce dalla banca con l'addebito della carta del mese dopo."""
+    __tablename__ = "tesoreria_advertising_mesi"
+    __table_args__ = (UniqueConstraint("advertising_id", "mese", name="uq_tesoreria_advertising_mese"),)
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    advertising_id = Column(Integer, ForeignKey("tesoreria_advertising.id", ondelete="CASCADE"), nullable=False, index=True)
+    mese           = Column(Integer, nullable=False)
+    importo        = Column(Numeric(14, 2), nullable=False)
 
 
 class TesoreriaPrevisioneSalvata(Base):

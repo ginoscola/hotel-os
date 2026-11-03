@@ -3,7 +3,8 @@ dettaglio per fornitore, lista "da segnalare allo studio" (pagate in banca o a m
 Passcom) con export, tempi di pagamento per la scheda KPI.
 
 Stato di una scadenza (in quest'ordine): `pareggio` (riga *PAREGGIO*), `pagata_banca` (abbinamento
-automatico o confermato), `pagata_manuale`, `da_confermare` (abbinamento proposto), `residuo` (anni
+automatico o confermato), `pagata_manuale`, `pagata_carta` (fornitore pagato sempre con carta: Google, Meta; non
+va nella lista da segnalare, lo studio lo registra con l'estratto), `da_confermare` (abbinamento proposto), `residuo` (anni
 precedenti, da verificare con lo studio), `scaduta`, `aperta`. Poi `compensa_pareggi()` distribuisce i
 pareggi del fornitore: le righe coperte per intero diventano `compensata` (`stato_originale` dice cosa
 erano), le altre hanno `aperto` (da pagare) o `da_segnalare` (pagata ma non ancora registrata dallo studio).
@@ -23,7 +24,7 @@ from app.models.tesoreria import (
     TesoreriaPagataManuale,
 )
 from app.routers.corrispettivi_documenti import _risposta_tabella
-from app.routers.tesoreria_abbinamenti import _abbinamenti_json, _alias, _uscite_pagamento, fotografia_corrente
+from app.routers.tesoreria_abbinamenti import _abbinamenti_json, _alias, _uscite_pagamento, fornitori_carta, fotografia_corrente
 from app.routers.tesoreria_shared import cella_data, cella_importo, euro, puo_vedere
 from app.services.tesoreria_abbinamento import forza_nome
 from app.services.tesoreria_scadenzario import compensa_pareggi, e_residuo, per_fornitore, riepilogo
@@ -64,6 +65,7 @@ def stato_scadenze(db: Session, oggi: Optional[date] = None) -> dict:
         return {"data_fotografia": None, "oggi": oggi.isoformat(), "totali": None, "fornitori": [], "scadenze": []}
     pagamenti = _pagamenti_per_chiave(db)
     manuali = {p.chiave: p for p in db.query(TesoreriaPagataManuale)}
+    carta = fornitori_carta(db)
     fornitori = {f["codice_fornitore"]: f for f in per_fornitore(scadenze, data_foto)}
 
     righe = []
@@ -75,6 +77,8 @@ def stato_scadenze(db: Session, oggi: Optional[date] = None) -> dict:
             stato = "pagata_banca"
         elif m:
             stato = "pagata_manuale"
+        elif s.codice_fornitore in carta:
+            stato = "pagata_carta"
         elif p:
             stato = "da_confermare"
         elif e_residuo(s, data_foto):
@@ -93,7 +97,8 @@ def stato_scadenze(db: Session, oggi: Optional[date] = None) -> dict:
             "abbinamento_id": p["abbinamento_id"] if p else None,
             "abbinamento_stato": p["stato"] if p else None,
             "pagata_come": (ETICHETTE_REGOLA.get(p["regola"], p["regola"]) if stato == "pagata_banca"
-                            else "Segnata a mano" if stato == "pagata_manuale" else None),
+                            else "Segnata a mano" if stato == "pagata_manuale"
+                            else "Carta di credito" if stato == "pagata_carta" else None),
             "data_pagamento": data_pag, "nota_manuale": m.nota if m else None, "pareggio": s.pareggio,
         })
     compensa_pareggi(righe)
@@ -112,6 +117,7 @@ def stato_scadenze(db: Session, oggi: Optional[date] = None) -> dict:
         "da_segnalare": somma(lambda r: r["stato"] in STATI_PAGATE, "da_segnalare"),
         "pagate_banca": somma(lambda r: r["stato"] == "pagata_banca", "da_segnalare"),
         "pagate_manuali": somma(lambda r: r["stato"] == "pagata_manuale", "da_segnalare"),
+        "pagate_carta": somma(lambda r: r["stato"] == "pagata_carta", "importo"),
         "da_confermare": somma(lambda r: r["stato"] == "da_confermare"),
         "residui": somma(lambda r: r["stato"] == "residuo"),
         "compensate": somma(lambda r: r["stato"] == "compensata", "compensato"),

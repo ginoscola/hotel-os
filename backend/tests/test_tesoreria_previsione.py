@@ -242,3 +242,11 @@ def test_export(client, formato):
     r = client.get(f"/tesoreria/previsione/export?scenario=pessimista&formato={formato}")
     assert r.status_code == 200 and len(r.content) > 100
     assert client.get("/tesoreria/previsione/export?scenario=boh").status_code == 400
+
+
+def test_advertising_tolto_dalla_stima_delle_carte():
+    uscite = {"carte": {(2026, 1): D("100"), (2026, 2): D("50")}}
+    r = calcola_scenario(_dati(uscite=uscite, advertising={(2026, 1): D("70"), (2026, 2): D("80")}), "realista")
+    assert _mese(r, 1)["uscite_stimate"]["carte"] == D("36")      # (100 − 70) × 1,2 del Budget
+    assert _mese(r, 2)["uscite_stimate"]["carte"] == 0            # mai negativa
+

@@ -20,7 +20,7 @@ const SCENARI = [
   { value: 'pessimista', label: 'Pessimista' }, { value: 'realista', label: 'Realista' }, { value: 'ottimista', label: 'Ottimista' },
 ]
 const NOMI_CERTE = {
-  fisco: 'Fisco', affitti: 'Affitti', mutuo: 'Mutuo', ricorrenti: 'Ricorrenti', interventi: 'Interventi', compensi: 'Compensi soci',
+  fisco: 'Fisco', affitti: 'Affitti', mutuo: 'Mutuo', ricorrenti: 'Ricorrenti', interventi: 'Interventi', compensi: 'Compensi soci', advertising: 'Advertising (carta)',
   carte: 'Estratti carte', fornitori: 'Fornitori (scadenzario)', altri_impegni: 'Altri impegni',
 }
 const NOMI_STIMATE = { fornitori: 'Fornitori', personale: 'Personale', utenze: 'Utenze', marketing: 'Marketing', carte: 'Carte', altre: 'Altre' }

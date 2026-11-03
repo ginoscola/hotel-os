@@ -156,7 +156,7 @@ inesistente e non aveva mai funzionato.
 **USALI**: `usali-kpi` (range KPI), `usali-cc` (mappatura costi lavoro), `usali-movimenti` (righe Movimenti Attivi per struttura), `usali-fnb` (reparti cedolini → punto vendita della scheda Food & Beverage)
 **Budget**: `budget-previsione` (AdminBudgetPrevisione — correttivi e parametri della proiezione fine stagione)
 **Statistiche Produzione**: `prod-categorie` (ProdCategorie), `prod-mapping` (ProdMappingDettagli — mapping testo Welcome→categoria)
-**Tesoreria**: `tes-conti`, `tes-categorie`, `tes-regole`, `tes-soglie`, `tes-affitti` (rate in data e %), `tes-interventi`, `tes-ricorrenti`, `tes-mutuo`, `tes-fiscale`, `tes-previsione` (crescita uscite e scenari) (tutti in `pages/admin/AdminTesoreria.jsx`)
+**Tesoreria**: `tes-conti`, `tes-categorie`, `tes-regole`, `tes-soglie`, `tes-affitti` (rate in data e %), `tes-interventi`, `tes-advertising` (advertising con carta e fornitori pagati con carta), `tes-ricorrenti`, `tes-mutuo`, `tes-fiscale`, `tes-previsione` (crescita uscite e scenari) (tutti in `pages/admin/AdminTesoreria.jsx`)
 Stagioni: `GET /hotels/{code}/seasons/{year}`, `POST /hotels/{code}/seasons` (upsert).
 Dati test: flag `is_test`; `GET|DELETE /admin/test-stats|test-data`, `GET|DELETE /dipendenti/admin/test-stats|test-data`.
 
@@ -264,7 +264,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 581 test verdi (23/10/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 874 test verdi (03/11/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -3205,6 +3205,26 @@ Solo backend, nessuna schermata né cambio di versione (schede nel blocco D).
 
 ### Compensi soci (02/11/2026, v4.16.0)
 Admin `?s=tes-compensi`, `tes013_2026`: `tesoreria_compensi` (voce marchio|amministratori, anno, importo **netto**, UNIQUE voce+anno) + `tesoreria_rate_compenso` (data + %, l'ultima chiude il 100% salvo se pagata), impegni `compenso:{voce}:{anno}:{rata}`, gruppo "Compensi soci" in previsione. Decisi ogni anno: nessuna stima automatica (`GRUPPI_STIMA` non li contiene). Amministratori: bonifico fuori dagli stipendi (scelta dell'utente), categoria `soci_amministratori` separata da `personale`, regola sulla descrizione; nel 2025–2026 nessun bonifico trovato. Abbinamento su somma dei bonifici dello stesso giorno nella categoria (Gino + Elisa), `movimento_id` = primo del giorno. Ritenute a parte, voci a mano in Impegni.
+
+### Advertising pagato con carta (03/11/2026, v4.18.0)
+Google e Meta (~50.000 €/anno, **sempre AMEX**) non passano dalla banca: prima erano solo dentro la stima «Carte», e le loro
+fatture aperte nello scadenzario Passcom (registro 8) entravano in previsione come uscita certa → doppio conteggio.
+- **Piano per anno** (Admin `?s=tes-advertising`, `tes014_2026`): `tesoreria_advertising` (anno UNIQUE, carta, totale, nota) +
+  `tesoreria_advertising_mesi` (mese, importo **in €**, scelta dell'utente); l'ultimo mese compilato chiude il totale
+  (`chiudi_totale()`, salvato in tabella). Impegno `advertising:{anno}:{mese}`, gruppo «Advertising (carta)», alla data di
+  addebito della carta del **mese dopo** (`data_addebito_advertising()`: giorno di addebito del conto, primo giorno lavorativo).
+  Non generato se l'addebito è già passato o se l'estratto della carta che si addebita quel mese è già inserito (lo contiene).
+  Mai abbinato alla banca (`TIPI_SENZA_BANCA`).
+- **Stima «Carte»** = addebiti carta dell'anno di riferimento − advertising addebitato in quel mese (`advertising_per_addebito()`,
+  `DatiPrevisione.advertising`), mai negativa. Per questo servono anche gli anni passati come riferimento.
+- Dati caricati (dai pannelli Google/Meta): 2025 ott–dic, 2026 gen–set reali + ott–dic = 2025 (indicazione dell'utente),
+  totale 50.655,29 €; **2027 copiato dal 2026, da decidere dall'utente**.
+- ⚠️ La sessione dell'app ha `autoflush=False`: `_salva_mesi()` fa `db.flush()` prima di `sincronizza_piani()` (i test usano
+  autoflush e non lo vedevano: il primo piano caricato sul DB reale era rimasto senza impegni).
+- **Fornitori pagati con carta** (`app_config['tesoreria_fornitori_carta']`, `GET|PUT /tesoreria/scadenzario/fornitori-carta`,
+  stessa pagina Admin): le loro scadenze hanno stato `pagata_carta` (dopo pagata in banca/a mano), coperte per prime dai pareggi
+  come le altre pagate, ma **fuori da "da segnalare"** (lo studio le registra con l'estratto), da pagare, scadute, abbinamenti e
+  previsione. Oggi: Google Ireland (601.00640), Meta Platforms (601.03326). Google Cloud Italy non incluso.
 
 ### Fase 3 — Blocco C fatto (02/11/2026, v4.12.0)
 Motore in `services/tesoreria_previsione.py`, dati in `routers/tesoreria_previsione.py`: `GET /tesoreria/previsione`,

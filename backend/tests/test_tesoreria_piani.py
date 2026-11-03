@@ -19,7 +19,8 @@ from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.services.tesoreria_parser import ErroreImportTesoreria  # noqa: E402
 from app.services.tesoreria_piani import (  # noqa: E402
-    data_addebito_carta, date_ricorrente, importi_rate, nome_corrisponde, parse_piano_mutuo,
+    advertising_per_addebito, chiudi_totale, data_addebito_advertising, data_addebito_carta, date_ricorrente, importi_rate,
+    nome_corrisponde, parse_piano_mutuo,
 )
 
 from tests._db import TEST_DB_URL  # noqa: E402
@@ -54,6 +55,18 @@ def test_addebito_carta():
     assert data_addebito_carta(date(2026, 10, 6), 27, date(2026, 10, 7)) == date(2026, 10, 27)
     assert data_addebito_carta(date(2026, 9, 28), 26, date(2026, 9, 29)) == date(2026, 10, 26)
     assert data_addebito_carta(date(2026, 9, 28), 26, date(2026, 11, 2)) == date(2026, 11, 2)   # in ritardo: oggi
+
+
+def test_advertising_addebito_mese_dopo_e_totale():
+    assert data_addebito_advertising(2026, 10, 27) == date(2026, 11, 27)
+    assert data_addebito_advertising(2026, 12, 27) == date(2027, 1, 27)
+    assert data_addebito_advertising(2027, 1, 27) == date(2027, 3, 1)      # 27/2/2027 è sabato
+    assert data_addebito_advertising(2026, 1, None) == date(2026, 3, 2)     # senza giorno: fine febbraio, 28/2 è sabato
+    assert advertising_per_addebito([(2025, 12, D("10")), (2026, 1, D("5"))]) == {(2026, 1): D("10"), (2026, 2): D("5")}
+    assert chiudi_totale(D("100"), {1: D("30"), 5: D("0"), 3: D("20")}) == {1: D("30"), 3: D("20"), 5: D("50")}
+    assert chiudi_totale(D("100"), {}) == {}
+    with pytest.raises(ValueError):
+        chiudi_totale(D("10"), {1: D("30"), 2: D("1")})
 
 
 def test_date_ricorrente_lavorative_e_periodo():
@@ -103,7 +116,7 @@ def pulisci(test_engine):
     utente_corrente["u"] = ADMIN
     with test_engine.begin() as conn:
         conn.execute(text("TRUNCATE tesoreria_impegni, tesoreria_contratti_affitto, tesoreria_rate_affitto, tesoreria_rate_mutuo, "
-                          "tesoreria_ricorrenti, tesoreria_interventi, tesoreria_compensi, tesoreria_movimenti, tesoreria_saldi, tesoreria_categorie, "
+                          "tesoreria_ricorrenti, tesoreria_interventi, tesoreria_compensi, tesoreria_advertising, tesoreria_movimenti, tesoreria_saldi, tesoreria_categorie, "
                           "tesoreria_conti, app_config, user_module_permissions, module_permissions, modules, users RESTART IDENTITY CASCADE"))
         conn.execute(text("INSERT INTO modules (code, name, ordine, attivo) VALUES ('tesoreria', 'TESORERIA', 30, true)"))
         conn.execute(text("""
@@ -354,6 +367,56 @@ def test_estratto_carta_da_addebitare_poi_sparisce(client, test_engine):
         conn.execute(text("INSERT INTO tesoreria_movimenti (conto_id, data_contabile, importo, descrizione, impronta) VALUES (1, :d, -500, 'AMERICAN EXPRESS', 'Y')"), {"d": date.today()})
     client.post("/tesoreria/impegni/genera")
     assert f"carta:AMEX:{chiusura}" not in _impegni(client)
+
+
+def _amex(test_engine):
+    with test_engine.begin() as conn:
+        return conn.execute(text("INSERT INTO tesoreria_conti (codice, nome, tipo, giorno_addebito, testo_addebito) "
+                                 "VALUES ('AMEX', 'Amex', 'carta_credito', 27, 'AMERICAN') RETURNING id")).scalar()
+
+
+def test_advertising_per_mese_ultimo_chiude_il_totale(client, test_engine):
+    amex = _amex(test_engine)
+    assert client.post("/tesoreria/piani/advertising", json={"anno": FUTURO, "conto_id": 1, "totale": "1200"}).status_code == 400
+    r = client.post("/tesoreria/piani/advertising", json={"anno": FUTURO, "conto_id": amex, "totale": "1200",
+                                                         "mesi": {"1": "100", "2": "200", "3": "999"}})
+    assert r.status_code == 200, r.text
+    a = r.json()
+    assert [(m["mese"], m["importo"], m["automatico"]) for m in a["mesi"]] == [(1, 100, False), (2, 200, False), (3, 900, True)]
+    assert client.post("/tesoreria/piani/advertising", json={"anno": FUTURO, "conto_id": amex, "totale": "1"}).status_code == 409
+    imp = {k: v for k, v in _impegni(client).items() if k.startswith("advertising:")}
+    assert imp[f"advertising:{FUTURO}:1"]["importo"] == 100 and imp[f"advertising:{FUTURO}:1"]["data_scadenza"] == data_addebito_advertising(FUTURO, 1, 27).isoformat()
+    assert imp[f"advertising:{FUTURO}:3"]["tipo"] == "advertising" and imp[f"advertising:{FUTURO}:3"]["importo"] == 900
+    # tolto marzo: febbraio diventa l'ultimo e chiude il totale
+    a = client.put(f"/tesoreria/piani/advertising/{a['id']}", json={"mesi": {"3": None}}).json()
+    assert [(m["mese"], m["importo"]) for m in a["mesi"]] == [(1, 100), (2, 1100)]
+    assert f"advertising:{FUTURO}:3" not in _impegni(client)
+    assert client.put(f"/tesoreria/piani/advertising/{a['id']}", json={"totale": "50"}).status_code == 400
+    assert client.put(f"/tesoreria/piani/advertising/{a['id']}", json={"mesi": {"13": "1"}}).status_code == 400
+    assert client.delete(f"/tesoreria/piani/advertising/{a['id']}").status_code == 200
+    assert not [k for k in _impegni(client) if k.startswith("advertising:")]
+
+
+def test_advertising_gia_addebitato_o_nell_estratto_non_entra(client, test_engine):
+    amex = _amex(test_engine)
+    passato = date.today().year - 1
+    client.post("/tesoreria/piani/advertising", json={"anno": passato, "conto_id": amex, "totale": "500", "mesi": {"3": "500"}})
+    assert not [k for k in _impegni(client) if k.startswith("advertising:")]
+    # spesa del mese che finisce nell'estratto già inserito: la contiene l'estratto
+    chiusura = date.today() - timedelta(days=2)
+    addebito = data_addebito_carta(chiusura, 27, date.today())
+    spesa = (addebito.year, addebito.month - 1) if addebito.month > 1 else (addebito.year - 1, 12)
+    r = client.post("/tesoreria/piani/advertising", json={"anno": spesa[0], "conto_id": amex, "totale": "300", "mesi": {str(spesa[1]): "300"}})
+    if r.status_code == 409:      # stesso anno del piano precedente
+        client.put(f"/tesoreria/piani/advertising/{client.get('/tesoreria/piani/advertising').json()[-1]['id']}",
+                   json={"totale": "800", "mesi": {str(spesa[1]): "300"}})
+    codice = f"advertising:{spesa[0]}:{spesa[1]}"
+    if data_addebito_advertising(spesa[0], spesa[1], 27) >= date.today():
+        assert codice in _impegni(client)
+    with test_engine.begin() as conn:
+        conn.execute(text("INSERT INTO tesoreria_saldi (conto_id, data, saldo, origine) VALUES (:c, :d, 900, 'manuale')"), {"c": amex, "d": chiusura})
+    client.post("/tesoreria/impegni/genera")
+    assert codice not in _impegni(client)
 
 
 def test_mutuo_da_file_salta_pagate_e_ricarica(client, test_engine):

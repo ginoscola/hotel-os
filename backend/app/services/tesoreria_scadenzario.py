@@ -114,7 +114,7 @@ def compensa_pareggi(righe: list) -> None:
        pareggi dello studio ne sono già al netto). Il credito che avanza resta credito (una nota pagata
        senza fatture da ridurre resta in `da_segnalare`, negativa);
     2. i `*PAREGGIO*` (pagamenti/compensazioni registrati dallo studio senza collegarli alle fatture) coprono
-       prima le scadenze già pagate (in banca o a mano: già registrate, non vanno segnalate), poi le aperte
+       prima le scadenze già pagate (in banca, a mano o con carta: già registrate, non vanno segnalate), poi le aperte
        dalla più vecchia.
     Ogni riga è un dict con `stato`, `importo`, `data_scadenza`, `codice_fornitore`, `pareggio`; riceve
     `compensato` (quota coperta), `aperto` (quota ancora da pagare, per le aperte) e `da_segnalare` (quota
@@ -122,7 +122,7 @@ def compensa_pareggi(righe: list) -> None:
     Caso reale MARR (29/10/2026): le note di credito di ottobre finivano sui mesi già pagati invece di
     ridurre la Ri.Ba. del 31/10.
     """
-    pagate = ("pagata_banca", "pagata_manuale")
+    pagate = ("pagata_banca", "pagata_manuale", "pagata_carta")
     per_forn = {}
     for r in righe:
         r["compensato"], r["aperto"], r["da_segnalare"] = ZERO, ZERO, ZERO

@@ -27,7 +27,7 @@ FINESTRA_RICORRENTE = (20, 20)
 FINESTRA_COMPENSO = (30, 45)
 CATEGORIA_COMPENSO = {"marchio": "soci_marchio", "amministratori": "soci_amministratori"}
 TIPI_SINGOLI = {"affitto", "mutuo", "ricorrente"}
-TIPI_SENZA_BANCA = {"intervento", "carta"}   # interventi dallo scadenzario, carte dallo stato dell'estratto
+TIPI_SENZA_BANCA = {"intervento", "carta", "advertising"}   # interventi dallo scadenzario, carte e advertising dallo stato dell'estratto
 
 
 def importo_impegno(i: TesoreriaImpegno) -> Decimal:

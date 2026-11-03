@@ -9,8 +9,11 @@ esclusioni (confermati, scartati, pagate a mano), il salvataggio e gli endpoint 
 - Scarta → `scartato`: le stesse coppie scadenza/movimento non vengono più proposte.
 - Abbinamento manuale: l'utente sceglie scadenze e movimenti → `confermato` (regola 'manuale').
 - Pagate a mano (selezione multipla): contanti, carta o altro non visibile in conto corrente.
+- Fornitori pagati con carta (Google, Meta): tutte le loro scadenze contano come pagate, mai abbinate alla banca
+  (l'addebito della carta è un totale unico).
 """
 
+import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Optional
@@ -20,6 +23,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.revenue import AppConfig
 from app.models.tesoreria import (
     TesoreriaAbbinamento, TesoreriaAbbinamentoMovimento, TesoreriaAbbinamentoScadenza, TesoreriaConto,
     TesoreriaFornitoreBanca, TesoreriaMovimento, TesoreriaPagataManuale, TesoreriaScadenza, TesoreriaScadImport,
@@ -34,6 +38,16 @@ router = APIRouter()
 
 STATI_ATTIVI = ("automatico", "proposto", "confermato")
 FINESTRA_CANDIDATI = 90            # giorni attorno alla scadenza per l'abbinamento manuale
+CHIAVE_FORNITORI_CARTA = "tesoreria_fornitori_carta"
+
+
+def fornitori_carta(db: Session) -> dict:
+    """{codice fornitore Passcom: ragione sociale} dei fornitori pagati sempre con carta."""
+    riga = db.query(AppConfig).filter(AppConfig.key == CHIAVE_FORNITORI_CARTA).first()
+    try:
+        return {f["codice_fornitore"]: f["fornitore"] for f in json.loads(riga.value)} if riga else {}
+    except (ValueError, KeyError, TypeError):
+        return {}
 
 
 # ── Fotografia corrente ─────────────────────────────────────────────────────────
@@ -146,7 +160,8 @@ def ricalcola_abbinamenti(db: Session) -> dict:
     if not scadenze:
         return {"n_automatici": 0, "n_proposti": 0, "n_scadenze_automatiche": 0, "n_scadenze_proposte": 0}
     escluse = _chiavi_in(db, ("confermato",)) | {k for (k,) in db.query(TesoreriaPagataManuale.chiave)}
-    da = _da_abbinare(scadenze, data_foto, escluse)
+    carta = fornitori_carta(db)
+    da = _da_abbinare([s for s in scadenze if s.codice_fornitore not in carta], data_foto, escluse)
     movimenti = _uscite_pagamento(db, _movimenti_in(db, ("confermato",)))
     per_chiave = {s.chiave: s for s in da}
     proposte = abbina(da, movimenti, _alias(db), _coppie_scartate(db))
@@ -395,3 +410,29 @@ def elenco_pagate(db: Session = Depends(get_db), _=Depends(puo_vedere)):
          "importo": euro(p.importo), "created_at": p.created_at.isoformat() if p.created_at else None}
         for p in db.query(TesoreriaPagataManuale).order_by(TesoreriaPagataManuale.data_scadenza)
     ]
+
+
+# ── Fornitori pagati con carta ──────────────────────────────────────────────────
+
+@router.get("/scadenzario/fornitori-carta")
+def elenco_fornitori_carta(db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    return [{"codice_fornitore": c, "fornitore": n} for c, n in sorted(fornitori_carta(db).items(), key=lambda x: x[1])]
+
+
+@router.put("/scadenzario/fornitori-carta")
+def salva_fornitori_carta(body: list = Body(...), db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    """Elenco completo [{codice_fornitore, fornitore}]: sostituisce il precedente e ricalcola gli abbinamenti."""
+    elenco = []
+    for f in body:
+        if not isinstance(f, dict) or not str(f.get("codice_fornitore") or "").strip():
+            raise HTTPException(400, "Ogni fornitore deve avere il codice Passcom")
+        elenco.append({"codice_fornitore": str(f["codice_fornitore"]).strip(), "fornitore": str(f.get("fornitore") or "").strip()})
+    riga = db.query(AppConfig).filter(AppConfig.key == CHIAVE_FORNITORI_CARTA).first()
+    if riga is None:
+        db.add(AppConfig(key=CHIAVE_FORNITORI_CARTA, value=json.dumps(elenco)))
+    else:
+        riga.value = json.dumps(elenco)
+    db.flush()
+    ricalcola_abbinamenti(db)
+    db.commit()
+    return elenco_fornitori_carta(db)
