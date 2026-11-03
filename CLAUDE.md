@@ -264,7 +264,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 918 test verdi (03/11/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 921 test verdi (03/11/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -2435,7 +2435,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ✅ v4.14.0 (02/11/2026) — blocchi A–D; ora uso con dati reali, poi Fase 4 (dopo ~1 mese, serve ok) |
-| 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⏳ blocco A caparre ✅ v4.21.0 (03/11/2026); B stipendi, C tempi, D verifica: serve ok |
+| 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⏳ A caparre ✅ v4.21.0, B stipendi ✅ v4.22.0 (03/11/2026); C tempi, D verifica: serve ok |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
 
@@ -3341,6 +3341,21 @@ valgono subito. Grafico e schede nel blocco D.
     segnati dall'utente (saldi a fine soggiorno, riaddebiti), 54 da completare. Stagione 2024/25 senza Welcome
     (nessuna prenotazione 2025 importata): conta solo come anno prima della 2026.
 
+### Fase 4 — Blocco B stipendi netti fatto (03/11/2026, v4.22.0)
+- Dati 2026: il netto dei cedolini di un mese esce in banca il mese dopo intorno al 10 (distinta "BONIFICI DEL …
+  QTA n" + bonifici singoli; a fine stagione il 2/10), quasi uguale (luglio 66.353 € = agosto in banca; differenze di
+  pochi % per anticipi e Fideuram). Scelte dell'utente: **sempre il 10** (costante `GIORNO_STIPENDI`, nessuna
+  impostazione in Admin); **fondo pensione Fideuram resta nella stima** del personale (importi variabili).
+- `netti_per_mese(db)` in `routers/dipendenti.py` (gemella di `costi_f24_per_mese`, voce `ret_netta`, non test).
+- `certe_stipendi(netti, pagati, oggi)` in `services/tesoreria_previsione.py`: uscita certa gruppo `stipendi`,
+  categoria `personale` (quindi tolta dalla stima del personale), al 10 del mese dopo; mese di pagamento passato →
+  non conta; mese in corso → pagato se le uscite in banca della categoria personale del mese arrivano al 90% del netto
+  (`QUOTA_STIPENDI_PAGATI`), altrimenti resta la differenza. Calcolata a ogni richiesta, nessuna tabella né impegno
+  in DB (non compare nella scheda Impegni, sì in Previsione: colonna/Drawer "Stipendi netti (cedolini)").
+- `cedolini_mancanti(netti, oggi)`: dopo il 5 del mese, se mancano i cedolini del mese prima (e ne esistono di
+  precedenti) → avviso in Previsione (`avvisi` nella risposta) e in Posizione (arancione, tipo `cedolini`).
+- Effetto: solo sul mese dopo l'ultimo cedolino importato (in inverno pochi €, in estate 50–67.000 € al mese).
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**
@@ -3364,6 +3379,8 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **Corrispettivi → tassa di soggiorno incassata**: `report_fatturati()` di `routers/corrispettivi_report.py`
   (`mesi[].per_struttura[].tassa_soggiorno`, annullati esclusi) in `_tassa_incassata_per_mese()` di
   `routers/tesoreria_kpi.py`.
+- **Dipendenti → stipendi netti**: `netti_per_mese()` di `routers/dipendenti.py` in `dati_previsione()` e
+  `posizione()` (avviso cedolini mancanti).
 - **Dipendenti → F24**: `costi_f24_per_mese()` di `routers/dipendenti.py` (voci `VOCI_F24`) in `dati_fiscali()` di
   `routers/tesoreria_impegni.py`. **Contabilità USALI → IRES**: `risultato_per_mese()` di `services/usali_contabile_kpi.py`.
   **Corrispettivi → tassa di soggiorno futura**: `_tassa_incassata_per_mese()` di `tesoreria_kpi.py`.

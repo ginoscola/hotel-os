@@ -21,7 +21,7 @@ const SCENARI = [
 ]
 const NOMI_CERTE = {
   fisco: 'Fisco', affitti: 'Affitti', mutuo: 'Mutuo', ricorrenti: 'Ricorrenti', interventi: 'Interventi', compensi: 'Compensi soci', advertising: 'Advertising (carta)',
-  carte: 'Estratti carte', fornitori: 'Fornitori (scadenzario)', altri_impegni: 'Altri impegni',
+  carte: 'Estratti carte', stipendi: 'Stipendi netti (cedolini)', fornitori: 'Fornitori (scadenzario)', altri_impegni: 'Altri impegni',
 }
 const NOMI_STIMATE = { fornitori: 'Fornitori', personale: 'Personale', utenze: 'Utenze', marketing: 'Marketing', carte: 'Carte', altre: 'Altre' }
 const COLORE_SALDO = colors.info
@@ -351,6 +351,7 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
         È una stima: rifacendo il 2026 con i dati 2025 il saldo si è scostato dal reale fino a circa 100.000 €, quasi sempre per prudenza.
         Le uscite «certe» sono note; entrate e uscite «stimate» dipendono da Budget e storico.
       </Messaggio>
+      {(d.avvisi || []).map(a => <Messaggio key={a} tipo="warn">{a}</Messaggio>)}
       {prova && <Messaggio tipo="warn">Stai guardando una prova: nulla è stato salvato.</Messaggio>}
       {critici.length > 0 && (
         <Messaggio tipo="warn">

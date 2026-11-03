@@ -275,3 +275,38 @@ def test_totali_previsione_per_anno():
         assert tot[0]["saldo_iniziale"] == righe[0]["saldo_iniziale"] and tot[-1]["saldo_finale"] == righe[-1]["saldo_finale"]
         assert sum(t["entrate"] for t in tot) == sum(r["entrate"] for r in righe)
 
+
+
+# ── Stipendi netti dai cedolini (Fase 4b) ─────────────────────────────────────────
+
+def test_certe_stipendi_dal_cedolino_al_10_del_mese_dopo():
+    from app.services.tesoreria_previsione import certe_stipendi
+    netti = {(2026, 6): D("57851"), (2026, 7): D("66353"), (2026, 8): D("65350")}
+    oggi = date(2026, 8, 5)
+    certe = certe_stipendi(netti, {}, oggi)
+    assert [(c.data, c.importo, c.gruppo, c.categoria) for c in certe] == [
+        (date(2026, 8, 10), D("66353"), "stipendi", "personale"),
+        (date(2026, 9, 10), D("65350"), "stipendi", "personale"),
+    ]                                                   # giugno: pagato a luglio, mese passato
+    assert [c.importo for c in certe_stipendi(netti, {(2026, 8): D("1000")}, oggi)][0] == D("65353")
+    assert len(certe_stipendi(netti, {(2026, 8): D("60000")}, oggi)) == 1    # >= 90%: pagato
+
+
+def test_cedolini_mancanti():
+    from app.services.tesoreria_previsione import cedolini_mancanti
+    netti = {(2026, 9): D("100")}
+    assert cedolini_mancanti(netti, date(2026, 11, 3)) is None          # entro il 5
+    assert cedolini_mancanti(netti, date(2026, 11, 6)) == (2026, 10)
+    assert cedolini_mancanti({**netti, (2026, 10): D("1")}, date(2026, 11, 6)) is None
+    assert cedolini_mancanti({(2026, 12): D("1")}, date(2027, 1, 10)) is None
+    assert cedolini_mancanti({(2026, 11): D("1")}, date(2027, 1, 10)) == (2026, 12)
+    assert cedolini_mancanti({}, date(2026, 11, 6)) is None
+
+
+def test_stipendi_tolti_dalla_stima_del_personale():
+    from app.services.tesoreria_previsione import certe_stipendi
+    d = _dati(certe=certe_stipendi({(2026, 12): D("8")}, {}, date(2026, 12, 15)),
+              uscite={"personale": {(2026, 1): D("10")}})
+    gennaio = _mese(calcola_scenario(d, "realista"), 1)
+    assert gennaio["uscite_certe"]["stipendi"] == D("8")
+    assert gennaio["uscite_stimate"]["personale"] == D("2")

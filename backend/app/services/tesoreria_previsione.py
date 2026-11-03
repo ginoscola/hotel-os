@@ -85,10 +85,46 @@ def stima_altri_crediti(storico: dict, y: int, m: int) -> Decimal:
 class Certa:
     data: date
     importo: Decimal
-    gruppo: str                      # fisco, affitti, mutuo, ricorrenti, interventi, compensi, advertising, carte, fornitori
+    gruppo: str                      # fisco, affitti, mutuo, ricorrenti, interventi, compensi, advertising, carte, stipendi, fornitori
     categoria: Optional[str] = None  # per sottrarla dalla stima (RAI da utenze, BCC da fornitori_sdd...)
     ident: Optional[int] = None      # id dell'impegno: serve alle prove
     codice: Optional[str] = None
+
+
+GIORNO_STIPENDI = 10                # i netti di un mese si pagano il 10 del mese dopo
+QUOTA_STIPENDI_PAGATI = Decimal("0.9")
+
+
+def mese_dopo(y: int, m: int) -> tuple:
+    return (y + 1, 1) if m == 12 else (y, m + 1)
+
+
+def certe_stipendi(netti: dict, pagati: dict, oggi: date) -> list:
+    """Uscite certe "Stipendi netti" dai cedolini: netto del mese M al 10 del mese dopo. Se il mese di pagamento è
+    passato non si conta più; se è il mese in corso e gli stipendi già usciti in banca (`pagati`, categoria personale)
+    arrivano al 90% del netto è pagato, altrimenti resta da pagare la differenza."""
+    out = []
+    corrente = (oggi.year, oggi.month)
+    for (y, m), netto in sorted(netti.items()):
+        pagamento = mese_dopo(y, m)
+        if pagamento < corrente or not netto or netto <= 0:
+            continue
+        residuo = netto
+        if pagamento == corrente:
+            gia = pagati.get(corrente, ZERO)
+            if gia >= netto * QUOTA_STIPENDI_PAGATI:
+                continue
+            residuo = netto - gia
+        out.append(Certa(date(*pagamento, GIORNO_STIPENDI), residuo, "stipendi", "personale", None, f"stipendi:{y}:{m}"))
+    return out
+
+
+def cedolini_mancanti(netti: dict, oggi: date) -> Optional[tuple]:
+    """(anno, mese) dei cedolini del mese scorso se dopo il 5 non sono ancora importati (e ne esistono di precedenti)."""
+    precedente = (oggi.year - 1, 12) if oggi.month == 1 else (oggi.year, oggi.month - 1)
+    if oggi.day > 5 and netti and precedente not in netti and max(netti) < precedente:
+        return precedente
+    return None
 
 
 def applica_prova(certe: list, sposta: dict, togli: set, aggiungi: list) -> list:

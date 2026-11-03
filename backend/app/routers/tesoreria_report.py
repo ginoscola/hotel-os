@@ -21,6 +21,7 @@ from app.models.tesoreria import (
 )
 from app.routers.corrispettivi_cassa import riepilogo_cassa
 from app.routers.corrispettivi_documenti import _risposta_tabella
+from app.routers.dipendenti import netti_per_mese
 from app.routers.tesoreria_caparre import caparre_posizione
 from app.routers.tesoreria_shared import (
     cella_data, cella_importo, euro, id_ripiego, puo_modificare, puo_vedere,
@@ -29,6 +30,7 @@ from app.services.tesoreria_report import (
     CHIAVE_SOGLIE, FINESTRA_ADDEBITO_CARTA, SOGLIE_DEFAULT, ZERO, aggrega, anno_prima, giorno_prima, mesi_tra, stato_fido,
     stato_carta, ultimo_giorno_mese, valida_soglie,
 )
+from app.services.tesoreria_previsione import cedolini_mancanti
 from app.services.tesoreria_saldi import saldo_a_data, verifica_saldi
 from app.utils.locale_it import MESI_IT, formatta_data_it, formatta_euro_it
 
@@ -242,6 +244,11 @@ def posizione(giorno: Optional[date] = None, db: Session = Depends(get_db), _=De
         avvisi.append({"livello": "info", "tipo": "da_classificare", "conto_id": None,
                        "messaggio": f"{n_da_class} movimenti da classificare"})
 
+    mancanti = cedolini_mancanti(netti_per_mese(db), giorno)
+    if mancanti:
+        avvisi.append({"livello": "arancione", "tipo": "cedolini", "conto_id": None,
+                       "messaggio": f"Cedolini di {MESI_IT[mancanti[1] - 1]} {mancanti[0]} non importati: in Previsione "
+                                    "gli stipendi del mese dopo sono stimati dallo storico della banca"})
     caparre = caparre_posizione(db, giorno)
     if caparre["n_coda"]:
         avvisi.append({"livello": "info", "tipo": "caparre", "conto_id": None,

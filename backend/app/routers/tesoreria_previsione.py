@@ -22,6 +22,7 @@ from app.models.tesoreria import (
 )
 from app.routers.corrispettivi_documenti import _risposta_tabella
 from app.routers.budget import ricavi_budget_anno, ricavi_consuntivo_anno
+from app.routers.dipendenti import netti_per_mese
 from app.routers.corrispettivi_report import report_fatturati
 from app.routers.tesoreria_impegni import leggi_parametri as leggi_parametri_fiscali
 from app.routers.tesoreria_impegni_abbina import importo_impegno
@@ -33,11 +34,12 @@ from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, pu
 from app.services.budget_ristoranti import totale_budget_anno
 from app.services.tesoreria_previsione import (
     GRUPPI_CRESCITA, SCENARI, TIPI_FISCO, Certa, DatiPrevisione, applica_prova, calcola_scenario, fattore_budget, fine_mese,
-    mesi_tra, parametri_default, rettifica_caparre, totali_per_anno,
+    cedolini_mancanti, certe_stipendi, mesi_tra, parametri_default, rettifica_caparre, totali_per_anno,
 )
 from app.services.tesoreria_piani import advertising_per_addebito, anno_calendario
 from app.services.tesoreria_report import TIPI_ANNO, anno_prima
 from app.services.tesoreria_saldi import saldo_a_data
+from app.utils.locale_it import MESI_IT
 
 router = APIRouter()
 
@@ -140,8 +142,9 @@ def dati_previsione(db: Session, oggi: date) -> DatiPrevisione:
     saldo = sum((saldo_a_data(oggi, saldi[c.id], movimenti[c.id]) or Decimal(0) for c in conti), Decimal(0))
     entrate, uscite = _storico_banca(db)
     ricavi, budget = _ricavi_e_budget(db, range(oggi.year - 1, orizzonte.year + 1))
+    certe = _certe(db, oggi) + certe_stipendi(netti_per_mese(db), uscite.get("personale", {}), oggi)
     return DatiPrevisione(
-        oggi=oggi, orizzonte=orizzonte, saldo_iniziale=saldo, entrate=entrate, uscite=uscite, certe=_certe(db, oggi),
+        oggi=oggi, orizzonte=orizzonte, saldo_iniziale=saldo, entrate=entrate, uscite=uscite, certe=certe,
         budget=budget, ricavi=ricavi, fidi=[(c.fido, c.fido_scadenza) for c in conti if c.fido],
         parametri=leggi_parametri(db), advertising=_advertising_addebitato(db), caparre=_caparre(db, oggi, orizzonte),
     )
@@ -206,7 +209,11 @@ def _risposta(d: DatiPrevisione, db: Session) -> dict:
                    for tipo in TIPI_ANNO}
     minimi = {nome: min(righe, key=lambda r: r["saldo_finale"]) for nome, righe in scenari.items()}
     anno_budget = max(d.budget) if d.budget else None
+    mancanti = cedolini_mancanti(netti_per_mese(db), d.oggi)
+    avvisi = [f"Cedolini di {MESI_IT[mancanti[1] - 1]} {mancanti[0]} non importati: gli stipendi del mese dopo sono "
+              "stimati dallo storico della banca (Dipendenti → Import PDF)"] if mancanti else []
     return {
+        "avvisi": avvisi,
         "oggi": d.oggi.isoformat(), "saldo_iniziale": euro(d.saldo_iniziale),
         "budget": {str(a): euro(v) for a, v in d.budget.items()}, "ricavi": {str(a): euro(v) for a, v in d.ricavi.items()},
         "fattore_budget": round(float(fattore_budget(anno_budget, d.budget, d.ricavi)), 4) if anno_budget else None,
@@ -285,7 +292,8 @@ def elimina_salvata(salvata_id: int, db: Session = Depends(get_db), _=Depends(pu
 
 
 COLONNE_CERTE = (("fisco", "Fisco"), ("affitti", "Affitti"), ("mutuo", "Mutuo"), ("ricorrenti", "Ricorrenti"),
-                 ("interventi", "Interventi"), ("compensi", "Compensi soci"), ("advertising", "Advertising (carta)"), ("carte", "Carte (estratti)"), ("fornitori", "Fornitori (scadenzario)"))
+                 ("interventi", "Interventi"), ("compensi", "Compensi soci"), ("advertising", "Advertising (carta)"), ("carte", "Carte (estratti)"), ("stipendi", "Stipendi netti"),
+                 ("fornitori", "Fornitori (scadenzario)"))
 COLONNE_STIMATE = (("fornitori", "Fornitori stimati"), ("personale", "Personale"), ("utenze", "Utenze"),
                    ("marketing", "Marketing"), ("carte", "Carte stimate"), ("altre", "Altre"))
 

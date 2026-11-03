@@ -732,6 +732,19 @@ def costi_f24_per_mese(db: Session) -> dict:
     return {(anno, mese): totale for anno, mese, totale in righe}
 
 
+def netti_per_mese(db: Session) -> dict:
+    """{(anno, mese di paga): Decimal} retribuzione netta dei cedolini (da pagare il mese dopo), usato da Tesoreria."""
+    righe = (
+        db.query(PayrollImport.anno, PayrollImport.mese, func.sum(PayrollEntry.importo))
+        .join(PayrollEntry, PayrollEntry.import_id == PayrollImport.id)
+        .join(PayrollCostType, PayrollCostType.id == PayrollEntry.cost_type_id)
+        .filter(PayrollImport.is_test.is_(False), PayrollCostType.code == "ret_netta")
+        .group_by(PayrollImport.anno, PayrollImport.mese)
+        .all()
+    )
+    return {(anno, mese): totale for anno, mese, totale in righe}
+
+
 def _arricchisci_parent_code(righe: list[dict], db: Session) -> list[dict]:
     """Aggiunge parent_code, struttura_code e struttura_name a ogni riga CC."""
     tutti_by_id = {cc.id: cc for cc in db.query(CostCenter).all()}
