@@ -29,6 +29,9 @@ export function permessiTesoreria() {
   return { puo_vedere: !!p.puo_vedere, puo_modificare: !!p.puo_modificare, puo_importare: !!p.puo_importare }
 }
 
+// Strutture a cui può riferirsi una caparra (dalla causale dei bonifici)
+export const STRUTTURE = [{ code: 'DPH', nome: 'Du Parc' }, { code: 'CLB', nome: 'Club Hotel' }, { code: 'INT', nome: 'International' }]
+
 export const MESI_BREVI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
 
 /** Data locale in formato ISO (mai toISOString: in Italia la mezzanotte diventa il giorno prima in UTC). */

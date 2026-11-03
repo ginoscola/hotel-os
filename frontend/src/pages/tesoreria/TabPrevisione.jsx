@@ -126,6 +126,13 @@ function DettaglioMese({ riga, onChiudi }) {
   }, [riga])
   return (
     <Drawer titolo={`Dettaglio ${nomeMese(riga)}`} sottotitolo={`Entrate stimate ${formatEuro(riga.entrate)}`} onChiudi={onChiudi} larghezza={640}>
+      {riga.rettifica_caparre ? (
+        <Messaggio tipo="info">
+          {riga.rettifica_caparre > 0
+            ? `Entrate ridotte di ${formatEuro(riga.rettifica_caparre)}: per gli arrivi di questo mese sono già arrivate più caparre dell'anno prima alla stessa data.`
+            : `Entrate aumentate di ${formatEuro(-riga.rettifica_caparre)}: per gli arrivi di questo mese sono arrivate meno caparre dell'anno prima alla stessa data, si attendono più vicino all'arrivo.`}
+        </Messaggio>
+      ) : null}
       <h4 style={{ margin: '0 0 6px' }}><Badge tono="info">Certe</Badge> {formatEuro(riga.totale_certe)}</h4>
       {Object.entries(riga.uscite_certe).map(([k, v]) => <div key={k}>{NOMI_CERTE[k] || k}: {formatEuro(v)}</div>)}
       <h4 style={{ margin: '12px 0 6px' }}><Badge>Stimate</Badge> {formatEuro(riga.totale_stimate)}</h4>

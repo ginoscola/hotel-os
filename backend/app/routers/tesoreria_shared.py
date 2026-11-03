@@ -10,15 +10,18 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.models.tesoreria import TesoreriaCategoria, TesoreriaMovimento, TesoreriaRegola
 from app.permessi import richiedi_permesso
+from app.services.tesoreria_caparre import leggi_arrivo, leggi_struttura
 from app.services.tesoreria_classificatore import RegolaClassificazione, classifica
 from app.utils.locale_it import formatta_euro_it
 
 MODULO = "tesoreria"
 CATEGORIA_RIPIEGO = "da_classificare"
+CATEGORIA_CAPARRE = "bonifici_clienti"
 
 puo_vedere = richiedi_permesso(MODULO, "vedere")
 puo_modificare = richiedi_permesso(MODULO, "modificare")
@@ -75,7 +78,30 @@ def ricalcola_categorie(db: Session, regole: Optional[list] = None) -> dict:
         if nuova != m.categoria_id:
             m.categoria_id = nuova
             n_cambiati += 1
+    db.flush()
+    aggiorna_caparre(db)
     return {"n_controllati": len(movimenti), "n_cambiati": n_cambiati}
+
+
+def aggiorna_caparre(db: Session) -> int:
+    """Rilegge l'arrivo del soggiorno dalla causale di tutti i bonifici da clienti in entrata (non corretti a mano)
+    e lo toglie ai movimenti che non lo sono più. Non fa commit. Restituisce quanti hanno un arrivo."""
+    cat = db.query(TesoreriaCategoria.id).filter(TesoreriaCategoria.codice == CATEGORIA_CAPARRE).first()
+    cat_id = cat[0] if cat else None
+    da_leggere = and_(TesoreriaMovimento.categoria_id == cat_id, TesoreriaMovimento.importo > 0)
+    movimenti = db.query(TesoreriaMovimento).filter(
+        TesoreriaMovimento.arrivo_manuale.is_(False),
+        or_(da_leggere, TesoreriaMovimento.arrivo.isnot(None), TesoreriaMovimento.arrivo_regola.isnot(None)),
+    ).all()
+    n = 0
+    for m in movimenti:
+        arrivo, regola, struttura = None, None, None
+        if m.categoria_id == cat_id and m.importo > 0:
+            arrivo, regola = leggi_arrivo(m.descrizione, m.data_contabile)
+            struttura = leggi_struttura(m.descrizione) if arrivo else None
+        m.arrivo, m.arrivo_regola, m.arrivo_struttura = arrivo, regola, struttura
+        n += arrivo is not None
+    return n
 
 
 def movimento_json(m: TesoreriaMovimento, categorie: dict) -> dict:
@@ -98,6 +124,10 @@ def movimento_json(m: TesoreriaMovimento, categorie: dict) -> dict:
         "categoria_manuale": m.categoria_manuale,
         "straordinario": m.straordinario,
         "note": m.note,
+        "arrivo": m.arrivo.isoformat() if m.arrivo else None,
+        "arrivo_struttura": m.arrivo_struttura,
+        "arrivo_regola": m.arrivo_regola,
+        "arrivo_manuale": m.arrivo_manuale,
     }
 
 

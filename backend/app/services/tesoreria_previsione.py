@@ -2,6 +2,9 @@
 
 Entrate del mese = entrate in banca dello stesso mese di riferimento × fattore (Budget dell'anno ÷ ricavi dell'anno
 prima): il Budget dice quanto si fattura, lo storico della banca quando arrivano i soldi (caparre comprese).
+Rettifica caparre (Fase 4a): per ogni mese di arrivo, caparre già in banca oggi − caparre che l'anno prima erano in
+banca alla stessa data (× fattore): se si è avanti la differenza è incasso anticipato e si toglie dalle entrate del
+mese di arrivo (indietro: si aggiunge). Il totale della stagione resta quello del Budget, cambia solo quando arriva.
 Uscite certe = impegni + scadenzario. Uscite stimate = stesso mese di riferimento per categoria, senza straordinari,
 con la crescita del gruppo, meno ciò che è già tra le certe o già pagato nel mese in corso.
 """
@@ -111,6 +114,8 @@ class DatiPrevisione:
     fidi: list = field(default_factory=list)          # [(importo, scadenza o None)]
     parametri: dict = field(default_factory=parametri_default)
     advertising: dict = field(default_factory=dict)   # {(y, m): Decimal} advertising addebitato dalle carte nel mese
+    # {(y, m) di arrivo: (caparre in banca oggi, caparre per (y-1, m) in banca un anno fa o None se lo storico non basta)}
+    caparre: dict = field(default_factory=dict)
 
 
 def _crescita(gruppo: str, fattore: Decimal, parametri: dict) -> Decimal:
@@ -146,6 +151,14 @@ def entrate_mese(d: DatiPrevisione, y: int, m: int) -> Decimal:
     if rif is None:
         return ZERO
     return d.entrate.get((rif, m), ZERO) * fattore_budget(y, d.budget, d.ricavi)
+
+
+def rettifica_caparre(d: DatiPrevisione, y: int, m: int) -> Decimal:
+    """Caparre per gli arrivi del mese già incassate in più (> 0) o in meno (< 0) dell'anno prima alla stessa data."""
+    ora, rif = d.caparre.get((y, m), (ZERO, None))
+    if rif is None:
+        return ZERO
+    return ora - rif * fattore_budget(y, d.budget, d.ricavi)
 
 
 def _gia_avvenuto(storico: dict, y: int, m: int) -> Decimal:
@@ -185,12 +198,15 @@ def calcola_scenario(d: DatiPrevisione, scenario: str) -> list:
                     tolte[gruppo] = tolte.get(gruppo, ZERO) + _gia_avvenuto(d.uscite.get(categoria, {}), y, m)
         stimate = {g: max(v - tolte.get(g, ZERO), ZERO) * k_stime for g, v in stime.items()}
         entrate *= k_incassi
+        rettifica = rettifica_caparre(d, y, m)
+        entrate = max(entrate - rettifica, ZERO)
         tot_certe = sum(per_gruppo.values(), ZERO)
         tot_stimate = sum(stimate.values(), ZERO)
         iniziale = saldo
         saldo = saldo + entrate - tot_certe - tot_stimate
         righe.append({
-            "anno": y, "mese": m, "saldo_iniziale": iniziale, "entrate": entrate, "uscite_certe": per_gruppo,
+            "anno": y, "mese": m, "saldo_iniziale": iniziale, "entrate": entrate, "rettifica_caparre": rettifica,
+            "uscite_certe": per_gruppo,
             "uscite_stimate": stimate, "totale_certe": tot_certe, "totale_stimate": tot_stimate, "saldo_finale": saldo,
         })
 

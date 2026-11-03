@@ -146,6 +146,12 @@ class TesoreriaMovimento(Base):
     categoria_manuale = Column(Boolean, nullable=False, default=False, server_default="false")
     straordinario     = Column(Boolean, nullable=False, default=False, server_default="false")
     note              = Column(Text, nullable=True)
+    # Bonifici da clienti: arrivo del soggiorno letto dalla causale (services/tesoreria_caparre.py) o inserito a mano.
+    # arrivo_regola = regola che l'ha letto, 'manuale', 'escluso' (non è per un soggiorno) o NULL (non letto).
+    arrivo            = Column(Date, nullable=True, index=True)
+    arrivo_struttura  = Column(String(3), nullable=True)
+    arrivo_regola     = Column(String(20), nullable=True)
+    arrivo_manuale    = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

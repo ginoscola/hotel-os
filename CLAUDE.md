@@ -264,7 +264,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 877 test verdi (03/11/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 915 test verdi (03/11/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -2435,7 +2435,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | 1 | Conti, import estratti conto, classificazione, posizione attuale, consuntivo | ✅ v4.0.0 (28/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 2 (serve ok) |
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ✅ v4.14.0 (02/11/2026) — blocchi A–D; ora uso con dati reali, poi Fase 4 (dopo ~1 mese, serve ok) |
-| 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⬜ dopo ~1 mese d'uso |
+| 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⏳ blocco A caparre ✅ v4.20.0 (03/11/2026); B stipendi, C tempi, D verifica: serve ok |
 | 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
 
@@ -3284,6 +3284,48 @@ valgono subito. Grafico e schede nel blocco D.
 - ⚠️ Schermate non aperte a video da Claude (nessun browser sul server): solo build, controllo identificatori e test API.
 - Non fatti: "slittamento apertura stagione" e scenari manuali salvati della specifica (la prova copre il caso Du Parc).
 
+### Fase 4 — decisioni (03/11/2026)
+- **Fase 3 chiusa senza** "slittamento apertura stagione" e scenari manuali salvati (decisione dell'utente: le date
+  di apertura stanno in Stagioni/Budget, la "prova" della Previsione copre le varianti).
+- **Caparre: fonte = banca** (causale dei bonifici da clienti), non l'export Welcome "Elenco Prenotazioni" (che ha
+  "Totale acconti/caparre" per prenotazione, 184.580 € nel 2026, ma non la data di pagamento: niente confronto alla
+  stessa data). Welcome eventualmente in futuro come controllo, o per i codici "BK/2026/…" ed "ERIC-…" in coda.
+- Ordine: A caparre (subito, inizia l'inverno delle caparre) → B stipendi netti dai cedolini → C tempi di
+  pagamento per fornitore → D verifica delle previsioni salvate (per ultima: servono previsioni salvate, una al mese).
+
+### Fase 4 — Blocco A caparre fatto (03/11/2026, v4.20.0)
+- Colonne su `tesoreria_movimenti` (`tes016_2026`): `arrivo`, `arrivo_struttura` (DPH/CLB/INT o NULL),
+  `arrivo_regola` (nome della regola, `manuale`, `escluso` = non è una caparra, NULL = non letto), `arrivo_manuale`.
+- Lettore puro `services/tesoreria_caparre.py`: `leggi_arrivo(descrizione, data_pagamento)` (regole in ordine su
+  testo pulito: senza "Info aggiuntive" e senza l'intestazione dei bonifici istantanei; anno mancante o scritto male
+  → anno del pagamento o successivo; arrivo plausibile = mesi aprile–ottobre, da 60 gg prima a 550 gg dopo il
+  pagamento; giorno/mese invertiti se fuori stagione), `leggi_struttura()`, `per_mese_arrivo()`, `future_al()`.
+  Caparra = incasso **prima** del giorno di arrivo (caparre, acconti e saldi anticipati insieme).
+- `aggiorna_caparre(db)` in `tesoreria_shared.py`: rilegge tutti i bonifici da clienti in entrata non corretti a mano
+  e toglie l'arrivo a chi non lo è più; chiamata da `ricalcola_categorie()` (quindi ricalcolo, regole, "Rileggi i file
+  originali"), conferma import estratti e cambio categoria di un movimento.
+- Sui dati reali 2025–2026: 1.770 bonifici letti su 2.459 (~663.000 € su 1,06 milioni), struttura per ~1.480.
+  Non letti: saldi senza date, codici di prenotazione, causali tagliate dalla banca. ~0,1 s per rileggere tutto.
+- Router `routers/tesoreria_caparre.py`: `GET /tesoreria/caparre?anno=` (stagione = anno alberghiero, = anno
+  dell'estate): per mese di arrivo e struttura incassate finora, anno prima alla stessa data (`anno_prima()`), anno
+  prima a fine stagione; coda = bonifici della stagione senza arrivo e non esclusi (**solo la stagione richiesta**:
+  lo storico non si completa a mano, i non letti succedono in modo simile in entrambi gli anni).
+  `PUT /tesoreria/caparre/{id}` `{arrivo, struttura}` | `{escluso: true}` | `{automatico: true}` (`puo_modificare`).
+- Posizione: `caparre_future` (già nel saldo banche, per mese di arrivo e struttura) + avviso info "N bonifici da
+  clienti senza periodo di soggiorno" con link alla scheda.
+- **Previsione**: `DatiPrevisione.caparre = {(y, m) arrivo: (in banca oggi, per (y-1, m) un anno fa)}`;
+  `rettifica_caparre()` = oggi − anno prima × `fattore_budget(y)`, tolta dalle entrate del mese di arrivo (dopo il
+  moltiplicatore dello scenario, mai sotto zero; negativa = si aggiunge). Il totale della stagione resta quello del
+  Budget. Confronto valido solo se gli estratti partono da gennaio di due anni prima dell'arrivo. Riga
+  `rettifica_caparre`, elenco `caparre` nella risposta, spiegazione nel Drawer del mese.
+  Al 03/11/2026: stagione 2027 680 € contro 3.165 € un anno prima → giugno +2.818 €, luglio +537 €, agosto −500 €.
+- Frontend: scheda **Caparre** (`pages/tesoreria/TabCaparre.jsx`, dopo Impegni; `NavAnno` per stagione, tabella
+  mesi × strutture con confronto, coda con data di arrivo + struttura → Salva o "Non è una caparra"), riquadro in
+  Posizione. `STRUTTURE` in `helpers.jsx`.
+- Limiti: caparre con carta/POS invisibili; una correzione sbagliata si annulla solo da endpoint
+  (`{automatico: true}`), nessuna vista dei letti/esclusi in UI. Prima coda reale: 3 pagamenti Italcamel (fatture di
+  agosto–settembre) e un rimborso, tutti da marcare "Non è una caparra".
+
 ### Punti aperti da chiarire con l'utente
 - Fase 3e: se usare il modulo Forecast per gli incassi futuri (verificare prima IVA inclusa/esclusa
   e confronto con gli incassi in banca 2026).
@@ -3303,6 +3345,8 @@ esistenti, mai query duplicate sulle loro tabelle.
   **Corrispettivi → tassa di soggiorno futura**: `_tassa_incassata_per_mese()` di `tesoreria_kpi.py`.
 - **Tesoreria interna**: `tesoreria_import.conferma_import`/`elimina_import` chiamano
   `ricalcola_abbinamenti()` di `tesoreria_abbinamenti.py` (gli estratti conto cambiano gli abbinamenti).
+- **Tesoreria interna (caparre)**: `caparre_db()` di `tesoreria_caparre.py` usata da `tesoreria_previsione.py`
+  (rettifica) e `caparre_posizione()` da `tesoreria_report.posizione()`.
 - **Corrispettivi → export**: `_risposta_tabella()` di `routers/corrispettivi_documenti.py` (xlsx/csv/pdf
   da intestazioni + righe) usata dagli export di Movimenti e Consuntivo.
 
@@ -3397,9 +3441,12 @@ esistenti, mai query duplicate sulle loro tabelle.
   Budget, scenari, altri crediti F24 dalla base dell'anno prima, sottrazione dei ricorrenti dalla stima), con ok dell'utente.
 - **02/11/2026 (3)** — Fase 3, blocco C fatto (v4.12.0). **Prossimo passo**: blocco D (schede Previsione e Impegni, ricorrenti e
   mutuo in Admin, salva previsione, collegamento interventi–scadenzario), con strategia e ok dell'utente.
-- **02/11/2026 (4) — PUNTO DI RIPRESA.** Fase 3 chiusa (v4.14.0). Da verificare a video le schede nuove. Rate modificate
+- **02/11/2026 (4).** Fase 3 chiusa (v4.14.0). Da verificare a video le schede nuove. Rate modificate
   dall'utente: Du Parc canone 2026 al 50% (79.300 € da pianificare, fuori previsione), International 33,3% × 3 (99,9%).
   **Prossimo passo**: uso reale, poi Fase 4 solo con ok dell'utente (strategia prima).
+- **03/11/2026 — PUNTO DI RIPRESA.** Fase 3 chiusa (lasciate fuori due voci, vedi decisioni Fase 4). Fase 4
+  avviata: **blocco A caparre fatto (v4.20.0)**. Serve il riavvio del backend (migrazione `tes016_2026` già applicata).
+  **Prossimo passo**: l'utente completa la coda; poi blocco B (stipendi netti dai cedolini) con strategia e ok.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

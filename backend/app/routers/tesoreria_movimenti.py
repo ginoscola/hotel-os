@@ -14,7 +14,7 @@ from app.models.tesoreria import TesoreriaCategoria, TesoreriaMovimento, Tesorer
 from app.models.tesoreria import TesoreriaConto
 from app.routers.corrispettivi_documenti import _risposta_tabella
 from app.routers.tesoreria_shared import (
-    categoria_automatica, cella_data, cella_importo, euro, id_ripiego, mappa_categorie, movimento_json, puo_modificare, puo_vedere,
+    aggiorna_caparre, categoria_automatica, cella_data, cella_importo, euro, id_ripiego, mappa_categorie, movimento_json, puo_modificare, puo_vedere,
     regole_attive,
 )
 from app.services.tesoreria_classificatore import RegolaClassificazione, corrisponde
@@ -188,6 +188,8 @@ def aggiorna_movimento(
         m.straordinario = bool(body["straordinario"])
     if "note" in body:
         m.note = (body["note"] or "").strip() or None
+    db.flush()
+    aggiorna_caparre(db)        # una nuova categoria può aggiungere o togliere l'arrivo del soggiorno
     db.commit()
     return movimento_json(m, mappa_categorie(db))
 

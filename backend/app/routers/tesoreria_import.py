@@ -29,7 +29,7 @@ from app.models.tesoreria import TesoreriaConto, TesoreriaImport, TesoreriaMovim
 from app.routers.tesoreria_abbinamenti import ricalcola_abbinamenti
 from app.routers.tesoreria_impegni_abbina import abbina_impegni
 from app.routers.tesoreria_shared import (
-    categoria_automatica, euro, id_ripiego, mappa_categorie, nome_sicuro, puo_importare, puo_vedere,
+    aggiorna_caparre, categoria_automatica, euro, id_ripiego, mappa_categorie, nome_sicuro, puo_importare, puo_vedere,
     regole_attive, ricalcola_categorie, storage_dir,
 )
 from app.services.tesoreria_parser import ErroreImportTesoreria, parse_estratto_cbi
@@ -246,6 +246,7 @@ def conferma_import(
         shutil.copyfile(d / "file.xml", copiato)
         imp.percorso = str(copiato)
         db.flush()
+        aggiorna_caparre(db)                        # arrivo del soggiorno dei nuovi bonifici da clienti
         abbinamenti = ricalcola_abbinamenti(db)     # nuove uscite: scadenze Passcom pagate
         abbina_impegni(db)                          # ... e impegni (F24, affitti, mutuo, ricorrenti)
         db.commit()

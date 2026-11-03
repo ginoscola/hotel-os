@@ -5,9 +5,10 @@ import api from '../../api/client.js'
 import { colors } from '../../styles/tokens.js'
 import { formatData, formatDataIt, formatEuro, mostraErrore } from '../../utils/format.js'
 import {
-  Badge, Card, Dot, Field, Input, KpiTile, Loading, Messaggio, Table, Td, Th,
+  Badge, Card, Dot, Field, HotelTag, Input, KpiTile, Loading, Messaggio, Table, Td, Th,
 } from '../../components/ui'
-import { ETICHETTE_TIPO_CONTO, Importo, oggiISO } from './helpers.jsx'
+import { ETICHETTE_TIPO_CONTO, Importo, MESI_BREVI, STRUTTURE, oggiISO } from './helpers.jsx'
+
 
 const TONO_AVVISO = { rosso: 'err', arancione: 'warn', info: 'info' }
 
@@ -46,6 +47,9 @@ export default function TabPosizione({ onVaiA }) {
           {a.tipo === 'da_classificare' && onVaiA && (
             <> — <a href="#" onClick={e => { e.preventDefault(); onVaiA('movimenti', { daClassificare: true }) }}>vedi</a></>
           )}
+          {a.tipo === 'caparre' && onVaiA && (
+            <> — <a href="#" onClick={e => { e.preventDefault(); onVaiA('caparre') }}>completa</a></>
+          )}
         </Messaggio>
       ))}
 
@@ -60,6 +64,35 @@ export default function TabPosizione({ onVaiA }) {
         <KpiTile size="lg" label="Disponibilità con fido" value={formatEuro(dati.disponibilita_con_fido)}
           sub={`di cui fidi ${formatEuro(dati.fidi)}`} />
       </div>
+
+      {dati.caparre_future?.totale > 0 && (
+        <Card title={`Caparre per soggiorni futuri: ${formatEuro(dati.caparre_future.totale)} (già nel saldo banche)`}>
+          <Table compact>
+            <thead>
+              <tr>
+                <Th>Arrivo</Th>
+                {STRUTTURE.map(s => <Th key={s.code} num><HotelTag code={s.code} label={s.nome} /></Th>)}
+                <Th num>Non indicata</Th><Th num tot>Totale</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {dati.caparre_future.per_mese.map(r => (
+                <tr key={`${r.anno}-${r.mese}`}>
+                  <Td>{MESI_BREVI[r.mese - 1]} {r.anno}</Td>
+                  {STRUTTURE.map(s => <Td key={s.code} num>{formatEuro(r.per_struttura[s.code])}</Td>)}
+                  <Td num muted>{formatEuro(r.per_struttura[''])}</Td>
+                  <Td num tot>{formatEuro(r.totale)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          <p className="ui-text-muted" style={{ marginTop: 8 }}>
+            Bonifici da clienti già incassati per soggiorni non ancora iniziati, per mese di arrivo letto dalla causale.
+            Sono soldi in cassa legati a un servizio ancora da dare. Dettaglio e confronto con l'anno prima nella scheda
+            Caparre.
+          </p>
+        </Card>
+      )}
 
       <Card title="Dettaglio per conto">
         <Table compact>

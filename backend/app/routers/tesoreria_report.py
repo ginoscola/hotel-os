@@ -21,6 +21,7 @@ from app.models.tesoreria import (
 )
 from app.routers.corrispettivi_cassa import riepilogo_cassa
 from app.routers.corrispettivi_documenti import _risposta_tabella
+from app.routers.tesoreria_caparre import caparre_posizione
 from app.routers.tesoreria_shared import (
     cella_data, cella_importo, euro, id_ripiego, puo_modificare, puo_vedere,
 )
@@ -241,8 +242,15 @@ def posizione(giorno: Optional[date] = None, db: Session = Depends(get_db), _=De
         avvisi.append({"livello": "info", "tipo": "da_classificare", "conto_id": None,
                        "messaggio": f"{n_da_class} movimenti da classificare"})
 
+    caparre = caparre_posizione(db, giorno)
+    if caparre["n_coda"]:
+        avvisi.append({"livello": "info", "tipo": "caparre", "conto_id": None,
+                       "messaggio": f"{caparre['n_coda']} bonifici da clienti senza periodo di soggiorno "
+                                    f"({formatta_euro_it(Decimal(str(caparre['importo_coda'])))})"})
+
     ordine_livello = {"rosso": 0, "arancione": 1, "info": 2}
     return {
+        "caparre_future": caparre,
         "giorno": giorno.isoformat(),
         "saldo_banche": euro(voci["banche"]),
         "contanti": euro(contanti),

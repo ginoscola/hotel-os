@@ -28,14 +28,15 @@ from app.routers.tesoreria_impegni_abbina import importo_impegno
 from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.routers.tesoreria_piani import rate_intervento
+from app.routers.tesoreria_caparre import caparre_db
 from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, puo_vedere
 from app.services.budget_ristoranti import totale_budget_anno
 from app.services.tesoreria_previsione import (
     GRUPPI_CRESCITA, SCENARI, TIPI_FISCO, Certa, DatiPrevisione, applica_prova, calcola_scenario, fattore_budget, fine_mese,
-    mesi_tra, parametri_default, totali_per_anno,
+    mesi_tra, parametri_default, rettifica_caparre, totali_per_anno,
 )
 from app.services.tesoreria_piani import advertising_per_addebito, anno_calendario
-from app.services.tesoreria_report import TIPI_ANNO
+from app.services.tesoreria_report import TIPI_ANNO, anno_prima
 from app.services.tesoreria_saldi import saldo_a_data
 
 router = APIRouter()
@@ -142,15 +143,32 @@ def dati_previsione(db: Session, oggi: date) -> DatiPrevisione:
     return DatiPrevisione(
         oggi=oggi, orizzonte=orizzonte, saldo_iniziale=saldo, entrate=entrate, uscite=uscite, certe=_certe(db, oggi),
         budget=budget, ricavi=ricavi, fidi=[(c.fido, c.fido_scadenza) for c in conti if c.fido],
-        parametri=leggi_parametri(db), advertising=_advertising_addebitato(db),
+        parametri=leggi_parametri(db), advertising=_advertising_addebitato(db), caparre=_caparre(db, oggi, orizzonte),
     )
+
+
+def _caparre(db: Session, oggi: date, orizzonte: date) -> dict:
+    """{(y, m) di arrivo: (caparre in banca oggi, per (y-1, m) un anno fa)} dei mesi della previsione. Il confronto
+    vale solo se gli estratti conto partono almeno da gennaio di due anni prima dell'arrivo (le caparre arrivano
+    fino a ~18 mesi prima)."""
+    primo = db.query(func.min(TesoreriaMovimento.data_contabile)).scalar()
+    caparre = caparre_db(db)
+    ap = anno_prima(oggi)
+    out = {}
+    for y, m in mesi_tra(oggi, orizzonte):
+        ora = sum((i for pag, arr, _, i in caparre if (arr.year, arr.month) == (y, m) and pag <= oggi < arr), Decimal(0))
+        rif = sum((i for pag, arr, _, i in caparre if (arr.year, arr.month) == (y - 1, m) and pag <= ap and pag < arr),
+                  Decimal(0))
+        if ora or rif:
+            out[(y, m)] = (ora, rif if primo and primo <= date(y - 2, 1, 31) else None)
+    return out
 
 
 def _riga_json(r: dict) -> dict:
     return {
         "anno": r["anno"], "mese": r["mese"], "stato": r["stato"], "fido": euro(r["fido"]),
-        **{k: euro(r[k]) for k in ("saldo_iniziale", "entrate", "totale_certe", "totale_stimate", "saldo_finale",
-                                   "cassa_impegnata_90", "cassa_libera")},
+        **{k: euro(r[k]) for k in ("saldo_iniziale", "entrate", "rettifica_caparre", "totale_certe", "totale_stimate",
+                                   "saldo_finale", "cassa_impegnata_90", "cassa_libera")},
         "uscite_certe": {k: euro(v) for k, v in r["uscite_certe"].items()},
         "uscite_stimate": {k: euro(v) for k, v in r["uscite_stimate"].items()},
     }
@@ -192,6 +210,9 @@ def _risposta(d: DatiPrevisione, db: Session) -> dict:
         "budget": {str(a): euro(v) for a, v in d.budget.items()}, "ricavi": {str(a): euro(v) for a, v in d.ricavi.items()},
         "fattore_budget": round(float(fattore_budget(anno_budget, d.budget, d.ricavi)), 4) if anno_budget else None,
         "parametri": d.parametri, "scenari": scenari, "totali_anno": totali_anno, "storico": _storico_saldi(db, d.oggi),
+        "caparre": [{"anno": y, "mese": m, "incassate": euro(ora), "anno_prima": euro(rif),
+                     "fattore": round(float(fattore_budget(y, d.budget, d.ricavi)), 4),
+                     "rettifica": euro(rettifica_caparre(d, y, m))} for (y, m), (ora, rif) in sorted(d.caparre.items())],
         "minimi": {nome: {"anno": r["anno"], "mese": r["mese"], "saldo": r["saldo_finale"], "stato": r["stato"]} for nome, r in minimi.items()},
     }
 

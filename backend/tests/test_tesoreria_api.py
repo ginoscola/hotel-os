@@ -676,3 +676,46 @@ def test_kpi(client):
     assert (a["etichetta"], a["etichetta_ap"], a["dal"]) == ("2025/26", "2024/25", "2025-10-01")
     assert a["minimo"]["anno"] == k["minimo"]["anno"] and a["ap_completo"] is False
     assert client.get("/tesoreria/kpi", params={"tipo_anno": "boh"}).status_code == 422
+
+
+# ── Caparre per mese di arrivo (Fase 4a) ──────────────────────────────────────────
+
+def _caparra(client):
+    return next(m for m in _movimenti(client)["righe"] if m["importo"] == 500)
+
+
+def test_caparra_letta_all_import(client):
+    _importa(client)
+    m = _caparra(client)
+    assert (m["arrivo"], m["arrivo_struttura"], m["arrivo_regola"], m["arrivo_manuale"]) == \
+        ("2026-07-12", "CLB", "dal_al", False)
+    r = client.get("/tesoreria/caparre", params={"anno": 2026}).json()
+    luglio = next(x for x in r["mesi"] if x["mese"] == 7)
+    assert luglio["quest_anno"]["per_struttura"]["CLB"] == 500
+    assert r["bonifici"] == {"n": 1, "n_letti": 1, "n_esclusi": 0, "n_coda": 0}
+    pos = client.get("/tesoreria/posizione", params={"giorno": "2026-03-05"}).json()["caparre_future"]
+    assert pos["totale"] == 500 and pos["per_mese"][0]["mese"] == 7 and pos["n_coda"] == 0
+
+
+def test_caparra_corretta_a_mano_esclusa_e_ripristinata(client):
+    _importa(client)
+    mid = _caparra(client)["id"]
+    r = client.put(f"/tesoreria/caparre/{mid}", json={"arrivo": "2026-08-01", "struttura": "INT"})
+    assert r.status_code == 200 and r.json()["arrivo_regola"] == "manuale"
+    client.post("/tesoreria/ricalcola")                     # la correzione a mano resta
+    assert _caparra(client)["arrivo"] == "2026-08-01"
+    assert client.put(f"/tesoreria/caparre/{mid}", json={"struttura": "XXX", "arrivo": "2026-08-01"}).status_code == 400
+    client.put(f"/tesoreria/caparre/{mid}", json={"escluso": True})
+    r = client.get("/tesoreria/caparre", params={"anno": 2026}).json()
+    assert r["bonifici"]["n_esclusi"] == 1 and r["totali"]["quest_anno"]["totale"] == 0
+    client.put(f"/tesoreria/caparre/{mid}", json={"automatico": True})
+    assert _caparra(client)["arrivo"] == "2026-07-12"
+
+
+def test_cambio_categoria_toglie_l_arrivo(client):
+    _importa(client)
+    m = _caparra(client)
+    client.put(f"/tesoreria/movimenti/{m['id']}", json={"categoria_id": _id_categoria(client, "versamenti")})
+    assert _caparra(client)["arrivo"] is None
+    r = client.get("/tesoreria/caparre", params={"anno": 2026}).json()
+    assert r["bonifici"]["n"] == 0

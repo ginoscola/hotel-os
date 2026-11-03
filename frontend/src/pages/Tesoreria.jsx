@@ -3,6 +3,7 @@
 // Configurazione in Admin → Tesoreria.
 import { useState } from 'react'
 import { PageHeader, SegmentedControl, Tabs } from '../components/ui'
+import TabCaparre from './tesoreria/TabCaparre.jsx'
 import TabConsuntivo from './tesoreria/TabConsuntivo.jsx'
 import TabImpegni from './tesoreria/TabImpegni.jsx'
 import TabImport from './tesoreria/TabImport.jsx'
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'kpi', label: 'KPI' },
   { id: 'previsione', label: 'Previsione' },
   { id: 'impegni', label: 'Impegni' },
+  { id: 'caparre', label: 'Caparre' },
   { id: 'movimenti', label: 'Movimenti' },
   { id: 'scadenzario', label: 'Scadenzario' },
   { id: 'import', label: 'Import e saldi' },
@@ -62,6 +64,7 @@ export default function Tesoreria() {
       {tab === 'kpi' && <TabKpi key={`${versione}-${tipoAnno}`} tipoAnno={tipoAnno} />}
       {tab === 'previsione' && <TabPrevisione key={versione} permessi={permessi} tipoAnno={tipoAnno} />}
       {tab === 'impegni' && <TabImpegni key={versione} permessi={permessi} />}
+      {tab === 'caparre' && <TabCaparre key={versione} permessi={permessi} />}
       {tab === 'movimenti' && (
         <TabMovimenti key={versione} conti={conti} categorie={categorie} permessi={permessi} tipoAnno={tipoAnno}
           filtroIniziale={filtroMovimenti} />
