@@ -61,13 +61,19 @@ function TooltipSaldo({ active, payload, label, scenario }) {
   )
 }
 
-/** Etichetta della linea verticale di inizio anno: anno e saldo previsto alla sua fine (o all'ultimo mese previsto). */
-function EtichettaAnno({ viewBox, testo, sotto }) {
+/** Etichetta della linea verticale di inizio anno: "Anno X →" e saldo previsto all'ultimo giorno dell'anno (o della previsione). */
+function EtichettaAnno({ viewBox, testo, data, saldo, parziale }) {
   if (!viewBox) return null
+  const x = viewBox.x + 6
   return (
-    <text x={viewBox.x + 4} y={viewBox.y - 22} fontSize={11} fill={colors.textMuted}>
-      <tspan fontWeight={600} fill={colors.text}>{testo}</tspan>
-      {sotto && <tspan x={viewBox.x + 4} dy={14}>{sotto}</tspan>}
+    <text x={x} y={viewBox.y - 24} fontSize={12} fill={colors.textMuted}>
+      <tspan fontWeight={700} fill={colors.text}>{testo} →</tspan>
+      {saldo != null && (
+        <tspan x={x} dy={15}>
+          {parziale ? 'saldo a fine previsione' : 'saldo previsto'} al {data}:{' '}
+          <tspan fontWeight={700} fill={saldo < 0 ? colors.danger : colors.text}>{formatEuroIntero(saldo)}</tspan>
+        </tspan>
+      )}
     </text>
   )
 }
@@ -81,12 +87,14 @@ function GraficoSaldo({ d, scenario, tipoAnno }) {
   const inizi = dati.filter(p => Number(p.data.slice(5, 7)) === meseInizio).map(p => {
     const anno = annoDi(new Date(Number(p.data.slice(0, 4)), meseInizio - 1, 1), tipoAnno)
     const t = totali.find(x => x.anno === anno)
-    return { label: p.label, testo: etichettaAnno(anno, tipoAnno),
-      sotto: t ? `fine ${etichetta(t.al.anno, t.al.mese)}: ${formatEuroIntero(t.saldo_finale)}` : null }
+    const ultimo = t && new Date(t.al.anno, t.al.mese, 0)
+    return { label: p.label, testo: `Anno ${etichettaAnno(anno, tipoAnno)}`,
+      data: ultimo ? ultimo.toLocaleDateString('it-IT') : null,
+      saldo: t ? t.saldo_finale : null, parziale: t ? t.al.mese !== (meseInizio === 1 ? 12 : 9) : false }
   })
   return (
     <ResponsiveContainer width="100%" height={320}>
-      <ComposedChart data={dati} margin={{ top: 36, right: 16, left: 8, bottom: 0 }}>
+      <ComposedChart data={dati} margin={{ top: 40, right: 16, left: 8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 12, fill: colors.textMuted }} interval={1} />
         <YAxis tickFormatter={v => `${Math.round(v / 1000)}k`} width={56} tick={{ fontSize: 12, fill: colors.textMuted }} />
@@ -95,8 +103,8 @@ function GraficoSaldo({ d, scenario, tipoAnno }) {
         {pastReferenceArea(dati, 'data', 'label', d.oggi)}
         <ReferenceLine y={0} stroke={colors.textMuted} />
         {inizi.map(i => (
-          <ReferenceLine key={i.label} x={i.label} stroke={colors.borderStrong} strokeDasharray="4 4"
-            label={<EtichettaAnno testo={i.testo} sotto={i.sotto} />} />
+          <ReferenceLine key={i.label} x={i.label} stroke={colors.text} strokeWidth={2} strokeDasharray="6 4"
+            label={<EtichettaAnno testo={i.testo} data={i.data} saldo={i.saldo} parziale={i.parziale} />} />
         ))}
         <Area dataKey="fascia" name="Da pessimista a ottimista" stroke="none" fill={COLORE_SALDO} fillOpacity={0.15} connectNulls={false} isAnimationActive={false} />
         <Line dataKey="reale" name="Saldo reale" stroke={colors.text} strokeWidth={2} dot={false} isAnimationActive={false} />

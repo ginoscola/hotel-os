@@ -3240,8 +3240,9 @@ alberghiero = 1/10–30/9, identificato dall'**anno di fine** (2026 = "2025/26")
 - **Previsione**: `totali_anno[tipo][scenario]` nella risposta (`totali_per_anno()`: saldo iniziale del primo mese, somme,
   saldo finale dell'ultimo, `completo` = 12 mesi) → riga "Totale …" dopo l'ultimo mese di ogni anno; export con
   `tipo_anno` e righe TOTALE sommate colonna per colonna.
-  Nel grafico (v4.19.1) una linea verticale tratteggiata all'inizio di ogni anno (gennaio o ottobre) con l'anno e il saldo
-  previsto a fine anno nello scenario scelto (`EtichettaAnno`): il saldo di fine mese è lo stesso con entrambi i toggle.
+  Nel grafico (v4.19.1, testo chiarito in v4.19.2) una linea verticale marcata all'inizio di ogni anno (gennaio o ottobre)
+  con "Anno X →" e "saldo previsto al gg/mm/aaaa: importo" (rosso se negativo) nello scenario scelto (`EtichettaAnno`;
+  "saldo a fine previsione" se l'anno finisce oltre l'orizzonte): il saldo di fine mese è lo stesso con entrambi i toggle.
 - **Advertising**: piano per stagione (vedi sopra). Posizione, Impegni e Scadenzario non cambiano.
 
 ### Fase 3 — Blocco C fatto (02/11/2026, v4.12.0)
