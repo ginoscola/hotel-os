@@ -3488,8 +3488,8 @@ esistenti, mai query duplicate sulle loro tabelle.
   dall'utente: Du Parc canone 2026 al 50% (79.300 € da pianificare, fuori previsione), International 33,3% × 3 (99,9%).
   **Prossimo passo**: uso reale, poi Fase 4 solo con ok dell'utente (strategia prima).
 - **03/11/2026 — PUNTO DI RIPRESA.** Fase 3 chiusa (lasciate fuori due voci, vedi decisioni Fase 4). Fase 4
-  avviata: **blocco A caparre fatto (v4.20.0)**. Serve il riavvio del backend (migrazione `tes016_2026` già applicata).
-  **Prossimo passo**: l'utente completa la coda; poi blocco B (stipendi netti dai cedolini) con strategia e ok.
+  avviata: **blocco A caparre fatto (v4.20.0–4.21.0)**, **blocco B stipendi netti fatto (v4.22.0)**. Serve il riavvio
+  del backend. **Prossimo passo**: blocco C (tempi di pagamento per fornitore) con strategia e ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.
