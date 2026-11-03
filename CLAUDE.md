@@ -3343,8 +3343,9 @@ valgono subito. Grafico e schede nel blocco D.
 
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
-  riferimento (`anno_riferimento()`, il più recente). Con almeno due inverni completi in banca (dalla previsione della
-  stagione 2028: 2025/26 e 2026/27) calcolare per ogni anno la quota della stagione incassata mese per mese, fare la
+  riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**
+  (caparre incassate da ottobre 2025): la stagione 2025 non va usata come riferimento. Quindi con almeno due stagioni
+  (dalla previsione della stagione 2028: stagioni 2026 e 2027) calcolare per ogni anno la quota della stagione incassata mese per mese, fare la
   media pesata (più recente 2:1, come il pickup del Budget) e applicarla al totale atteso dal Budget. Possibile
   anche correggere il ritmo dei mesi futuri quando a metà inverno si è molto avanti o indietro (oggi la rettifica
   caparre sposta solo sul mese di arrivo).
