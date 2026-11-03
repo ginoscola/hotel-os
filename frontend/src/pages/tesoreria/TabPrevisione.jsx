@@ -13,7 +13,7 @@ import {
   Badge, Button, Card, Checkbox, Drawer, Field, Input, KpiTile, Loading, Messaggio, SegmentedControl, StatoVuoto,
   Table, Td, Th, useAvvisi, useConferma,
 } from '../../components/ui'
-import { Importo, MESI_BREVI, isoLocale } from './helpers.jsx'
+import { Importo, MESI_BREVI, annoDi, etichettaAnno, isoLocale } from './helpers.jsx'
 
 const LS_SCENARIO = 'tesoreria_previsione_scenario'
 const SCENARI = [
@@ -61,12 +61,32 @@ function TooltipSaldo({ active, payload, label, scenario }) {
   )
 }
 
-function GraficoSaldo({ d, scenario }) {
+/** Etichetta della linea verticale di inizio anno: anno e saldo previsto alla sua fine (o all'ultimo mese previsto). */
+function EtichettaAnno({ viewBox, testo, sotto }) {
+  if (!viewBox) return null
+  return (
+    <text x={viewBox.x + 4} y={viewBox.y - 22} fontSize={11} fill={colors.textMuted}>
+      <tspan fontWeight={600} fill={colors.text}>{testo}</tspan>
+      {sotto && <tspan x={viewBox.x + 4} dy={14}>{sotto}</tspan>}
+    </text>
+  )
+}
+
+function GraficoSaldo({ d, scenario, tipoAnno }) {
   const dati = useMemo(() => datiGrafico(d, scenario), [d, scenario])
   const nomeScenario = SCENARI.find(s => s.value === scenario).label
+  // una linea verticale all'inizio di ogni anno: gennaio (solare) o ottobre (alberghiero)
+  const meseInizio = tipoAnno === 'alberghiero' ? 10 : 1
+  const totali = d.totali_anno?.[tipoAnno]?.[scenario] || []
+  const inizi = dati.filter(p => Number(p.data.slice(5, 7)) === meseInizio).map(p => {
+    const anno = annoDi(new Date(Number(p.data.slice(0, 4)), meseInizio - 1, 1), tipoAnno)
+    const t = totali.find(x => x.anno === anno)
+    return { label: p.label, testo: etichettaAnno(anno, tipoAnno),
+      sotto: t ? `fine ${etichetta(t.al.anno, t.al.mese)}: ${formatEuroIntero(t.saldo_finale)}` : null }
+  })
   return (
     <ResponsiveContainer width="100%" height={320}>
-      <ComposedChart data={dati} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+      <ComposedChart data={dati} margin={{ top: 36, right: 16, left: 8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 12, fill: colors.textMuted }} interval={1} />
         <YAxis tickFormatter={v => `${Math.round(v / 1000)}k`} width={56} tick={{ fontSize: 12, fill: colors.textMuted }} />
@@ -74,6 +94,10 @@ function GraficoSaldo({ d, scenario }) {
         <Legend formatter={legendaNeutra} />
         {pastReferenceArea(dati, 'data', 'label', d.oggi)}
         <ReferenceLine y={0} stroke={colors.textMuted} />
+        {inizi.map(i => (
+          <ReferenceLine key={i.label} x={i.label} stroke={colors.borderStrong} strokeDasharray="4 4"
+            label={<EtichettaAnno testo={i.testo} sotto={i.sotto} />} />
+        ))}
         <Area dataKey="fascia" name="Da pessimista a ottimista" stroke="none" fill={COLORE_SALDO} fillOpacity={0.15} connectNulls={false} isAnimationActive={false} />
         <Line dataKey="reale" name="Saldo reale" stroke={colors.text} strokeWidth={2} dot={false} isAnimationActive={false} />
         <Line dataKey="previsto" name={nomeScenario} stroke={COLORE_SALDO} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
@@ -333,7 +357,7 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
       </div>
 
       <Card title="Saldo dei conti a fine mese">
-        <GraficoSaldo d={d} scenario={scenario} />
+        <GraficoSaldo d={d} scenario={scenario} tipoAnno={tipoAnno} />
       </Card>
 
       <Card title="Mese per mese" actions={<ExportMenu url={`/tesoreria/previsione/export?scenario=${scenario}&tipo_anno=${tipoAnno}`} nome={`previsione_${scenario}`} />}>
