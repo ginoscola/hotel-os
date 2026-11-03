@@ -2,7 +2,7 @@
 // scenario (uscite certe e stimate), dettaglio del mese, prove "cosa succede se" che non salvano nulla, previsioni salvate.
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import api from '../../api/client.js'
 import { ExportMenu } from '../../components/ExportMenu.jsx'
@@ -61,19 +61,17 @@ function TooltipSaldo({ active, payload, label, scenario }) {
   )
 }
 
-/** Etichetta della linea verticale di inizio anno: "Anno X →" e saldo previsto all'ultimo giorno dell'anno (o della previsione). */
-function EtichettaAnno({ viewBox, testo, data, saldo, parziale }) {
+/** Etichetta della linea verticale di fine anno: l'anno e il saldo di quel punto (ultimo giorno dell'anno). */
+function EtichettaAnno({ viewBox, testo, data, saldo, reale }) {
   if (!viewBox) return null
-  const x = viewBox.x + 6
+  const x = viewBox.x - 6
   return (
-    <text x={x} y={viewBox.y - 24} fontSize={12} fill={colors.textMuted}>
-      <tspan fontWeight={700} fill={colors.text}>{testo} →</tspan>
-      {saldo != null && (
-        <tspan x={x} dy={15}>
-          {parziale ? 'saldo a fine previsione' : 'saldo previsto'} al {data}:{' '}
-          <tspan fontWeight={700} fill={saldo < 0 ? colors.danger : colors.text}>{formatEuroIntero(saldo)}</tspan>
-        </tspan>
-      )}
+    <text x={x} y={viewBox.y - 24} fontSize={12} fill={colors.textMuted} textAnchor="end">
+      <tspan fontWeight={700} fill={colors.text}>Fine {testo}</tspan>
+      <tspan x={x} dy={15}>
+        {reale ? 'saldo reale' : 'saldo previsto'} al {data}:{' '}
+        <tspan fontWeight={700} fill={saldo < 0 ? colors.danger : colors.text}>{formatEuroIntero(saldo)}</tspan>
+      </tspan>
     </text>
   )
 }
@@ -81,16 +79,14 @@ function EtichettaAnno({ viewBox, testo, data, saldo, parziale }) {
 function GraficoSaldo({ d, scenario, tipoAnno }) {
   const dati = useMemo(() => datiGrafico(d, scenario), [d, scenario])
   const nomeScenario = SCENARI.find(s => s.value === scenario).label
-  // una linea verticale all'inizio di ogni anno: gennaio (solare) o ottobre (alberghiero)
-  const meseInizio = tipoAnno === 'alberghiero' ? 10 : 1
-  const totali = d.totali_anno?.[tipoAnno]?.[scenario] || []
-  const inizi = dati.filter(p => Number(p.data.slice(5, 7)) === meseInizio).map(p => {
-    const anno = annoDi(new Date(Number(p.data.slice(0, 4)), meseInizio - 1, 1), tipoAnno)
-    const t = totali.find(x => x.anno === anno)
-    const ultimo = t && new Date(t.al.anno, t.al.mese, 0)
-    return { label: p.label, testo: `Anno ${etichettaAnno(anno, tipoAnno)}`,
-      data: ultimo ? ultimo.toLocaleDateString('it-IT') : null,
-      saldo: t ? t.saldo_finale : null, parziale: t ? t.al.mese !== (meseInizio === 1 ? 12 : 9) : false }
+  // una linea verticale sull'ultimo mese di ogni anno: dicembre (solare) o settembre (alberghiero),
+  // sul punto di cui l'etichetta riporta il saldo
+  const meseFine = tipoAnno === 'alberghiero' ? 9 : 12
+  const fini = dati.filter(p => Number(p.data.slice(5, 7)) === meseFine).map(p => {
+    const fine = new Date(Number(p.data.slice(0, 4)), meseFine, 0)
+    const reale = p.previsto == null || p.reale != null
+    return { label: p.label, testo: etichettaAnno(annoDi(fine, tipoAnno), tipoAnno),
+      data: fine.toLocaleDateString('it-IT'), saldo: reale ? p.reale : p.previsto, reale, y: reale ? p.reale : p.previsto }
   })
   return (
     <ResponsiveContainer width="100%" height={320}>
@@ -102,13 +98,14 @@ function GraficoSaldo({ d, scenario, tipoAnno }) {
         <Legend formatter={legendaNeutra} />
         {pastReferenceArea(dati, 'data', 'label', d.oggi)}
         <ReferenceLine y={0} stroke={colors.textMuted} />
-        {inizi.map(i => (
+        {fini.map(i => (
           <ReferenceLine key={i.label} x={i.label} stroke={colors.text} strokeWidth={2} strokeDasharray="6 4"
-            label={<EtichettaAnno testo={i.testo} data={i.data} saldo={i.saldo} parziale={i.parziale} />} />
+            label={<EtichettaAnno testo={i.testo} data={i.data} saldo={i.saldo} reale={i.reale} />} />
         ))}
         <Area dataKey="fascia" name="Da pessimista a ottimista" stroke="none" fill={COLORE_SALDO} fillOpacity={0.15} connectNulls={false} isAnimationActive={false} />
         <Line dataKey="reale" name="Saldo reale" stroke={colors.text} strokeWidth={2} dot={false} isAnimationActive={false} />
         <Line dataKey="previsto" name={nomeScenario} stroke={COLORE_SALDO} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+        {fini.map(i => <ReferenceDot key={`p${i.label}`} x={i.label} y={i.y} r={6} fill={colors.text} stroke={colors.surface} strokeWidth={2} />)}
         <Line dataKey="soglia" name="Soglia del fido" stroke={colors.danger} strokeWidth={2} strokeDasharray="6 4" dot={false} type="stepAfter" isAnimationActive={false} />
       </ComposedChart>
     </ResponsiveContainer>
