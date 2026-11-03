@@ -1,6 +1,6 @@
 // Previsione di cassa: saldo mese per mese con la fascia pessimista–ottimista e la soglia del fido, tabella per
 // scenario (uscite certe e stimate), dettaglio del mese, prove "cosa succede se" che non salvano nulla, previsioni salvate.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Area, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
@@ -274,7 +274,7 @@ function PrevisioniSalvate({ permessi, versione, onCambio }) {
   )
 }
 
-export default function TabPrevisione({ permessi }) {
+export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
   const [base, setBase] = useState(null)
   const [prova, setProva] = useState(null)
   const [errore, setErrore] = useState(null)
@@ -296,6 +296,8 @@ export default function TabPrevisione({ permessi }) {
   if (!base) return <Loading />
   const d = prova || base
   const righe = d.scenari[scenario]
+  // riga di totale dopo l'ultimo mese di ogni anno (solare o alberghiero, dal toggle in cima alla pagina)
+  const totaliDopo = new Map((d.totali_anno?.[tipoAnno]?.[scenario] || []).map(t => [`${t.al.anno}-${t.al.mese}`, t]))
   const critici = d.scenari.pessimista.filter(r => r.stato === 'sotto_fido')
   const kpiMin = nome => {
     const m = d.minimi[nome]
@@ -334,7 +336,7 @@ export default function TabPrevisione({ permessi }) {
         <GraficoSaldo d={d} scenario={scenario} />
       </Card>
 
-      <Card title="Mese per mese" actions={<ExportMenu url={`/tesoreria/previsione/export?scenario=${scenario}`} nome={`previsione_${scenario}`} />}>
+      <Card title="Mese per mese" actions={<ExportMenu url={`/tesoreria/previsione/export?scenario=${scenario}&tipo_anno=${tipoAnno}`} nome={`previsione_${scenario}`} />}>
         <div style={{ marginBottom: 8 }}><SegmentedControl options={SCENARI} value={scenario} onChange={cambiaScenario} label="Scenario" /></div>
         <Table compact>
           <thead>
@@ -344,19 +346,35 @@ export default function TabPrevisione({ permessi }) {
             </tr>
           </thead>
           <tbody>
-            {righe.map(r => (
-              <tr key={`${r.anno}-${r.mese}`} style={{ cursor: 'pointer' }} onClick={() => setDettaglio(r)}
-                className={r.stato === 'sotto_fido' ? 'ui-riga-errore' : r.stato === 'sotto_zero' ? 'ui-riga-avviso' : undefined}>
-                <Td>{nomeMese(r)}</Td>
-                <Td num><Importo v={r.saldo_iniziale} /></Td>
-                <Td num>{formatEuro(r.entrate)}</Td>
-                <Td num>{formatEuro(r.totale_certe)}</Td>
-                <Td num>{formatEuro(r.totale_stimate)}</Td>
-                <Td num tot><Importo v={r.saldo_finale} forte /></Td>
-                <Td num><Importo v={r.cassa_libera} /></Td>
-                <Td><BadgeStato stato={r.stato} /></Td>
-              </tr>
-            ))}
+            {righe.map(r => {
+              const t = totaliDopo.get(`${r.anno}-${r.mese}`)
+              return (
+                <Fragment key={`${r.anno}-${r.mese}`}>
+                  <tr style={{ cursor: 'pointer' }} onClick={() => setDettaglio(r)}
+                    className={r.stato === 'sotto_fido' ? 'ui-riga-errore' : r.stato === 'sotto_zero' ? 'ui-riga-avviso' : undefined}>
+                    <Td>{nomeMese(r)}</Td>
+                    <Td num><Importo v={r.saldo_iniziale} /></Td>
+                    <Td num>{formatEuro(r.entrate)}</Td>
+                    <Td num>{formatEuro(r.totale_certe)}</Td>
+                    <Td num>{formatEuro(r.totale_stimate)}</Td>
+                    <Td num tot><Importo v={r.saldo_finale} forte /></Td>
+                    <Td num><Importo v={r.cassa_libera} /></Td>
+                    <Td><BadgeStato stato={r.stato} /></Td>
+                  </tr>
+                  {t && (
+                    <tr className="ui-riga-subtotale">
+                      <Td>Totale {t.etichetta}{!t.completo && <span className="ui-text-muted"> ({t.n_mesi} mesi)</span>}</Td>
+                      <Td num><Importo v={t.saldo_iniziale} /></Td>
+                      <Td num>{formatEuro(t.entrate)}</Td>
+                      <Td num>{formatEuro(t.totale_certe)}</Td>
+                      <Td num>{formatEuro(t.totale_stimate)}</Td>
+                      <Td num tot><Importo v={t.saldo_finale} forte /></Td>
+                      <Td num /><Td />
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
           </tbody>
         </Table>
       </Card>

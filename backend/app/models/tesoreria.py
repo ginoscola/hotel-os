@@ -441,7 +441,8 @@ class TesoreriaRataCompenso(Base):
 
 
 class TesoreriaAdvertising(Base):
-    """Spesa pubblicitaria pagata con carta (Google, Meta) decisa per un anno. L'ultimo mese inserito chiude il totale."""
+    """Spesa pubblicitaria pagata con carta (Google, Meta) decisa per un anno alberghiero (`anno` = anno di fine:
+    2026 = ottobre 2025 – settembre 2026). L'ultimo mese della stagione inserito chiude il totale."""
     __tablename__ = "tesoreria_advertising"
 
     id       = Column(Integer, primary_key=True, autoincrement=True)

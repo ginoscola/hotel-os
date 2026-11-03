@@ -77,14 +77,23 @@ def advertising_per_addebito(piani: list) -> dict:
     return out
 
 
+MESI_STAGIONE = (10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+
+def anno_calendario(stagione: int, mese: int) -> int:
+    """Anno solare di un mese della stagione (anno alberghiero `stagione` = 1/10 dell'anno prima – 30/9)."""
+    return stagione - 1 if mese >= 10 else stagione
+
+
 def chiudi_totale(totale: Decimal, importi: dict) -> dict:
-    """{mese: importo} con l'ultimo mese che prende quanto manca al totale. Errore se gli altri lo superano."""
+    """{mese: importo} con l'ultimo mese della stagione (ottobre → settembre) che prende quanto manca al totale.
+    Errore se gli altri lo superano."""
     if not importi:
         return {}
-    ultimo = max(importi)
+    ultimo = max(importi, key=MESI_STAGIONE.index)
     altri = sum((v for k, v in importi.items() if k != ultimo), Decimal(0))
     if altri > totale:
-        raise ValueError(f"I mesi prima di {ultimo} superano già il totale di {altri - totale:.2f} €")
+        raise ValueError(f"I mesi prima dell'ultimo superano già il totale di {altri - totale:.2f} €")
     return {**importi, ultimo: totale - altri}
 
 

@@ -32,9 +32,10 @@ from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, pu
 from app.services.budget_ristoranti import totale_budget_anno
 from app.services.tesoreria_previsione import (
     GRUPPI_CRESCITA, SCENARI, TIPI_FISCO, Certa, DatiPrevisione, applica_prova, calcola_scenario, fattore_budget, fine_mese,
-    mesi_tra, parametri_default,
+    mesi_tra, parametri_default, totali_per_anno,
 )
-from app.services.tesoreria_piani import advertising_per_addebito
+from app.services.tesoreria_piani import advertising_per_addebito, anno_calendario
+from app.services.tesoreria_report import TIPI_ANNO
 from app.services.tesoreria_saldi import saldo_a_data
 
 router = APIRouter()
@@ -128,7 +129,7 @@ def _certe(db: Session, oggi: date) -> list:
 def _advertising_addebitato(db: Session) -> dict:
     righe = db.query(TesoreriaAdvertising.anno, TesoreriaAdvertisingMese.mese, TesoreriaAdvertisingMese.importo).join(
         TesoreriaAdvertisingMese, TesoreriaAdvertisingMese.advertising_id == TesoreriaAdvertising.id)
-    return advertising_per_addebito([tuple(r) for r in righe])
+    return advertising_per_addebito([(anno_calendario(a, m), m, imp) for a, m, imp in righe])
 
 
 def dati_previsione(db: Session, oggi: date) -> DatiPrevisione:
@@ -173,15 +174,24 @@ def _storico_saldi(db: Session, oggi: date, n_mesi: int = 12) -> list:
     return out
 
 
+def _totale_json(t: dict) -> dict:
+    return {"anno": t["anno"], "etichetta": t["etichetta"], "n_mesi": t["n_mesi"], "completo": t["completo"],
+            "dal": {"anno": t["dal"][0], "mese": t["dal"][1]}, "al": {"anno": t["al"][0], "mese": t["al"][1]},
+            **{k: euro(t[k]) for k in ("saldo_iniziale", "entrate", "totale_certe", "totale_stimate", "saldo_finale")}}
+
+
 def _risposta(d: DatiPrevisione, db: Session) -> dict:
-    scenari = {nome: [_riga_json(r) for r in calcola_scenario(d, nome)] for nome in SCENARI}
+    calcolati = {nome: calcola_scenario(d, nome) for nome in SCENARI}
+    scenari = {nome: [_riga_json(r) for r in righe] for nome, righe in calcolati.items()}
+    totali_anno = {tipo: {nome: [_totale_json(t) for t in totali_per_anno(righe, tipo)] for nome, righe in calcolati.items()}
+                   for tipo in TIPI_ANNO}
     minimi = {nome: min(righe, key=lambda r: r["saldo_finale"]) for nome, righe in scenari.items()}
     anno_budget = max(d.budget) if d.budget else None
     return {
         "oggi": d.oggi.isoformat(), "saldo_iniziale": euro(d.saldo_iniziale),
         "budget": {str(a): euro(v) for a, v in d.budget.items()}, "ricavi": {str(a): euro(v) for a, v in d.ricavi.items()},
         "fattore_budget": round(float(fattore_budget(anno_budget, d.budget, d.ricavi)), 4) if anno_budget else None,
-        "parametri": d.parametri, "scenari": scenari, "storico": _storico_saldi(db, d.oggi),
+        "parametri": d.parametri, "scenari": scenari, "totali_anno": totali_anno, "storico": _storico_saldi(db, d.oggi),
         "minimi": {nome: {"anno": r["anno"], "mese": r["mese"], "saldo": r["saldo_finale"], "stato": r["stato"]} for nome, r in minimi.items()},
     }
 
@@ -259,20 +269,28 @@ COLONNE_STIMATE = (("fornitori", "Fornitori stimati"), ("personale", "Personale"
 
 
 @router.get("/previsione/export")
-def export(scenario: str = Query("realista"), formato: str = Query("xlsx"), db: Session = Depends(get_db), _=Depends(puo_vedere)):
-    if scenario not in SCENARI:
-        raise HTTPException(400, "Scenario non valido")
+def export(scenario: str = Query("realista"), formato: str = Query("xlsx"), tipo_anno: str = Query("solare"),
+           db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    if scenario not in SCENARI or tipo_anno not in TIPI_ANNO:
+        raise HTTPException(400, "Scenario o tipo di anno non valido")
     righe_calc = calcola_scenario(dati_previsione(db, date.today()), scenario)
+    totali = {t["al"]: t for t in totali_per_anno(righe_calc, tipo_anno)}
     intestazioni = (["Mese", "Saldo iniziale", "Entrate (stima)"] + [n for _k, n in COLONNE_CERTE]
                     + [n for _k, n in COLONNE_STIMATE] + ["Saldo finale", "Cassa libera a 90 gg"])
-    righe = []
+    righe, somme = [], None
     for r in righe_calc:
-        righe.append([
-            f"{r['mese']:02d}/{r['anno']}", cella_importo(r["saldo_iniziale"], formato), cella_importo(r["entrate"], formato),
-            *[cella_importo(r["uscite_certe"].get(k, 0), formato) for k, _n in COLONNE_CERTE],
-            *[cella_importo(r["uscite_stimate"].get(k, 0), formato) for k, _n in COLONNE_STIMATE],
-            cella_importo(r["saldo_finale"], formato), cella_importo(r["cassa_libera"], formato),
-        ])
+        valori = ([r["entrate"]] + [r["uscite_certe"].get(k, Decimal(0)) for k, _n in COLONNE_CERTE]
+                  + [r["uscite_stimate"].get(k, Decimal(0)) for k, _n in COLONNE_STIMATE])
+        somme = valori if somme is None else [a + b for a, b in zip(somme, valori)]
+        righe.append([f"{r['mese']:02d}/{r['anno']}", cella_importo(r["saldo_iniziale"], formato),
+                      *[cella_importo(v, formato) for v in valori],
+                      cella_importo(r["saldo_finale"], formato), cella_importo(r["cassa_libera"], formato)])
+        t = totali.get((r["anno"], r["mese"]))
+        if t:      # riga di totale dopo l'ultimo mese di ogni anno (solare o alberghiero)
+            nome = f"TOTALE {t['etichetta']}" + ("" if t["completo"] else f" ({t['n_mesi']} mesi)")
+            righe.append([nome, cella_importo(t["saldo_iniziale"], formato), *[cella_importo(v, formato) for v in somme],
+                          cella_importo(t["saldo_finale"], formato), ""])
+            somme = None
     n = len(intestazioni)
     return _risposta_tabella(formato, f"previsione_{scenario}", f"Previsione di cassa, scenario {scenario} (stima)", intestazioni, righe,
                              larghezze_pdf=[1.2] + [1] * (n - 1), numeriche_pdf=tuple(range(1, n)))

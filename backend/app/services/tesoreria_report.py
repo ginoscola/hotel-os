@@ -49,6 +49,25 @@ def anno_prima(giorno: date) -> date:
         return giorno.replace(year=giorno.year - 1, day=28)
 
 
+TIPI_ANNO = ("solare", "alberghiero")
+
+
+def intervallo_anno(anno: int, tipo: str) -> tuple:
+    """Anno solare 1/1–31/12, anno alberghiero 1/10 dell'anno prima – 30/9 (`anno` = anno di fine stagione)."""
+    if tipo == "alberghiero":
+        return date(anno - 1, 10, 1), date(anno, 9, 30)
+    return date(anno, 1, 1), date(anno, 12, 31)
+
+
+def anno_di(giorno: date, tipo: str) -> int:
+    """Anno (solare o alberghiero, identificato dall'anno di fine) a cui appartiene il giorno."""
+    return giorno.year + 1 if tipo == "alberghiero" and giorno.month >= 10 else giorno.year
+
+
+def etichetta_anno(anno: int, tipo: str) -> str:
+    return f"{anno - 1}/{str(anno)[2:]}" if tipo == "alberghiero" else str(anno)
+
+
 def stato_fido(fido: Decimal, scadenza: Optional[date], giorno: date, preavviso: int) -> dict:
     """{conteggiato, livello: None|'arancione'|'rosso', giorni_alla_scadenza}."""
     if not fido or fido <= 0:

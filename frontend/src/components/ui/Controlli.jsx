@@ -135,11 +135,11 @@ export function NavMese({ anno, mese, onChange, etichetta, selettore = false }) 
 }
 
 /** Navigazione ◀ Anno ▶. onChange(anno). */
-export function NavAnno({ anno, onChange }) {
+export function NavAnno({ anno, onChange, etichetta }) {
   return (
     <div className="ui-navmese">
       <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => onChange(anno - 1)} aria-label="Anno precedente">◀</button>
-      <span className="ui-navmese-label" style={{ minWidth: 60 }}>{anno}</span>
+      <span className="ui-navmese-label" style={{ minWidth: 60 }}>{etichetta ? etichetta(anno) : anno}</span>
       <button type="button" className="ui-btn ui-btn-secondary ui-btn-sm" onClick={() => onChange(anno + 1)} aria-label="Anno successivo">▶</button>
     </div>
   )

@@ -37,6 +37,27 @@ export function isoLocale(d) {
 }
 export const oggiISO = () => isoLocale(new Date())
 
+// ── Anno solare (1/1–31/12) o alberghiero (1/10–30/9, identificato dall'anno di fine: 2026 = 2025/26) ──
+export const LS_TIPO_ANNO = 'tesoreria_tipo_anno'
+export const OPZIONI_TIPO_ANNO = [{ value: 'solare', label: 'Anno solare' }, { value: 'alberghiero', label: 'Anno alberghiero' }]
+
+export function intervalloAnno(anno, tipo) {
+  return tipo === 'alberghiero' ? [`${anno - 1}-10-01`, `${anno}-09-30`] : [`${anno}-01-01`, `${anno}-12-31`]
+}
+/** Anno (solare o alberghiero) del giorno; `d` è un Date. */
+export function annoDi(d, tipo) {
+  return tipo === 'alberghiero' && d.getMonth() >= 9 ? d.getFullYear() + 1 : d.getFullYear()
+}
+export function etichettaAnno(anno, tipo) {
+  return tipo === 'alberghiero' ? `${anno - 1}/${String(anno).slice(2)}` : String(anno)
+}
+/** Periodo "da inizio anno a oggi" o "anno precedente intero", per le scorciatoie di Consuntivo e Movimenti. */
+export function periodoAnno(tipo, quale) {
+  const anno = annoDi(new Date(), tipo)
+  if (quale === 'precedente') return intervalloAnno(anno - 1, tipo)
+  return [intervalloAnno(anno, tipo)[0], oggiISO()]
+}
+
 /** Importo in euro, rosso se negativo. */
 export function Importo({ v, forte }) {
   if (v == null) return <span style={{ color: colors.textSubtle }}>—</span>

@@ -8,7 +8,7 @@ import {
   Button, Checkbox, Field, Input, Loading, Messaggio, Modal, Paginazione, Select, StatoVuoto, Table, Td, Textarea, Th,
   ThOrdinabile, useAvvisi, useConferma,
 } from '../../components/ui'
-import { BadgeCategoria, Importo, ModaleRegola, SelectCategoria, causaleDi, queryString } from './helpers.jsx'
+import { BadgeCategoria, Importo, ModaleRegola, SelectCategoria, causaleDi, periodoAnno, queryString } from './helpers.jsx'
 
 const PER_PAGINA = 50
 
@@ -70,7 +70,7 @@ function ModaleMovimento({ movimento, conti, puoModificare, onChiudi, onSalvato,
   )
 }
 
-export default function TabMovimenti({ conti, categorie, permessi, filtroIniziale }) {
+export default function TabMovimenti({ conti, categorie, permessi, filtroIniziale, tipoAnno }) {
   const daClassificareId = categorie.find(c => c.codice === 'da_classificare')?.id
   const [filtri, setFiltri] = useState(() => ({
     conto_id: '', data_da: '', data_a: '', segno: '', solo_manuali: false, straordinario: '',
@@ -166,6 +166,12 @@ export default function TabMovimenti({ conti, categorie, permessi, filtroInizial
         </Field>
         <Field label="Dal"><Input type="date" value={filtri.data_da} onChange={e => setFiltro({ data_da: e.target.value })} /></Field>
         <Field label="Al"><Input type="date" value={filtri.data_a} onChange={e => setFiltro({ data_a: e.target.value })} /></Field>
+        <Button variant="secondary" size="sm" onClick={() => { const [da, a] = periodoAnno(tipoAnno, 'corrente'); setFiltro({ data_da: da, data_a: a }) }}>
+          {tipoAnno === 'alberghiero' ? 'Anno alberghiero' : 'Anno in corso'}
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => { const [da, a] = periodoAnno(tipoAnno, 'precedente'); setFiltro({ data_da: da, data_a: a }) }}>
+          {tipoAnno === 'alberghiero' ? 'Anno alberghiero prec.' : 'Anno precedente'}
+        </Button>
         <Field label="Categoria">
           <SelectCategoria categorie={categorie} value={filtri.categoria_id ? Number(filtri.categoria_id) : null}
             vuota="Tutte" soloAttive={false} onChange={v => setFiltro({ categoria_id: v ? String(v) : '' })} />

@@ -24,7 +24,7 @@ from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.routers.tesoreria_shared import euro, puo_importare, puo_modificare, puo_vedere
 from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_piani import (
-    TOLLERANZA_PERCENTUALE, chiudi_totale, data_addebito_advertising, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, importi_rate_intervento, nome_corrisponde, parse_piano_mutuo,
+    MESI_STAGIONE, TOLLERANZA_PERCENTUALE, anno_calendario, chiudi_totale, data_addebito_advertising, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, importi_rate_intervento, nome_corrisponde, parse_piano_mutuo,
     percentuali_effettive,
 )
 from app.services.tesoreria_report import stato_carta
@@ -153,8 +153,9 @@ def _previsti_compensi(db: Session) -> list:
 
 
 def _mesi_advertising(db: Session, advertising_id: int) -> list:
-    return db.query(TesoreriaAdvertisingMese).filter(TesoreriaAdvertisingMese.advertising_id == advertising_id) \
-        .order_by(TesoreriaAdvertisingMese.mese).all()
+    """Mesi del piano in ordine di stagione, da ottobre a settembre."""
+    mesi = db.query(TesoreriaAdvertisingMese).filter(TesoreriaAdvertisingMese.advertising_id == advertising_id).all()
+    return sorted(mesi, key=lambda r: MESI_STAGIONE.index(r.mese))
 
 
 def _previsti_advertising(db: Session, oggi: date, carte: list) -> list:
@@ -165,11 +166,12 @@ def _previsti_advertising(db: Session, oggi: date, carte: list) -> list:
     for a in db.query(TesoreriaAdvertising):
         conto = db.get(TesoreriaConto, a.conto_id)
         for r in _mesi_advertising(db, a.id):
-            data = data_addebito_advertising(a.anno, r.mese, conto.giorno_addebito)
+            anno = anno_calendario(a.anno, r.mese)
+            data = data_addebito_advertising(anno, r.mese, conto.giorno_addebito)
             if r.importo <= 0 or data < oggi or (conto.codice, data.year, data.month) in con_estratto:
                 continue
-            out.append(dict(codice=f"advertising:{a.anno}:{r.mese}", tipo="advertising", competenza=f"{a.anno}-{r.mese:02d}",
-                            descrizione=f"Advertising {MESI_IT[r.mese - 1]} {a.anno} ({conto.nome})", data=data, importo=r.importo,
+            out.append(dict(codice=f"advertising:{anno}:{r.mese}", tipo="advertising", competenza=f"{anno}-{r.mese:02d}",
+                            descrizione=f"Advertising {MESI_IT[r.mese - 1]} {anno} ({conto.nome})", data=data, importo=r.importo,
                             base="Spesa decisa in Admin", stato="confermato"))
     return out
 
@@ -849,7 +851,7 @@ def elimina_rata_compenso(rata_id: int, db: Session = Depends(get_db), _=Depends
 # ── Advertising pagato con carta ────────────────────────────────────────────────
 
 class AdvertisingIn(BaseModel):
-    anno: Optional[int] = None
+    anno: Optional[int] = None       # anno alberghiero, identificato dall'anno di fine (2026 = ottobre 2025 – settembre 2026)
     conto_id: Optional[int] = None
     totale: Optional[str] = None
     nota: Optional[str] = None
@@ -859,16 +861,18 @@ class AdvertisingIn(BaseModel):
 def _advertising_json(db: Session, a: TesoreriaAdvertising, oggi: date) -> dict:
     conto = db.get(TesoreriaConto, a.conto_id)
     mesi = _mesi_advertising(db, a.id)
-    impegni = {i.codice: i for i in db.query(TesoreriaImpegno).filter(TesoreriaImpegno.codice.like(f"advertising:{a.anno}:%"))}
+    codici = {f"advertising:{anno_calendario(a.anno, r.mese)}:{r.mese}" for r in mesi}
+    impegni = {i.codice: i for i in db.query(TesoreriaImpegno).filter(TesoreriaImpegno.codice.in_(codici))} if codici else {}
     ultimo = mesi[-1].mese if mesi else None
     righe = []
     for r in mesi:
-        data = data_addebito_advertising(a.anno, r.mese, conto.giorno_addebito)
-        i = impegni.get(f"advertising:{a.anno}:{r.mese}")
-        righe.append({"mese": r.mese, "importo": euro(r.importo), "automatico": r.mese == ultimo and len(mesi) > 1,
+        anno = anno_calendario(a.anno, r.mese)
+        data = data_addebito_advertising(anno, r.mese, conto.giorno_addebito)
+        i = impegni.get(f"advertising:{anno}:{r.mese}")
+        righe.append({"mese": r.mese, "anno": anno, "importo": euro(r.importo), "automatico": r.mese == ultimo and len(mesi) > 1,
                       "data_addebito": (i.data_scadenza if i else data).isoformat(),
                       "in_previsione": i is not None, "addebitato": i is None and data < oggi})
-    return {"id": a.id, "anno": a.anno, "conto_id": a.conto_id, "conto": conto.nome, "totale": euro(a.totale), "nota": a.nota,
+    return {"id": a.id, "anno": a.anno, "etichetta": f"{a.anno - 1}/{str(a.anno)[2:]}", "conto_id": a.conto_id, "conto": conto.nome, "totale": euro(a.totale), "nota": a.nota,
             "mesi": righe, "in_previsione": euro(sum((importo_impegno(i) for i in impegni.values()), Decimal(0)))}
 
 
@@ -927,7 +931,7 @@ def crea_advertising(corpo: AdvertisingIn, db: Session = Depends(get_db), _=Depe
     if corpo.anno is None or corpo.totale is None or corpo.conto_id is None:
         raise HTTPException(400, "Anno, carta e totale sono obbligatori")
     if db.query(TesoreriaAdvertising).filter(TesoreriaAdvertising.anno == corpo.anno).first():
-        raise HTTPException(409, f"Advertising {corpo.anno} già presente")
+        raise HTTPException(409, f"Advertising della stagione {corpo.anno - 1}/{str(corpo.anno)[2:]} già presente")
     _carta_o_400(db, corpo.conto_id)
     a = TesoreriaAdvertising(anno=corpo.anno, conto_id=corpo.conto_id, totale=_decimale(corpo.totale, "Totale"), nota=corpo.nota or None)
     db.add(a)

@@ -11,7 +11,7 @@ import { formatData, formatEuro, formatEuroIntero, mostraErrore } from '../../ut
 import {
   Button, Card, Checkbox, Drawer, Field, Input, KpiTile, Loading, Messaggio, Paginazione, Select, StatoVuoto, Table, Td, Th,
 } from '../../components/ui'
-import { BadgeCategoria, Importo, causaleDi, isoLocale, oggiISO, queryString } from './helpers.jsx'
+import { BadgeCategoria, Importo, causaleDi, isoLocale, periodoAnno, queryString } from './helpers.jsx'
 
 const LS_CONTO = 'tesoreria_consuntivo_conto'
 const LS_AP_COLONNE = 'tesoreria_consuntivo_ap_colonne'
@@ -20,14 +20,12 @@ const PER_PAGINA_DRAWER = 50
 
 const legendaNeutra = v => <span style={{ color: colors.text }}>{v}</span>
 
-function preset(tipo) {
+function preset(tipo, tipoAnno) {
   const oggi = new Date()
-  const a = oggi.getFullYear()
   if (tipo === 'mese_prec') {
-    return [isoLocale(new Date(a, oggi.getMonth() - 1, 1)), isoLocale(new Date(a, oggi.getMonth(), 0))]
+    return [isoLocale(new Date(oggi.getFullYear(), oggi.getMonth() - 1, 1)), isoLocale(new Date(oggi.getFullYear(), oggi.getMonth(), 0))]
   }
-  if (tipo === 'anno_prec') return [`${a - 1}-01-01`, `${a - 1}-12-31`]
-  return [`${a}-01-01`, oggiISO()]   // da inizio anno
+  return periodoAnno(tipoAnno, tipo === 'anno_prec' ? 'precedente' : 'corrente')
 }
 
 function DrawerMovimenti({ riga, filtri, onChiudi }) {
@@ -82,8 +80,9 @@ function Kpi({ label, k, size }) {
   )
 }
 
-export default function TabConsuntivo({ conti }) {
-  const [periodo, setPeriodo] = useState(() => preset('ytd'))
+export default function TabConsuntivo({ conti, tipoAnno }) {
+  const [periodo, setPeriodo] = useState(() => preset('ytd', tipoAnno))
+  const alb = tipoAnno === 'alberghiero'
   const [contoId, setContoId] = useState(() => localStorage.getItem(LS_CONTO) || '')
   const [dati, setDati] = useState(null)
   const [errore, setErrore] = useState(null)
@@ -128,9 +127,9 @@ export default function TabConsuntivo({ conti }) {
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <Field label="Dal"><Input type="date" value={periodo[0]} onChange={e => setPeriodo([e.target.value, periodo[1]])} /></Field>
         <Field label="Al"><Input type="date" value={periodo[1]} onChange={e => setPeriodo([periodo[0], e.target.value])} /></Field>
-        <Button variant="secondary" size="sm" onClick={() => setPeriodo(preset('mese_prec'))}>Mese precedente</Button>
-        <Button variant="secondary" size="sm" onClick={() => setPeriodo(preset('ytd'))}>Da inizio anno</Button>
-        <Button variant="secondary" size="sm" onClick={() => setPeriodo(preset('anno_prec'))}>Anno precedente</Button>
+        <Button variant="secondary" size="sm" onClick={() => setPeriodo(preset('mese_prec', tipoAnno))}>Mese precedente</Button>
+        <Button variant="secondary" size="sm" onClick={() => setPeriodo(preset('ytd', tipoAnno))}>{alb ? 'Da inizio anno alberghiero' : 'Da inizio anno'}</Button>
+        <Button variant="secondary" size="sm" onClick={() => setPeriodo(preset('anno_prec', tipoAnno))}>{alb ? 'Anno alberghiero precedente' : 'Anno precedente'}</Button>
         <Field label="Conto">
           <Select value={contoId} onChange={e => cambiaConto(e.target.value)}>
             <option value="">Tutti i conti</option>

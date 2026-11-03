@@ -749,17 +749,19 @@ export function AdminTesoreriaCompensi() {
 
 // ── Advertising pagato con carta e fornitori pagati con carta ───────────────────
 
-const MESI_ADV = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
+const NOMI_MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre']
+const MESI_STAGIONE = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9]     // anno alberghiero: ottobre → settembre
+const etichettaStagione = anno => `${anno - 1}/${String(anno).slice(2)}`
 const numero = v => Number(String(v ?? '').replace(',', '.')) || 0
 
-/** Valori a schermo dei 12 mesi con la bozza applicata: l'ultimo mese compilato prende quanto manca al totale. */
+/** Valori a schermo dei 12 mesi con la bozza applicata: l'ultimo mese compilato della stagione prende quanto manca al totale. */
 function mesiConBozza(piano, bozza) {
   const valori = {}
   for (const m of piano.mesi) valori[m.mese] = String(m.importo)
   for (const [m, v] of Object.entries(bozza?.mesi || {})) {
     if (v === '' || v == null) delete valori[m]; else valori[m] = v
   }
-  const compilati = Object.keys(valori).map(Number).sort((a, b) => a - b)
+  const compilati = Object.keys(valori).map(Number).sort((a, b) => MESI_STAGIONE.indexOf(a) - MESI_STAGIONE.indexOf(b))
   const ultimo = compilati.at(-1)
   const totale = numero(bozza?.totale ?? piano.totale)
   const altri = compilati.slice(0, -1).reduce((x, m) => x + numero(valori[m]), 0)
@@ -788,13 +790,13 @@ function PianoAdvertising({ piano, carte, onAggiorna, onElimina }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 8 }}>
-        <strong style={{ fontSize: 16, marginRight: 8 }}>{piano.anno}</strong>
+        <strong style={{ fontSize: 16, marginRight: 8 }}>Stagione {piano.etichetta}</strong>
         <Field label="Carta">
           <Select value={v.conto_id} onChange={e => modifica({ conto_id: Number(e.target.value) })}>
             {carte.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </Select>
         </Field>
-        <Field label="Totale dell'anno (€)"><Input value={v.totale} inputMode="decimal" style={{ width: 110 }} onChange={e => modifica({ totale: e.target.value })} /></Field>
+        <Field label="Totale della stagione (€)"><Input value={v.totale} inputMode="decimal" style={{ width: 110 }} onChange={e => modifica({ totale: e.target.value })} /></Field>
         <Field label="Nota"><Input value={v.nota || ''} style={{ width: 220 }} onChange={e => modifica({ nota: e.target.value })} /></Field>
         {bozza ? <>
           <Button onClick={salva}>Salva</Button>
@@ -804,8 +806,8 @@ function PianoAdvertising({ piano, carte, onAggiorna, onElimina }) {
       <Table compact>
         <thead><tr><Th>Mese della spesa</Th><Th num>Spesa (€)</Th><Th>Addebito in banca</Th><Th>Nella previsione</Th></tr></thead>
         <tbody>
-          {MESI_ADV.map((nome, i) => {
-            const m = i + 1
+          {MESI_STAGIONE.map(m => {
+            const nome = `${NOMI_MESI[m - 1]} ${m >= 10 ? piano.anno - 1 : piano.anno}`
             const r = info.get(m)
             const auto = m === ultimo && automatico != null
             const modificato = bozza?.mesi && m in bozza.mesi
@@ -887,7 +889,9 @@ function FornitoriCarta() {
 export function AdminTesoreriaAdvertising() {
   const [piani, setPiani] = useState(null)
   const [carte, setCarte] = useState([])
-  const [nuovo, setNuovo] = useState({ anno: new Date().getFullYear() + 1, conto_id: '', totale: '' })
+  // anno = anno di fine della stagione (2027 = ottobre 2026 – settembre 2027); proposta la successiva a quella in corso
+  const corrente = (() => { const d = new Date(); return d.getMonth() >= 9 ? d.getFullYear() + 1 : d.getFullYear() })()
+  const [nuovo, setNuovo] = useState({ anno: corrente + 1, conto_id: '', totale: '' })
   const avvisi = useAvvisi()
   const conferma = useConferma()
 
@@ -908,7 +912,7 @@ export function AdminTesoreriaAdvertising() {
     } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
   async function elimina(p) {
-    if (!await conferma({ titolo: "Eliminare il piano advertising?", messaggio: `Anno ${p.anno}`, pericolo: true })) return
+    if (!await conferma({ titolo: "Eliminare il piano advertising?", messaggio: `Stagione ${p.etichetta}`, pericolo: true })) return
     try { await api.delete(`/tesoreria/piani/advertising/${p.id}`); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
@@ -917,24 +921,29 @@ export function AdminTesoreriaAdvertising() {
     <>
       <Card title="Advertising pagato con carta (Google, Meta)">
         <p className="ui-text-muted" style={{ marginBottom: 8 }}>
-          Spesa di ogni mese decisa da te: esce dalla banca con l'addebito della carta del <strong>mese dopo</strong> (AMEX: estratto chiuso il 6,
-          addebito intorno al 27). L'ultimo mese compilato prende quanto manca al totale dell'anno. In previsione entra come gruppo «Advertising»;
+          Budget per <strong>anno alberghiero</strong> (ottobre → settembre) e spesa di ogni mese decisa da te: esce dalla banca con l'addebito
+          della carta del <strong>mese dopo</strong> (AMEX: estratto chiuso il 6, addebito intorno al 27). L'ultimo mese compilato della
+          stagione prende quanto manca al totale. In previsione entra come gruppo «Advertising»;
           la stima «Carte» dello stesso mese dell'anno di riferimento viene ridotta dell'advertising di quell'anno, quindi inserisci anche
-          gli anni passati (sono il riferimento). Un mese il cui estratto è già inserito non entra: lo contiene l'estratto.
+          le stagioni passate (sono il riferimento). Un mese il cui estratto è già inserito non entra: lo contiene l'estratto.
         </p>
         {piani.length === 0 ? <StatoVuoto>Nessun piano</StatoVuoto> : piani.map(p => (
           <PianoAdvertising key={p.id} piano={p} carte={carte} onElimina={elimina}
             onAggiorna={nuovo => setPiani(lista => lista.map(x => (x.id === nuovo.id ? nuovo : x)))} />
         ))}
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12, flexWrap: 'wrap' }}>
-          <Field label="Anno"><Input type="number" value={nuovo.anno} style={{ width: 80 }} onChange={e => setNuovo({ ...nuovo, anno: Number(e.target.value) })} /></Field>
+          <Field label="Stagione">
+            <Select value={nuovo.anno} onChange={e => setNuovo({ ...nuovo, anno: Number(e.target.value) })}>
+              {[-2, -1, 0, 1, 2].map(k => corrente + k).map(a => <option key={a} value={a}>{etichettaStagione(a)} (ott {a - 1} – set {a})</option>)}
+            </Select>
+          </Field>
           <Field label="Carta">
             <Select value={nuovo.conto_id} onChange={e => setNuovo({ ...nuovo, conto_id: Number(e.target.value) })}>
               {carte.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </Select>
           </Field>
-          <Field label="Totale dell'anno (€)"><Input value={nuovo.totale} inputMode="decimal" style={{ width: 110 }} onChange={e => setNuovo({ ...nuovo, totale: e.target.value })} /></Field>
-          <Button onClick={aggiungi} disabled={!nuovo.totale || !nuovo.conto_id}>Aggiungi anno</Button>
+          <Field label="Totale della stagione (€)"><Input value={nuovo.totale} inputMode="decimal" style={{ width: 110 }} onChange={e => setNuovo({ ...nuovo, totale: e.target.value })} /></Field>
+          <Button onClick={aggiungi} disabled={!nuovo.totale || !nuovo.conto_id}>Aggiungi stagione</Button>
         </div>
       </Card>
       <div style={{ height: 16 }} />

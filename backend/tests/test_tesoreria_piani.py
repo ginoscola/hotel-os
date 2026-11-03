@@ -65,6 +65,8 @@ def test_advertising_addebito_mese_dopo_e_totale():
     assert advertising_per_addebito([(2025, 12, D("10")), (2026, 1, D("5"))]) == {(2026, 1): D("10"), (2026, 2): D("5")}
     assert chiudi_totale(D("100"), {1: D("30"), 5: D("0"), 3: D("20")}) == {1: D("30"), 3: D("20"), 5: D("50")}
     assert chiudi_totale(D("100"), {}) == {}
+    # stagione ottobre → settembre: settembre è l'ultimo anche se ottobre ha un numero più alto
+    assert chiudi_totale(D("100"), {10: D("40"), 9: D("1"), 12: D("10")}) == {10: D("40"), 12: D("10"), 9: D("50")}
     with pytest.raises(ValueError):
         chiudi_totale(D("10"), {1: D("30"), 2: D("1")})
 
@@ -397,6 +399,17 @@ def test_advertising_per_mese_ultimo_chiude_il_totale(client, test_engine):
     assert not [k for k in _impegni(client) if k.startswith("advertising:")]
 
 
+def test_advertising_per_stagione_ottobre_dell_anno_prima(client, test_engine):
+    amex = _amex(test_engine)
+    a = client.post("/tesoreria/piani/advertising", json={"anno": FUTURO + 1, "conto_id": amex, "totale": "1000",
+                                                         "mesi": {"10": "100", "12": "200", "9": "1"}}).json()
+    assert a["etichetta"] == f"{FUTURO}/{str(FUTURO + 1)[2:]}"
+    assert [(m["mese"], m["anno"], m["importo"], m["automatico"]) for m in a["mesi"]] == [
+        (10, FUTURO, 100, False), (12, FUTURO, 200, False), (9, FUTURO + 1, 700, True)]
+    imp = _impegni(client)
+    assert imp[f"advertising:{FUTURO}:10"]["importo"] == 100 and imp[f"advertising:{FUTURO + 1}:9"]["importo"] == 700
+
+
 def test_advertising_gia_addebitato_o_nell_estratto_non_entra(client, test_engine):
     amex = _amex(test_engine)
     passato = date.today().year - 1
@@ -406,7 +419,8 @@ def test_advertising_gia_addebitato_o_nell_estratto_non_entra(client, test_engin
     chiusura = date.today() - timedelta(days=2)
     addebito = data_addebito_carta(chiusura, 27, date.today())
     spesa = (addebito.year, addebito.month - 1) if addebito.month > 1 else (addebito.year - 1, 12)
-    r = client.post("/tesoreria/piani/advertising", json={"anno": spesa[0], "conto_id": amex, "totale": "300", "mesi": {str(spesa[1]): "300"}})
+    stagione = spesa[0] + 1 if spesa[1] >= 10 else spesa[0]
+    r = client.post("/tesoreria/piani/advertising", json={"anno": stagione, "conto_id": amex, "totale": "300", "mesi": {str(spesa[1]): "300"}})
     if r.status_code == 409:      # stesso anno del piano precedente
         client.put(f"/tesoreria/piani/advertising/{client.get('/tesoreria/piani/advertising').json()[-1]['id']}",
                    json={"totale": "800", "mesi": {str(spesa[1]): "300"}})

@@ -17,8 +17,9 @@ from app.auth import richiedi_admin, richiedi_utente_attivo  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.services.tesoreria_previsione import (  # noqa: E402
-    Certa, DatiPrevisione, calcola_scenario, fattore_budget, parametri_default, stima_altri_crediti,
+    Certa, DatiPrevisione, calcola_scenario, fattore_budget, parametri_default, stima_altri_crediti, totali_per_anno,
 )
+from app.services.tesoreria_report import anno_di, etichetta_anno, intervallo_anno  # noqa: E402
 
 from tests._db import TEST_DB_URL  # noqa: E402
 
@@ -164,6 +165,8 @@ def test_previsione_risponde_con_tre_scenari(client):
     r = client.get("/tesoreria/previsione")
     assert r.status_code == 200, r.text
     assert set(r.json()["scenari"]) == {"pessimista", "realista", "ottimista"}
+    tot = r.json()["totali_anno"]
+    assert set(tot) == {"solare", "alberghiero"} and tot["solare"]["realista"][0]["etichetta"] == str(date.today().year)
     assert r.json()["scenari"]["realista"][0]["saldo_iniziale"] == 0
 
 
@@ -242,6 +245,9 @@ def test_export(client, formato):
     r = client.get(f"/tesoreria/previsione/export?scenario=pessimista&formato={formato}")
     assert r.status_code == 200 and len(r.content) > 100
     assert client.get("/tesoreria/previsione/export?scenario=boh").status_code == 400
+    r = client.get(f"/tesoreria/previsione/export?scenario=realista&formato=csv&tipo_anno=alberghiero")
+    assert r.status_code == 200 and "TOTALE " in r.content.decode("utf-8-sig", errors="ignore")
+    assert client.get("/tesoreria/previsione/export?tipo_anno=boh").status_code == 400
 
 
 def test_advertising_tolto_dalla_stima_delle_carte():
@@ -249,4 +255,23 @@ def test_advertising_tolto_dalla_stima_delle_carte():
     r = calcola_scenario(_dati(uscite=uscite, advertising={(2026, 1): D("70"), (2026, 2): D("80")}), "realista")
     assert _mese(r, 1)["uscite_stimate"]["carte"] == D("36")      # (100 − 70) × 1,2 del Budget
     assert _mese(r, 2)["uscite_stimate"]["carte"] == 0            # mai negativa
+
+
+def test_anno_solare_e_alberghiero():
+    assert intervallo_anno(2026, "solare") == (date(2026, 1, 1), date(2026, 12, 31))
+    assert intervallo_anno(2026, "alberghiero") == (date(2025, 10, 1), date(2026, 9, 30))
+    assert anno_di(date(2026, 10, 1), "alberghiero") == 2027 and anno_di(date(2026, 9, 30), "alberghiero") == 2026
+    assert anno_di(date(2026, 10, 1), "solare") == 2026
+    assert etichetta_anno(2027, "alberghiero") == "2026/27" and etichetta_anno(2027, "solare") == "2027"
+
+
+def test_totali_previsione_per_anno():
+    righe = calcola_scenario(_dati(oggi=date(2026, 9, 15), orizzonte=date(2027, 10, 31)), "realista")
+    sol = totali_per_anno(righe, "solare")
+    alb = totali_per_anno(righe, "alberghiero")
+    assert [(t["etichetta"], t["n_mesi"], t["completo"]) for t in sol] == [("2026", 4, False), ("2027", 10, False)]
+    assert [(t["etichetta"], t["n_mesi"], t["completo"]) for t in alb] == [("2025/26", 1, False), ("2026/27", 12, True), ("2027/28", 1, False)]
+    for tot in (sol, alb):
+        assert tot[0]["saldo_iniziale"] == righe[0]["saldo_iniziale"] and tot[-1]["saldo_finale"] == righe[-1]["saldo_finale"]
+        assert sum(t["entrate"] for t in tot) == sum(r["entrate"] for r in righe)
 

@@ -12,6 +12,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
+from app.services.tesoreria_report import anno_di, etichetta_anno
+
 ZERO = Decimal(0)
 UNO = Decimal(1)
 CENTO = Decimal(100)
@@ -202,3 +204,24 @@ def calcola_scenario(d: DatiPrevisione, scenario: str) -> list:
         r["fido"] = fido
         r["stato"] = "sotto_fido" if r["saldo_finale"] < -fido else "sotto_zero" if r["saldo_finale"] < 0 else "ok"
     return righe
+
+
+def totali_per_anno(righe: list, tipo: str) -> list:
+    """Righe mensili di uno scenario raggruppate per anno solare o alberghiero: saldo iniziale del primo mese,
+    somme di entrate e uscite, saldo finale dell'ultimo. `completo` = tutti i 12 mesi dentro l'orizzonte."""
+    out = []
+    for r in righe:
+        anno = anno_di(date(r["anno"], r["mese"], 1), tipo)
+        if not out or out[-1]["anno"] != anno:
+            out.append({"anno": anno, "etichetta": etichetta_anno(anno, tipo), "dal": (r["anno"], r["mese"]), "n_mesi": 0,
+                        "saldo_iniziale": r["saldo_iniziale"], "entrate": ZERO, "totale_certe": ZERO, "totale_stimate": ZERO})
+        t = out[-1]
+        t["n_mesi"] += 1
+        t["al"] = (r["anno"], r["mese"])
+        for k in ("entrate", "totale_certe", "totale_stimate"):
+            t[k] += r[k]
+        t["saldo_finale"] = r["saldo_finale"]
+    for t in out:
+        t["completo"] = t["n_mesi"] == 12
+    return out
+

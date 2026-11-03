@@ -12,7 +12,7 @@ import { formatDataIt, formatEuro, formatEuroIntero, formatPerc, mostraErrore } 
 import {
   Badge, Card, KpiTile, Loading, Messaggio, NavAnno, StatoVuoto, Table, Td, Th,
 } from '../../components/ui'
-import { BadgeCategoria, Importo } from './helpers.jsx'
+import { BadgeCategoria, Importo, annoDi, etichettaAnno } from './helpers.jsx'
 
 const COLORE_SALDO = colors.info
 // Anno precedente in un colore diverso (scelta dell'utente), tratteggiato come ogni serie di confronto
@@ -26,8 +26,8 @@ function DeltaPunti({ v }) {
   return <span className="ui-num" style={{ color: colore }}>{v > 0 ? '+' : ''}{v.toFixed(2)} pt</span>
 }
 
-export default function TabKpi() {
-  const [anno, setAnno] = useState(new Date().getFullYear())
+export default function TabKpi({ tipoAnno = 'solare' }) {
+  const [anno, setAnno] = useState(() => annoDi(new Date(), tipoAnno))
   const [dati, setDati] = useState(null)
   const [errore, setErrore] = useState(null)
 
@@ -35,16 +35,16 @@ export default function TabKpi() {
     let annullato = false
     setDati(null)
     setErrore(null)
-    api.get('/tesoreria/kpi', { params: { anno } })
+    api.get('/tesoreria/kpi', { params: { anno, tipo_anno: tipoAnno } })
       .then(r => { if (!annullato) setDati(r.data) })
       .catch(e => { if (!annullato) setErrore(mostraErrore(e)) })
     return () => { annullato = true }
-  }, [anno])
+  }, [anno, tipoAnno])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <NavAnno anno={anno} onChange={setAnno} />
+        <NavAnno anno={anno} onChange={setAnno} etichetta={a => etichettaAnno(a, tipoAnno)} />
       </div>
       <Messaggio>{errore}</Messaggio>
       {!dati ? (!errore && <Loading />) : <Contenuto d={dati} />}
@@ -60,10 +60,15 @@ function Contenuto({ d }) {
   const minimoAp = d.minimo.ap_stesso_periodo
   const costo = d.costo_incassi
   const ts = d.tassa_soggiorno
-  const periodo = `1 gen – ${formatDataIt(d.fino_al)}`
+  const periodo = `${formatDataIt(d.dal)} – ${formatDataIt(d.fino_al)}`
 
   return (
     <>
+      {!d.ap_completo && (
+        <Messaggio tipo="info">
+          Confronto con il {d.etichetta_ap} incompleto: gli estratti conto partono dopo il {formatDataIt(d.ap_dal)}.
+        </Messaggio>
+      )}
       <div className="ui-kpi-row">
         {pv ? (
           <KpiTile size="lg" label="Mesi di autonomia (previsione)"
@@ -75,7 +80,7 @@ function Contenuto({ d }) {
         )}
         {pv && <KpiTile label="Cassa libera a 90 giorni" value={formatEuro(pv.cassa_libera_90)} colore={pv.cassa_libera_90 < 0 ? colors.danger : undefined} sub="saldo di fine mese meno gli impegni dei 90 giorni dopo" />}
         {pv && <KpiTile label="Debito residuo del mutuo" value={formatEuro(pv.debito_mutuo)} />}
-        <KpiTile label={`Punto più basso ${d.anno}`} value={minimo ? formatEuro(minimo.saldo) : '—'}
+        <KpiTile label={`Punto più basso ${d.etichetta}`} value={minimo ? formatEuro(minimo.saldo) : '—'}
           colore={minimo && minimo.saldo < 0 ? colors.danger : undefined}
           sub={minimo ? formatDataIt(minimo.data) : null}
           confronto={minimoAp ? `${formatEuro(minimoAp.saldo)} (${formatDataIt(minimoAp.data)})` : null}
@@ -112,8 +117,8 @@ function Contenuto({ d }) {
               <Tooltip formatter={(v, n) => [v == null ? '—' : formatEuroIntero(v), n]} />
               <Legend formatter={legendaNeutra} />
               <ReferenceLine y={0} stroke={colors.danger} strokeOpacity={0.5} />
-              <Line dataKey="saldo" name={String(d.anno)} stroke={COLORE_SALDO} dot={false} strokeWidth={2} connectNulls={false} />
-              <Line dataKey="saldo_ap" name={String(d.anno - 1)} stroke={COLORE_SALDO_AP} dot={false}
+              <Line dataKey="saldo" name={d.etichetta} stroke={COLORE_SALDO} dot={false} strokeWidth={2} connectNulls={false} />
+              <Line dataKey="saldo_ap" name={d.etichetta_ap} stroke={COLORE_SALDO_AP} dot={false}
                 {...STILE_CONFRONTO} strokeOpacity={1} />
             </LineChart>
           </ResponsiveContainer>
@@ -151,12 +156,12 @@ function Contenuto({ d }) {
         </p>
       </Card>
 
-      <Fornitori f={d.fornitori} anno={d.anno} periodo={periodo} />
+      <Fornitori f={d.fornitori} anno={d.etichetta} periodo={periodo} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
         <Card title={`Costo degli incassi (${periodo})`}>
           <Table compact>
-            <thead><tr><Th></Th><Th num>{d.anno}</Th><Th num>{d.anno - 1}</Th></tr></thead>
+            <thead><tr><Th></Th><Th num>{d.etichetta}</Th><Th num>{d.etichetta_ap}</Th></tr></thead>
             <tbody>
               <tr><Td>Incassi POS e online</Td><Td num>{formatEuro(costo.anno.incassi_pos)}</Td><Td num>{formatEuro(costo.ap.incassi_pos)}</Td></tr>
               <tr><Td>Commissioni POS</Td><Td num>{formatEuro(costo.anno.commissioni_pos)}</Td><Td num>{formatEuro(costo.ap.commissioni_pos)}</Td></tr>
@@ -173,7 +178,7 @@ function Contenuto({ d }) {
           </p>
         </Card>
 
-        <Card title={`Tassa di soggiorno ${d.anno}`}>
+        <Card title={`Tassa di soggiorno ${d.anno}${d.tipo_anno === 'alberghiero' ? ' (trimestri dell\'anno solare)' : ''}`}>
           {!ts.disponibile ? <StatoVuoto>Nessun dato nei Corrispettivi per quest'anno.</StatoVuoto> : (
             <Table compact>
               <thead><tr><Th>Trimestre</Th><Th num>Incassata</Th><Th num>Versata</Th><Th>Stato</Th><Th num tot>Scarto</Th></tr></thead>

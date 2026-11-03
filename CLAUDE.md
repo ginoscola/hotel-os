@@ -264,7 +264,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 874 test verdi (03/11/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 877 test verdi (03/11/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -3209,22 +3209,38 @@ Admin `?s=tes-compensi`, `tes013_2026`: `tesoreria_compensi` (voce marchio|ammin
 ### Advertising pagato con carta (03/11/2026, v4.18.0)
 Google e Meta (~50.000 €/anno, **sempre AMEX**) non passano dalla banca: prima erano solo dentro la stima «Carte», e le loro
 fatture aperte nello scadenzario Passcom (registro 8) entravano in previsione come uscita certa → doppio conteggio.
-- **Piano per anno** (Admin `?s=tes-advertising`, `tes014_2026`): `tesoreria_advertising` (anno UNIQUE, carta, totale, nota) +
+- **Piano per anno alberghiero** (Admin `?s=tes-advertising`, `tes014_2026`; da `tes015_2026` `anno` = anno di fine stagione,
+  2026 = ottobre 2025 – settembre 2026, `anno_calendario()` per l'anno solare del mese): `tesoreria_advertising` (anno UNIQUE, carta, totale, nota) +
   `tesoreria_advertising_mesi` (mese, importo **in €**, scelta dell'utente); l'ultimo mese compilato chiude il totale
-  (`chiudi_totale()`, salvato in tabella). Impegno `advertising:{anno}:{mese}`, gruppo «Advertising (carta)», alla data di
+  (`chiudi_totale()`, ordine della stagione `MESI_STAGIONE`, salvato in tabella). Impegno `advertising:{anno solare}:{mese}`, gruppo «Advertising (carta)», alla data di
   addebito della carta del **mese dopo** (`data_addebito_advertising()`: giorno di addebito del conto, primo giorno lavorativo).
   Non generato se l'addebito è già passato o se l'estratto della carta che si addebita quel mese è già inserito (lo contiene).
   Mai abbinato alla banca (`TIPI_SENZA_BANCA`).
 - **Stima «Carte»** = addebiti carta dell'anno di riferimento − advertising addebitato in quel mese (`advertising_per_addebito()`,
   `DatiPrevisione.advertising`), mai negativa. Per questo servono anche gli anni passati come riferimento.
-- Dati caricati (dai pannelli Google/Meta): 2025 ott–dic, 2026 gen–set reali + ott–dic = 2025 (indicazione dell'utente),
-  totale 50.655,29 €; **2027 copiato dal 2026, da decidere dall'utente**.
+- Dati caricati (dai pannelli Google/Meta): stagione 2025/26 reale (50.655,29 €); 2026/27 ott–dic come 2025 (indicazione
+  dell'utente) + gen–set copiati dal 2026; 2027/28 solo ott–dic copiati — **da decidere dall'utente**.
 - ⚠️ La sessione dell'app ha `autoflush=False`: `_salva_mesi()` fa `db.flush()` prima di `sincronizza_piani()` (i test usano
   autoflush e non lo vedevano: il primo piano caricato sul DB reale era rimasto senza impegni).
 - **Fornitori pagati con carta** (`app_config['tesoreria_fornitori_carta']`, `GET|PUT /tesoreria/scadenzario/fornitori-carta`,
   stessa pagina Admin): le loro scadenze hanno stato `pagata_carta` (dopo pagata in banca/a mano), coperte per prime dai pareggi
   come le altre pagate, ma **fuori da "da segnalare"** (lo studio le registra con l'estratto), da pagare, scadute, abbinamenti e
   previsione. Oggi: Google Ireland (601.00640), Meta Platforms (601.03326). Google Cloud Italy non incluso.
+
+### Anno solare / anno alberghiero (03/11/2026, v4.19.0)
+Toggle in cima alla pagina Tesoreria (`SegmentedControl`, `localStorage('tesoreria_tipo_anno')`, default **solare**). Anno
+alberghiero = 1/10–30/9, identificato dall'**anno di fine** (2026 = "2025/26"). Funzioni uniche: `intervallo_anno()`,
+`anno_di()`, `etichetta_anno()` in `services/tesoreria_report.py`; nel frontend `intervalloAnno`/`annoDi`/`etichettaAnno`/
+`periodoAnno` in `pages/tesoreria/helpers.jsx`. Nome scelto: "anno alberghiero" (il Forecast resta su "anno commerciale").
+- **KPI**: `GET /tesoreria/kpi?anno=&tipo_anno=solare|alberghiero` → `etichetta`, `etichetta_ap`, `dal`, `ap_dal`,
+  `ap_completo` (avviso se mancano estratti dell'anno prima: il 2024/25 è parziale, banca dal 1/1/2025). Tassa di soggiorno
+  sempre per trimestri dell'anno solare `anno`; mesi di autonomia invariati (inverno ott–apr). `NavAnno` ha la prop
+  facoltativa `etichetta` (funzione anno → testo).
+- **Consuntivo e Movimenti**: scorciatoie "Da inizio anno (alberghiero)" / "Anno (alberghiero) precedente".
+- **Previsione**: `totali_anno[tipo][scenario]` nella risposta (`totali_per_anno()`: saldo iniziale del primo mese, somme,
+  saldo finale dell'ultimo, `completo` = 12 mesi) → riga "Totale …" dopo l'ultimo mese di ogni anno; export con
+  `tipo_anno` e righe TOTALE sommate colonna per colonna.
+- **Advertising**: piano per stagione (vedi sopra). Posizione, Impegni e Scadenzario non cambiano.
 
 ### Fase 3 — Blocco C fatto (02/11/2026, v4.12.0)
 Motore in `services/tesoreria_previsione.py`, dati in `routers/tesoreria_previsione.py`: `GET /tesoreria/previsione`,

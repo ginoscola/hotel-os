@@ -22,7 +22,7 @@ from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti, consunt
 from app.routers.tesoreria_scadenzario_report import stato_scadenze, tempi_pagamento
 from app.routers.tesoreria_shared import euro, puo_vedere
 from app.services.tesoreria_report import (
-    ZERO, anno_prima, inverno_di_riferimento, mesi_di_autonomia, minimo_serie, serie_saldi, tassa_per_trimestre,
+    ZERO, anno_di, anno_prima, etichetta_anno, intervallo_anno, inverno_di_riferimento, mesi_di_autonomia, minimo_serie, serie_saldi, tassa_per_trimestre,
 )
 from app.utils.locale_it import MESI_IT
 
@@ -81,12 +81,17 @@ def _kpi_previsione(db: Session, oggi: date) -> Optional[dict]:
 
 
 @router.get("/kpi")
-def kpi(anno: Optional[int] = Query(None, ge=2020, le=2100), db: Session = Depends(get_db), _=Depends(puo_vedere)):
+def kpi(anno: Optional[int] = Query(None, ge=2020, le=2100), tipo_anno: str = Query("solare", pattern="^(solare|alberghiero)$"),
+        db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    """`anno` = anno solare o, con tipo_anno=alberghiero, anno di fine stagione (2026 = 1/10/2025–30/9/2026).
+    Tassa di soggiorno per trimestri dell'anno solare `anno` in entrambi i casi (sono trimestri fiscali)."""
     oggi = date.today()
-    anno = anno or oggi.year
-    fine = min(date(anno, 12, 31), oggi)
-    inizio = date(anno, 1, 1)
-    ap_inizio, ap_fine, ap_fine_anno = date(anno - 1, 1, 1), anno_prima(fine), date(anno - 1, 12, 31)
+    corrente = anno_di(oggi, tipo_anno)
+    anno = anno or corrente
+    inizio, fine_anno = intervallo_anno(anno, tipo_anno)
+    fine = min(fine_anno, oggi)
+    ap_inizio, ap_fine_anno = intervallo_anno(anno - 1, tipo_anno)
+    ap_fine = anno_prima(fine)
 
     # ── 1-2. Andamento del saldo, punto più basso, uso del fido ────────────────
     conti = db.query(TesoreriaConto).filter(TesoreriaConto.tipo.in_(TIPI_BANCA),
@@ -206,14 +211,17 @@ def kpi(anno: Optional[int] = Query(None, ge=2020, le=2100), db: Session = Depen
     }
 
     return {
-        "anno": anno, "fino_al": fine.isoformat(), "ap_fino_al": ap_fine.isoformat(),
+        "anno": anno, "tipo_anno": tipo_anno, "etichetta": etichetta_anno(anno, tipo_anno),
+        "etichetta_ap": etichetta_anno(anno - 1, tipo_anno), "dal": inizio.isoformat(), "ap_dal": ap_inizio.isoformat(),
+        "fino_al": fine.isoformat(), "ap_fino_al": ap_fine.isoformat(),
+        "ap_completo": prec["copertura_dal"] is not None and prec["copertura_dal"] <= ap_inizio.isoformat(),
         "fornitori": fornitori,
         "andamento": andamento,
         "minimo": {"anno": _minimo(serie), "ap_stesso_periodo": _minimo({g: v for g, v in serie_ap.items() if g <= ap_fine}),
                    "ap_intero": _minimo(serie_ap)},
         "fido": fido,
         "autonomia": autonomia,
-        "previsione": _kpi_previsione(db, oggi) if anno == oggi.year else None,
+        "previsione": _kpi_previsione(db, oggi) if anno == corrente else None,
         "costo_incassi": costo_incassi,
         "peso_uscite": peso,
         "tassa_soggiorno": tassa,

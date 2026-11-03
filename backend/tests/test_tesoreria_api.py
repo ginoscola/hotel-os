@@ -668,3 +668,11 @@ def test_kpi(client):
     assert "Incassi POS/online" not in nomi and nomi[0] == "Mutuo – rate e spese"
     assert k["costo_incassi"]["anno"]["incassi_pos"] == 2361.8    # al netto dello storno
     assert k["tassa_soggiorno"]["disponibile"] is False
+    assert k["etichetta"] == "2026" and k["dal"] == "2026-01-01"
+    # anno alberghiero 2025/26: dal 1/10/2025, stesso andamento dai dati del 2026, anno prima senza estratti
+    r = client.get("/tesoreria/kpi", params={"anno": 2026, "tipo_anno": "alberghiero"})
+    assert r.status_code == 200, r.text
+    a = r.json()
+    assert (a["etichetta"], a["etichetta_ap"], a["dal"]) == ("2025/26", "2024/25", "2025-10-01")
+    assert a["minimo"]["anno"] == k["minimo"]["anno"] and a["ap_completo"] is False
+    assert client.get("/tesoreria/kpi", params={"tipo_anno": "boh"}).status_code == 422
