@@ -3506,8 +3506,9 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **03/11/2026 — PUNTO DI RIPRESA.** Fase 3 chiusa (lasciate fuori due voci, vedi decisioni Fase 4). Fase 4
   avviata: **blocco A caparre fatto (v4.20.0–4.21.0)**, **blocco B stipendi netti fatto (v4.22.0)**. Serve il riavvio
   del backend. Blocchi C e D **rimandati finché non ci sono dati** (criteri nella sezione "Blocchi C e D rimandati"):
-  a ogni sessione sulla Tesoreria controllarli e, se soddisfatti, ricordarlo all'utente. Fase 5 (fatture XML) solo
-  con ok dell'utente.
+  a ogni sessione sulla Tesoreria controllarli e, se soddisfatti, ricordarlo all'utente. **Fase 5 (fatture XML): in
+  attesa** che l'utente scarichi dall'AdE tutti gli ZIP delle fatture ricevute 2025 e 2026 (regole nella sezione
+  "Fase 5 — regole per scaricare gli ZIP"), poi strategia e ok.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.
