@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 import api from '../api/client.js'
 import { formatDataIt, mostraErrore } from '../utils/format.js'
 import {
-  Badge, Button, Card, KpiTile, Loading, Messaggio, NavMese, PageHeader, StatoVuoto, Table, Td, Th, useAvvisi,
+  Badge, Button, Card, Checkbox, KpiTile, Loading, Messaggio, NavMese, PageHeader, StatoVuoto, Table, Td, Th, useAvvisi,
 } from '../components/ui'
 import { colors } from '../styles/tokens.js'
 
@@ -16,6 +16,7 @@ const STATO = {
   fatta: { tono: 'ok', testo: 'fatta' },
 }
 const PARTI = { disdetta: 'disdette', non_disdetta: 'non disdette' }
+const LS_NASCONDI = 'attivita_nascondi_fatte'
 const gg = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
 function Dettaglio({ v }) {
@@ -81,7 +82,13 @@ export default function Attivita() {
   const [dati, setDati] = useState(null)
   const [errore, setErrore] = useState(null)
   const [versione, setVersione] = useState(0)
+  const [nascondiFatte, setNascondiFatte] = useState(() => localStorage.getItem(LS_NASCONDI) === 'true')
   const avvisi = useAvvisi()
+
+  function cambiaNascondi(si) {
+    setNascondiFatte(si)
+    localStorage.setItem(LS_NASCONDI, String(si))
+  }
 
   useEffect(() => {
     let annullato = false
@@ -128,6 +135,7 @@ export default function Attivita() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader title="Attività ricorrenti" subtitle="Cosa caricare o aggiornare, settimana per settimana">
         <NavMese anno={periodo.anno} mese={periodo.mese} onChange={setPeriodo} selettore />
+        <Checkbox label="Nascondi le fatte" checked={nascondiFatte} onChange={cambiaNascondi} />
         <Button variant="secondary" onClick={scaricaPdf}>Scarica PDF</Button>
         <Link to="/admin?s=attivita" className="ui-btn ui-btn-ghost">Frequenze</Link>
       </PageHeader>
@@ -150,12 +158,18 @@ export default function Attivita() {
         </Card>
       )}
 
-      {dati.settimane.map(s => (
-        <Card key={s.inizio} title={`Settimana dal ${formatDataIt(s.inizio)} al ${formatDataIt(s.fine)}`}>
-          {s.voci.length === 0 ? <StatoVuoto>Nessuna attività.</StatoVuoto>
-            : <TabellaVoci voci={s.voci} onFatto={segna} />}
-        </Card>
-      ))}
+      {dati.settimane.map(s => {
+        const voci = nascondiFatte ? s.voci.filter(v => v.stato !== 'fatta') : s.voci
+        const nascoste = s.voci.length - voci.length
+        return (
+          <Card key={s.inizio} title={`Settimana dal ${formatDataIt(s.inizio)} al ${formatDataIt(s.fine)}`}
+            actions={nascoste > 0 && <span className="ui-text-muted">{nascoste} {nascoste === 1 ? 'fatta nascosta' : 'fatte nascoste'}</span>}>
+            {voci.length === 0
+              ? <StatoVuoto>{s.voci.length ? 'Tutto fatto.' : 'Nessuna attività.'}</StatoVuoto>
+              : <TabellaVoci voci={voci} onFatto={segna} />}
+          </Card>
+        )
+      })}
 
       {imp.totale > 0 && (
         <p className="ui-text-muted">

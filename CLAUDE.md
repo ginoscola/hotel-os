@@ -507,7 +507,8 @@ stessa fonte `prod_righe` ma per scopi diversi: non collegati tra loro.
 Pagina `/attivita` (`pages/Attivita.jsx`, **solo admin**, come la Home non è un modulo: nessun tab evidenziato,
 `rilevaModuloAttivo()` → `'home'`): cosa caricare o aggiornare, per settimana del mese (`NavMese`, apre sul mese
 **in corso** — eccezione voluta alla regola "mese precedente": è una lista di cose da fare), riquadro "In ritardo"
-(mese scorso + mese in corso, con "Segna tutti come fatti" per ripulire), impegni di Tesoreria del mese solo come
+(mese scorso + mese in corso, con "Segna tutti come fatti" per ripulire), casella "Nascondi le fatte"
+(`localStorage('attivita_nascondi_fatte')`, solo a schermo: il PDF le mostra sempre con la spunta), impegni di Tesoreria del mese solo come
 conteggio (il calendario fiscale resta in Tesoreria → Impegni), **PDF** del mese con caselle da spuntare. In Home,
 per gli admin, `pages/home/RiquadroAttivita.jsx` ("N attività in ritardo · M entro 7 giorni").
 - **Stato ricavato dagli import**, nessuna spunta per la maggior parte delle voci: catalogo `CATALOGO` in
