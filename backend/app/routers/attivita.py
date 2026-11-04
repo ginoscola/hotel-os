@@ -42,7 +42,7 @@ from app.models.tesoreria import (TesoreriaConto, TesoreriaImpegno, TesoreriaImp
 from app.models.usali import UsaliFnbCoperti
 from app.models.usali_contabile import UsaliImport
 from app.services.attivita import (CATALOGO, ETICHETTE_PARTI, MESI_LUNGHI, PER_CODICE, applica_parametri,
-                                   descrivi_frequenza, in_ritardo, riepilogo, valida_parametri, voci_mese)
+                                   descrivi_frequenza, in_ritardo, riepilogo, testo, valida_parametri, voci_mese)
 from app.utils.locale_it import formatta_data_it
 
 router = APIRouter(prefix="/attivita", tags=["attivita"])
@@ -240,13 +240,14 @@ def segna_fatto(body: CorpoFatto, db: Session = Depends(get_db), utente=Depends(
 @router.get("/catalogo")
 def catalogo(db: Session = Depends(get_db), _=Depends(richiedi_admin)):
     parametri = _leggi_parametri(db)
+    anno = date.today().year
     in_uso = {a.codice: a for a in applica_parametri(parametri)}
     out = []
     for base in CATALOGO:
         a = in_uso[base.codice]
         out.append({
-            "codice": a.codice, "titolo": a.titolo, "gruppo": a.gruppo, "frequenza": a.frequenza,
-            "automatica": a.automatica, "nota": a.nota, "giorno": a.giorno, "mese": a.mese, "mesi": list(a.mesi),
+            "codice": a.codice, "titolo": testo(a.titolo, anno), "gruppo": a.gruppo, "frequenza": a.frequenza,
+            "automatica": a.automatica, "nota": testo(a.nota, anno), "giorno": a.giorno, "mese": a.mese, "mesi": list(a.mesi),
             "attiva": a.attiva, "descrizione": descrivi_frequenza(a), "modificata": base.codice in parametri,
             "default": {"giorno": base.giorno, "mese": base.mese, "mesi": list(base.mesi), "attiva": base.attiva},
         })
@@ -319,7 +320,10 @@ def _righe_pdf(voci: list, p) -> list:
         stato = _STATO_PDF[v["stato"]]
         if stato == "IN RITARDO":
             stato = '<font color="#b91c1c"><b>IN RITARDO</b></font>'
-        righe.append([casella, Paragraph(v["titolo"], p), Paragraph(v["gruppo"], p),
+        titolo = v["titolo"]
+        if not v["automatica"] and v["nota"]:
+            titolo += f'<br/><font size="7" color="#64748b">{v["nota"]}</font>'
+        righe.append([casella, Paragraph(titolo, p), Paragraph(v["gruppo"], p),
                       Paragraph(quando, p), Paragraph(" ".join(x for x in (stato, dettaglio) if x), p)])
     return righe
 

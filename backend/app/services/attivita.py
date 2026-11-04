@@ -94,16 +94,31 @@ CATALOGO = [
     Attivita("bcc", "Estratto carta BCC (chiusura il 28)", "Tesoreria", "mensile", giorno=31, link="/tesoreria",
              nota="Import e saldi → saldo manuale = saldo attuale."),
     # ── Ogni anno ──
-    Attivita("dich_iva", "Credito IVA dalla dichiarazione IVA", "Tesoreria", "annuale", giorno=30, mese=4,
-             automatica=False, link="/admin?s=tes-fiscale"),
-    Attivita("tari_acconto", "Avviso TARI di acconto", "Tesoreria", "annuale", giorno=31, mese=5, automatica=False,
-             link="/tesoreria", nota="Impegni → avviso TARI (PDF della PEC)."),
+    Attivita("dich_iva", "Dichiarazione IVA {anno} (anno {prima}): credito IVA", "Tesoreria", "annuale", giorno=30,
+             mese=4, automatica=False, link="/admin?s=tes-fiscale",
+             nota="Dove: cassetto fiscale AdE → Dichiarazioni fiscali → modello «IVA {anno}», presentato nel {anno} "
+                  "per l'anno d'imposta {prima} (se c'è, anche l'integrativa: vale l'ultima). Cosa serve: il credito "
+                  "IVA annuo, quadro VL, rigo VL33. Dove va: Admin → Tesoreria → Dati fiscali, crediti IVA (oltre "
+                  "5.000 € si usa in F24 solo dopo la presentazione). In alternativa: PDF in "
+                  "uploads/tesoreria_campioni/fisco e lo inserisce Claude."),
+    Attivita("tari_acconto", "Avviso TARI {anno} di acconto", "Tesoreria", "annuale", giorno=31, mese=5,
+             automatica=False, link="/tesoreria",
+             nota="Arriva per PEC dal Comune di Gabicce Mare verso maggio: acconto = 75% dell'anno prima, rate 30/6 "
+                  "e 30/9. Dove va: Tesoreria → Impegni → avviso TARI, caricando il PDF della PEC."),
     Attivita("advertising", "Piano advertising della stagione successiva", "Tesoreria", "annuale", giorno=30, mese=9,
              automatica=False, link="/admin?s=tes-advertising"),
-    Attivita("redditi", "Redditi SC e IRAP nei dati fiscali", "Tesoreria", "annuale", giorno=31, mese=10,
-             automatica=False, link="/admin?s=tes-fiscale"),
-    Attivita("tari_conguaglio", "Avviso TARI di conguaglio", "Tesoreria", "annuale", giorno=31, mese=10,
-             automatica=False, link="/tesoreria"),
+    Attivita("redditi", "Dichiarazioni Redditi SC e IRAP {anno} (anno {prima}): IRES e IRAP", "Tesoreria",
+             "annuale", giorno=31, mese=10, automatica=False, link="/admin?s=tes-fiscale",
+             nota="Dove: cassetto fiscale AdE → Dichiarazioni fiscali → modelli «Redditi Società di capitali (SC) "
+                  "{anno}» e «IRAP {anno}», presentati nel {anno} per l'anno d'imposta {prima} (lo studio li invia "
+                  "entro il 31/10: se non ci sono ancora, chiederli allo studio). Cosa serve: dalla Redditi SC l'IRES "
+                  "dovuta e gli acconti versati (quadro RN), dall'IRAP l'imposta dovuta (quadro IR). Servono a "
+                  "calcolare il 2° acconto di novembre e saldo e acconti dell'anno dopo. Dove va: Admin → Tesoreria "
+                  "→ Dati fiscali. In alternativa: PDF in uploads/tesoreria_campioni/fisco e li inserisce Claude."),
+    Attivita("tari_conguaglio", "Avviso TARI {anno} di conguaglio", "Tesoreria", "annuale", giorno=31, mese=10,
+             automatica=False, link="/tesoreria",
+             nota="Arriva per PEC dal Comune di Gabicce Mare verso fine ottobre: tariffe definitive, rata unica entro "
+                  "il 1° dicembre. Dove va: Tesoreria → Impegni → avviso TARI, caricando il PDF della PEC."),
     Attivita("interventi", "Interventi dell'inverno: importi e rate", "Tesoreria", "annuale", giorno=31, mese=10,
              automatica=False, link="/admin?s=tes-interventi"),
     Attivita("stagioni", "Stagioni operative dell'anno dopo", "Admin", "annuale", giorno=30, mese=11,
@@ -245,9 +260,14 @@ def _peggiore(stati: list) -> str:
     return next(s for s in STATI if s in stati)
 
 
-def _voce(att: Attivita) -> dict:
-    return {"codice": att.codice, "titolo": att.titolo, "gruppo": att.gruppo, "frequenza": att.frequenza,
-            "automatica": att.automatica, "link": att.link, "nota": att.nota}
+def testo(t: str, anno: int) -> str:
+    """Titoli e note con l'anno dell'occorrenza: {anno} e {prima} (= anno − 1)."""
+    return t.replace("{anno}", str(anno)).replace("{prima}", str(anno - 1))
+
+
+def _voce(att: Attivita, anno: int) -> dict:
+    return {"codice": att.codice, "titolo": testo(att.titolo, anno), "gruppo": att.gruppo,
+            "frequenza": att.frequenza, "automatica": att.automatica, "link": att.link, "nota": testo(att.nota, anno)}
 
 
 def voci_mese(catalogo: list, anno: int, mese: int, evidenze: dict, fatte: set, stagioni: dict,
@@ -268,12 +288,12 @@ def voci_mese(catalogo: list, anno: int, mese: int, evidenze: dict, fatte: set, 
                 giornalieri.setdefault(settimana(occ.giorno_dato)["inizio"], []).append((occ, st))
                 continue
             settimana(occ.scadenza)["voci"].append({
-                **_voce(att), **st, "scadenza": occ.scadenza, "scadenze": [occ.scadenza], "giorni": None,
+                **_voce(att, occ.scadenza.year), **st, "scadenza": occ.scadenza, "scadenze": [occ.scadenza], "giorni": None,
             })
         for lun, elenco in giornalieri.items():
             giorni = [{"data": o.giorno_dato, "scadenza": o.scadenza, **s} for o, s in elenco]
             settimana(lun)["voci"].append({
-                **_voce(att), "stato": _peggiore([g["stato"] for g in giorni]),
+                **_voce(att, lun.year), "stato": _peggiore([g["stato"] for g in giorni]),
                 "manuale": all(g["manuale"] for g in giorni), "mancanti": [],
                 "scadenza": giorni[-1]["scadenza"], "scadenze": [g["scadenza"] for g in giorni], "giorni": giorni,
             })

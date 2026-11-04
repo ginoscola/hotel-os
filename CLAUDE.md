@@ -519,6 +519,8 @@ per gli admin, `pages/home/RiquadroAttivita.jsx` ("N attività in ritardo · M e
 - Finestre: giornaliera = giorno del dato (scadenza il giorno dopo, solo nei giorni di `hotel_seasons` degli hotel
   indicati), settimanale = settimana lun–dom della scadenza, mensile = il mese, annuale = l'anno. `parti` = evidenze
   richieste tutte (Revenue DPH/CLB/INT, coperti MMS/BON, Welcome disdette/non disdette).
+- Titoli e note accettano `{anno}`/`{prima}` (anno della scadenza e anno prima, `testo()`): le voci fiscali dicono
+  dove cercare nel cassetto fiscale e con quali anni (v4.23.1); nel PDF la nota è stampata sotto le voci a mano.
 - Attività `automatica=False` (ZIP fatture AdE, coda caparre, TARI, dichiarazioni, advertising, interventi,
   compensi): solo spunta a mano. La spunta (`attivita_fatte`, migrazione `att001_2026`, UNIQUE codice+scadenza) vale
   anche sulle automatiche, per una scadenza senza file.
