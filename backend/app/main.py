@@ -19,6 +19,7 @@ from app.routers import budget_previsione as budget_previsione_router
 from app.routers import budget_ristoranti as budget_ristoranti_router
 from app.routers import tesoreria as tesoreria_router
 from app.routers import wave as wave_router
+from app.routers import attivita as attivita_router
 
 
 def _leggi_cors_origini() -> list:
@@ -85,6 +86,7 @@ app.include_router(usali_contabile_router.router)
 app.include_router(usali_fnb_router.router)
 app.include_router(tesoreria_router.router)
 app.include_router(wave_router.router)
+app.include_router(attivita_router.router)
 
 
 @app.get("/")

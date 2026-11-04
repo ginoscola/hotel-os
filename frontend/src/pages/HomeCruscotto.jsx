@@ -6,6 +6,7 @@ import StripFreschezza from './home/StripFreschezza.jsx'
 import TabellaSemaforo from './home/TabellaSemaforo.jsx'
 import HeatmapOccupancy from './home/HeatmapOccupancy.jsx'
 import MixList from './home/MixList.jsx'
+import RiquadroAttivita from './home/RiquadroAttivita.jsx'
 import { formatEuro, formatEuroK, formatPerc, formatN, formatDataIt, mostraErrore } from '../utils/format.js'
 import { isAdmin } from '../utils/auth.js'
 import { Badge, Card, KpiTile, Loading, Messaggio, PageHeader, SectionTitle, SegmentedControl } from '../components/ui'
@@ -68,6 +69,8 @@ export default function HomeCruscotto() {
       <PageHeader title={`Cruscotto ${dati.anno}`}>
         <SegmentedControl value={hotelCode} onChange={setHotelCode} options={HOTELS} />
       </PageHeader>
+
+      {admin && <RiquadroAttivita />}
 
       {stagione && (
         <div className="ui-text-muted" style={{ fontSize: 'var(--fs-base)', marginTop: -8, marginBottom: 16 }}>

@@ -130,7 +130,7 @@ invece di cadere nel fallback "non ancora implementato". **Budget e Usali non to
 richiesto): mostrano ancora "in sviluppo" finché non verrà chiesto esplicitamente anche per loro.
 
 ## Area Admin (`/admin` → AdminUnificato.jsx, sidebar `?s=`)
-**Comune**: `utenti` (CRUD), `stagioni` (stagioni operative), `moduli` (attiva/disattiva/permessi)
+**Comune**: `utenti` (CRUD), `stagioni` (stagioni operative), `moduli` (attiva/disattiva/permessi), `attivita` (frequenze dello scadenziario, vedi "Attività ricorrenti")
 **Revenue**: `revenue-import` (bulk import), `revenue-test` (cancella is_test)
 **Dipendenti**: `dip-cc` (AdminCentriDiCosto), `dip-colori` (colori CC), `dip-test`
 **Corrispettivi**: `corr-tipi-doc`, `corr-pagamenti`, `corr-classificazione` (CorrClassificazioneTrattamenti)
@@ -264,7 +264,7 @@ l'URL manca, coincide con `DATABASE_URL` o il nome non finisce in `_test`: i fix
 quindi i semi delle migrazioni non ci sono: chi ne ha bisogno li inserisce nel fixture (es.
 `payroll_cost_types` + CC `KMDIMARE`/`CLB` in `test_dipendenti.py`). Nessun test usa più
 `SessionLocal` (il DB reale). Ricreare il DB se sparisce: `sudo -u postgres createdb -O hotelos_user
-hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 921 test verdi (03/11/2026). I tre
+hotel_os_test` (`hotelos_user` non ha CREATEDB). Suite completa: 933 test verdi (04/11/2026). I tre
 file che prima "fallivano verso revenue-master" (`test_parser_e_bulk`, `test_navigazione_confronto_export`,
 `test_upload_endpoint`) erano in realtà 401 da override auth mancante + aspettative superate (riga
 TOTALE negli export giornalieri, rifiuto file identici in `parse_coppia`): corretti.
@@ -502,6 +502,33 @@ Sotto-pagina "Ricavi camere" di Produzione (`TabRicaviCamere.jsx`) e questo modu
 stessa fonte `prod_righe` ma per scopi diversi: non collegati tra loro.
 
 ---
+
+## Attività ricorrenti — scadenziario operativo (novembre 2026, v4.23.0)
+Pagina `/attivita` (`pages/Attivita.jsx`, **solo admin**, come la Home non è un modulo: nessun tab evidenziato,
+`rilevaModuloAttivo()` → `'home'`): cosa caricare o aggiornare, per settimana del mese (`NavMese`, apre sul mese
+**in corso** — eccezione voluta alla regola "mese precedente": è una lista di cose da fare), riquadro "In ritardo"
+(mese scorso + mese in corso, con "Segna tutti come fatti" per ripulire), impegni di Tesoreria del mese solo come
+conteggio (il calendario fiscale resta in Tesoreria → Impegni), **PDF** del mese con caselle da spuntare. In Home,
+per gli admin, `pages/home/RiquadroAttivita.jsx` ("N attività in ritardo · M entro 7 giorni").
+- **Stato ricavato dagli import**, nessuna spunta per la maggior parte delle voci: catalogo `CATALOGO` in
+  `services/attivita.py` (puro: occorrenze, finestre, stato), evidenze in `_evidenze()` di `routers/attivita.py`
+  (date degli import/dati: corrispettivi per `data_documento`, `rt_chiusure`, incassi MMS/BON, snapshot Revenue per
+  hotel, `created_at` degli import di banca/Produzione/Passbi/Passcom/CE contabile/Welcome/previsioni salvate,
+  versamenti in Cassa, saldi manuali AMEX/BCC/TASCA; dati per (anno, mese) — cedolini, coperti, utenze — contano
+  dal 1° del mese dopo; budget e stagioni dell'anno dopo contano a dicembre dell'anno prima).
+- Finestre: giornaliera = giorno del dato (scadenza il giorno dopo, solo nei giorni di `hotel_seasons` degli hotel
+  indicati), settimanale = settimana lun–dom della scadenza, mensile = il mese, annuale = l'anno. `parti` = evidenze
+  richieste tutte (Revenue DPH/CLB/INT, coperti MMS/BON, Welcome disdette/non disdette).
+- Attività `automatica=False` (ZIP fatture AdE, coda caparre, TARI, dichiarazioni, advertising, interventi,
+  compensi): solo spunta a mano. La spunta (`attivita_fatte`, migrazione `att001_2026`, UNIQUE codice+scadenza) vale
+  anche sulle automatiche, per una scadenza senza file.
+- Endpoint (prefix `/attivita`, tutti `richiedi_admin`): `GET ?anno=&mese=`, `GET /riepilogo`, `GET /export` (pdf),
+  `POST /fatto {codice, scadenze, fatto}`, `GET /catalogo`, `PUT /parametri/{codice}` (`giorno`/`mese`/`mesi`/
+  `attiva`, `{ripristina: true}`). Modifiche salvate in `app_config['attivita_parametri']` (solo gli override).
+  Admin `?s=attivita` → `pages/admin/AdminAttivita.jsx`.
+- ⚠️ **Nuovo import o dato ricorrente in un modulo → aggiungerlo a `CATALOGO` e, se verificabile, a `_evidenze()`**,
+  altrimenti lo scadenziario non lo conosce. Al primo avvio (04/11/2026) ottobre risultava pieno di ritardi perché
+  la Tesoreria è partita il 28/10: normale, si ripuliscono con "Segna tutti come fatti".
 
 ## Dashboard Hotel
 - Snapshot: `GET /snapshots/{hotel_code}` → navigazione con frecce. Settimana di riferimento = settimana Sab–Ven contenente snapshot_date.

@@ -37,7 +37,7 @@ function getSubnav(modulo, hotels, isAdmin) {
 function rilevaModuloAttivo(pathname) {
   // 'home' non è un code modulo reale (nessuna riga in `modules`): nessun tab si evidenzia,
   // che è il comportamento voluto per la landing page.
-  if (pathname === '/home' || pathname === '/') return 'home'
+  if (pathname === '/home' || pathname === '/' || pathname.startsWith('/attivita')) return 'home'
   if (pathname.startsWith('/statistiche-produzione')) return 'produzione'
   if (pathname.startsWith('/budget')) return 'budget'
   if (pathname.startsWith('/usali')) return 'usali'

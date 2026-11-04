@@ -17,6 +17,7 @@ import AdminCentriDiCosto from './pages/AdminCentriDiCosto.jsx'
 import Forecast from './pages/Forecast.jsx'
 import AdminUnificato from './pages/AdminUnificato.jsx'
 import Tesoreria from './pages/Tesoreria.jsx'
+import Attivita from './pages/Attivita.jsx'
 import { UiProvider } from './components/ui'
 
 export default function App() {
@@ -78,6 +79,9 @@ export default function App() {
           } />
           <Route path="/forecast" element={
             <ProtectedRoute moduleCode="forecast"><Forecast /></ProtectedRoute>
+          } />
+          <Route path="/attivita" element={
+            <ProtectedRoute ruoloRichiesto="admin"><Attivita /></ProtectedRoute>
           } />
           <Route path="/tesoreria" element={
             <ProtectedRoute moduleCode="tesoreria"><Tesoreria /></ProtectedRoute>

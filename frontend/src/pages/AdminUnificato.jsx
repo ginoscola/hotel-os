@@ -9,6 +9,7 @@ import AdminUsaliCategorieKpi from './admin/AdminUsaliCategorieKpi.jsx'
 import AdminBudgetPrevisione from './admin/AdminBudgetPrevisione.jsx'
 import AdminWave from './admin/AdminWave.jsx'
 import AdminUsaliFnb from './admin/AdminUsaliFnb.jsx'
+import AdminAttivita from './admin/AdminAttivita.jsx'
 import {
   AdminTesoreriaAdvertising, AdminTesoreriaAffitti, AdminTesoreriaCategorie, AdminTesoreriaCompensi, AdminTesoreriaConti, AdminTesoreriaFiscale, AdminTesoreriaInterventi, AdminTesoreriaMutuo,
   AdminTesoreriaPrevisione, AdminTesoreriaRegole, AdminTesoreriaRicorrenti, AdminTesoreriaSoglie,
@@ -29,6 +30,7 @@ const SEZIONI = [
       { id: 'utenti',   label: 'Utenti' },
       { id: 'stagioni', label: 'Stagioni operative' },
       { id: 'moduli',   label: 'Gestione moduli' },
+      { id: 'attivita', label: 'Attività ricorrenti' },
     ],
   },
   {
@@ -215,6 +217,7 @@ function Contenuto({ sezione }) {
   if (sezione === 'revenue-test')  return <RevenueDatiTest />
   if (sezione === 'budget-previsione') return <AdminBudgetPrevisione />
   if (sezione === 'wave-storico') return <AdminWave />
+  if (sezione === 'attivita') return <AdminAttivita />
   if (sezione === 'dip-cc')           return <DipCentriDiCosto />
   if (sezione === 'dip-colori')       return <DipColoriCC />
   if (sezione === 'dip-test')         return <DipDatiTest />
