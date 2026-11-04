@@ -2983,6 +2983,16 @@ accanto alla DropZone), così ogni richiesta resta coerente con le precedenti.
   il `…_fileInput.xml` accanto è il modulo della richiesta, da ignorare.
 - La conservazione sul portale non è illimitata (fonte non ufficiale: fino al 31/12 del secondo anno
   dopo la ricezione): scaricare per tempo.
+- **Il portale limita le richieste giornaliere**: lo storico va chiesto in più giorni.
+- **Controlli da fare in import** (errori reali del 04/11/2026): un ZIP di fatture **emesse** (cedente
+  = Km di Mare, P.IVA 04569190400, nei `_metaDato.xml`) va rifiutato; il nome del file non dice il
+  periodo (un "gennaio-marzo-25" conteneva il 2026): mostrare in anteprima il periodo di ricezione
+  vero (`dataaccoglienza`). 39 `.p7m` hanno firma non valida ma contenuto leggibile: estrarre con
+  `openssl cms -verify -noverify -nosigs -inform DER` (2 sono DER in base64).
+- Stato al 04/11/2026 in `uploads/tesoreria_campioni/fatture_xml/` (rinominati per trimestre): presenti
+  2025-T4, 2026-T1/T2/T3, ottobre 2026 parziale (2.198 ricevute); ottobre 2026 intero richiesto il
+  04/11; **2025 T1/T2/T3 da richiedere il 05/11** (i primi tentativi erano fatture emesse o il 2026).
+  Tre file `…_DA-CANCELLARE.zip` (emesse e doppione) da eliminare.
 
 ### Fase 3 — calendario fiscale indipendente dallo studio (30/10/2026)
 Scelta dell'utente: **non dipendere dal commercialista** per il calendario fiscale.
