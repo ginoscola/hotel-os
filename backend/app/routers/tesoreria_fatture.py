@@ -4,7 +4,8 @@
   partita IVA + numero + data se l'idfile manca o è diverso), errori per file, periodo di ricezione. Lo ZIP e il
   risultato della lettura restano in area temporanea con un token (24h): la conferma non rilegge lo ZIP (fino a 15 s).
 - POST /fatture/conferma: inserisce le nuove con righe IVA e rate, ZIP originale in {dir}/fatture/{anno}/, poi
-  ricalcola gli abbinamenti con la banca (anche le rate delle fatture non ancora in Passcom).
+  ricalcola gli abbinamenti con la banca (anche le rate delle fatture non ancora in Passcom) e rigenera il calendario
+  fiscale (IVA dei mesi conclusi stimata dagli acquisti).
 - GET /fatture/import, GET /fatture/import/{id}/file, DELETE /fatture/import/{id}?conferma=true (toglie le fatture
   che quell'import ha inserito per primo).
 - GET /fatture (filtri, stato, paginazione), GET /fatture/{id}, GET /fatture/da-registrare/export (solo le da registrare).
@@ -35,6 +36,7 @@ from app.models.tesoreria import (
 from app.routers.corrispettivi_documenti import _risposta_tabella
 from app.routers.tesoreria_abbinamenti import _abbinamenti_json, ricalcola_abbinamenti
 from app.routers.tesoreria_fatture_stato import stato_fatture
+from app.routers.tesoreria_impegni import genera_impegni
 from app.routers.tesoreria_import import _pulisci_anteprime_scadute
 from app.routers.tesoreria_shared import (
     cella_data, cella_importo, euro, nome_sicuro, puo_importare, puo_vedere, storage_dir,
@@ -197,6 +199,7 @@ def conferma(body: dict = Body(...), db: Session = Depends(get_db), utente=Depen
         imp.percorso = str(copiato)
         db.flush()
         abbinamenti = ricalcola_abbinamenti(db)     # rate delle fatture non in Passcom cercate in banca
+        genera_impegni(db, date.today())            # IVA dei mesi conclusi stimata anche dagli acquisti
         db.commit()
     except Exception:
         db.rollback()
@@ -249,6 +252,7 @@ def elimina_import(import_id: int, conferma: bool = False, db: Session = Depends
     db.delete(imp)                                  # CASCADE su fatture, righe IVA e rate
     db.flush()
     ricalcola_abbinamenti(db)
+    genera_impegni(db, date.today())
     db.commit()
     if percorso:
         Path(percorso).unlink(missing_ok=True)

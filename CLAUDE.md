@@ -3116,6 +3116,31 @@ Solo backend (+ etichetta della colonna nuova in Previsione), nessun cambio di v
   pagate con carta 20, da confermare 11, **da registrare 1** (Comune di Gabicce 366 €, ricevuta il 29/10), le altre
   chiuse. Gli abbinamenti automatici salgono da 6 a 62 (dati utili anche per la Fase 4C).
 
+### Fase 5 — Blocco C fatto (05/11/2026): stima dell'IVA mensile
+Solo backend, nessun cambio di versione. **Serve il riavvio del backend** (endpoint `/tesoreria/iva`).
+- Calcoli puri `services/tesoreria_iva.py`, dati `routers/tesoreria_iva.py`. Liquidazione = IVA vendite − IVA acquisti
+  + credito riportato; versamento il 16 del mese dopo solo se > 25,82 € (sotto: rinviato al mese dopo); a gennaio si
+  riparte da zero (il credito annuale è la tranche del calendario, inserita a mano dalla dichiarazione).
+  **Vendite** = `report_fatturati()` IVA inclusa − IVA esclusa (scontrini, fatture Welcome, Mare Mosso e Buona Onda;
+  caparre CP ed estratti conto ES di Welcome fuori: non sono documenti fiscali — IVA scontrini agosto 2026 61.073 € =
+  IVA delle chiusure RT 61.054 €). **Acquisti** = imposta delle fatture SDI per **mese di ricezione**, note di credito
+  in meno, autofatture escluse; la regola "entro il 15 del mese dopo → mese prima" torna peggio col versato.
+- Mese **completo**: concluso; acquisti con l'ultima fattura ricevuta da 3 giorni prima della fine del mese in poi;
+  vendite con incassi se il mese è in stagione (`hotel_seasons`). Anno senza stagioni in Admin (2025) → nessun mese
+  completo. La catena del credito si ferma al primo mese incompleto.
+- **Calendario (scelta dell'utente, opzione 1)**: `DatiFiscali.iva_dati` = mesi conclusi con dati completi
+  (`iva_mesi_conclusi()`), impegno `iva:{anno}-{mm}` solo se a debito, base con vendite/acquisti/credito; **mesi futuri
+  come prima** (agosto = ultimo agosto versato, gli altri a credito). Acconto di dicembre non generato (dicembre sempre
+  a credito). Le conferme a mano vincono come sempre. `genera_impegni()` chiamato anche dopo import/eliminazione delle
+  fatture. Il credito di fine anno stimato è solo informativo (tranche invariate).
+- `GET /tesoreria/iva?anno=` → per mese vendite, acquisti, credito precedente, saldo, versamento stimato, scadenza,
+  versato (agosto da `iva_agosto`, altri dagli impegni pagati o confermati) e scarto; `credito_fine_anno`.
+- **Collaudo**: 2026 gennaio–luglio a credito ✓, agosto 7.811 € contro 5.281,61 € versati (+2.530), settembre e
+  ottobre a credito ✓. Metodo "ultimo versato" su agosto 2026 = 18.466 €. Sul 2025 IVA delle fatture SDI 209.650 € +
+  autofatture 25.899 € = 235.549 € contro VF71 258.352 € → ~23.000 € (9%) di acquisti con IVA fuori dallo SDI: la stima
+  tende a sopravvalutare il dovuto. Oggi nessun impegno IVA cambia sul DB reale (mesi conclusi già scaduti o a credito).
+- Test `test_tesoreria_iva.py` (4) + 1 in `test_tesoreria_fatture_api.py`. Suite: 967 verdi.
+
 ### Fase 3 — calendario fiscale indipendente dallo studio (30/10/2026)
 Scelta dell'utente: **non dipendere dal commercialista** per il calendario fiscale.
 - Date per legge (calcolate da HotelOS, slittamento al primo giorno lavorativo); importi da: **cassetto
@@ -3644,8 +3669,8 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **05/11/2026** — Fase 5 avviata: blocco A (lettore ZIP) e blocco B (import, stato rispetto a Passcom e banca,
   debiti da registrare in previsione) fatti; scelta b (nessuno stato "da verificare"). Backend riavviato e **storico
   fatture caricato nel DB reale** (8 ZIP, 4.707 fatture, import #1–#8): 1 da registrare, 11 da confermare.
-  Abbinamenti automatici/confermati: **72 su 38 fornitori → criterio del blocco 4C raggiunto** (segnalato). **Prossimo
-  passo**: Fase 5 blocco C (stima IVA mensile), con ok dell'utente.
+  Abbinamenti automatici/confermati: **72 su 38 fornitori → criterio del blocco 4C raggiunto** (segnalato). Blocco C
+  (stima IVA mensile, opzione 1) fatto. **Prossimo passo**: Fase 5 blocco D (schermate, v4.24.0), con ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

@@ -24,6 +24,7 @@ from app.models.tesoreria import TesoreriaImpegno
 from app.routers.dipendenti import costi_f24_per_mese
 from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno
 from app.routers.tesoreria_import import _leggi_anteprima, _pulisci_anteprime_scadute
+from app.routers.tesoreria_iva import iva_mesi_conclusi
 from app.routers.tesoreria_kpi import _tassa_incassata_per_mese
 from app.routers.tesoreria_piani import sincronizza_piani
 from app.routers.tesoreria_shared import euro, nome_sicuro, puo_importare, puo_modificare, puo_vedere, storage_dir
@@ -34,6 +35,7 @@ from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_previsione import stima_altri_crediti
 from app.services.tesoreria_tari_parser import parse_avviso_tari
 from app.services.usali_contabile_kpi import risultato_per_mese
+from app.utils.locale_it import formatta_euro_it
 
 router = APIRouter()
 
@@ -80,6 +82,11 @@ def dati_fiscali(db: Session, parametri: dict, anno_fine: int) -> DatiFiscali:
         dati.f24_storico[(int(anno), int(mese))] = _dec(valore)
 
     dati.iva_agosto = {int(a): _dec(v) for a, v in parametri["iva_agosto"].items()}
+    oggi = date.today()
+    for (anno, mese), r in iva_mesi_conclusi(db, range(oggi.year - 1, anno_fine + 1), oggi).items():
+        dati.iva_dati[(anno, mese)] = (r.versamento, (
+            f"Stima da Corrispettivi e fatture SDI: IVA vendite {formatta_euro_it(r.vendite or 0)}, acquisti "
+            f"{formatta_euro_it(r.acquisti or 0)}, credito riportato {formatta_euro_it(-r.credito_precedente)}"))
     contabili = _anni_contabili(db, range(2024, anno_fine + 1))
 
     for anno in range(2025, anno_fine + 1):

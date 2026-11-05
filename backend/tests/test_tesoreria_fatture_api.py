@@ -330,3 +330,24 @@ def test_compensa_note_e_giorni_abituali():
     g = giorni_abituali([("P", date(2026, 1, 1), date(2026, 1, 31)), ("P", date(2026, 2, 1), date(2026, 3, 3)),
                          ("P", date(2026, 3, 1), date(2026, 5, 30)), ("Q", date(2026, 1, 1), None)])
     assert g == {"P": 30}
+
+
+def test_iva_mensile_da_vendite_e_fatture(client, Sessione, monkeypatch):
+    import app.routers.tesoreria_iva as modulo_iva
+    anno = OGGI.year - 1                                   # anno concluso: tutti i mesi completi
+    monkeypatch.setattr(modulo_iva, "_mesi_in_stagione", lambda db, a: {7, 8})
+    monkeypatch.setattr(modulo_iva, "vendite_iva_per_mese", lambda db, a: (
+        {(a, 7): Decimal("100.00"), (a, 8): Decimal("900.00")}, {(a, 7): Decimal("1100"), (a, 8): Decimal("9900")}))
+    _importa(client, zip_fatture([
+        ("1", date(anno, 7, 10), fattura_xml("01111111111", "Pesce Fresco Srl", "1", f"{anno}-07-10", "610.00")),
+        ("2", date(anno, 8, 10), fattura_xml("01111111111", "Pesce Fresco Srl", "2", f"{anno}-08-10", "122.00")),
+        ("3", date(anno, 8, 11), fattura_xml("IE1", "Ads Ltd", "3", f"{anno}-08-11", "1220.00", tipo="TD17", paese="IE")),
+        ("4", date(anno, 12, 30), fattura_xml("01111111111", "Pesce Fresco Srl", "4", f"{anno}-12-30", "12.20")),
+        ("5", OGGI, fattura_xml("01111111111", "Pesce Fresco Srl", "5", OGGI.isoformat(), "12.20")),
+    ]))
+    r = client.get("/tesoreria/iva", params={"anno": anno}).json()
+    mesi = {m["mese"]: m for m in r["mesi"]}
+    assert mesi[7]["acquisti"] == 110.0 and mesi[7]["saldo"] == -10.0 and mesi[7]["versamento"] == 0
+    # agosto: 900 − 22 (autofattura esclusa) − 10 di credito = 868 da versare il 16/9
+    assert mesi[8]["acquisti"] == 22.0 and mesi[8]["versamento"] == 868.0 and mesi[8]["scadenza"] == f"{anno}-09-16"
+    assert r["credito_fine_anno"] == 2.2 and all(m["completo"] for m in r["mesi"])

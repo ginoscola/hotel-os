@@ -4,8 +4,10 @@ abbinamento con la banca. Solo calcoli, nessun accesso al DB (i dati arrivano da
 Importi per tipo:
 - F24 dipendenti (16 del mese dopo): cedolini del mese; senza cedolini, gli F24 storici dello stesso mese o
   l'anno prima. È il DOVUTO LORDO: i crediti del sostituto d'imposta (1701, 1704, 1631, 1627) non sono stimati.
-- IVA: solo agosto (16/9), gli altri mesi sono a credito. Importo = ultimo versato: una stima da vendite e acquisti
-  sbagliava di oltre 4 volte sul 2026 (23.140 € contro 5.282 €: credito del mese prima e fatture d'affitto).
+- IVA (Fase 5, blocco C, scelta dell'utente): per i mesi **conclusi con dati completi** la liquidazione stimata da
+  vendite (Corrispettivi) e acquisti (fatture SDI) con il credito riportato (`iva_dati`, services/tesoreria_iva.py):
+  scadenza il 16 del mese dopo solo se a debito. Mesi futuri come prima: solo agosto (16/9) = ultimo agosto versato,
+  gli altri a credito. Acconto di dicembre non generato: dicembre è sempre a credito (nessun 6013 nel 2025–2026).
 - IRES/IRAP: acconti metà e metà dell'imposta dell'anno prima, saldo = imposta anno prima − suoi acconti.
 - Tassa di soggiorno: incassata nel trimestre, versata il mese dopo.
 - TARI: acconto 75% del totale dell'anno prima, poi conguaglio; con l'avviso valgono gli importi veri.
@@ -80,6 +82,7 @@ class DatiFiscali:
     f24_cedolini: dict = field(default_factory=dict)     # {(anno, mese di paga): Decimal}
     f24_storico: dict = field(default_factory=dict)      # {(anno, mese di paga): Decimal}
     iva_agosto: dict = field(default_factory=dict)       # {anno: Decimal versato}
+    iva_dati: dict = field(default_factory=dict)         # {(anno, mese): (versamento stimato dai dati, base)}
     tassa_incassata: dict = field(default_factory=dict)  # {(anno, mese): Decimal}
     imposte: dict = field(default_factory=dict)          # {'ires'|'irap': {anno: Decimal}}
     imposte_stimate: set = field(default_factory=set)    # {(tipo, anno)} calcolate e non da dichiarazione
@@ -112,13 +115,28 @@ def _f24_dipendenti(dati, anno) -> list:
     return out
 
 
+MESI_NOMI = ("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre",
+             "novembre", "dicembre")
+
+
 def _iva(dati, anno) -> list:
-    precedenti = [a for a in dati.iva_agosto if a <= anno]
-    if not precedenti:
-        return []
-    importo, base = dati.iva_agosto[max(precedenti)], f"IVA di agosto versata nel {max(precedenti)}"
-    return [ScadenzaPrevista(f"iva:{anno}-08", "iva", f"IVA agosto {anno}", f"{anno}-08",
-                             scadenza_legale(date(anno, 9, 16)), importo, base)]
+    out = []
+    for mese in range(1, 13):
+        pagamento = date(anno + 1, 1, 16) if mese == 12 else date(anno, mese + 1, 16)
+        if (anno, mese) in dati.iva_dati:
+            importo, base = dati.iva_dati[(anno, mese)]
+            if importo <= 0:
+                continue            # mese a credito
+        elif mese == 8:
+            precedenti = [a for a in dati.iva_agosto if a <= anno]
+            if not precedenti:
+                continue
+            importo, base = dati.iva_agosto[max(precedenti)], f"IVA di agosto versata nel {max(precedenti)}"
+        else:
+            continue
+        out.append(ScadenzaPrevista(f"iva:{anno}-{mese:02d}", "iva", f"IVA {MESI_NOMI[mese - 1]} {anno}",
+                                    f"{anno}-{mese:02d}", scadenza_legale(pagamento), _cent(importo), base))
+    return out
 
 
 def _imposte(dati, anno, data_acconto: date) -> list:
