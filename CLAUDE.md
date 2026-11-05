@@ -3028,6 +3028,23 @@ accanto alla DropZone), così ogni richiesta resta coerente con le precedenti.
   (`{idfile}_{nomefile}`, omonimi dello stesso intermediario) mentre il `_metaDato` riporta `nomefile` senza:
   cercare il file come nome del metaDato senza `_metaDato.xml`. Ultima ricezione 29/10 alle 9:28 (30–31/10 vuoti).
 
+### Fase 5 — strategia approvata (05/11/2026), blocco A da avviare con ok
+Blocchi: **A** tabelle (fattura unica per `idfile`, righe IVA per aliquota, scadenze) + lettore ZIP (p7m anche
+base64, ZIP annidati, file con prefisso `idfile`, errori per file senza bloccare, rifiuto emesse/cessionario diverso,
+XML conservato senza allegati + ZIP originale) → **B** import anteprima/conferma + abbinamento Passcom (numero
+normalizzato + data + importo + nome; impara P.IVA ↔ codice fornitore Passcom) e banca (motore Fase 2) → debiti da
+registrare in previsione (scadenza XML, altrimenti tempi abituali del fornitore dalle sue fatture); TD16–19 e
+fornitori pagati con carta esclusi dai debiti → **C** stima IVA mensile (acquisti XML con la regola del 15 del mese
+dopo, vendite da Corrispettivi, credito riportato, collaudo 2025 su VF71 258.352 € e agosto 2026 su 5.281,61 €;
+verificare l'effetto delle caparre CP con IVA, escluse dai Corrispettivi) → **D** scheda Fatture, previsione/impegni,
+interventi, attività "ZIP fatture AdE" automatica, v4.24.0. Permessi = resto della Tesoreria.
+Decisioni dell'utente:
+- **"Da registrare"** = assente dallo scadenzario Passcom "da pagare", non pagata in banca e **ricevuta dopo l'ultima
+  data di registrazione dello studio − 15 giorni**; le più vecchie senza riscontro in un elenco "da verificare" (una
+  tantum). Il file Passcom delle rate pagate non si usa (eventuale aggiunta solo se l'elenco risulta lungo).
+- **Fatture emesse fuori da Welcome: rare** (circa 1 nel 2026): IVA vendite solo dai Corrispettivi, niente import
+  delle fatture emesse.
+
 ### Fase 3 — calendario fiscale indipendente dallo studio (30/10/2026)
 Scelta dell'utente: **non dipendere dal commercialista** per il calendario fiscale.
 - Date per legge (calcolate da HotelOS, slittamento al primo giorno lavorativo); importi da: **cassetto
