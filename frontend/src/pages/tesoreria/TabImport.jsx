@@ -1,4 +1,4 @@
-// Import degli estratti conto (XML CBI) e dello scadenzario fornitori Passcom con anteprima e conferma,
+// Import degli estratti conto (XML CBI), dello scadenzario fornitori Passcom e degli ZIP di fatture ricevute con anteprima e conferma,
 // storico degli import con file originali, e saldi inseriti a mano per carte di credito e prepagate.
 import { useCallback, useEffect, useState } from 'react'
 import api from '../../api/client.js'
@@ -10,6 +10,7 @@ import {
 } from '../../components/ui'
 import { scarica } from '../usaliContabile/helpers.jsx'
 import { BadgeCategoria, ETICHETTE_TIPO_CONTO, Importo, oggiISO } from './helpers.jsx'
+import ImportFatture from './ImportFatture.jsx'
 
 const TIMEOUT_IMPORT = 120000
 
@@ -445,6 +446,8 @@ export default function TabImport({ conti, permessi, onCambio }) {
       </Card>
 
       <ImportScadenzario permessi={permessi} onCambio={onCambio} />
+
+      <ImportFatture permessi={permessi} onCambio={onCambio} />
 
       <SaldiManuali conti={conti} puoModificare={permessi.puo_modificare} onCambio={onCambio} />
 

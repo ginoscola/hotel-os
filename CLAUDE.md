@@ -2466,7 +2466,7 @@ formati, regole effettivamente implementate) va scritto qui in CLAUDE.md, non la
 | 2 | Scadenzario Passcom e abbinamento con la banca | ✅ v4.5.0 (29/10/2026) — blocchi A–D; ora uso con dati reali, poi Fase 3 (serve ok) |
 | 3 | Previsione di cassa: fiscale, affitti, interventi, ricorrenti, stime, scenari | ✅ v4.14.0 (02/11/2026) — blocchi A–D; ora uso con dati reali, poi Fase 4 (dopo ~1 mese, serve ok) |
 | 4 | Precisione: caparre, stipendi da Dipendenti, tempi di pagamento, verifica previsioni | ⏳ A caparre ✅ v4.21.0, B stipendi ✅ v4.22.0 (03/11/2026); C tempi e D verifica **in attesa di dati** (vedi sotto) |
-| 5 | Fatture XML passive: debiti non registrati e stima IVA | ⬜ dopo la Fase 4 |
+| 5 | Fatture XML passive: debiti non registrati e stima IVA | ✅ v4.24.0 (05/11/2026) — blocchi A–D |
 Legenda: ⬜ non iniziata · ⏳ in corso · ✅ completata (con versione).
 
 ### Decisioni prese
@@ -3141,6 +3141,24 @@ Solo backend, nessun cambio di versione. **Serve il riavvio del backend** (endpo
   tende a sopravvalutare il dovuto. Oggi nessun impegno IVA cambia sul DB reale (mesi conclusi già scaduti o a credito).
 - Test `test_tesoreria_iva.py` (4) + 1 in `test_tesoreria_fatture_api.py`. Suite: 967 verdi.
 
+### Fase 5 — Blocco D fatto (05/11/2026, v4.24.0) — Fase 5 chiusa
+- Scheda **Fatture** (`pages/tesoreria/TabFatture.jsx`, dopo Scadenzario): KPI per stato, riga che spiega il limite
+  "da registrare" (fotografia Passcom e ultima registrazione), filtri (cerca, stato, tipo, ricevute dal/al),
+  `ThOrdinabile`, paginazione, `ExportMenu` delle da registrare; clic → `Drawer` con dati, riepilogo IVA, rate (scadenza
+  "stimata" se assente nel file), scadenze Passcom collegate, pagamenti in banca (Conferma/Scarta) e, per le da
+  registrare/da confermare, "Abbina a un pagamento in banca" e "Segna pagata a mano" (riusano `ModaleManuale` e
+  `ModalePagate` di `TabScadenzario.jsx`, ora esportati) o "Togli pagata a mano".
+- **Import ZIP** in "Import e saldi" (`ImportFatture.jsx`): istruzioni fisse per la richiesta all'AdE (sezione apribile,
+  stato in `localStorage('tesoreria_istruzioni_ade')`), `DropZone .zip`, anteprima (periodo di ricezione vero, nuove,
+  già presenti, file illeggibili, per tipo), timeout 300 s, storico con Scarica/Elimina.
+- **IVA mese per mese** (`CardIva.jsx`, sezione apribile in fondo a Impegni, `localStorage('tesoreria_iva_aperta')`,
+  `NavAnno`): vendite, acquisti, credito riportato, saldo, da versare, scadenza, versato e scarto; mesi incompleti
+  attenuati; credito stimato a fine anno solo come confronto.
+- Previsione: colonna/Drawer "Fatture da registrare (SDI)".
+- **Attività ricorrenti**: `fatture_ade` ora automatica — fatta se un import arriva fino a fine mese (−3 giorni)
+  (`_evidenze()` in `routers/attivita.py`, `TesoreriaFattureImport.ricezione_a`, come dato del mese dopo).
+- Nessun componente nuovo nella Libreria UI. Schermate non aperte a video da Claude (build + controllo identificatori).
+
 ### Fase 3 — calendario fiscale indipendente dallo studio (30/10/2026)
 Scelta dell'utente: **non dipendere dal commercialista** per il calendario fiscale.
 - Date per legge (calcolate da HotelOS, slittamento al primo giorno lavorativo); importi da: **cassetto
@@ -3563,6 +3581,9 @@ esistenti, mai query duplicate sulle loro tabelle.
   usate da `tesoreria_previsione.py` (rettifica) e `caparre_posizione()` da `tesoreria_report.posizione()`.
 - **Forecast → prenotazioni Welcome**: `indice_welcome()` (tesoreria_shared) legge `prenotazioni_cancellate`
   (non disdette, non test); `routers/prenotazioni.py` chiama `aggiorna_caparre()` dopo import ed eliminazione.
+- **Corrispettivi → IVA vendite**: `report_fatturati()` (lordo e netto) in `vendite_iva_per_mese()` di
+  `routers/tesoreria_iva.py`; **stagioni**: `hotel_seasons` per dire se un mese doveva avere incassi.
+- **Attività ricorrenti**: `routers/attivita.py::_evidenze()` legge `tesoreria_fatture_import.ricezione_a`.
 - **Corrispettivi → export**: `_risposta_tabella()` di `routers/corrispettivi_documenti.py` (xlsx/csv/pdf
   da intestazioni + righe) usata dagli export di Movimenti e Consuntivo.
 
@@ -3670,7 +3691,8 @@ esistenti, mai query duplicate sulle loro tabelle.
   debiti da registrare in previsione) fatti; scelta b (nessuno stato "da verificare"). Backend riavviato e **storico
   fatture caricato nel DB reale** (8 ZIP, 4.707 fatture, import #1–#8): 1 da registrare, 11 da confermare.
   Abbinamenti automatici/confermati: **72 su 38 fornitori → criterio del blocco 4C raggiunto** (segnalato). Blocco C
-  (stima IVA mensile, opzione 1) fatto. **Prossimo passo**: Fase 5 blocco D (schermate, v4.24.0), con ok dell'utente.
+  (stima IVA mensile, opzione 1) e blocco D (schermate) fatti: **Fase 5 chiusa con v4.24.0**. Prossimo: uso reale;
+  Fase 4C (tempi di pagamento) pronta a partire con l'ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.

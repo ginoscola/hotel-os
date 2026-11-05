@@ -7,6 +7,7 @@ import {
   Badge, Button, Card, Checkbox, Field, FileButton, Input, KpiTile, Loading, Messaggio, Modal, Select, StatoVuoto, Table, Td, Th,
   useAvvisi,
 } from '../../components/ui'
+import CardIva from './CardIva.jsx'
 import { oggiISO } from './helpers.jsx'
 
 const ETICHETTE_TIPO = {
@@ -221,6 +222,8 @@ export default function TabImpegni({ permessi }) {
           )}
         </Card>
       </>}
+
+      <CardIva />
 
       {modifica && <ModaleModifica impegno={modifica} onChiudi={() => setModifica(null)} onSalvato={() => { setModifica(null); carica() }} />}
       {nuovo && <ModaleNuovo onChiudi={() => setNuovo(false)} onSalvato={() => { setNuovo(false); carica() }} />}

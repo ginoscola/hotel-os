@@ -1,10 +1,12 @@
 // Modulo Tesoreria — flusso di cassa di KM di Mare S.r.l.: posizione attuale, consuntivo,
-// movimenti bancari, scadenzario fornitori (Passcom ↔ banca), import di estratti conto e scadenzario.
+// movimenti bancari, scadenzario fornitori (Passcom ↔ banca), fatture ricevute dallo SDI, import di estratti conto,
+// scadenzario e ZIP delle fatture.
 // Configurazione in Admin → Tesoreria.
 import { useState } from 'react'
 import { PageHeader, SegmentedControl, Tabs } from '../components/ui'
 import TabCaparre from './tesoreria/TabCaparre.jsx'
 import TabConsuntivo from './tesoreria/TabConsuntivo.jsx'
+import TabFatture from './tesoreria/TabFatture.jsx'
 import TabImpegni from './tesoreria/TabImpegni.jsx'
 import TabImport from './tesoreria/TabImport.jsx'
 import TabKpi from './tesoreria/TabKpi.jsx'
@@ -25,6 +27,7 @@ const TABS = [
   { id: 'caparre', label: 'Caparre' },
   { id: 'movimenti', label: 'Movimenti' },
   { id: 'scadenzario', label: 'Scadenzario' },
+  { id: 'fatture', label: 'Fatture' },
   { id: 'import', label: 'Import e saldi' },
 ]
 
@@ -70,6 +73,7 @@ export default function Tesoreria() {
           filtroIniziale={filtroMovimenti} />
       )}
       {tab === 'scadenzario' && <TabScadenzario key={versione} permessi={permessi} onVaiA={vaiA} />}
+      {tab === 'fatture' && <TabFatture key={versione} permessi={permessi} onVaiA={vaiA} />}
       {tab === 'import' && <TabImport conti={conti} permessi={permessi} onCambio={datiCambiati} />}
     </div>
   )

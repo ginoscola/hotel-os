@@ -76,8 +76,9 @@ CATALOGO = [
              nota="Previsione → Salva previsione: serve per confrontare previsto e reale."),
     Attivita("passcom", "Scadenzario fornitori Passcom", "Tesoreria", "mensile", giorno=5, link="/tesoreria"),
     Attivita("fatture_ade", "ZIP fatture ricevute dall'AdE (mese prima)", "Tesoreria", "mensile", giorno=5,
-             automatica=False, link="/tesoreria",
-             nota="Portale Fatture e Corrispettivi: Ricevute, data di ricezione, mese intero."),
+             link="/tesoreria",
+             nota="Portale Fatture e Corrispettivi: Ricevute, data di ricezione, mese intero. Fatta se è caricato "
+                  "uno ZIP che arriva a fine mese (Import e saldi)."),
     Attivita("cedolini", "Cedolini del mese prima", "Dipendenti", "mensile", giorno=10, link="/dipendenti",
              nota="Servono anche alla Tesoreria per gli stipendi del 10."),
     Attivita("coperti", "Coperti Mare Mosso e scontrini Buona Onda", "USALI", "mensile", giorno=10,

@@ -37,7 +37,7 @@ from app.models.corrispettivi import CassaMovimento, CorrispettiviDocumento, Cor
 from app.models.prenotazioni import PrenotazioneCancellataImport
 from app.models.produzione import ProdImport, ProdOccupazioneConsumo
 from app.models.revenue import AppConfig, BudgetEntry, Hotel, HotelSeason, ImportSession, PayrollImport
-from app.models.tesoreria import (TesoreriaConto, TesoreriaImpegno, TesoreriaImport, TesoreriaPrevisioneSalvata,
+from app.models.tesoreria import (TesoreriaConto, TesoreriaFattureImport, TesoreriaImpegno, TesoreriaImport, TesoreriaPrevisioneSalvata,
                                   TesoreriaSaldo, TesoreriaScadImport)
 from app.models.usali import UsaliFnbCoperti
 from app.models.usali_contabile import UsaliImport
@@ -69,6 +69,10 @@ def _catalogo(db: Session) -> list:
 
 def _date(q) -> list:
     return sorted({r[0] for r in q if r[0] is not None})
+
+
+def _fine_mese(d: date) -> date:
+    return (date(d.year + 1, 1, 1) if d.month == 12 else date(d.year, d.month + 1, 1)) - timedelta(days=1)
 
 
 def _mese_dopo(righe) -> list:
@@ -116,6 +120,10 @@ def _evidenze(db: Session, da: date, a: date) -> dict:
         PrenotazioneCancellataImport.is_test.is_(False), tra(_creato(PrenotazioneCancellataImport.created_at))))
     ev["previsione"] = {"": _date(db.query(_creato(TesoreriaPrevisioneSalvata.created_at)).filter(
         tra(_creato(TesoreriaPrevisioneSalvata.created_at))))}
+    # ZIP fatture AdE: un mese conta se un import arriva fino a fine mese (−3 giorni), come i dati del mese dopo
+    ev["fatture_ade"] = {"": _mese_dopo({(r.year, r.month) for (r,) in db.query(TesoreriaFattureImport.ricezione_a)
+                                         .filter(TesoreriaFattureImport.ricezione_a.isnot(None))
+                                         if r >= _fine_mese(r) - timedelta(days=3)})}
     ev["passcom"] = {"": _date(db.query(_creato(TesoreriaScadImport.created_at)).filter(
         tra(_creato(TesoreriaScadImport.created_at))))}
     ev["ce_contabile"] = {"": _date(db.query(_creato(UsaliImport.created_at)).filter(

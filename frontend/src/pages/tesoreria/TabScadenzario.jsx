@@ -61,7 +61,7 @@ function documento(r) {
 
 // ── Segna pagate a mano ──────────────────────────────────────────────────────
 
-function ModalePagate({ righe, onChiudi, onFatto }) {
+export function ModalePagate({ righe, onChiudi, onFatto }) {
   const [data, setData] = useState(oggiISO())
   const [nota, setNota] = useState('')
   const [lavoro, setLavoro] = useState(false)
@@ -431,7 +431,7 @@ function VistaResidui({ dati, onFornitore }) {
 
 // ── Dettaglio fornitore ──────────────────────────────────────────────────────
 
-function ModaleManuale({ scadenze, onChiudi, onFatto }) {
+export function ModaleManuale({ scadenze, onChiudi, onFatto }) {
   const [cand, setCand] = useState(null)
   const [scelti, setScelti] = useState(() => new Set())
   const [nota, setNota] = useState('')
