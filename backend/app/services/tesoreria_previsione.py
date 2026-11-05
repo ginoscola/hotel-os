@@ -21,6 +21,7 @@ ZERO = Decimal(0)
 UNO = Decimal(1)
 CENTO = Decimal(100)
 GIORNI_CASSA_LIBERA = 90
+PESI_ANNI = (2, 1)          # uscite stimate: media dell'ultimo anno solare intero (peso 2) e di quello prima (peso 1)
 
 # Categoria → gruppo di stima. Fuori dall'elenco: coperte da impegni (affitti, f24, tassa_soggiorno, mutuo_rate,
 # assicurazioni), non operative, e compensi dei soci (decisi ogni anno in Admin, entrano come impegni).
@@ -67,9 +68,19 @@ def anno_riferimento(y: int, m: int, oggi: date, presenti: set) -> Optional[int]
     return None
 
 
-def fattore_budget(y: int, budget: dict, ricavi: dict) -> Decimal:
-    """Budget dell'anno ÷ ricavi dell'anno prima. 1 se manca uno dei due (es. l'anno in corso, già senza budget)."""
-    b, r = budget.get(y), ricavi.get(y - 1)
+def anni_riferimento_uscite(y: int, oggi: date, presenti: set) -> list:
+    """Anni solari interi (gennaio–dicembre già conclusi e coperti dagli estratti) da cui stimare le uscite di tutto
+    l'anno `y`, dal più recente, al massimo len(PESI_ANNI). Stessi anni per tutti i mesi: se i pagamenti scivolano da
+    un mese all'altro (Ri.Ba. di fine ottobre addebitate a novembre) il totale dell'anno resta giusto."""
+    anni = [r for r in range(y - 1, y - 4, -1)
+            if fine_mese(r, 12) < oggi and all((r, mm) in presenti for mm in range(1, 13))]
+    return anni[:len(PESI_ANNI)]
+
+
+def fattore_budget(y: int, budget: dict, ricavi: dict, rif: Optional[int] = None) -> Decimal:
+    """Budget dell'anno ÷ ricavi dell'anno di riferimento (default l'anno prima). 1 se manca uno dei due (es. l'anno in
+    corso, già senza budget)."""
+    b, r = budget.get(y), ricavi.get(y - 1 if rif is None else rif)
     return b / r if b and r else UNO
 
 
@@ -166,27 +177,42 @@ def _mesi_con_dati(d: DatiPrevisione) -> set:
 
 
 def stime_mese(d: DatiPrevisione, y: int, m: int) -> dict:
-    """{gruppo: stima} del mese, scenario realista, prima di togliere le uscite certe."""
-    rif = anno_riferimento(y, m, d.oggi, _mesi_con_dati(d))
-    if rif is None:
+    """{gruppo: stima} del mese, scenario realista, prima di togliere le uscite certe. Media pesata degli anni di
+    `anni_riferimento_uscite()`, ognuno portato all'anno `y` con il proprio fattore di crescita; senza un anno intero
+    (primi mesi di dati) l'ultimo anno con quel mese concluso."""
+    anni = riferimento_uscite(d, y, m)
+    if not anni:
         return {}
-    fattore = fattore_budget(y, d.budget, d.ricavi)
+    pesi = PESI_ANNI[:len(anni)]
     gruppi = {}
-    for categoria, gruppo in GRUPPI_STIMA.items():
-        crescita = _crescita(gruppo, fattore, d.parametri) if y > d.oggi.year else UNO
-        storico = d.uscite.get(categoria, {}).get((rif, m), ZERO)
-        if categoria == "carte":
-            # L'advertising è deciso in Admin ed entra come impegno: qui restano solo le altre spese con carta
-            storico = max(storico - d.advertising.get((rif, m), ZERO), ZERO)
-        gruppi[gruppo] = gruppi.get(gruppo, ZERO) + storico * crescita
-    return gruppi
+    for rif, peso in zip(anni, pesi):
+        fattore = fattore_budget(y, d.budget, d.ricavi, rif)
+        for categoria, gruppo in GRUPPI_STIMA.items():
+            crescita = _crescita(gruppo, fattore, d.parametri) if y > d.oggi.year else UNO
+            storico = d.uscite.get(categoria, {}).get((rif, m), ZERO)
+            if categoria == "carte":
+                # L'advertising è deciso in Admin ed entra come impegno: qui restano solo le altre spese con carta
+                storico = max(storico - d.advertising.get((rif, m), ZERO), ZERO)
+            gruppi[gruppo] = gruppi.get(gruppo, ZERO) + storico * crescita * peso
+    totale_pesi = Decimal(sum(pesi))
+    return {g: v / totale_pesi for g, v in gruppi.items()}
+
+
+def riferimento_uscite(d: DatiPrevisione, y: int, m: int) -> list:
+    """Anni usati da stime_mese() per il mese (per la spiegazione a schermo)."""
+    presenti = _mesi_con_dati(d)
+    anni = anni_riferimento_uscite(y, d.oggi, presenti)
+    if not anni:
+        rif = anno_riferimento(y, m, d.oggi, presenti)
+        anni = [rif] if rif is not None else []
+    return anni
 
 
 def entrate_mese(d: DatiPrevisione, y: int, m: int) -> Decimal:
     rif = anno_riferimento(y, m, d.oggi, _mesi_con_dati(d))
     if rif is None:
         return ZERO
-    return d.entrate.get((rif, m), ZERO) * fattore_budget(y, d.budget, d.ricavi)
+    return d.entrate.get((rif, m), ZERO) * fattore_budget(y, d.budget, d.ricavi, rif)
 
 
 def rettifica_caparre(d: DatiPrevisione, y: int, m: int) -> Decimal:
@@ -242,6 +268,8 @@ def calcola_scenario(d: DatiPrevisione, scenario: str) -> list:
         saldo = saldo + entrate - tot_certe - tot_stimate
         righe.append({
             "anno": y, "mese": m, "saldo_iniziale": iniziale, "entrate": entrate, "rettifica_caparre": rettifica,
+            "riferimento_entrate": anno_riferimento(y, m, d.oggi, _mesi_con_dati(d)),
+            "riferimento_uscite": riferimento_uscite(d, y, m),
             "uscite_certe": per_gruppo,
             "uscite_stimate": stimate, "totale_certe": tot_certe, "totale_stimate": tot_stimate, "saldo_finale": saldo,
         })

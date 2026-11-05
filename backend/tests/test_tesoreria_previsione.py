@@ -357,3 +357,35 @@ def test_avviso_previsione_non_salvata(client, test_engine):
         assert avvisato(8)
     finally:
         db.close()
+
+
+def _anno(y, valore):
+    return {(y, m): D(valore) for m in range(1, 13)}
+
+
+def test_uscite_dallo_stesso_anno_intero_per_tutti_i_mesi():
+    """2025 completo: novembre e dicembre 2027 non mescolano il 2025 con settembre–ottobre 2026 (Ri.Ba. slittate)."""
+    entrate = {**_anno(2025, "100"), **{(2026, m): D("100") for m in range(1, 11)}}
+    riba = {**{(2025, m): D("0") for m in range(1, 13)}, (2025, 10): D("300"), (2025, 11): D("10"),
+            (2026, 10): D("30"), (2026, 11): D("280")}
+    d = _dati(oggi=date(2026, 11, 5), orizzonte=date(2027, 12, 31), entrate=entrate, uscite={"fornitori_riba": riba},
+              budget={2027: D("1200")}, ricavi={2025: D("1000"), 2026: D("1500")})
+    r = [x for x in calcola_scenario(d, "realista") if x["anno"] == 2027]
+    assert _mese(r, 10)["riferimento_uscite"] == [2025] and _mese(r, 11)["riferimento_uscite"] == [2025]
+    assert _mese(r, 10)["uscite_stimate"]["fornitori"] == D("360")      # 300 × 1200/1000 (ricavi del 2025)
+    assert _mese(r, 11)["uscite_stimate"]["fornitori"] == D("12")
+    assert _mese(r, 10)["riferimento_entrate"] == 2026                    # le entrate restano sul mese più recente
+
+
+def test_media_pesata_degli_ultimi_due_anni_interi():
+    entrate = {**_anno(2025, "100"), **_anno(2026, "100")}
+    utenze = {**_anno(2025, "30"), **_anno(2026, "60")}
+    d = _dati(oggi=date(2027, 1, 10), orizzonte=date(2027, 3, 31), entrate=entrate, uscite={"utenze": utenze},
+              budget={}, ricavi={})
+    febbraio = _mese(calcola_scenario(d, "realista"), 2)
+    assert febbraio["riferimento_uscite"] == [2026, 2025]
+    assert febbraio["uscite_stimate"]["utenze"] == D("50")               # (60 × 2 + 30) / 3
+
+
+def test_fattore_budget_sull_anno_di_riferimento():
+    assert fattore_budget(2027, {2027: D("1200")}, {2025: D("800"), 2026: D("1000")}, 2025) == D("1.5")

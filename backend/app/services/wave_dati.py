@@ -32,6 +32,16 @@ def fine_stagione(db: Session, struttura: str, anno: int) -> date:
     return s[0] if s else date(anno, 9, 30)
 
 
+def lordo_storico_anno(db: Session, anno: int) -> Optional[float]:
+    """Fatturato IVA inclusa (netto storico × 1,10) di hotel e ristoranti in un anno precedente a HotelOS, aprile–
+    settembre. Usato dalla previsione di Tesoreria quando mancano i dati Revenue/Corrispettivi di quell'anno."""
+    if anno >= PRIMO_ANNO_HOTELOS:
+        return None
+    righe = [float(r.netto) for r in db.query(WaveStorico).filter(WaveStorico.anno == anno)
+             if r.struttura_code in STRUTTURE and r.mese in MESI_WAVE]
+    return round(sum(righe) * IVA, 2) if righe else None
+
+
 def valori_mensili(db: Session, oggi: date) -> dict:
     """→ {struttura: {anno: {'fonte': 'storico'|'corrispettivi', 'in_corso': bool, 'mesi': {mese: netto}}}}.
     Solo anni con almeno un mese di aprile–settembre."""

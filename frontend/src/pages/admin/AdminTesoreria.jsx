@@ -1042,9 +1042,11 @@ export function AdminTesoreriaPrevisione() {
   if (!parametri) return <Loading />
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Card title="Crescita delle uscite rispetto all'anno prima">
+      <Card title="Crescita delle uscite rispetto all'anno di riferimento">
         <p className="ui-text-muted" style={{ marginBottom: 8 }}>
-          Percentuale per gruppo, anche negativa. Campo vuoto = cresce come il Budget rispetto ai ricavi dell'anno prima.
+          Le uscite stimate di ogni anno si calcolano dagli ultimi due anni solari interi (il più recente pesa il doppio),
+          gli stessi per tutti i mesi. Percentuale per gruppo, anche negativa. Campo vuoto = cresce come il Budget rispetto
+          ai ricavi dell'anno di riferimento.
           Vale per le uscite stimate degli anni futuri, non per quelle già certe (scadenzario, affitti, fisco).
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 420 }}>

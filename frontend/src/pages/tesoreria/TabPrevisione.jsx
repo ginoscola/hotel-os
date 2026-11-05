@@ -136,6 +136,13 @@ function DettaglioMese({ riga, onChiudi }) {
       <h4 style={{ margin: '0 0 6px' }}><Badge tono="info">Certe</Badge> {formatEuro(riga.totale_certe)}</h4>
       {Object.entries(riga.uscite_certe).map(([k, v]) => <div key={k}>{NOMI_CERTE[k] || k}: {formatEuro(v)}</div>)}
       <h4 style={{ margin: '12px 0 6px' }}><Badge>Stimate</Badge> {formatEuro(riga.totale_stimate)}</h4>
+      {riga.riferimento_uscite?.length > 0 && (
+        <p className="ui-text-muted" style={{ margin: '0 0 6px' }}>
+          Dallo stesso mese {riga.riferimento_uscite.length > 1
+            ? `del ${riga.riferimento_uscite[0]} (peso doppio) e del ${riga.riferimento_uscite[1]}`
+            : `del ${riga.riferimento_uscite[0]}`}, scalato sul Budget. Entrate sul ritmo del {riga.riferimento_entrate ?? '—'}.
+        </p>
+      )}
       {Object.entries(riga.uscite_stimate).filter(([, v]) => v > 0).map(([k, v]) => <div key={k}>{NOMI_STIMATE[k] || k}: {formatEuro(v)}</div>)}
       <h4 style={{ margin: '12px 0 6px' }}>Impegni del mese</h4>
       {!impegni ? <Loading /> : impegni.length === 0 ? <StatoVuoto>Nessun impegno.</StatoVuoto> : (

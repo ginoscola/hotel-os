@@ -35,6 +35,7 @@ from app.routers.tesoreria_piani import rate_intervento
 from app.routers.tesoreria_caparre import caparre_db, caparre_per_mese, senza_periodo_db
 from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, puo_vedere
 from app.services.budget_ristoranti import totale_budget_anno
+from app.services.wave_dati import lordo_storico_anno
 from app.services.tesoreria_previsione import (
     GRUPPI_CRESCITA, SCENARI, TIPI_FISCO, Certa, DatiPrevisione, applica_prova, calcola_scenario, fattore_budget, fine_mese,
     cedolini_mancanti, certe_stipendi, mesi_tra, parametri_default, rettifica_caparre, totali_per_anno,
@@ -104,13 +105,18 @@ def _storico_banca(db: Session) -> tuple:
 
 
 def _ricavi_e_budget(db: Session, anni: range) -> tuple:
-    """Hotel (dati Revenue) + ristoranti (incassi manuali), IVA inclusa: stessa base del Budget."""
+    """Hotel (dati Revenue) + ristoranti (incassi manuali), IVA inclusa: stessa base del Budget. Per gli anni prima di
+    HotelOS (2025) lo storico WAVE × 1,10, che serve a scalare le stime fatte su quell'anno."""
     ricavi, budget = {}, {}
     for anno in anni:
         hotel = ricavi_consuntivo_anno(db, anno)
         if hotel:
             r = report_fatturati(anno=anno, lordo=True, is_test=False, db=db, _=None)
             ricavi[anno] = hotel + Decimal(str(round(sum(m["totale_ristoranti"] for m in r["mesi"]), 2)))
+        else:
+            storico = lordo_storico_anno(db, anno)
+            if storico:
+                ricavi[anno] = Decimal(str(storico))
         b = ricavi_budget_anno(db, anno) + totale_budget_anno(db, anno)
         if b:
             budget[anno] = b
@@ -154,7 +160,7 @@ def dati_previsione(db: Session, oggi: date) -> DatiPrevisione:
     saldi, movimenti = _saldi_e_movimenti(db, [c.id for c in conti])
     saldo = sum((saldo_a_data(oggi, saldi[c.id], movimenti[c.id]) or Decimal(0) for c in conti), Decimal(0))
     entrate, uscite = _storico_banca(db)
-    ricavi, budget = _ricavi_e_budget(db, range(oggi.year - 1, orizzonte.year + 1))
+    ricavi, budget = _ricavi_e_budget(db, range(oggi.year - 3, orizzonte.year + 1))
     certe = _certe(db, oggi) + certe_stipendi(netti_per_mese(db), uscite.get("personale", {}), oggi)
     return DatiPrevisione(
         oggi=oggi, orizzonte=orizzonte, saldo_iniziale=saldo, entrate=entrate, uscite=uscite, certe=certe,
@@ -188,6 +194,7 @@ def _riga_json(r: dict) -> dict:
                                    "saldo_finale", "cassa_impegnata_90", "cassa_libera")},
         "uscite_certe": {k: euro(v) for k, v in r["uscite_certe"].items()},
         "uscite_stimate": {k: euro(v) for k, v in r["uscite_stimate"].items()},
+        "riferimento_entrate": r["riferimento_entrate"], "riferimento_uscite": r["riferimento_uscite"],
     }
 
 

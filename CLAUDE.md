@@ -3568,6 +3568,26 @@ più anni (picchi tipo assegni gennaio 2025), incassi della stagione dalla proie
 credito IVA 2026 calcolato dai dati (Fase 5C) invece di copiato, IVA dei mesi futuri da vendite/acquisti previsti,
 blocco 4C (criterio raggiunto).
 
+### Uscite stimate su anni solari interi (05/11/2026, v4.26.0)
+Prima ogni mese stimava dall'ultimo anno con quel mese concluso: il 2027 mescolava gen–ott 2026 e nov–dic 2025, e
+le Ri.Ba. che nel 2026 sono slittate da settembre–ottobre a novembre non finivano in nessun mese (fine 2027 a +143.000 €
+contro +23.000 € del 2026, ~140.000 € di fornitori persi). Ora (`services/tesoreria_previsione.py`):
+- **Uscite stimate**: `anni_riferimento_uscite()` = ultimi anni solari **interi** (tutti i 12 mesi coperti dagli estratti,
+  dicembre concluso), al massimo 2, **gli stessi per tutti i mesi dell'anno**; media pesata `PESI_ANNI` = (2, 1), il più
+  recente pesa il doppio (dal 2027: 2026 ×2 + 2025; dal 2028: 2027 ×2 + 2026). Senza un anno intero: vecchia regola per
+  mese (`anno_riferimento()`).
+- **Entrate invariate** (ritmo dell'ultimo mese concluso: per l'utente il 2025 non è affidabile per gli incassi).
+- **Fattore di crescita sull'anno di riferimento vero**: `fattore_budget(y, budget, ricavi, rif)` = Budget di `y` ÷ ricavi
+  di `rif` (prima sempre ÷ ricavi di y−1, anche partendo dal 2025). Vale per uscite ed entrate.
+- **Ricavi degli anni prima di HotelOS** (2025) da `lordo_storico_anno()` di `services/wave_dati.py` = Σ netto dello
+  storico WAVE (hotel + ristoranti, apr–set) × 1,10, scelta dell'utente. 2025 = 1.841.704 €, 2026 = 1.830.727 €.
+  `_ricavi_e_budget()` ora da `oggi.year − 3`.
+- Righe della risposta con `riferimento_entrate` (anno) e `riferimento_uscite` (lista), mostrati nel dettaglio del mese.
+- **Dati corretti**: l'assegno da 61.000 € del 31/01/2025 (categoria "Assegni", finiva nei fornitori stimati di ogni
+  gennaio e doppio con l'impegno d'affitto) è la rata di gennaio dell'affitto International → categoria Affitti a mano.
+Effetto al 05/11/2026 (realista): fine 2027 da 143.000 € a 26.000 €, picco agosto 581.000 €, minimo aprile 2027 da
+−75.000 € a −114.000 € (gen–apr 2025 con ~39.000 € di uscite in più del 2026; da gennaio pesa il 2026).
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**
@@ -3605,6 +3625,7 @@ esistenti, mai query duplicate sulle loro tabelle.
 - **Corrispettivi → IVA vendite**: `report_fatturati()` (lordo e netto) in `vendite_iva_per_mese()` di
   `routers/tesoreria_iva.py`; **stagioni**: `hotel_seasons` per dire se un mese doveva avere incassi.
 - **Attività ricorrenti**: `routers/attivita.py::_evidenze()` legge `tesoreria_fatture_import.ricezione_a`.
+- **Indice WAVE → ricavi 2025**: `lordo_storico_anno()` di `services/wave_dati.py` in `_ricavi_e_budget()` della previsione.
 - **Corrispettivi → export**: `_risposta_tabella()` di `routers/corrispettivi_documenti.py` (xlsx/csv/pdf
   da intestazioni + righe) usata dagli export di Movimenti e Consuntivo.
 
