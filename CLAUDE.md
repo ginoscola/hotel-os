@@ -3141,6 +3141,13 @@ Solo backend, nessun cambio di versione. **Serve il riavvio del backend** (endpo
   tende a sopravvalutare il dovuto. Oggi nessun impegno IVA cambia sul DB reale (mesi conclusi già scaduti o a credito).
 - Test `test_tesoreria_iva.py` (4) + 1 in `test_tesoreria_fatture_api.py`. Suite: 967 verdi.
 
+### Nomi fornitore ↔ banca: una parola sola non basta più (05/11/2026, v4.24.1)
+Segnalato dall'utente: nel dettaglio fornitore dello Scadenzario i pagamenti a Castellana Gianni comparivano sotto
+Gianni Gianmarco e viceversa. `forza_nome()` dava 1 con una qualunque parola di ≥ 4 lettere in comune: sul DB reale 40
+fornitori su 76 ricevevano pagamenti altrui (ITALIA, SERVICE, SERVIZI, MARCO…). Ora la forza 1 richiede anche che
+**tutte le parole del nome in banca** siano nel nome del fornitore ('GLAM', 'corif', 'Sogefer Srl' restano). Verificato:
+i 74 abbinamenti proposti/automatici sui dati reali sono identici prima e dopo.
+
 ### Fase 5 — Blocco D fatto (05/11/2026, v4.24.0) — Fase 5 chiusa
 - Scheda **Fatture** (`pages/tesoreria/TabFatture.jsx`, dopo Scadenzario): KPI per stato, riga che spiega il limite
   "da registrare" (fotografia Passcom e ultima registrazione), filtri (cerca, stato, tipo, ricevute dal/al),

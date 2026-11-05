@@ -37,6 +37,11 @@ def test_forza_nome():
     assert forza_nome("La Fourchette (Italy) srl", "GC RE THEFORK") == 0
     assert forza_nome("La Fourchette (Italy) srl", "GC RE THEFORK", {"GC RE THEFORK"}) == 2       # alias imparato
     assert forza_nome("ROSSI SRL", None) == 0
+    # una sola parola in comune vale solo se il nome in banca è tutto dentro quello del fornitore
+    assert forza_nome("CORIF IMPIANTI SRL", "corif") == 1
+    assert forza_nome("CASTELLANA GIANNI", "GIANNI GIANMARCO") == 0
+    assert forza_nome("GIANNI GIANMARCO", "castellana gianni") == 0
+    assert forza_nome("SKY ITALIA S.R.L.", "ALD AUTOMOTIVE ITALIA SRL") == 0
 
 
 def test_numero_fattura():

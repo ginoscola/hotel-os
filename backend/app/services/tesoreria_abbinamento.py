@@ -134,7 +134,11 @@ def _uguali(a: str, b: str) -> bool:
 
 def forza_nome(fornitore: str, controparte: Optional[str], alias: set = frozenset()) -> int:
     """2 = stesso fornitore (alias imparato, oppure tutte le parole o almeno due in comune);
-    1 = una parola di almeno 4 lettere in comune; 0 = nessuna somiglianza."""
+    1 = una parola di almeno 4 lettere in comune **e** tutte le parole del nome in banca presenti nel nome del
+    fornitore (es. 'GLAM' per 'GLAM Società Consortile', 'corif' per 'CORIF Impianti'); 0 = nessuna somiglianza.
+    Fino al 05/11/2026 bastava una parola qualsiasi: 'CASTELLANA GIANNI' e 'GIANNI GIANMARCO' si scambiavano i
+    pagamenti nel dettaglio fornitore (così anche ITALIA, SERVICE, SERVIZI, MARCO: 40 fornitori su 76). Nessun
+    abbinamento con la banca è cambiato con la regola nuova."""
     if not controparte:
         return 0
     if normalizza_nome(controparte) in alias:
@@ -146,7 +150,7 @@ def forza_nome(fornitore: str, controparte: Optional[str], alias: set = frozense
     comuni = [p for p in pf if any(_uguali(p, c) for c in pc)]
     if len(comuni) >= 2 or (comuni and len(comuni) == len(pf)):
         return 2
-    if any(len(p) >= 4 for p in comuni):
+    if any(len(p) >= 4 for p in comuni) and all(any(_uguali(c, p) for p in pf) for c in pc):
         return 1
     return 0
 
