@@ -257,9 +257,14 @@ def conferma_import(
         raise
     shutil.rmtree(d, ignore_errors=True)
 
+    # Previsione del mese salvata da sola al primo estratto che arriva a fine mese prima (verifica delle previsioni)
+    from app.routers.tesoreria_previsione import salva_automatica
+    previsione_id = salva_automatica(db, risultato.data_a, meta["nome_file"], utente_id)
+
     return {"import_id": imp.id, "conto_id": conto.id, "n_nuovi": len(nuovi),
             "n_gia_presenti": analisi["n_gia_presenti"], "n_saldi": len(risultato.saldi),
-            "n_discrepanze": len(analisi["discrepanze"]), "abbinamenti": abbinamenti}
+            "n_discrepanze": len(analisi["discrepanze"]), "abbinamenti": abbinamenti,
+            "previsione_salvata": previsione_id}
 
 
 @router.get("/import")

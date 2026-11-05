@@ -3554,6 +3554,20 @@ Verificato sui dati reali prima di scrivere codice:
   tesoreria_abbinamenti WHERE stato IN ('automatico','confermato')`); D quando ci sono **almeno 3 previsioni salvate
   distanti almeno un mese** e con mesi già chiusi da confrontare (`tesoreria_previsioni_salvate`).
 
+### Previsione salvata in automatico (05/11/2026, v4.25.0)
+Per il blocco 4D servono previsioni salvate una al mese: `salva_automatica()` in `routers/tesoreria_previsione.py`,
+chiamata da `conferma_import` degli estratti conto **dopo il commit** (un errore non annulla l'import: rollback e log).
+Salva se nel mese non c'è ancora una previsione salvata e l'estratto arriva a fine mese prima (`arriva_a_fine_mese()`:
+ultima data ≥ ultimo giorno del mese prima − `TOLLERANZA_FINE_MESE` = 4, perché l'XML non ha i giorni senza movimenti).
+Basta **un** conto (in inverno l'utente carica solo il principale). Nota "Automatica (estratto conto …)", risposta
+dell'import con `previsione_salvata` (id o null). Dal giorno 8 (`GIORNO_AVVISO_SALVATE`) avviso in Previsione se il
+mese non ne ha una. L'attività "Salva previsione" dello scadenziario risulta fatta da sola (già esistente).
+Scelta dell'utente: al caricamento dell'estratto, non a data fissa (il 1° del mese i dati di fine mese spesso mancano).
+Suggerimenti di attendibilità della previsione presentati all'utente lo stesso giorno, da scegliere: uscite stimate su
+più anni (picchi tipo assegni gennaio 2025), incassi della stagione dalla proiezione del Budget invece del budget fisso,
+credito IVA 2026 calcolato dai dati (Fase 5C) invece di copiato, IVA dei mesi futuri da vendite/acquisti previsti,
+blocco 4C (criterio raggiunto).
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**

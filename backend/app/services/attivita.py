@@ -73,7 +73,7 @@ CATALOGO = [
     Attivita("prenotazioni", "Prenotazioni Welcome: disdette e non disdette", "Forecast", "mensile", giorno=5,
              parti=("disdetta", "non_disdetta"), link="/forecast", nota="Forecast → Importa Welcome, due file."),
     Attivita("previsione", "Salva previsione di cassa", "Tesoreria", "mensile", giorno=5, link="/tesoreria",
-             nota="Previsione → Salva previsione: serve per confrontare previsto e reale."),
+             nota="Si salva da sola al primo estratto conto che arriva a fine mese prima; altrimenti Previsione → Salva previsione."),
     Attivita("passcom", "Scadenzario fornitori Passcom", "Tesoreria", "mensile", giorno=5, link="/tesoreria"),
     Attivita("fatture_ade", "ZIP fatture ricevute dall'AdE (mese prima)", "Tesoreria", "mensile", giorno=5,
              link="/tesoreria",

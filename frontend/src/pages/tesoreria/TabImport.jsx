@@ -35,7 +35,8 @@ function ModaleAnteprima({ file, onChiudi, onImportato }) {
     try {
       const r = await api.post('/tesoreria/import/conferma', { token: anteprima.token, note: note || null },
         { timeout: TIMEOUT_IMPORT })
-      avvisi.successo(`Import completato: ${r.data.n_nuovi} movimenti nuovi, ${r.data.n_saldi} saldi`)
+      avvisi.successo(`Import completato: ${r.data.n_nuovi} movimenti nuovi, ${r.data.n_saldi} saldi`
+        + (r.data.previsione_salvata ? '. Salvata anche la previsione del mese' : ''))
       onImportato()
     } catch (e) {
       setErrore(mostraErrore(e, "Errore durante l'import"))

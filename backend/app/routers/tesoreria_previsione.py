@@ -3,7 +3,8 @@ chiama services/tesoreria_previsione.py. Tutto calcolato alla richiesta: una mod
 """
 
 import json
-from datetime import date
+import logging
+from datetime import date, timedelta
 from decimal import Decimal
 
 from typing import Optional
@@ -44,6 +45,12 @@ from app.services.tesoreria_saldi import saldo_a_data
 from app.utils.locale_it import MESI_IT
 
 router = APIRouter()
+log = logging.getLogger(__name__)
+
+# Salvataggio automatico: un estratto conto "arriva a fine mese" se la sua ultima data è al massimo a tanti giorni
+# dall'ultimo giorno del mese prima (l'XML non ha i giorni senza movimenti: weekend, festivi).
+TOLLERANZA_FINE_MESE = 4
+GIORNO_AVVISO_SALVATE = 8   # dal giorno 8 avviso se il mese non ha ancora una previsione salvata
 
 CHIAVE_PARAMETRI = "tesoreria_previsione_parametri"
 GRUPPO_DA_TIPO = {"affitto": "affitti", "mutuo": "mutuo", "ricorrente": "ricorrenti", "intervento": "interventi", "carta": "carte", "compenso": "compensi", "advertising": "advertising"}
@@ -218,6 +225,10 @@ def _risposta(d: DatiPrevisione, db: Session) -> dict:
     mancanti = cedolini_mancanti(netti_per_mese(db), d.oggi)
     avvisi = [f"Cedolini di {MESI_IT[mancanti[1] - 1]} {mancanti[0]} non importati: gli stipendi del mese dopo sono "
               "stimati dallo storico della banca (Dipendenti → Import PDF)"] if mancanti else []
+    if d.oggi.day >= GIORNO_AVVISO_SALVATE and not salvata_nel_mese(db, d.oggi):
+        prima = d.oggi.replace(day=1) - timedelta(days=1)
+        avvisi.append(f"Nessuna previsione salvata a {MESI_IT[d.oggi.month - 1]}: si salva da sola caricando un estratto "
+                      f"conto che arriva a fine {MESI_IT[prima.month - 1]}, oppure con «Salva previsione» qui sotto")
     return {
         "avvisi": avvisi,
         "oggi": d.oggi.isoformat(), "saldo_iniziale": euro(d.saldo_iniziale),
@@ -259,14 +270,44 @@ def prova(corpo: ProvaIn, db: Session = Depends(get_db), _=Depends(puo_vedere)):
     return _risposta(d, db)
 
 
-@router.post("/previsione/salva")
-def salva(corpo: SalvaIn, db: Session = Depends(get_db), utente: User = Depends(puo_modificare)):
-    oggi = date.today()
-    s = TesoreriaPrevisioneSalvata(data_riferimento=oggi, nota=(corpo.nota or "").strip()[:255] or None,
-                                   dati=_risposta(dati_previsione(db, oggi), db), utente_id=getattr(utente, "id", None))
+def salva_previsione(db: Session, oggi: date, nota: Optional[str], utente_id: Optional[int]) -> TesoreriaPrevisioneSalvata:
+    s = TesoreriaPrevisioneSalvata(data_riferimento=oggi, nota=(nota or "").strip()[:255] or None,
+                                   dati=_risposta(dati_previsione(db, oggi), db), utente_id=utente_id)
     db.add(s)
     db.commit()
-    return _salvata_json(s)
+    return s
+
+
+def salvata_nel_mese(db: Session, oggi: date) -> bool:
+    return db.query(TesoreriaPrevisioneSalvata.id).filter(
+        TesoreriaPrevisioneSalvata.data_riferimento >= oggi.replace(day=1),
+        TesoreriaPrevisioneSalvata.data_riferimento <= oggi).first() is not None
+
+
+def arriva_a_fine_mese(data_a: Optional[date], oggi: date) -> bool:
+    """L'estratto copre la fine del mese prima di oggi (anche se l'ultimo movimento è qualche giorno prima)."""
+    fine_prima = oggi.replace(day=1) - timedelta(days=1)
+    return data_a is not None and data_a >= fine_prima - timedelta(days=TOLLERANZA_FINE_MESE)
+
+
+def salva_automatica(db: Session, data_a: Optional[date], nome_file: str, utente_id: Optional[int],
+                     oggi: Optional[date] = None) -> Optional[int]:
+    """Dopo l'import di un estratto conto: salva la previsione del mese se non c'è ancora e l'estratto arriva a fine
+    del mese prima (saldo di partenza aggiornato). Un errore qui non deve annullare l'import: lo registra e basta."""
+    oggi = oggi or date.today()
+    try:
+        if not arriva_a_fine_mese(data_a, oggi) or salvata_nel_mese(db, oggi):
+            return None
+        return salva_previsione(db, oggi, f"Automatica (estratto conto {nome_file})", utente_id).id
+    except Exception:
+        db.rollback()
+        log.exception("Salvataggio automatico della previsione non riuscito")
+        return None
+
+
+@router.post("/previsione/salva")
+def salva(corpo: SalvaIn, db: Session = Depends(get_db), utente: User = Depends(puo_modificare)):
+    return _salvata_json(salva_previsione(db, date.today(), corpo.nota, getattr(utente, "id", None)))
 
 
 def _salvata_json(s: TesoreriaPrevisioneSalvata) -> dict:

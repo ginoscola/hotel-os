@@ -310,3 +310,50 @@ def test_stipendi_tolti_dalla_stima_del_personale():
     gennaio = _mese(calcola_scenario(d, "realista"), 1)
     assert gennaio["uscite_certe"]["stipendi"] == D("8")
     assert gennaio["uscite_stimate"]["personale"] == D("2")
+
+
+def test_arriva_a_fine_mese():
+    from app.routers.tesoreria_previsione import arriva_a_fine_mese
+    oggi = date(2026, 11, 3)
+    assert arriva_a_fine_mese(date(2026, 10, 27), oggi)      # 31/10 sabato: margine di 4 giorni
+    assert arriva_a_fine_mese(date(2026, 11, 2), oggi)
+    assert not arriva_a_fine_mese(date(2026, 10, 26), oggi)
+    assert not arriva_a_fine_mese(date(2025, 12, 31), oggi)  # file vecchio ricaricato
+    assert not arriva_a_fine_mese(None, oggi)
+
+
+def test_salvataggio_automatico_una_volta_al_mese(client, test_engine):
+    from app.routers.tesoreria_previsione import salva_automatica
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_previsioni_salvate RESTART IDENTITY"))
+    client.put("/tesoreria/impegni/parametri", json={"orizzonte": f"{date.today().year + 1}-12-31"})
+    oggi = date.today()
+    db = sessionmaker(bind=test_engine)()
+    try:
+        assert salva_automatica(db, date(oggi.year - 1, 1, 31), "vecchio.xml", None, oggi) is None
+        primo = salva_automatica(db, oggi, "nuovo.xml", None, oggi)
+        assert primo is not None
+        assert salva_automatica(db, oggi, "altro.xml", None, oggi) is None   # già salvata nel mese
+    finally:
+        db.close()
+    salvate = client.get("/tesoreria/previsione/salvate").json()
+    assert len(salvate) == 1 and salvate[0]["nota"] == "Automatica (estratto conto nuovo.xml)"
+    # con una previsione salvata nel mese non compare l'avviso
+    assert not any("Nessuna previsione salvata" in a for a in client.get("/tesoreria/previsione").json()["avvisi"])
+
+
+def test_avviso_previsione_non_salvata(client, test_engine):
+    from app.routers.tesoreria_previsione import _risposta, dati_previsione
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_previsioni_salvate RESTART IDENTITY"))
+    client.put("/tesoreria/impegni/parametri", json={"orizzonte": f"{date.today().year + 1}-12-31"})
+    oggi = date.today()
+    db = sessionmaker(bind=test_engine)()
+    try:
+        def avvisato(giorno):
+            g = oggi.replace(day=giorno)
+            return any("Nessuna previsione salvata" in a for a in _risposta(dati_previsione(db, g), db)["avvisi"])
+        assert not avvisato(7)
+        assert avvisato(8)
+    finally:
+        db.close()
