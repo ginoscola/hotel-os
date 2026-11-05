@@ -7,7 +7,7 @@
   ricalcola gli abbinamenti con la banca (anche le rate delle fatture non ancora in Passcom).
 - GET /fatture/import, GET /fatture/import/{id}/file, DELETE /fatture/import/{id}?conferma=true (toglie le fatture
   che quell'import ha inserito per primo).
-- GET /fatture (filtri, stato, paginazione), GET /fatture/{id}, GET /fatture/da-registrare/export.
+- GET /fatture (filtri, stato, paginazione), GET /fatture/{id}, GET /fatture/da-registrare/export (solo le da registrare).
 Pagare a mano e abbinare a mano una rata usano gli endpoint dello scadenzario con la chiave `XML:{impronta}#{rata}`.
 """
 
@@ -48,12 +48,12 @@ router = APIRouter()
 
 MAX_ERRORI_ANTEPRIMA = 200
 STATI = ("autofattura", "in_scadenzario", "pagata_banca", "pagata_manuale", "pagata_carta", "da_confermare",
-         "da_registrare", "da_verificare", "chiusa")
+         "da_registrare", "chiusa")
 ETICHETTE_STATO = {
     "autofattura": "Autofattura (solo IVA)", "in_scadenzario": "Nello scadenzario Passcom",
     "pagata_banca": "Pagata in banca", "pagata_manuale": "Segnata pagata a mano", "pagata_carta": "Pagata con carta",
     "da_confermare": "Pagamento da confermare", "da_registrare": "Da registrare",
-    "da_verificare": "Da verificare", "chiusa": "Chiusa in contabilità",
+    "chiusa": "Chiusa in contabilità",
 }
 ORDINAMENTI = {
     "data_ricezione": TesoreriaFattura.data_ricezione, "data_documento": TesoreriaFattura.data_documento,
@@ -335,9 +335,8 @@ def export_da_registrare(formato: str = Query("xlsx", pattern="^(xlsx|csv|pdf)$"
                          db: Session = Depends(get_db), _=Depends(puo_vedere)):
     """Fatture arrivate allo SDI ma non ancora nello scadenzario Passcom: la lista da mandare allo studio."""
     st = stato_fatture(db)
-    righe = sorted((r for r in st["righe"] if r["stato"] in ("da_registrare", "da_verificare")),
-                   key=lambda r: (r["stato"] != "da_registrare", r["fattura"].cedente_denominazione.lower(),
-                                  r["fattura"].data_documento))
+    righe = sorted((r for r in st["righe"] if r["stato"] == "da_registrare"),
+                   key=lambda r: (r["fattura"].cedente_denominazione.lower(), r["fattura"].data_documento))
     intestazioni = ["Stato", "Fornitore", "P.IVA", "Tipo", "Numero", "Data doc.", "Ricevuta", "Totale", "Scadenza"]
     corpo = [[ETICHETTE_STATO[r["stato"]], r["fattura"].cedente_denominazione, r["fattura"].cedente_piva or "",
               r["fattura"].tipo_documento, r["fattura"].numero, cella_data(r["fattura"].data_documento),

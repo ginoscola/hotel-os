@@ -3084,8 +3084,11 @@ Solo backend (+ etichetta della colonna nuova in Previsione), nessun cambio di v
 - Regole pure in `services/tesoreria_fatture.py`; stato in `routers/tesoreria_fatture_stato.py::stato_fatture()`.
   Stati in ordine: `autofattura` (TD16–19…) · `in_scadenzario` · `pagata_banca` · `pagata_manuale` · `pagata_carta`
   (codice in `tesoreria_fornitori_carta`) · `da_confermare` · `da_registrare` (ricevuta ≥ ultima data di registrazione
-  dello studio nella fotografia − 15 gg) · `da_verificare` (nei 60 gg prima) · `chiusa` (più vecchia: non più aperta in
-  Passcom). Senza fotografia: niente "da registrare".
+  dello studio nella fotografia − 15 gg) · `chiusa` (ricevuta prima: non più aperta in Passcom). Senza fotografia:
+  tutte chiuse. **Nessuno stato "da verificare"** (scelta dell'utente 05/11/2026, opzione b): la prima versione aveva
+  anche le assenti da Passcom senza pagamento ricevute nei 60 gg prima del limite (82 fatture, ~111.000 € sui dati veri),
+  quasi tutte già chiuse dallo studio e pagate con carta, contanti o bonifici cumulativi. Rischio accettato: una fattura
+  dimenticata dallo studio resta visibile solo finché è "da registrare" (~15 gg), poi diventa "chiusa".
 - **Abbinamento con la banca**: le rate delle fatture non in Passcom e ricevute da non più di 60 gg prima del limite
   entrano in `ricalcola_abbinamenti()` insieme alle scadenze Passcom (stesso motore `abbina()`, stesse tabelle, chiave
   `XML:{impronta}#{rata}`, codice fornitore Passcom se noto altrimenti `PIVA:…`). Da pagare = Σ rate del file, altrimenti
@@ -3105,14 +3108,13 @@ Solo backend (+ etichetta della colonna nuova in Previsione), nessun cambio di v
   (fatture inserite per prime, CASCADE), `GET /fatture` (`stato` anche più valori separati da virgola, `tipo`, `q`,
   `ricevuta_da/a`, ordinamento, paginazione; `conteggi` per stato, `limite_da_registrare`), `GET /fatture/{id}` (righe
   IVA, rate del file, rate da pagare, scadenze Passcom collegate, abbinamenti; `?xml=true`),
-  `GET /fatture/da-registrare/export` (da registrare + da verificare, per lo studio).
+  `GET /fatture/da-registrare/export` (solo le da registrare, per lo studio).
 - Test `test_tesoreria_fatture_api.py` (13). Suite: 962 verdi.
 - **Prova sui dati veri** (DB di test con conti, movimenti, scadenzario 28/10 e abbinamenti copiati dal reale, poi
   svuotato): 8 ZIP importati, anteprima ≤ 15 s, conferma ≤ 2 s, reimport riconosciuto. Con fotografia 28/10 (ultima
   registrazione 24/10, limite 09/10): in scadenzario 1.123, chiuse 2.994, autofatture 411, pagate in banca 65,
-  pagate con carta 20, da confermare 11, **da registrare 1** (Comune di Gabicce 366 €, ricevuta il 29/10),
-  **da verificare 82 (≈111.000 €)**: quasi tutte già chiuse dallo studio e pagate in modi non riconosciuti (Lidl,
-  Sogeal, GLAM 1574–1576, Ortofrutta…). Gli abbinamenti automatici salgono da 6 a 62 (dati utili anche per la Fase 4C).
+  pagate con carta 20, da confermare 11, **da registrare 1** (Comune di Gabicce 366 €, ricevuta il 29/10), le altre
+  chiuse. Gli abbinamenti automatici salgono da 6 a 62 (dati utili anche per la Fase 4C).
 
 ### Fase 3 — calendario fiscale indipendente dallo studio (30/10/2026)
 Scelta dell'utente: **non dipendere dal commercialista** per il calendario fiscale.

@@ -9,9 +9,12 @@ già abbinato a quella partita IVA). Sui dati 2025–2026 si trovano 1.122 delle
 **Stato** di una fattura (in quest'ordine, decisione dell'utente 05/11/2026 per "da registrare"):
 `autofattura` (TD16–19…, non è un debito) · `in_scadenzario` (la segue Passcom) · `pagata_banca` · `pagata_manuale` ·
 `pagata_carta` (fornitore pagato sempre con carta) · `da_confermare` (pagamento proposto) · `da_registrare` (ricevuta
-dopo l'ultima data di registrazione dello studio − 15 giorni: debito certo non ancora registrato) · `da_verificare`
-(ricevuta nei 60 giorni prima: assente da Passcom senza pagamento trovato, da guardare) · `chiusa` (più vecchia:
-non più aperta in Passcom, quindi registrata e chiusa dallo studio).
+dopo l'ultima data di registrazione dello studio − 15 giorni: debito certo non ancora registrato) · `chiusa` (ricevuta
+prima: non più aperta in Passcom, quindi registrata e chiusa dallo studio). Senza fotografia Passcom: `chiusa`.
+Scelta dell'utente (05/11/2026): nessuno stato intermedio "da verificare" per le assenti da Passcom senza pagamento
+trovato (sui dati veri erano quasi tutte già chiuse e pagate con carta, contanti o bonifici cumulativi).
+Le rate ricevute fino a 60 giorni prima del limite si cercano comunque in banca (`da_abbinare`): stato "pagata"
+invece di "chiusa" e dati per i tempi di pagamento.
 """
 
 import re
@@ -24,7 +27,7 @@ from typing import Optional
 
 ZERO = Decimal("0.00")
 GIORNI_MARGINE_REGISTRAZIONE = 15
-GIORNI_DA_VERIFICARE = 60
+GIORNI_RICERCA_BANCA = 60
 GIORNI_PAGAMENTO_RIPIEGO = 30
 PREFISSO_CHIAVE = "XML:"
 
@@ -139,11 +142,8 @@ def stato_fattura(f, in_passcom: bool, stati_abbinamento: set, pagata_a_mano: bo
         return "pagata_carta"
     if "proposto" in stati_abbinamento:
         return "da_confermare"
-    ricevuta = data_ricevuta(f)
-    if limite and ricevuta >= limite:
+    if limite and data_ricevuta(f) >= limite:
         return "da_registrare"
-    if ricevuta >= (limite or oggi) - timedelta(days=GIORNI_DA_VERIFICARE):
-        return "da_verificare"
     return "chiusa"
 
 
@@ -158,8 +158,8 @@ def impronta_da_chiave(chiave: str) -> Optional[str]:
 
 
 def da_abbinare(ricevuta: date, limite: Optional[date], oggi: date) -> bool:
-    """Le fatture più vecchie della finestra "da verificare" non si cercano in banca (chiuse dallo studio)."""
-    return ricevuta >= (limite or oggi) - timedelta(days=GIORNI_DA_VERIFICARE)
+    """Si cercano in banca le fatture ricevute da 60 giorni prima del limite in poi; le più vecchie no (chiuse)."""
+    return ricevuta >= (limite or oggi) - timedelta(days=GIORNI_RICERCA_BANCA)
 
 
 def compensa_note(rate: list) -> list:

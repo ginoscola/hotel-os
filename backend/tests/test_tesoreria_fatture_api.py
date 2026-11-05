@@ -246,7 +246,7 @@ def test_stato_rispetto_a_passcom_e_banca(client, Sessione):
         ("7", limite + timedelta(days=3), fattura_xml("03333333333", "Carni Spa", "NC1", "2026-10-06", "11.00", tipo="TD04")),
     ]))
     stati = _stati(client)
-    assert stati == {"BA000123": "in_scadenzario", "55": "da_registrare", "88": "da_verificare", "12": "chiusa",
+    assert stati == {"BA000123": "in_scadenzario", "55": "da_registrare", "88": "chiusa", "12": "chiusa",
                      "E-900": "pagata_banca", "10/1": "autofattura", "NC1": "da_registrare"}
     with Sessione() as db:
         assert db.query(TesoreriaFornitorePiva).one().codice_fornitore == "601.00001"   # imparato da Passcom
@@ -255,11 +255,11 @@ def test_stato_rispetto_a_passcom_e_banca(client, Sessione):
     assert [(r.fornitore, importo, r.data_scadenza) for r, importo in st["debiti"]] == \
         [("Carni Spa", Decimal("50.00"), OGGI + timedelta(days=20))]
 
-    r = client.get("/tesoreria/fatture", params={"stato": "da_registrare,da_verificare"}).json()
-    assert r["limite_da_registrare"] == limite.isoformat() and r["totale"] == 3
+    r = client.get("/tesoreria/fatture", params={"stato": "da_registrare,chiusa"}).json()
+    assert r["limite_da_registrare"] == limite.isoformat() and r["totale"] == 4
     assert r["conteggi"]["da_registrare"]["n"] == 2
 
-    # la fattura "da verificare" segnata pagata a mano con l'endpoint dello scadenzario
+    # una fattura chiusa ma recente (cercata in banca) segnata pagata a mano con l'endpoint dello scadenzario
     ferr = client.get("/tesoreria/fatture", params={"q": "ferramenta"}).json()["fatture"][0]
     assert ferr["rate"][0]["data_stimata"]
     k = client.post("/tesoreria/scadenzario/pagate-manuali", json={"chiavi": [ferr["rate"][0]["chiave"]]})
