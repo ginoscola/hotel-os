@@ -3641,6 +3641,11 @@ esistenti, mai query duplicate sulle loro tabelle.
   a ogni sessione sulla Tesoreria controllarli e, se soddisfatti, ricordarlo all'utente. **Fase 5 (fatture XML): in
   attesa** che l'utente scarichi dall'AdE tutti gli ZIP delle fatture ricevute 2025 e 2026 (regole nella sezione
   "Fase 5 — regole per scaricare gli ZIP"), poi strategia e ok.
+- **05/11/2026** — Fase 5 avviata: blocco A (lettore ZIP) e blocco B (import, stato rispetto a Passcom e banca,
+  debiti da registrare in previsione) fatti; scelta b (nessuno stato "da verificare"). Backend riavviato e **storico
+  fatture caricato nel DB reale** (8 ZIP, 4.707 fatture, import #1–#8): 1 da registrare, 11 da confermare.
+  Abbinamenti automatici/confermati: **72 su 38 fornitori → criterio del blocco 4C raggiunto** (segnalato). **Prossimo
+  passo**: Fase 5 blocco C (stima IVA mensile), con ok dell'utente.
 - **28/10/2026 (5)** — blocco D fatto, **Fase 1 chiusa con v4.0.0**. Modulo attivo (solo admin).
   Prossimo: l'utente importa gli XML reali e usa il modulo; correzioni; poi strategia Fase 2
   (scadenzario Passcom) — serve l'ok dell'utente.
