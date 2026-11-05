@@ -3019,10 +3019,10 @@ accanto alla DropZone), così ogni richiesta resta coerente con le precedenti.
   periodo (un "gennaio-marzo-25" conteneva il 2026): mostrare in anteprima il periodo di ricezione
   vero (`dataaccoglienza`). 39 `.p7m` hanno firma non valida ma contenuto leggibile: estrarre con
   `openssl cms -verify -noverify -nosigs -inform DER` (2 sono DER in base64).
-- Stato al 04/11/2026 in `uploads/tesoreria_campioni/fatture_xml/` (rinominati per trimestre): presenti
-  2025-T4, 2026-T1/T2/T3, ottobre 2026 parziale (2.198 ricevute); ottobre 2026 intero richiesto il
-  04/11; **2025 T1/T2/T3 da richiedere il 05/11** (i primi tentativi erano fatture emesse o il 2026).
-  Tre file `…_DA-CANCELLARE.zip` (emesse e doppione) da eliminare.
+- Stato al 05/11/2026 in `uploads/tesoreria_campioni/fatture_xml/`: presenti 2025-T4, 2026-T1/T2/T3 e
+  ottobre 2026 intero (`2026-10-ott.zip`, 66 ricevute fino al 29/10; nessun doppione con il T3). **Mancano
+  2025 T1/T2/T3**: il primo "2025-T1" arrivato il 05/11 conteneva di nuovo il 2026 (stessi `idfile` del
+  2026-T1, rinominato `…_DA-CANCELLARE.zip`) → nella richiesta controllare l'anno delle date.
 
 ### Fase 3 — calendario fiscale indipendente dallo studio (30/10/2026)
 Scelta dell'utente: **non dipendere dal commercialista** per il calendario fiscale.
