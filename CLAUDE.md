@@ -3064,7 +3064,8 @@ Solo backend, nessuna schermata né cambio di versione.
 - **Prova sui dati veri** (senza DB): 8 ZIP, 4.707 fatture, 0 errori, nessun doppione tra ZIP, ~36 s in tutto (il
   ZIP più grande 15 s, quasi tutto openssl), 36 MB di XML senza allegati. Tipi: TD24 2.719, TD01 1.480, TD17 356,
   TD04 83, TD18 38, TD06 11, TD16 9, TD19 8, TD02 3. Da sapere per il blocco B:
-  - **Da pagare = Σ rate (`ImportoPagamento`)**, non il totale: nelle parcelle TD06 le rate sono al netto della
+  - **Da pagare = Σ rate (`ImportoPagamento`)**, non il totale (Σ rate = totale − ritenuta in 3.959 fatture su 3.970
+    con rate complete; 11 fatture con ritenuta): nelle parcelle TD06 le rate sono al netto della
     ritenuta (es. 1.268,80 € con rata 1.068,80 €); alcuni fornitori (Sky, Adriagelo) mettono importi diversi dal
     totale (acconti, cauzioni, rate di più documenti).
   - 737 fatture senza dati di pagamento (in gran parte autofatture), 344 rate senza data di scadenza.
