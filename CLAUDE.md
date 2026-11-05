@@ -3028,7 +3028,7 @@ accanto alla DropZone), così ogni richiesta resta coerente con le precedenti.
   (`{idfile}_{nomefile}`, omonimi dello stesso intermediario) mentre il `_metaDato` riporta `nomefile` senza:
   cercare il file come nome del metaDato senza `_metaDato.xml`. Ultima ricezione 29/10 alle 9:28 (30–31/10 vuoti).
 
-### Fase 5 — strategia approvata (05/11/2026), blocco A da avviare con ok
+### Fase 5 — strategia approvata (05/11/2026)
 Blocchi: **A** tabelle (fattura unica per `idfile`, righe IVA per aliquota, scadenze) + lettore ZIP (p7m anche
 base64, ZIP annidati, file con prefisso `idfile`, errori per file senza bloccare, rifiuto emesse/cessionario diverso,
 XML conservato senza allegati + ZIP originale) → **B** import anteprima/conferma + abbinamento Passcom (numero
@@ -3044,6 +3044,32 @@ Decisioni dell'utente:
   tantum). Il file Passcom delle rate pagate non si usa (eventuale aggiunta solo se l'elenco risulta lungo).
 - **Fatture emesse fuori da Welcome: rare** (circa 1 nel 2026): IVA vendite solo dai Corrispettivi, niente import
   delle fatture emesse.
+
+### Fase 5 — Blocco A fatto (05/11/2026)
+Solo backend, nessuna schermata né cambio di versione.
+- Tabelle (`tes017_2026`, dopo `att001_2026`; applicata al DB reale, vuote): `tesoreria_fatture_import` (log, sha256,
+  file, conteggi nuove/già presenti/errori, periodo di ricezione, errori e avvisi JSON), `tesoreria_fatture`
+  (`impronta` UNIQUE = `SDI:{idfile}` o `H:{sha256}` senza metaDato; `import_id` CASCADE = import che l'ha inserita
+  per primo; cedente, tipo, numero, data, data ricezione con fuso, totale come nel file — note di credito positive —,
+  imponibile/imposta sommati dai riepiloghi, **`ritenuta`** d'acconto, causale, fatture collegate, n. DDT, XML
+  **senza Allegati**), `tesoreria_fatture_iva` (per aliquota/natura, esigibilità), `tesoreria_fatture_scadenze`
+  (rate: condizioni, modalità, scadenza, importo, IBAN).
+- Lettore puro `services/tesoreria_fatture_parser.py::parse_zip_fatture(bytes, piva_azienda)`: file firmati con
+  `openssl cms -verify -noverify -nosigs` (anche in base64), ZIP annidati (max 3 livelli), BOM, file con prefisso
+  `idfile`, fatture senza metaDato; un file illeggibile o un lotto con più fatture → `errori`, non blocca; bloccanti:
+  non ZIP, nessuna fattura, fatture emesse dall'azienda o intestate ad altri. `PIVA_AZIENDA` = 04569190400.
+  `TIPI_AUTOFATTURA` (TD16–23, 26–28) e `TIPI_NOTA_CREDITO` (TD04, TD08) per il blocco B.
+- Test `test_tesoreria_fatture_parser.py` (16) con fatture inventate in `tests/fixtures/tesoreria/fatture/`
+  (`firmata.xml.p7m` firmata con un certificato di prova). Suite: 949 verdi.
+- **Prova sui dati veri** (senza DB): 8 ZIP, 4.707 fatture, 0 errori, nessun doppione tra ZIP, ~36 s in tutto (il
+  ZIP più grande 15 s, quasi tutto openssl), 36 MB di XML senza allegati. Tipi: TD24 2.719, TD01 1.480, TD17 356,
+  TD04 83, TD18 38, TD06 11, TD16 9, TD19 8, TD02 3. Da sapere per il blocco B:
+  - **Da pagare = Σ rate (`ImportoPagamento`)**, non il totale: nelle parcelle TD06 le rate sono al netto della
+    ritenuta (es. 1.268,80 € con rata 1.068,80 €); alcuni fornitori (Sky, Adriagelo) mettono importi diversi dal
+    totale (acconti, cauzioni, rate di più documenti).
+  - 737 fatture senza dati di pagamento (in gran parte autofatture), 344 rate senza data di scadenza.
+  - Amazon Business arrotonda: totale ≠ Σ riepiloghi di qualche centesimo (usare il totale).
+  - Nessuna IVA a esigibilità differita o in scissione nei dati reali.
 
 ### Fase 3 — calendario fiscale indipendente dallo studio (30/10/2026)
 Scelta dell'utente: **non dipendere dal commercialista** per il calendario fiscale.

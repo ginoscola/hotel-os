@@ -493,3 +493,90 @@ class TesoreriaInterventoScadenza(Base):
     data_scadenza    = Column(Date, nullable=False)
     numero_documento = Column(String(30), nullable=True)
     importo          = Column(Numeric(14, 2), nullable=False)
+
+
+# ── Fase 5: fatture elettroniche ricevute (ZIP scaricati dal portale AdE) ──────
+
+class TesoreriaFattureImport(Base):
+    """Un caricamento di ZIP di fatture ricevute, con il file originale su disco."""
+    __tablename__ = "tesoreria_fatture_import"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    nome_file     = Column(String(255), nullable=False)
+    sha256        = Column(String(64), nullable=False, index=True)
+    percorso      = Column(String(500), nullable=True)
+    n_file        = Column(Integer, nullable=False, default=0, server_default="0")   # fatture nello ZIP
+    n_nuove       = Column(Integer, nullable=False, default=0, server_default="0")
+    n_presenti    = Column(Integer, nullable=False, default=0, server_default="0")   # già importate prima
+    n_errori      = Column(Integer, nullable=False, default=0, server_default="0")
+    ricezione_da  = Column(Date, nullable=True)
+    ricezione_a   = Column(Date, nullable=True)
+    errori        = Column(JSON, nullable=True)                     # [{file, motivo}]
+    avvisi        = Column(JSON, nullable=True)
+    note          = Column(Text, nullable=True)
+    utente_id     = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class TesoreriaFattura(Base):
+    """Una fattura ricevuta. `impronta` = 'SDI:{idfile}' (o sha256 del contenuto senza metaDato):
+    ricaricare uno ZIP sovrapposto non crea doppioni. `import_id` = import che l'ha inserita per primo."""
+    __tablename__ = "tesoreria_fatture"
+
+    id                    = Column(Integer, primary_key=True, autoincrement=True)
+    import_id             = Column(Integer, ForeignKey("tesoreria_fatture_import.id", ondelete="CASCADE"), nullable=False, index=True)
+    impronta              = Column(String(80), nullable=False, unique=True)
+    id_sdi                = Column(String(30), nullable=True)
+    nome_file             = Column(String(255), nullable=False)
+    data_ricezione        = Column(DateTime(timezone=True), nullable=True, index=True)
+    cedente_paese         = Column(String(2), nullable=True)
+    cedente_piva          = Column(String(30), nullable=True, index=True)
+    cedente_cf            = Column(String(30), nullable=True)
+    cedente_denominazione = Column(String(200), nullable=False)
+    tipo_documento        = Column(String(4), nullable=False)       # TD01, TD04 nota di credito, TD24 differita…
+    numero                = Column(String(40), nullable=False)
+    data_documento        = Column(Date, nullable=False)
+    divisa                = Column(String(3), nullable=False, default="EUR", server_default="EUR")
+    totale                = Column(Numeric(14, 2), nullable=False)  # come nel file (note di credito positive)
+    totale_calcolato      = Column(Boolean, nullable=False, default=False, server_default="false")
+    imponibile            = Column(Numeric(14, 2), nullable=False)
+    imposta               = Column(Numeric(14, 2), nullable=False)
+    ritenuta              = Column(Numeric(14, 2), nullable=True)   # ritenuta d'acconto (parcelle)
+    causale               = Column(Text, nullable=True)
+    fatture_collegate     = Column(JSON, nullable=True)
+    n_ddt                 = Column(Integer, nullable=False, default=0, server_default="0")
+    ha_allegati           = Column(Boolean, nullable=False, default=False, server_default="false")
+    xml                   = Column(Text, nullable=False)            # senza Allegati
+    created_at            = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_tesoreria_fatture_doc", "cedente_piva", "numero", "data_documento"),
+    )
+
+
+class TesoreriaFatturaIva(Base):
+    """Riepilogo IVA di una fattura (una riga per aliquota/natura, `DatiRiepilogo`)."""
+    __tablename__ = "tesoreria_fatture_iva"
+
+    id                    = Column(Integer, primary_key=True, autoincrement=True)
+    fattura_id            = Column(Integer, ForeignKey("tesoreria_fatture.id", ondelete="CASCADE"), nullable=False, index=True)
+    aliquota              = Column(Numeric(6, 2), nullable=False)
+    natura                = Column(String(10), nullable=True)
+    imponibile            = Column(Numeric(14, 2), nullable=False)
+    imposta               = Column(Numeric(14, 2), nullable=False)
+    esigibilita           = Column(String(1), nullable=True)
+    riferimento_normativo = Column(String(100), nullable=True)
+
+
+class TesoreriaFatturaScadenza(Base):
+    """Rata di pagamento di una fattura (`DatiPagamento/DettaglioPagamento`)."""
+    __tablename__ = "tesoreria_fatture_scadenze"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    fattura_id    = Column(Integer, ForeignKey("tesoreria_fatture.id", ondelete="CASCADE"), nullable=False, index=True)
+    numero_rata   = Column(Integer, nullable=False)
+    condizioni    = Column(String(4), nullable=True)
+    modalita      = Column(String(4), nullable=True)
+    data_scadenza = Column(Date, nullable=True, index=True)
+    importo       = Column(Numeric(14, 2), nullable=True)
+    iban          = Column(String(34), nullable=True)
