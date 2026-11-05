@@ -32,6 +32,7 @@ from app.routers.tesoreria_shared import euro, puo_modificare, puo_vedere
 from app.services.tesoreria_abbinamento import (
     ABI_PAGAMENTI, MovimentoUscita, ScadenzaDaAbbinare, abbina, forza_nome, normalizza_nome,
 )
+from app.services.tesoreria_fatture import PREFISSO_CHIAVE
 from app.services.tesoreria_scadenzario import e_residuo, per_fornitore, unisci_fotografia
 
 router = APIRouter()
@@ -156,12 +157,17 @@ def ricalcola_abbinamenti(db: Session) -> dict:
         .delete(synchronize_session=False)
     db.flush()
 
+    from app.routers.tesoreria_fatture_stato import _contesto, aggiorna_fornitori_piva, rate_xml_da_abbinare
     data_foto, scadenze = fotografia_corrente(db)
-    if not scadenze:
-        return {"n_automatici": 0, "n_proposti": 0, "n_scadenze_automatiche": 0, "n_scadenze_proposte": 0}
     escluse = _chiavi_in(db, ("confermato",)) | {k for (k,) in db.query(TesoreriaPagataManuale.chiave)}
     carta = fornitori_carta(db)
-    da = _da_abbinare([s for s in scadenze if s.codice_fornitore not in carta], data_foto, escluse)
+    da = _da_abbinare([s for s in scadenze if s.codice_fornitore not in carta], data_foto, escluse) if scadenze else []
+    # Fase 5: rate delle fatture ricevute non presenti in Passcom, cercate in banca con lo stesso motore
+    ctx = _contesto(db)
+    aggiorna_fornitori_piva(db, ctx)
+    da += [r for r in rate_xml_da_abbinare(db, ctx=ctx) if r.chiave not in escluse]
+    if not da:
+        return {"n_automatici": 0, "n_proposti": 0, "n_scadenze_automatiche": 0, "n_scadenze_proposte": 0}
     movimenti = _uscite_pagamento(db, _movimenti_in(db, ("confermato",)))
     per_chiave = {s.chiave: s for s in da}
     proposte = abbina(da, movimenti, _alias(db), _coppie_scartate(db))
@@ -229,6 +235,9 @@ def _scadenze_correnti(db: Session, chiavi: list) -> list:
         raise HTTPException(400, "Nessuna scadenza indicata")
     _, scadenze = fotografia_corrente(db)
     per_chiave = {s.chiave: s for s in scadenze}
+    if any(k.startswith(PREFISSO_CHIAVE) for k in chiavi):         # rate di fatture ricevute non in Passcom (Fase 5)
+        from app.routers.tesoreria_fatture_stato import rate_xml_da_abbinare
+        per_chiave.update({r.chiave: r for r in rate_xml_da_abbinare(db)})
     mancanti = [k for k in chiavi if k not in per_chiave]
     if mancanti:
         raise HTTPException(400, f"Scadenze non presenti nell'ultimo scadenzario: {len(mancanti)}")

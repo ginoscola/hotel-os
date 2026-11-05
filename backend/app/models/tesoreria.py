@@ -553,6 +553,16 @@ class TesoreriaFattura(Base):
         Index("ix_tesoreria_fatture_doc", "cedente_piva", "numero", "data_documento"),
     )
 
+    @property
+    def autofattura(self) -> bool:
+        from app.services.tesoreria_fatture_parser import TIPI_AUTOFATTURA
+        return self.tipo_documento in TIPI_AUTOFATTURA
+
+    @property
+    def nota_credito(self) -> bool:
+        from app.services.tesoreria_fatture_parser import TIPI_NOTA_CREDITO
+        return self.tipo_documento in TIPI_NOTA_CREDITO
+
 
 class TesoreriaFatturaIva(Base):
     """Riepilogo IVA di una fattura (una riga per aliquota/natura, `DatiRiepilogo`)."""
@@ -580,3 +590,15 @@ class TesoreriaFatturaScadenza(Base):
     data_scadenza = Column(Date, nullable=True, index=True)
     importo       = Column(Numeric(14, 2), nullable=True)
     iban          = Column(String(34), nullable=True)
+
+
+class TesoreriaFornitorePiva(Base):
+    """Partita IVA del cedente ↔ codice fornitore Passcom, imparato dalle fatture trovate nello scadenzario
+    (Passcom non ha la partita IVA). Resta anche quando le scadenze escono dalle fotografie."""
+    __tablename__ = "tesoreria_fornitori_piva"
+
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    piva             = Column(String(30), nullable=False, unique=True)
+    codice_fornitore = Column(String(20), nullable=False, index=True)
+    fornitore        = Column(String(200), nullable=False)
+    updated_at       = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

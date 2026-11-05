@@ -27,7 +27,9 @@ from app.routers.corrispettivi_report import report_fatturati
 from app.routers.tesoreria_impegni import leggi_parametri as leggi_parametri_fiscali
 from app.routers.tesoreria_impegni_abbina import importo_impegno
 from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti
+from app.routers.tesoreria_fatture_stato import stato_fatture
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
+from app.services.tesoreria_fatture import CATEGORIA_DI_MODALITA
 from app.routers.tesoreria_piani import rate_intervento
 from app.routers.tesoreria_caparre import caparre_db, caparre_per_mese, senza_periodo_db
 from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, puo_vedere
@@ -126,6 +128,10 @@ def _certe(db: Session, oggi: date) -> list:
     for s in stato_scadenze(db, oggi)["scadenze"]:
         if s["stato"] in STATI_SCADENZA_APERTA and s["aperto"] > 0:
             out.append(Certa(s["data_scadenza"], Decimal(str(s["aperto"])), "fornitori", "fornitori_bonifici"))
+    # Fase 5: fatture arrivate allo SDI e non ancora nello scadenzario (al netto delle note di credito)
+    for r, importo in stato_fatture(db, oggi)["debiti"]:
+        out.append(Certa(r.data_scadenza, importo, "fatture", CATEGORIA_DI_MODALITA.get(r.tipo_pagamento, "fornitori_bonifici"),
+                         codice=r.chiave))
     return out
 
 
@@ -293,7 +299,7 @@ def elimina_salvata(salvata_id: int, db: Session = Depends(get_db), _=Depends(pu
 
 COLONNE_CERTE = (("fisco", "Fisco"), ("affitti", "Affitti"), ("mutuo", "Mutuo"), ("ricorrenti", "Ricorrenti"),
                  ("interventi", "Interventi"), ("compensi", "Compensi soci"), ("advertising", "Advertising (carta)"), ("carte", "Carte (estratti)"), ("stipendi", "Stipendi netti"),
-                 ("fornitori", "Fornitori (scadenzario)"))
+                 ("fornitori", "Fornitori (scadenzario)"), ("fatture", "Fatture da registrare"))
 COLONNE_STIMATE = (("fornitori", "Fornitori stimati"), ("personale", "Personale"), ("utenze", "Utenze"),
                    ("marketing", "Marketing"), ("carte", "Carte stimate"), ("altre", "Altre"))
 

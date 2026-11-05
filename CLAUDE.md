@@ -3072,6 +3072,48 @@ Solo backend, nessuna schermata né cambio di versione.
   - Amazon Business arrotonda: totale ≠ Σ riepiloghi di qualche centesimo (usare il totale).
   - Nessuna IVA a esigibilità differita o in scissione nei dati reali.
 
+### Fase 5 — Blocco B fatto (05/11/2026)
+Solo backend (+ etichetta della colonna nuova in Previsione), nessun cambio di versione. **Serve il riavvio del backend.**
+- **Numero in Passcom = ultime 6 cifre del numero della fattura, senza zeri iniziali** (`numero_passcom()`: 'BA046401'
+  → '46401', '991/2026' → '912026', '351697231' → '697231'; verificato su 1.107 coppie reali). Fattura nello
+  scadenzario = scadenza con stesso numero Passcom + stessa data documento + nome compatibile (`forza_nome` ≥ 1) o
+  codice fornitore già noto per quella P.IVA. Trova 1.122 delle 1.143 scadenze Passcom 2025–2026 (le altre: fatture
+  estere Meta/Google, nello SDI solo come autofattura); nessun numero ambiguo tra fornitori.
+- Tabella `tesoreria_fornitori_piva` (`tes018_2026`, applicata al DB reale): P.IVA ↔ codice Passcom, imparata a ogni
+  ricalcolo degli abbinamenti (`aggiorna_fornitori_piva()`), resta anche quando la scadenza esce dalle fotografie.
+- Regole pure in `services/tesoreria_fatture.py`; stato in `routers/tesoreria_fatture_stato.py::stato_fatture()`.
+  Stati in ordine: `autofattura` (TD16–19…) · `in_scadenzario` · `pagata_banca` · `pagata_manuale` · `pagata_carta`
+  (codice in `tesoreria_fornitori_carta`) · `da_confermare` · `da_registrare` (ricevuta ≥ ultima data di registrazione
+  dello studio nella fotografia − 15 gg) · `da_verificare` (nei 60 gg prima) · `chiusa` (più vecchia: non più aperta in
+  Passcom). Senza fotografia: niente "da registrare".
+- **Abbinamento con la banca**: le rate delle fatture non in Passcom e ricevute da non più di 60 gg prima del limite
+  entrano in `ricalcola_abbinamenti()` insieme alle scadenze Passcom (stesso motore `abbina()`, stesse tabelle, chiave
+  `XML:{impronta}#{rata}`, codice fornitore Passcom se noto altrimenti `PIVA:…`). Da pagare = Σ rate del file, altrimenti
+  totale − ritenuta; note di credito negative. Senza data di scadenza: data documento + giorni abituali del fornitore
+  (mediana dalle sue fatture) o 30, `data_stimata`; senza modalità nel file `tipo_pagamento='NON INDICATA'` → nessun
+  canale principale, finestra larga −30/+45 e sempre da confermare (caso reale Campanelli: scadenza stimata 04/11,
+  bonifico il 07/10). `_scadenze_correnti()` accetta le chiavi `XML:` → **pagare a mano, abbinare a mano e candidati
+  usano gli endpoint dello scadenzario** (`/scadenzario/pagate-manuali`, `/abbinamenti/manuale`, `/movimenti-candidati`).
+- **Previsione**: solo `da_registrare` (le "da confermare" hanno già un pagamento probabile in banca), note di credito
+  compensate per fornitore (`compensa_note()`, credito avanzato ignorato) → gruppo **`fatture`** "Fatture da registrare",
+  categoria per modalità (Ri.Ba. → fornitori_riba, SDD → fornitori_sdd, assegno → assegni, altro → fornitori_bonifici),
+  tolta dalla stima dei fornitori.
+- Router `routers/tesoreria_fatture.py`: `POST /fatture/anteprima` (multipart `file`; nuove / già presenti per `idfile` /
+  doppie per P.IVA + numero + data; ZIP e lettura in pickle nell'area `_anteprima`, la conferma non rilegge lo ZIP),
+  `POST /fatture/conferma` (`{token, note}`, 409 stesso sha256; ZIP in `{TESORERIA_DIR}/fatture/{anno}/`; ricalcola gli
+  abbinamenti), `GET /fatture/import`, `GET /fatture/import/{id}/file`, `DELETE /fatture/import/{id}?conferma=true`
+  (fatture inserite per prime, CASCADE), `GET /fatture` (`stato` anche più valori separati da virgola, `tipo`, `q`,
+  `ricevuta_da/a`, ordinamento, paginazione; `conteggi` per stato, `limite_da_registrare`), `GET /fatture/{id}` (righe
+  IVA, rate del file, rate da pagare, scadenze Passcom collegate, abbinamenti; `?xml=true`),
+  `GET /fatture/da-registrare/export` (da registrare + da verificare, per lo studio).
+- Test `test_tesoreria_fatture_api.py` (13). Suite: 962 verdi.
+- **Prova sui dati veri** (DB di test con conti, movimenti, scadenzario 28/10 e abbinamenti copiati dal reale, poi
+  svuotato): 8 ZIP importati, anteprima ≤ 15 s, conferma ≤ 2 s, reimport riconosciuto. Con fotografia 28/10 (ultima
+  registrazione 24/10, limite 09/10): in scadenzario 1.123, chiuse 2.994, autofatture 411, pagate in banca 65,
+  pagate con carta 20, da confermare 11, **da registrare 1** (Comune di Gabicce 366 €, ricevuta il 29/10),
+  **da verificare 82 (≈111.000 €)**: quasi tutte già chiuse dallo studio e pagate in modi non riconosciuti (Lidl,
+  Sogeal, GLAM 1574–1576, Ortofrutta…). Gli abbinamenti automatici salgono da 6 a 62 (dati utili anche per la Fase 4C).
+
 ### Fase 3 — calendario fiscale indipendente dallo studio (30/10/2026)
 Scelta dell'utente: **non dipendere dal commercialista** per il calendario fiscale.
 - Date per legge (calcolate da HotelOS, slittamento al primo giorno lavorativo); importi da: **cassetto

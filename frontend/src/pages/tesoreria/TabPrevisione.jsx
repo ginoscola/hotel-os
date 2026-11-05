@@ -21,7 +21,7 @@ const SCENARI = [
 ]
 const NOMI_CERTE = {
   fisco: 'Fisco', affitti: 'Affitti', mutuo: 'Mutuo', ricorrenti: 'Ricorrenti', interventi: 'Interventi', compensi: 'Compensi soci', advertising: 'Advertising (carta)',
-  carte: 'Estratti carte', stipendi: 'Stipendi netti (cedolini)', fornitori: 'Fornitori (scadenzario)', altri_impegni: 'Altri impegni',
+  carte: 'Estratti carte', stipendi: 'Stipendi netti (cedolini)', fornitori: 'Fornitori (scadenzario)', fatture: 'Fatture da registrare (SDI)', altri_impegni: 'Altri impegni',
 }
 const NOMI_STIMATE = { fornitori: 'Fornitori', personale: 'Personale', utenze: 'Utenze', marketing: 'Marketing', carte: 'Carte', altre: 'Altre' }
 const COLORE_SALDO = colors.info
