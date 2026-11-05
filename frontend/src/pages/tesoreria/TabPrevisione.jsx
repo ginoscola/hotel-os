@@ -140,7 +140,9 @@ function DettaglioMese({ riga, onChiudi }) {
         <p className="ui-text-muted" style={{ margin: '0 0 6px' }}>
           Dallo stesso mese {riga.riferimento_uscite.length > 1
             ? `del ${riga.riferimento_uscite[0]} (peso doppio) e del ${riga.riferimento_uscite[1]}`
-            : `del ${riga.riferimento_uscite[0]}`}, scalato sul Budget. Entrate sul ritmo del {riga.riferimento_entrate ?? '—'}.
+            : `del ${riga.riferimento_uscite[0]}`}
+          {riga.riferimento_previsti?.length > 0 && ` (del ${riga.riferimento_uscite[0]}, ${MESI_BREVI[riga.riferimento_previsti[0] - 1]}–dic sono quelli previsti qui)`}, scalato sul Budget.
+          Entrate sul ritmo del {riga.riferimento_entrate ?? '—'}.
         </p>
       )}
       {Object.entries(riga.uscite_stimate).filter(([, v]) => v > 0).map(([k, v]) => <div key={k}>{NOMI_STIMATE[k] || k}: {formatEuro(v)}</div>)}

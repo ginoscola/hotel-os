@@ -3582,11 +3582,18 @@ contro +23.000 € del 2026, ~140.000 € di fornitori persi). Ora (`services/te
 - **Ricavi degli anni prima di HotelOS** (2025) da `lordo_storico_anno()` di `services/wave_dati.py` = Σ netto dello
   storico WAVE (hotel + ristoranti, apr–set) × 1,10, scelta dell'utente. 2025 = 1.841.704 €, 2026 = 1.830.727 €.
   `_ricavi_e_budget()` ora da `oggi.year − 3`.
-- Righe della risposta con `riferimento_entrate` (anno) e `riferimento_uscite` (lista), mostrati nel dettaglio del mese.
+- **Anno in corso completato con la previsione** (v4.26.1, scelta dell'utente): se mancano al massimo
+  `MESI_PREVISTI_MAX` = 2 mesi a fine anno (novembre–dicembre), l'anno in corso conta già come anno intero; i mesi non
+  conclusi si prendono dalla previsione realista stessa (`completa_anno_corrente()` → `DatiPrevisione.completamento`:
+  per gruppo, già avvenuto nel mese + impegni certi della categoria + stima; carte al netto dell'advertising, come lo
+  storico). Durante quel calcolo l'anno in corso non fa da riferimento a sé stesso. Quindi a novembre 2026 il 2027 usa
+  già 2026 ×2 + 2025 (novembre 2026 = Ri.Ba. già pagate + scadenzario); a gennaio il completamento non serve più.
+- Righe della risposta con `riferimento_entrate` (anno), `riferimento_uscite` (lista) e `riferimento_previsti` (mesi
+  dell'anno di riferimento presi dalla previsione), mostrati nel dettaglio del mese.
 - **Dati corretti**: l'assegno da 61.000 € del 31/01/2025 (categoria "Assegni", finiva nei fornitori stimati di ogni
   gennaio e doppio con l'impegno d'affitto) è la rata di gennaio dell'affitto International → categoria Affitti a mano.
-Effetto al 05/11/2026 (realista): fine 2027 da 143.000 € a 26.000 €, picco agosto 581.000 €, minimo aprile 2027 da
-−75.000 € a −114.000 € (gen–apr 2025 con ~39.000 € di uscite in più del 2026; da gennaio pesa il 2026).
+Effetto al 05/11/2026 (realista): fine 2027 da 143.000 € a −7.500 € (2026: +23.000 €; fido scaduto dal 30/09/2027),
+picco agosto 562.000 €, minimo aprile 2027 da −75.000 € a −88.000 € (solo 2025: −114.000 €).
 
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di

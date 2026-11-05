@@ -195,6 +195,7 @@ def _riga_json(r: dict) -> dict:
         "uscite_certe": {k: euro(v) for k, v in r["uscite_certe"].items()},
         "uscite_stimate": {k: euro(v) for k, v in r["uscite_stimate"].items()},
         "riferimento_entrate": r["riferimento_entrate"], "riferimento_uscite": r["riferimento_uscite"],
+        "riferimento_previsti": r["riferimento_previsti"],
     }
 
 

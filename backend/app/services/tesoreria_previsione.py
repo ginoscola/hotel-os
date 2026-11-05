@@ -22,6 +22,7 @@ UNO = Decimal(1)
 CENTO = Decimal(100)
 GIORNI_CASSA_LIBERA = 90
 PESI_ANNI = (2, 1)          # uscite stimate: media dell'ultimo anno solare intero (peso 2) e di quello prima (peso 1)
+MESI_PREVISTI_MAX = 2       # l'anno in corso vale come anno intero se ne mancano al massimo 2 mesi (novembre–dicembre)
 
 # Categoria → gruppo di stima. Fuori dall'elenco: coperte da impegni (affitti, f24, tassa_soggiorno, mutuo_rate,
 # assicurazioni), non operative, e compensi dei soci (decisi ogni anno in Admin, entrano come impegni).
@@ -69,11 +70,19 @@ def anno_riferimento(y: int, m: int, oggi: date, presenti: set) -> Optional[int]
 
 
 def anni_riferimento_uscite(y: int, oggi: date, presenti: set) -> list:
-    """Anni solari interi (gennaio–dicembre già conclusi e coperti dagli estratti) da cui stimare le uscite di tutto
-    l'anno `y`, dal più recente, al massimo len(PESI_ANNI). Stessi anni per tutti i mesi: se i pagamenti scivolano da
-    un mese all'altro (Ri.Ba. di fine ottobre addebitate a novembre) il totale dell'anno resta giusto."""
-    anni = [r for r in range(y - 1, y - 4, -1)
-            if fine_mese(r, 12) < oggi and all((r, mm) in presenti for mm in range(1, 13))]
+    """Anni solari interi da cui stimare le uscite di tutto l'anno `y`, dal più recente, al massimo len(PESI_ANNI).
+    Stessi anni per tutti i mesi: se i pagamenti scivolano da un mese all'altro (Ri.Ba. di fine ottobre addebitate a
+    novembre) il totale dell'anno resta giusto. Intero = tutti i 12 mesi coperti dagli estratti; l'anno in corso conta se
+    ne mancano al massimo MESI_PREVISTI_MAX mesi, che si prendono dalla previsione stessa (`completamento`)."""
+    anni = []
+    for r in range(y - 1, y - 4, -1):
+        if fine_mese(r, 12) < oggi:
+            intero = all((r, mm) in presenti for mm in range(1, 13))
+        else:
+            intero = (r == oggi.year and 13 - oggi.month <= MESI_PREVISTI_MAX
+                      and all((r, mm) in presenti for mm in range(1, oggi.month)))
+        if intero:
+            anni.append(r)
     return anni[:len(PESI_ANNI)]
 
 
@@ -163,6 +172,9 @@ class DatiPrevisione:
     advertising: dict = field(default_factory=dict)   # {(y, m): Decimal} advertising addebitato dalle carte nel mese
     # {(y, m) di arrivo: (caparre in banca oggi, caparre per (y-1, m) in banca un anno fa o None se lo storico non basta)}
     caparre: dict = field(default_factory=dict)
+    # {(anno in corso, mese): {gruppo: uscite}} dei mesi non ancora conclusi dell'anno in corso, dalla previsione
+    # realista: completano l'anno come riferimento (vedi anni_riferimento_uscite). None = da calcolare.
+    completamento: Optional[dict] = None
 
 
 def _crescita(gruppo: str, fattore: Decimal, parametri: dict) -> Decimal:
@@ -176,10 +188,24 @@ def _mesi_con_dati(d: DatiPrevisione) -> set:
     return set(d.entrate).union(*(set(v) for v in d.uscite.values()))
 
 
+def _storico_gruppi(d: DatiPrevisione, rif: int, m: int) -> dict:
+    """Uscite per gruppo di stima nel mese `m` dell'anno `rif`: dalla banca o, per i mesi dell'anno in corso non ancora
+    conclusi, dalla previsione (`completamento`)."""
+    if d.completamento and (rif, m) in d.completamento:
+        return d.completamento[(rif, m)]
+    gruppi = {}
+    for categoria, gruppo in GRUPPI_STIMA.items():
+        valore = d.uscite.get(categoria, {}).get((rif, m), ZERO)
+        if categoria == "carte":
+            # L'advertising è deciso in Admin ed entra come impegno: qui restano solo le altre spese con carta
+            valore = max(valore - d.advertising.get((rif, m), ZERO), ZERO)
+        gruppi[gruppo] = gruppi.get(gruppo, ZERO) + valore
+    return gruppi
+
+
 def stime_mese(d: DatiPrevisione, y: int, m: int) -> dict:
     """{gruppo: stima} del mese, scenario realista, prima di togliere le uscite certe. Media pesata degli anni di
-    `anni_riferimento_uscite()`, ognuno portato all'anno `y` con il proprio fattore di crescita; senza un anno intero
-    (primi mesi di dati) l'ultimo anno con quel mese concluso."""
+    `riferimento_uscite()`, ognuno portato all'anno `y` con il proprio fattore di crescita."""
     anni = riferimento_uscite(d, y, m)
     if not anni:
         return {}
@@ -187,25 +213,39 @@ def stime_mese(d: DatiPrevisione, y: int, m: int) -> dict:
     gruppi = {}
     for rif, peso in zip(anni, pesi):
         fattore = fattore_budget(y, d.budget, d.ricavi, rif)
-        for categoria, gruppo in GRUPPI_STIMA.items():
+        for gruppo, storico in _storico_gruppi(d, rif, m).items():
             crescita = _crescita(gruppo, fattore, d.parametri) if y > d.oggi.year else UNO
-            storico = d.uscite.get(categoria, {}).get((rif, m), ZERO)
-            if categoria == "carte":
-                # L'advertising è deciso in Admin ed entra come impegno: qui restano solo le altre spese con carta
-                storico = max(storico - d.advertising.get((rif, m), ZERO), ZERO)
             gruppi[gruppo] = gruppi.get(gruppo, ZERO) + storico * crescita * peso
     totale_pesi = Decimal(sum(pesi))
     return {g: v / totale_pesi for g, v in gruppi.items()}
 
 
 def riferimento_uscite(d: DatiPrevisione, y: int, m: int) -> list:
-    """Anni usati da stime_mese() per il mese (per la spiegazione a schermo)."""
+    """Anni usati da stime_mese() per il mese; senza un anno intero (primi mesi di dati) l'ultimo anno con quel mese
+    concluso. L'anno in corso solo quando il completamento è pronto."""
     presenti = _mesi_con_dati(d)
-    anni = anni_riferimento_uscite(y, d.oggi, presenti)
+    anni = [r for r in anni_riferimento_uscite(y, d.oggi, presenti) if r != d.oggi.year or d.completamento]
     if not anni:
         rif = anno_riferimento(y, m, d.oggi, presenti)
         anni = [rif] if rif is not None else []
     return anni
+
+
+def completa_anno_corrente(d: DatiPrevisione) -> dict:
+    """Uscite per gruppo dei mesi dell'anno in corso da oggi a dicembre, scenario realista: già avvenute nel mese +
+    impegni certi della categoria + stima. Servono solo se l'anno in corso può fare da riferimento."""
+    if 13 - d.oggi.month > MESI_PREVISTI_MAX:
+        return {}
+    d.completamento = {}                 # durante il calcolo l'anno in corso non fa da riferimento a sé stesso
+    out = {}
+    for r in calcola_scenario(d, "realista"):
+        if r["anno"] != d.oggi.year:
+            continue
+        gruppi = dict(r["uscite_per_stima"])
+        if "carte" in gruppi:            # gli estratti carta comprendono l'advertising, come lo storico della banca
+            gruppi["carte"] = max(gruppi["carte"] - d.advertising.get((r["anno"], r["mese"]), ZERO), ZERO)
+        out[(r["anno"], r["mese"])] = gruppi
+    return out
 
 
 def entrate_mese(d: DatiPrevisione, y: int, m: int) -> Decimal:
@@ -228,6 +268,8 @@ def _gia_avvenuto(storico: dict, y: int, m: int) -> Decimal:
 
 
 def calcola_scenario(d: DatiPrevisione, scenario: str) -> list:
+    if d.completamento is None:
+        d.completamento = completa_anno_corrente(d)
     p = d.parametri["scenari"][scenario]
     k_incassi = UNO + Decimal(str(p["incassi_pct"])) / CENTO
     k_stime = UNO + Decimal(str(p["uscite_stimate_pct"])) / CENTO
@@ -259,6 +301,10 @@ def calcola_scenario(d: DatiPrevisione, scenario: str) -> list:
                 if gruppo in stime:
                     tolte[gruppo] = tolte.get(gruppo, ZERO) + _gia_avvenuto(d.uscite.get(categoria, {}), y, m)
         stimate = {g: max(v - tolte.get(g, ZERO), ZERO) * k_stime for g, v in stime.items()}
+        # Uscite totali per gruppo di stima (certe della categoria + già avvenute + stimate): completano l'anno in corso
+        per_stima = dict(stimate)
+        for g, v in tolte.items():
+            per_stima[g] = per_stima.get(g, ZERO) + v
         entrate *= k_incassi
         rettifica = rettifica_caparre(d, y, m)
         entrate = max(entrate - rettifica, ZERO)
@@ -269,7 +315,8 @@ def calcola_scenario(d: DatiPrevisione, scenario: str) -> list:
         righe.append({
             "anno": y, "mese": m, "saldo_iniziale": iniziale, "entrate": entrate, "rettifica_caparre": rettifica,
             "riferimento_entrate": anno_riferimento(y, m, d.oggi, _mesi_con_dati(d)),
-            "riferimento_uscite": riferimento_uscite(d, y, m),
+            "riferimento_uscite": riferimento_uscite(d, y, m), "uscite_per_stima": per_stima,
+            "riferimento_previsti": sorted({mm for (a, mm) in (d.completamento or {}) if a in riferimento_uscite(d, y, m)}),
             "uscite_certe": per_gruppo,
             "uscite_stimate": stimate, "totale_certe": tot_certe, "totale_stimate": tot_stimate, "saldo_finale": saldo,
         })
