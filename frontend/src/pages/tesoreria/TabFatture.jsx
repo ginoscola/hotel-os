@@ -11,6 +11,7 @@ import {
 } from '../../components/ui'
 import { Importo, etichettaAnno } from './helpers.jsx'
 import { ModaleManuale, ModalePagate } from './TabScadenzario.jsx'
+import VistaFattura from './VistaFattura.jsx'
 
 const PER_PAGINA = 50
 const STATI = {
@@ -123,6 +124,7 @@ function DettaglioFattura({ id, permessi, onChiudi, onCambio }) {
   const [d, setD] = useState(null)
   const [pagate, setPagate] = useState(null)
   const [manuale, setManuale] = useState(null)
+  const [vedi, setVedi] = useState(false)
   const avvisi = useAvvisi()
   const conferma = useConferma()
 
@@ -154,6 +156,8 @@ function DettaglioFattura({ id, permessi, onChiudi, onCambio }) {
       sottotitolo={d ? `${TIPI[d.tipo_documento] || d.tipo_documento} n. ${d.numero} del ${formatData(d.data_documento)}` : null}>
       {!d ? <Loading /> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div><Button onClick={() => setVedi(true)}>Vedi fattura{d.ha_allegati ? ' (PDF del fornitore)' : ''}</Button></div>
+          {vedi && <VistaFattura id={d.id} onChiudi={() => setVedi(false)} />}
           <div>
             <Riga etichetta="Stato"><BadgeStato stato={d.stato} /></Riga>
             <Riga etichetta="Partita IVA">{d.cedente_paese || ''} {d.cedente_piva || d.cedente_cf || '—'}

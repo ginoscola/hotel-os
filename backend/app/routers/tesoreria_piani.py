@@ -1098,13 +1098,34 @@ class PagamentoFatturaIn(BaseModel):
     data_pagamento: Optional[str] = None         # 'YYYY-MM-DD', '' = togli
 
 
-def _fattura_json(f: TesoreriaInterventoScadenza, movimenti: Optional[dict] = None) -> dict:
+def _fatture_sdi_per_chiave(db: Session, chiavi) -> dict:
+    """{chiave collegata: id della fattura SDI} per aprire la fattura: rate XML dall'impronta, scadenze Passcom dalle
+    fatture trovate nello scadenzario attuale."""
+    from app.models.tesoreria import TesoreriaFattura
+    from app.routers.tesoreria_fatture_stato import stato_fatture
+    chiavi = list(chiavi)
+    impronte = {c: impronta_da_chiave(c) for c in chiavi if c.startswith(PREFISSO_CHIAVE)}
+    out = {}
+    if impronte:
+        ids = dict(db.query(TesoreriaFattura.impronta, TesoreriaFattura.id).filter(TesoreriaFattura.impronta.in_(set(impronte.values()))))
+        out.update({c: ids[i] for c, i in impronte.items() if i in ids})
+    passcom = {c for c in chiavi if not c.startswith(PREFISSO_CHIAVE)}
+    if passcom:
+        for r in stato_fatture(db, date.today())["righe"]:
+            for p in r["passcom"]:
+                if p["chiave"] in passcom:
+                    out[p["chiave"]] = r["fattura"].id
+    return out
+
+
+def _fattura_json(f: TesoreriaInterventoScadenza, movimenti: Optional[dict] = None, fatture_sdi: Optional[dict] = None) -> dict:
     m = (movimenti or {}).get(f.chiave)
     return {"id": f.id, "chiave": f.chiave, "fornitore": f.fornitore, "data_scadenza": f.data_scadenza.isoformat(),
             "numero_documento": f.numero_documento, "importo": euro(f.importo),
             "origine": "sdi" if f.chiave.startswith(PREFISSO_CHIAVE) else "passcom",
             "modalita_pagamento": f.modalita_pagamento, "data_pagamento": f.data_pagamento.isoformat() if f.data_pagamento else None,
-            "pagamento_banca": {"data": m[1].isoformat(), "straordinario": m[2]} if m else None}
+            "pagamento_banca": {"data": m[1].isoformat(), "straordinario": m[2]} if m else None,
+            "fattura_id": (fatture_sdi or {}).get(f.chiave)}
 
 
 def _movimenti_per_chiave(db: Session, chiavi) -> dict:
@@ -1188,7 +1209,10 @@ def fatture_intervento(intervento_id: int, db: Session = Depends(get_db), _=Depe
     collegati = _pagamenti_collegati(db, i.id)
     movimenti = {m.id: m for m in db.query(TesoreriaMovimento).filter(TesoreriaMovimento.id.in_([p.movimento_id for p in collegati] or [0]))}
     movimenti_f = _movimenti_per_chiave(db, [f.chiave for f in fatture])
-    return {"collegate": [_fattura_json(f, movimenti_f) for f in sorted(fatture, key=lambda f: (f.fornitore, f.data_scadenza))],
+    sdi_f = _fatture_sdi_per_chiave(db, [f.chiave for f in fatture] + [c["chiave"] for c in candidate[:500]])
+    for c in candidate[:500]:
+        c["fattura_id"] = sdi_f.get(c["chiave"])
+    return {"collegate": [_fattura_json(f, movimenti_f, sdi_f) for f in sorted(fatture, key=lambda f: (f.fornitore, f.data_scadenza))],
             "candidate": candidate[:500],
             "pagamenti": [_pagamento_json(p, movimenti[p.movimento_id], di_fatture) for p in collegati],
             "pagamenti_candidati": _pagamenti_candidati(db, i, di_fatture),

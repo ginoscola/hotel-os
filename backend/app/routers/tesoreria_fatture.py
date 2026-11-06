@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -46,6 +46,7 @@ from app.models.tesoreria import (
 )
 from app.services.tesoreria_fatture import NOMI_MODALITA, PREFISSO_CHIAVE
 from app.services.tesoreria_fatture_parser import parse_zip_fatture
+from app.services.tesoreria_fatture_vista import allegati, documento_leggibile, tipo_mime, trova_nel_zip
 from app.services.tesoreria_parser import ErroreImportTesoreria
 
 router = APIRouter()
@@ -417,3 +418,71 @@ def dettaglio(fattura_id: int, xml: bool = False, db: Session = Depends(get_db),
     if xml:
         out["xml"] = f.xml
     return out
+
+
+# ── Fattura leggibile e PDF del fornitore (v4.30.0) ─────────────────────────────
+
+FORMATI_IN_LINEA = ("pdf", "png", "jpg", "jpeg")
+
+
+def _xml_originale(db: Session, f: TesoreriaFattura) -> Optional[bytes]:
+    """XML originale (con gli allegati) dallo ZIP conservato: prima quello dell'import che l'ha inserita, poi gli altri
+    (la stessa fattura può essere in più ZIP). None se nessuno ZIP la contiene più."""
+    imports = db.query(TesoreriaFattureImport).order_by(TesoreriaFattureImport.id.desc()).all()
+    imports.sort(key=lambda i: i.id != f.import_id)
+    for imp in imports:
+        if not imp.percorso or not Path(imp.percorso).exists():
+            continue
+        try:
+            trovato = trova_nel_zip(Path(imp.percorso).read_bytes(), f.nome_file)
+        except Exception:      # file firmato non estraibile o ZIP rovinato: si prova il prossimo
+            trovato = None
+        if trovato is not None:
+            return trovato
+    return None
+
+
+def _fattura_o_404(db: Session, fattura_id: int) -> TesoreriaFattura:
+    f = db.get(TesoreriaFattura, fattura_id)
+    if not f:
+        raise HTTPException(404, "Fattura non trovata")
+    return f
+
+
+@router.get("/fatture/{fattura_id}/documento")
+def documento(fattura_id: int, db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    """La fattura come documento (dall'XML salvato) + elenco degli allegati del fornitore se ce ne sono."""
+    f = _fattura_o_404(db, fattura_id)
+    out = documento_leggibile(f.xml)
+    out.update({"id": f.id, "id_sdi": f.id_sdi, "nome_file": f.nome_file,
+                "data_ricezione": f.data_ricezione.isoformat() if f.data_ricezione else None, "allegati": []})
+    if f.ha_allegati:
+        originale = _xml_originale(db, f)
+        if originale is None:
+            out["allegati_non_disponibili"] = True
+        else:
+            out["allegati"] = [{"indice": n, "nome": a["nome"], "formato": a["formato"], "descrizione": a["descrizione"],
+                                "dimensione": len(a["dati"])} for n, a in enumerate(allegati(originale))]
+    return out
+
+
+@router.get("/fatture/{fattura_id}/allegati/{indice}")
+def allegato(fattura_id: int, indice: int, db: Session = Depends(get_db), _=Depends(puo_vedere)):
+    """Un allegato del fornitore (di solito il PDF della fattura), aperto nel browser."""
+    f = _fattura_o_404(db, fattura_id)
+    originale = _xml_originale(db, f) if f.ha_allegati else None
+    if originale is None:
+        raise HTTPException(404, "Allegato non disponibile")
+    lista = allegati(originale)
+    if not 0 <= indice < len(lista):
+        raise HTTPException(404, "Allegato non trovato")
+    a = lista[indice]
+    nome = re.sub(r'[^A-Za-z0-9._-]+', "_", a["nome"]) or "allegato"
+    if a["formato"] == "pdf" and not nome.lower().endswith(".pdf"):
+        nome += ".pdf"
+    # nel browser solo PDF e immagini; il resto (HTML compreso, che verrebbe eseguito) si scarica
+    in_linea = a["formato"] in FORMATI_IN_LINEA
+    media = tipo_mime(a["formato"]) if in_linea else "application/octet-stream"
+    return Response(a["dati"], media_type=media, headers={
+        "Content-Disposition": f'{"inline" if in_linea else "attachment"}; filename="{nome}"',
+        "X-Content-Type-Options": "nosniff"})

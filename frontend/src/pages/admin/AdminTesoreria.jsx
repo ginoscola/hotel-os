@@ -9,6 +9,7 @@ import {
   Badge, Button, Card, Checkbox, Field, FileButton, Input, Loading, Modal, SegmentedControl, Select, StatoVuoto, Table, Td, Th, useAvvisi, useConferma,
 } from '../../components/ui'
 import { ETICHETTE_SEGNO, ETICHETTE_TIPO_CONTO, MODALITA_PAGAMENTO, ModaleRegola, etichettaAnno } from '../tesoreria/helpers.jsx'
+import VistaFattura from '../tesoreria/VistaFattura.jsx'
 
 const oggi = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const TIPI_CATEGORIA = { entrata: 'Entrata', uscita: 'Uscita', neutra: 'Neutra' }
@@ -1059,7 +1060,7 @@ function contiene(testo, q) {
 }
 
 /** Riga di una fattura collegata: come e quando è stata pagata, salvati appena cambiano. */
-function RigaFatturaCollegata({ f, onCambia, onTogli }) {
+function RigaFatturaCollegata({ f, onCambia, onTogli, onVedi }) {
   const avvisi = useAvvisi()
   async function salva(patch) {
     try { await api.put(`/tesoreria/piani/interventi/fatture/${f.id}`, patch); onCambia() } catch (e) { avvisi.errore(mostraErrore(e)) }
@@ -1069,7 +1070,8 @@ function RigaFatturaCollegata({ f, onCambia, onTogli }) {
   return (
     <tr className={manca ? 'ui-riga-avviso' : undefined}>
       <Td>{f.fornitore}<div className="ui-text-muted">{ORIGINE_FATTURA[f.origine]}</div></Td>
-      <Td>{f.numero_documento || '—'}</Td><Td>{formatData(f.data_scadenza)}</Td>
+      <Td>{f.fattura_id ? <Button size="sm" variant="ghost" title="Vedi la fattura" onClick={() => onVedi(f.fattura_id)}>{f.numero_documento || 'vedi'}</Button> : (f.numero_documento || '—')}</Td>
+      <Td>{formatData(f.data_scadenza)}</Td>
       <Td num>{formatEuro(f.importo)}</Td>
       <Td>
         <Select value={f.modalita_pagamento || ''} onChange={e => salva({ modalita_pagamento: e.target.value })}>
@@ -1087,7 +1089,7 @@ function RigaFatturaCollegata({ f, onCambia, onTogli }) {
 }
 
 /** Fatture ricevute dallo SDI (anche già pagate e chiuse) cercate per fornitore, numero o testo. */
-function CercaFattureSdi({ intervento, onAssegnate }) {
+function CercaFattureSdi({ intervento, onAssegnate, onVedi }) {
   const [q, setQ] = useState('')
   const [elenco, setElenco] = useState(null)
   const [scelte, setScelte] = useState(new Set())
@@ -1119,7 +1121,7 @@ function CercaFattureSdi({ intervento, onAssegnate }) {
     </div>
     {elenco && (elenco.length === 0 ? <StatoVuoto>Nessuna fattura trovata.</StatoVuoto> : (
       <Table compact maxHeight="40vh">
-        <thead><tr><Th></Th><Th>Fornitore</Th><Th>N.</Th><Th>Data</Th><Th>Stato</Th><Th num>Totale</Th></tr></thead>
+        <thead><tr><Th></Th><Th>Fornitore</Th><Th>N.</Th><Th>Data</Th><Th>Stato</Th><Th num>Totale</Th><Th></Th></tr></thead>
         <tbody>
           {elenco.map(f => {
             const ok = selezionabili.includes(f)
@@ -1129,6 +1131,7 @@ function CercaFattureSdi({ intervento, onAssegnate }) {
                 <Td>{f.cedente_denominazione}{f.spesa && <div className="ui-text-muted">in «{f.spesa.descrizione}»</div>}</Td>
                 <Td>{f.numero}</Td><Td>{formatData(f.data_documento)}</Td><Td muted>{f.stato_etichetta}</Td>
                 <Td num>{formatEuro(f.totale)}</Td>
+                <Td><Button size="sm" variant="ghost" onClick={() => onVedi(f.id)}>Vedi</Button></Td>
               </tr>
             )
           })}
@@ -1139,7 +1142,7 @@ function CercaFattureSdi({ intervento, onAssegnate }) {
 }
 
 /** Fatture aperte: scadenzario Passcom e SDI da registrare. */
-function ScegliAperte({ intervento, candidate, onCollegate }) {
+function ScegliAperte({ intervento, candidate, onCollegate, onVedi }) {
   const [q, setQ] = useState('')
   const [tutte, setTutte] = useState(false)
   const [scelte, setScelte] = useState(new Set())
@@ -1161,7 +1164,7 @@ function ScegliAperte({ intervento, candidate, onCollegate }) {
     </div>
     {visibili.length === 0 ? <StatoVuoto>Nessuna fattura aperta {q ? 'trovata' : 'del fornitore della spesa'}.</StatoVuoto> : (
       <Table compact maxHeight="40vh">
-        <thead><tr><Th></Th><Th>Fornitore</Th><Th>N.</Th><Th>Scadenza</Th><Th>Da</Th><Th num>Importo</Th></tr></thead>
+        <thead><tr><Th></Th><Th>Fornitore</Th><Th>N.</Th><Th>Scadenza</Th><Th>Da</Th><Th num>Importo</Th><Th></Th></tr></thead>
         <tbody>
           {visibili.slice(0, 300).map(c => (
             <tr key={c.chiave}>
@@ -1169,6 +1172,7 @@ function ScegliAperte({ intervento, candidate, onCollegate }) {
               <Td>{c.suggerita ? '★ ' : ''}{c.fornitore}</Td><Td>{c.numero_documento || 's.n.'}</Td>
               <Td>{formatData(c.data_scadenza)}</Td><Td muted>{c.origine === 'sdi' ? 'SDI, da registrare' : 'Scadenzario'}</Td>
               <Td num>{formatEuro(c.importo)}</Td>
+              <Td>{c.fattura_id && <Button size="sm" variant="ghost" onClick={() => onVedi(c.fattura_id)}>Vedi</Button>}</Td>
             </tr>
           ))}
         </tbody>
@@ -1209,6 +1213,7 @@ function ScegliPagamento({ intervento, candidati, onCollegato }) {
 function ModaleFatture({ intervento, onChiudi }) {
   const [dati, setDati] = useState(null)
   const [fonte, setFonte] = useState('tutte')
+  const [vedi, setVedi] = useState(null)
   const avvisi = useAvvisi()
   const carica = useCallback(async () => {
     try { setDati((await api.get(`/tesoreria/piani/interventi/${intervento.id}/fatture`)).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
@@ -1238,7 +1243,7 @@ function ModaleFatture({ intervento, onChiudi }) {
           <Table compact maxHeight="40vh">
             <thead><tr><Th>Fornitore</Th><Th>N.</Th><Th>Scadenza</Th><Th num>Importo</Th><Th>Pagata con</Th><Th>Addebito in banca</Th><Th></Th></tr></thead>
             <tbody>
-              {dati.collegate.map(f => <RigaFatturaCollegata key={f.id} f={f} onCambia={carica} onTogli={() => scollega(f)} />)}
+              {dati.collegate.map(f => <RigaFatturaCollegata key={f.id} f={f} onCambia={carica} onTogli={() => scollega(f)} onVedi={setVedi} />)}
             </tbody>
           </Table>
         )}
@@ -1250,8 +1255,8 @@ function ModaleFatture({ intervento, onChiudi }) {
         ]} />
         <div style={{ marginTop: 8 }}>
           {fonte === 'tutte'
-            ? <CercaFattureSdi intervento={intervento} onAssegnate={carica} />
-            : <ScegliAperte intervento={intervento} candidate={dati.candidate} onCollegate={carica} />}
+            ? <CercaFattureSdi intervento={intervento} onAssegnate={carica} onVedi={setVedi} />
+            : <ScegliAperte intervento={intervento} candidate={dati.candidate} onCollegate={carica} onVedi={setVedi} />}
         </div>
 
         <h4 style={{ margin: '16px 0 6px' }}>Pagamenti in banca senza fattura</h4>
@@ -1274,6 +1279,7 @@ function ModaleFatture({ intervento, onChiudi }) {
         <div style={{ marginTop: 8 }}>
           <ScegliPagamento intervento={intervento} candidati={dati.pagamenti_candidati} onCollegato={carica} />
         </div>
+        {vedi && <VistaFattura id={vedi} onChiudi={() => setVedi(null)} />}
       </>}
     </Modal>
   )

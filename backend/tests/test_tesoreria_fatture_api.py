@@ -430,3 +430,37 @@ def test_fattura_chiusa_assegnata_a_spesa_esce_dallo_storico(client, Sessione, t
     r = client.post(f"/tesoreria/piani/interventi/{j['id']}/fatture-sdi", json={"fattura_ids": [ids["77"]]})
     assert r.json()["n_spostate"] == 1
     assert client.get(f"/tesoreria/piani/interventi/{j['id']}/fatture").json()["collegate"][0]["modalita_pagamento"] == "contanti"
+
+
+def test_fattura_leggibile_e_pdf_del_fornitore(client):
+    """Righe della fattura dall'XML salvato; allegati letti dallo ZIP originale: PDF nel browser, il resto scaricato."""
+    import base64
+    pdf = b"%PDF-1.4 finto"
+    xml = fattura_xml("03333333333", "Arredi Spa", "77", OGGI.isoformat(), "122.00", modalita="MP05",
+                      scadenza=OGGI.isoformat()).decode()
+    xml = xml.replace("<DatiBeniServizi>", "<DatiBeniServizi><DettaglioLinee><NumeroLinea>1</NumeroLinea>"
+                      "<Descrizione>TAVOLO ROVERE 80x80</Descrizione><Quantita>2.00</Quantita><UnitaMisura>PZ</UnitaMisura>"
+                      "<PrezzoUnitario>50.00</PrezzoUnitario><PrezzoTotale>100.00</PrezzoTotale><AliquotaIVA>22.00</AliquotaIVA>"
+                      "</DettaglioLinee>")
+    xml = xml.replace("</FatturaElettronicaBody>",
+                      f"<Allegati><NomeAttachment>fattura.pdf</NomeAttachment><FormatoAttachment>PDF</FormatoAttachment>"
+                      f"<Attachment>{base64.b64encode(pdf).decode()}</Attachment></Allegati>"
+                      f"<Allegati><NomeAttachment>nota.html</NomeAttachment><FormatoAttachment>HTML</FormatoAttachment>"
+                      f"<Attachment>{base64.b64encode(b'<script>x</script>').decode()}</Attachment></Allegati>"
+                      "</FatturaElettronicaBody>")
+    _importa(client, zip_fatture([("1", OGGI, xml.encode())]))
+    fid = client.get("/tesoreria/fatture").json()["fatture"][0]["id"]
+    d = client.get(f"/tesoreria/fatture/{fid}/documento")
+    assert d.status_code == 200, d.text
+    d = d.json()
+    assert d["tipo_nome"] == "Fattura" and d["cedente"]["denominazione"] == "Arredi Spa"
+    assert d["righe"] == [{"numero": "1", "codice": None, "descrizione": "TAVOLO ROVERE 80x80", "quantita": 2.0, "unita": "PZ",
+                           "prezzo_unitario": 50.0, "sconti": None, "prezzo_totale": 100.0, "aliquota": 22.0, "natura": None}]
+    assert d["pagamenti"][0]["modalita"] == "Bonifico"
+    assert [(a["nome"], a["formato"]) for a in d["allegati"]] == [("fattura.pdf", "pdf"), ("nota.html", "html")]
+    r = client.get(f"/tesoreria/fatture/{fid}/allegati/0")
+    assert r.status_code == 200 and r.content == pdf and r.headers["content-type"] == "application/pdf"
+    assert r.headers["content-disposition"].startswith("inline")
+    r = client.get(f"/tesoreria/fatture/{fid}/allegati/1")
+    assert r.headers["content-type"] == "application/octet-stream" and r.headers["content-disposition"].startswith("attachment")
+    assert client.get(f"/tesoreria/fatture/{fid}/allegati/5").status_code == 404

@@ -3659,6 +3659,19 @@ una tendina di sole fatture aperte). Migrazione `tes020_2026` (applicata al DB r
   Limite noto: un bonifico singolo collegato come "pagamento senza fattura" **e** la sua fattura con modalità bonifico verrebbero
   tolti due volte (la finestra avvisa di non farlo).
 
+**v4.30.0 — vedere la fattura** (06/11/2026, richiesta dell'utente). `pages/tesoreria/VistaFattura.jsx` (popup), aperto da
+Fatture → dettaglio ("Vedi fattura") e da Admin → Spese straordinarie → "Fatture e pagamenti" (numero della fattura collegata,
+"Vedi" nelle ricerche; `fattura_id` dato da `_fatture_sdi_per_chiave()` in `tesoreria_piani.py`: rate XML dall'impronta, scadenze
+Passcom dalle fatture trovate nello scadenzario attuale). Due viste:
+- **Dati della fattura (XML)**: `GET /tesoreria/fatture/{id}/documento` → `documento_leggibile()` di
+  `services/tesoreria_fatture_vista.py` sull'XML salvato: anagrafiche, **righe `DettaglioLinee`** (non estratte in tabella), riepilogo
+  IVA, pagamenti, DDT/ordini/contratti, ritenute, cassa, bollo.
+- **PDF del fornitore** (3.128 fatture su 4.707 hanno `Allegati`): il DB ha l'XML senza allegati, quindi `_xml_originale()` lo
+  ritrova nello ZIP AdE conservato (`trova_nel_zip()` per `nome_file`, ZIP annidati, `.p7m` estratto; prima l'import che l'ha
+  inserita, poi gli altri), ~0,02–0,07 s. `GET /tesoreria/fatture/{id}/allegati/{indice}`: **in linea solo PDF e immagini**
+  (`FORMATI_IN_LINEA`), il resto (testi, ZIP, XML, HTML) come `attachment` `application/octet-stream` + `nosniff`, perché l'HTML
+  di un fornitore aperto in linea verrebbe eseguito. ZIP originale cancellato → `allegati_non_disponibili`.
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**
