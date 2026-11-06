@@ -408,3 +408,14 @@ def test_media_pesata_degli_ultimi_due_anni_interi():
 
 def test_fattore_budget_sull_anno_di_riferimento():
     assert fattore_budget(2027, {2027: D("1200")}, {2025: D("800"), 2026: D("1000")}, 2025) == D("1.5")
+
+
+def test_linea_solo_spese_ordinarie():
+    d = _dati(certe=[Certa(date(2027, 2, 10), D("300"), "interventi"), Certa(date(2027, 2, 12), D("50"), "affitti")])
+    r = calcola_scenario(d, "realista")
+    gen, feb, mar = _mese(r, 1), _mese(r, 2), _mese(r, 3)
+    assert gen["straordinarie"] == 0 and gen["saldo_ordinario"] == gen["saldo_finale"]
+    assert feb["straordinarie"] == D("300")
+    assert feb["saldo_ordinario"] - feb["saldo_finale"] == D("300")
+    assert mar["saldo_ordinario"] - mar["saldo_finale"] == D("300")     # la distanza resta nei mesi dopo
+    assert totali_per_anno(r, "solare")[-1]["straordinarie"] == D("300")

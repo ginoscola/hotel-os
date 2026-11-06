@@ -1,5 +1,5 @@
 // Admin → Tesoreria: conti (fido e scadenza), categorie (colore, operative o no), regole di
-// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza, piano affitti, interventi, advertising e fornitori
+// classificazione (con prova e ricalcolo), soglie degli avvisi di freschezza, piano affitti, spese straordinarie, advertising e fornitori
 // pagati con carta, ricorrenti, mutuo, dati fiscali,
 // parametri della previsione.
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -498,7 +498,7 @@ export function AdminTesoreriaAffitti() {
   )
 }
 
-// ── Interventi ──────────────────────────────────────────────────────────────────
+// ── Spese straordinarie (tabella interventi) ───────────────────────────────────
 
 const STATI_INTERVENTO = { idea: 'Idea', approvato: 'Approvato', ordinato: 'Ordinato', fatturato: 'Fatturato', pagato: 'Pagato' }
 const STRUTTURE_INTERVENTO = ['DPH', 'CLB', 'INT', 'BON']
@@ -534,19 +534,22 @@ export function AdminTesoreriaInterventi() {
   }
 
   async function elimina(i) {
-    if (!await conferma({ titolo: 'Eliminare l\'intervento?', messaggio: i.descrizione, pericolo: true })) return
+    if (!await conferma({ titolo: 'Eliminare la spesa straordinaria?', messaggio: i.descrizione, pericolo: true })) return
     try { await api.delete(`/tesoreria/piani/interventi/${i.id}`); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   if (!interventi) return <Loading />
   return (
-    <Card title="Interventi straordinari">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <Card title="Spese straordinarie previste">
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
-        Un intervento entra in previsione solo con «In previsione» attivo, importo e almeno una rata (data e percentuale; l'ultima chiude il 100%).
-        Finché mancano le cifre può restare qui come promemoria. A un lavoro puoi collegare più fatture dello scadenzario: la stima si riduce
-        partendo dalla prima rata (le fatture sono già tra le uscite certe); quando sono tutte pagate e coprono la stima, l'intervento diventa «Pagato».
+        Lavori, attrezzature, software, consulenze una tantum: tutto ciò che non si ripete ogni anno. Vanno inserite qui anno per anno,
+        con importo e rate (data e percentuale; l'ultima chiude il 100%): in Previsione il toggle «Ordinarie e straordinarie» le mostra
+        come seconda linea. Una spesa entra in previsione solo con «In previsione» attivo, importo e almeno una rata; finché mancano le cifre
+        può restare qui come promemoria. Puoi collegare più fatture dello scadenzario: la stima si riduce partendo dalla prima rata
+        (le fatture sono già tra le uscite certe); quando sono tutte pagate e coprono la stima, la spesa diventa «Pagato».
       </p>
-      {interventi.length === 0 ? <StatoVuoto>Nessun intervento</StatoVuoto> : (
+      {interventi.length === 0 ? <StatoVuoto>Nessuna spesa straordinaria</StatoVuoto> : (
         <Table compact>
           <thead>
             <tr><Th>Descrizione</Th><Th>Struttura</Th><Th>Fornitore</Th><Th num>Importo (€)</Th><Th>Pagamenti</Th><Th>Stato</Th><Th center>In previsione</Th><Th num>Ancora da fatturare</Th><Th></Th></tr>
@@ -591,13 +594,81 @@ export function AdminTesoreriaInterventi() {
         </Table>
       )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
-        <Field label="Nuovo intervento"><Input value={nuovo} style={{ width: 260 }} onChange={e => setNuovo(e.target.value)} /></Field>
+        <Field label="Nuova spesa straordinaria"><Input value={nuovo} style={{ width: 260 }} onChange={e => setNuovo(e.target.value)} /></Field>
         <Button onClick={aggiungi} disabled={!nuovo.trim()}>Aggiungi</Button>
       </div>
       {fatture && <ModaleFatture intervento={fatture} onChiudi={() => { setFatture(null); carica() }} />}
       {rateDi && interventi.some(i => i.id === rateDi) && (
         <ModaleRate piano={interventi.find(i => i.id === rateDi)} titolo={interventi.find(i => i.id === rateDi).descrizione} url="/tesoreria/piani/interventi" onChiudi={() => setRateDi(null)}
           onAggiorna={nuovo => setInterventi(lista => lista.map(x => (x.id === nuovo.id ? nuovo : x)))} />
+      )}
+    </Card>
+    <UsciteDaControllare />
+    </div>
+  )
+}
+
+// Categorie che alimentano le uscite stimate della previsione (GRUPPI_STIMA nel backend), senza personale e carte:
+// una spesa una tantum non segnata qui finisce nelle stime degli anni dopo come se fosse ordinaria.
+const CATEGORIE_DA_CONTROLLARE = ['fornitori_riba', 'fornitori_bonifici', 'fornitori_sdd', 'assegni', 'utenze', 'ota_marketing', 'spiagge', 'auto', 'banca']
+
+function UsciteDaControllare() {
+  const annoCorrente = new Date().getFullYear()
+  const [anno, setAnno] = useState(annoCorrente)
+  const [soglia, setSoglia] = useState('3000')
+  const [righe, setRighe] = useState(null)
+  const avvisi = useAvvisi()
+
+  const carica = useCallback(async () => {
+    setRighe(null)
+    try {
+      const r = await api.get(`/tesoreria/movimenti?segno=uscita&data_da=${anno}-01-01&data_a=${anno}-12-31&ordina_per=importo&direzione=asc&per_pagina=500`)
+      setRighe(r.data.righe)
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }, [anno, avvisi])
+  useEffect(() => { carica() }, [carica])
+
+  async function segna(m, valore) {
+    try {
+      const nuovo = (await api.put(`/tesoreria/movimenti/${m.id}`, { straordinario: valore })).data
+      setRighe(lista => lista.map(x => (x.id === m.id ? nuovo : x)))
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+
+  const limite = Number(String(soglia).replace(',', '.')) || 0
+  const visibili = (righe || []).filter(m => -m.importo >= limite && CATEGORIE_DA_CONTROLLARE.includes(m.categoria_codice))
+  const totale = visibili.filter(m => m.straordinario).reduce((t, m) => t - m.importo, 0)
+  return (
+    <Card title="Uscite passate da controllare">
+      <p className="ui-text-muted" style={{ marginBottom: 8 }}>
+        Le uscite grandi pagate in banca, dalle categorie su cui si basano le stime della previsione. Spunta quelle una tantum:
+        restano nel consuntivo ma escono dalle stime degli anni dopo. Le spese pagate con carta non si possono separare qui.
+      </p>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 8 }}>
+        <Field label="Anno">
+          <Select value={anno} onChange={e => setAnno(Number(e.target.value))}>
+            {[annoCorrente, annoCorrente - 1, annoCorrente - 2].map(a => <option key={a} value={a}>{a}</option>)}
+          </Select>
+        </Field>
+        <Field label="Da (€)"><Input value={soglia} inputMode="decimal" style={{ width: 90 }} onChange={e => setSoglia(e.target.value)} /></Field>
+        {righe && <span className="ui-text-muted">Straordinarie segnate in elenco: {formatEuro(totale)}</span>}
+      </div>
+      {!righe ? <Loading /> : visibili.length === 0 ? <StatoVuoto>Nessuna uscita sopra la soglia.</StatoVuoto> : (
+        <Table compact maxHeight="60vh">
+          <thead><tr><Th>Data</Th><Th>Controparte</Th><Th>Causale</Th><Th>Categoria</Th><Th num>Importo</Th><Th center>Straordinaria</Th></tr></thead>
+          <tbody>
+            {visibili.map(m => (
+              <tr key={m.id} className={m.straordinario ? 'ui-riga-modificata' : undefined}>
+                <Td>{formatData(m.data_contabile)}</Td>
+                <Td>{m.controparte || '—'}</Td>
+                <Td style={{ maxWidth: 320, whiteSpace: 'normal' }}>{m.causale || m.descrizione}</Td>
+                <Td>{m.categoria_nome}</Td>
+                <Td num>{formatEuro(m.importo)}</Td>
+                <Td center><Checkbox checked={m.straordinario} onChange={x => segna(m, x)} /></Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
       )}
     </Card>
   )

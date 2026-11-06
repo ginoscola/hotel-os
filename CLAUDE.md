@@ -3595,6 +3595,26 @@ contro +23.000 € del 2026, ~140.000 € di fornitori persi). Ora (`services/te
 Effetto al 05/11/2026 (realista): fine 2027 da 143.000 € a −7.500 € (2026: +23.000 €; fido scaduto dal 30/09/2027),
 picco agosto 562.000 €, minimo aprile 2027 da −75.000 € a −88.000 € (solo 2025: −114.000 €).
 
+### Spese ordinarie e straordinarie separate (06/11/2026, v4.27.0)
+Richiesta dell'utente: una linea del grafico solo con le spese ordinarie e le straordinarie a parte (importi e date),
+gestite anno per anno.
+- **Passato**: le spese una tantum pagate in banca si segnano `straordinario` sul movimento (escono dalle stime degli anni
+  dopo, restano nel consuntivo). Admin → Tesoreria → Spese straordinarie → card "Uscite passate da controllare" (anno, soglia
+  default 3.000 €, solo categorie che alimentano le stime tranne personale e carte; spunta = `PUT /movimenti/{id}`).
+  Segnati il 06/11/2026 su indicazione dell'utente anche Boghi Marco (2 × 8.000 €, 30–31/07/2026), FIDER (7.642 €, commissioni
+  pratica finanziamento), BSD (6.813 €) e Dorelan (5.545 €) di aprile 2025. **Non** straordinari: Albergatore PRO, Palazzi 2026,
+  parcheggi Campoquadro. Le spese con carta non si separano (restano nella stima Carte).
+- **Futuro**: la tabella degli interventi è ora chiamata in UI **"Spese straordinarie"** (Admin `?s=tes-interventi`, Previsione,
+  prova): voci dell'anno con importo e rate, nessuna copia da un anno all'altro. Al 06/11/2026 per il 2027 solo piscina,
+  parcheggio e cella frigorifera senza importo (l'utente: "per il 2027 non dovrebbe esserci altro").
+- **Motore**: `calcola_scenario()` dà per riga `straordinarie` (= certe del gruppo `GRUPPO_STRAORDINARIE` = "interventi") e
+  `saldo_ordinario` (stesso saldo senza quelle uscite); `totali_per_anno()` somma `straordinarie`. Export con colonna
+  "Saldo solo spese ordinarie".
+- **Grafico**: toggle "Una linea / Ordinarie e straordinarie" (`localStorage('tesoreria_previsione_linee')`, default una):
+  seconda linea verde tratteggiata dello scenario scelto, tooltip con le straordinarie del mese; colonna "di cui straordinarie"
+  in tabella.
+Effetto al 06/11/2026 (realista, solo per i 5 movimenti segnati): fine 2027 da −7.500 € a +14.700 €, aprile 2027 −83.500 €.
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**

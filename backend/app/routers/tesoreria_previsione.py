@@ -191,7 +191,7 @@ def _riga_json(r: dict) -> dict:
     return {
         "anno": r["anno"], "mese": r["mese"], "stato": r["stato"], "fido": euro(r["fido"]),
         **{k: euro(r[k]) for k in ("saldo_iniziale", "entrate", "rettifica_caparre", "totale_certe", "totale_stimate",
-                                   "saldo_finale", "cassa_impegnata_90", "cassa_libera")},
+                                   "saldo_finale", "cassa_impegnata_90", "cassa_libera", "straordinarie", "saldo_ordinario")},
         "uscite_certe": {k: euro(v) for k, v in r["uscite_certe"].items()},
         "uscite_stimate": {k: euro(v) for k, v in r["uscite_stimate"].items()},
         "riferimento_entrate": r["riferimento_entrate"], "riferimento_uscite": r["riferimento_uscite"],
@@ -220,7 +220,7 @@ def _storico_saldi(db: Session, oggi: date, n_mesi: int = 12) -> list:
 def _totale_json(t: dict) -> dict:
     return {"anno": t["anno"], "etichetta": t["etichetta"], "n_mesi": t["n_mesi"], "completo": t["completo"],
             "dal": {"anno": t["dal"][0], "mese": t["dal"][1]}, "al": {"anno": t["al"][0], "mese": t["al"][1]},
-            **{k: euro(t[k]) for k in ("saldo_iniziale", "entrate", "totale_certe", "totale_stimate", "saldo_finale")}}
+            **{k: euro(t[k]) for k in ("saldo_iniziale", "entrate", "totale_certe", "totale_stimate", "saldo_finale", "straordinarie")}}
 
 
 def _risposta(d: DatiPrevisione, db: Session) -> dict:
@@ -347,7 +347,7 @@ def elimina_salvata(salvata_id: int, db: Session = Depends(get_db), _=Depends(pu
 
 
 COLONNE_CERTE = (("fisco", "Fisco"), ("affitti", "Affitti"), ("mutuo", "Mutuo"), ("ricorrenti", "Ricorrenti"),
-                 ("interventi", "Interventi"), ("compensi", "Compensi soci"), ("advertising", "Advertising (carta)"), ("carte", "Carte (estratti)"), ("stipendi", "Stipendi netti"),
+                 ("interventi", "Spese straordinarie"), ("compensi", "Compensi soci"), ("advertising", "Advertising (carta)"), ("carte", "Carte (estratti)"), ("stipendi", "Stipendi netti"),
                  ("fornitori", "Fornitori (scadenzario)"), ("fatture", "Fatture da registrare"))
 COLONNE_STIMATE = (("fornitori", "Fornitori stimati"), ("personale", "Personale"), ("utenze", "Utenze"),
                    ("marketing", "Marketing"), ("carte", "Carte stimate"), ("altre", "Altre"))
@@ -361,7 +361,7 @@ def export(scenario: str = Query("realista"), formato: str = Query("xlsx"), tipo
     righe_calc = calcola_scenario(dati_previsione(db, date.today()), scenario)
     totali = {t["al"]: t for t in totali_per_anno(righe_calc, tipo_anno)}
     intestazioni = (["Mese", "Saldo iniziale", "Entrate (stima)"] + [n for _k, n in COLONNE_CERTE]
-                    + [n for _k, n in COLONNE_STIMATE] + ["Saldo finale", "Cassa libera a 90 gg"])
+                    + [n for _k, n in COLONNE_STIMATE] + ["Saldo finale", "Saldo solo spese ordinarie", "Cassa libera a 90 gg"])
     righe, somme = [], None
     for r in righe_calc:
         valori = ([r["entrate"]] + [r["uscite_certe"].get(k, Decimal(0)) for k, _n in COLONNE_CERTE]
@@ -369,12 +369,13 @@ def export(scenario: str = Query("realista"), formato: str = Query("xlsx"), tipo
         somme = valori if somme is None else [a + b for a, b in zip(somme, valori)]
         righe.append([f"{r['mese']:02d}/{r['anno']}", cella_importo(r["saldo_iniziale"], formato),
                       *[cella_importo(v, formato) for v in valori],
-                      cella_importo(r["saldo_finale"], formato), cella_importo(r["cassa_libera"], formato)])
+                      cella_importo(r["saldo_finale"], formato), cella_importo(r["saldo_ordinario"], formato),
+                      cella_importo(r["cassa_libera"], formato)])
         t = totali.get((r["anno"], r["mese"]))
         if t:      # riga di totale dopo l'ultimo mese di ogni anno (solare o alberghiero)
             nome = f"TOTALE {t['etichetta']}" + ("" if t["completo"] else f" ({t['n_mesi']} mesi)")
             righe.append([nome, cella_importo(t["saldo_iniziale"], formato), *[cella_importo(v, formato) for v in somme],
-                          cella_importo(t["saldo_finale"], formato), ""])
+                          cella_importo(t["saldo_finale"], formato), "", ""])
             somme = None
     n = len(intestazioni)
     return _risposta_tabella(formato, f"previsione_{scenario}", f"Previsione di cassa, scenario {scenario} (stima)", intestazioni, righe,

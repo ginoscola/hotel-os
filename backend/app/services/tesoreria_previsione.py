@@ -34,6 +34,7 @@ GRUPPI_STIMA = {
 GRUPPI_CRESCITA = ("fornitori", "marketing", "carte", "personale", "utenze", "altre")
 CATEGORIE_DA_SCADENZARIO = {"fornitori"}
 SCENARI = ("pessimista", "realista", "ottimista")
+GRUPPO_STRAORDINARIE = "interventi"   # spese straordinarie (Admin → Spese straordinarie): fuori dalla linea "solo ordinarie"
 TIPI_FISCO = {"f24_dipendenti", "iva", "ires", "irap", "tari", "tributo_fisso", "tassa_soggiorno"}
 
 
@@ -283,6 +284,7 @@ def calcola_scenario(d: DatiPrevisione, scenario: str) -> list:
             certe_mese.setdefault(chiave, []).append(c)
 
     righe, saldo = [], d.saldo_iniziale
+    saldo_ordinario = d.saldo_iniziale      # stesso calcolo senza le spese straordinarie previste
     for y, m in mesi:
         certe = certe_mese.get((y, m), [])
         per_gruppo = {}
@@ -312,6 +314,8 @@ def calcola_scenario(d: DatiPrevisione, scenario: str) -> list:
         tot_stimate = sum(stimate.values(), ZERO)
         iniziale = saldo
         saldo = saldo + entrate - tot_certe - tot_stimate
+        straordinarie = per_gruppo.get(GRUPPO_STRAORDINARIE, ZERO)
+        saldo_ordinario = saldo_ordinario + entrate - (tot_certe - straordinarie) - tot_stimate
         righe.append({
             "anno": y, "mese": m, "saldo_iniziale": iniziale, "entrate": entrate, "rettifica_caparre": rettifica,
             "riferimento_entrate": anno_riferimento(y, m, d.oggi, _mesi_con_dati(d)),
@@ -319,6 +323,7 @@ def calcola_scenario(d: DatiPrevisione, scenario: str) -> list:
             "riferimento_previsti": sorted({mm for (a, mm) in (d.completamento or {}) if a in riferimento_uscite(d, y, m)}),
             "uscite_certe": per_gruppo,
             "uscite_stimate": stimate, "totale_certe": tot_certe, "totale_stimate": tot_stimate, "saldo_finale": saldo,
+            "straordinarie": straordinarie, "saldo_ordinario": saldo_ordinario,
         })
 
     for r in righe:
@@ -341,11 +346,12 @@ def totali_per_anno(righe: list, tipo: str) -> list:
         anno = anno_di(date(r["anno"], r["mese"], 1), tipo)
         if not out or out[-1]["anno"] != anno:
             out.append({"anno": anno, "etichetta": etichetta_anno(anno, tipo), "dal": (r["anno"], r["mese"]), "n_mesi": 0,
-                        "saldo_iniziale": r["saldo_iniziale"], "entrate": ZERO, "totale_certe": ZERO, "totale_stimate": ZERO})
+                        "saldo_iniziale": r["saldo_iniziale"], "entrate": ZERO, "totale_certe": ZERO, "totale_stimate": ZERO,
+                        "straordinarie": ZERO})
         t = out[-1]
         t["n_mesi"] += 1
         t["al"] = (r["anno"], r["mese"])
-        for k in ("entrate", "totale_certe", "totale_stimate"):
+        for k in ("entrate", "totale_certe", "totale_stimate", "straordinarie"):
             t[k] += r[k]
         t["saldo_finale"] = r["saldo_finale"]
     for t in out:

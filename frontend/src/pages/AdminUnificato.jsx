@@ -95,7 +95,7 @@ const SEZIONI = [
       { id: 'tes-regole',    label: 'Regole di classificazione' },
       { id: 'tes-soglie',    label: 'Soglie avvisi' },
       { id: 'tes-affitti',   label: 'Piano affitti' },
-      { id: 'tes-interventi', label: 'Interventi' },
+      { id: 'tes-interventi', label: 'Spese straordinarie' },
       { id: 'tes-compensi',  label: 'Compensi soci' },
       { id: 'tes-advertising', label: 'Advertising e carte' },
       { id: 'tes-ricorrenti', label: 'Ricorrenti' },

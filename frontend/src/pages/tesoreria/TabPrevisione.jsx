@@ -16,15 +16,18 @@ import {
 import { Importo, MESI_BREVI, annoDi, etichettaAnno, isoLocale } from './helpers.jsx'
 
 const LS_SCENARIO = 'tesoreria_previsione_scenario'
+const LS_LINEE = 'tesoreria_previsione_linee'
+const LINEE = [{ value: 'una', label: 'Una linea' }, { value: 'due', label: 'Ordinarie e straordinarie' }]
 const SCENARI = [
   { value: 'pessimista', label: 'Pessimista' }, { value: 'realista', label: 'Realista' }, { value: 'ottimista', label: 'Ottimista' },
 ]
 const NOMI_CERTE = {
-  fisco: 'Fisco', affitti: 'Affitti', mutuo: 'Mutuo', ricorrenti: 'Ricorrenti', interventi: 'Interventi', compensi: 'Compensi soci', advertising: 'Advertising (carta)',
+  fisco: 'Fisco', affitti: 'Affitti', mutuo: 'Mutuo', ricorrenti: 'Ricorrenti', interventi: 'Spese straordinarie', compensi: 'Compensi soci', advertising: 'Advertising (carta)',
   carte: 'Estratti carte', stipendi: 'Stipendi netti (cedolini)', fornitori: 'Fornitori (scadenzario)', fatture: 'Fatture da registrare (SDI)', altri_impegni: 'Altri impegni',
 }
 const NOMI_STIMATE = { fornitori: 'Fornitori', personale: 'Personale', utenze: 'Utenze', marketing: 'Marketing', carte: 'Carte', altre: 'Altre' }
 const COLORE_SALDO = colors.info
+const COLORE_ORDINARIO = colors.success
 
 const legendaNeutra = v => <span style={{ color: colors.text }}>{v}</span>
 const etichetta = (a, m) => `${MESI_BREVI[m - 1]} ${String(a).slice(2)}`
@@ -35,15 +38,20 @@ function datiGrafico(d, scenario) {
   const passato = d.storico.map(s => ({ label: etichetta(s.anno, s.mese), data: fineMese(s.anno, s.mese), reale: s.saldo }))
   const futuro = d.scenari.realista.map((r, i) => ({
     label: nomeMese(r), data: fineMese(r.anno, r.mese), previsto: d.scenari[scenario][i].saldo_finale, realista: r.saldo_finale,
+    ordinario: d.scenari[scenario][i].saldo_ordinario, straordinarie: d.scenari[scenario][i].straordinarie,
     pessimista: d.scenari.pessimista[i].saldo_finale, ottimista: d.scenari.ottimista[i].saldo_finale,
     fascia: [d.scenari.pessimista[i].saldo_finale, d.scenari.ottimista[i].saldo_finale], soglia: -r.fido,
   }))
   // Le due linee si toccano nell'ultimo mese reale, così il grafico non ha un vuoto
-  if (passato.length && futuro.length) passato[passato.length - 1].previsto = passato[passato.length - 1].reale
+  if (passato.length && futuro.length) {
+    const ultimo = passato[passato.length - 1]
+    ultimo.previsto = ultimo.reale
+    ultimo.ordinario = ultimo.reale
+  }
   return [...passato, ...futuro]
 }
 
-function TooltipSaldo({ active, payload, label, scenario }) {
+function TooltipSaldo({ active, payload, label, scenario, dueLinee }) {
   if (!active || !payload?.length) return null
   const p = payload[0].payload
   const riga = (nome, v, chiave) => v != null && (
@@ -56,6 +64,12 @@ function TooltipSaldo({ active, payload, label, scenario }) {
       {riga('Ottimista', p.ottimista, 'ottimista')}
       {riga('Realista', p.realista, 'realista')}
       {riga('Pessimista', p.pessimista, 'pessimista')}
+      {dueLinee && p.fascia && (
+        <div style={{ marginTop: 4, color: COLORE_ORDINARIO }}>
+          Solo spese ordinarie ({scenario}): <strong>{formatEuroIntero(p.ordinario)}</strong>
+          {p.straordinarie > 0 && <div style={{ color: colors.text }}>Straordinarie del mese: <strong>{formatEuroIntero(p.straordinarie)}</strong></div>}
+        </div>
+      )}
       {riga('Soglia fido', p.soglia)}
     </div>
   )
@@ -76,7 +90,7 @@ function EtichettaAnno({ viewBox, testo, data, saldo, reale }) {
   )
 }
 
-function GraficoSaldo({ d, scenario, tipoAnno }) {
+function GraficoSaldo({ d, scenario, tipoAnno, dueLinee }) {
   const dati = useMemo(() => datiGrafico(d, scenario), [d, scenario])
   const nomeScenario = SCENARI.find(s => s.value === scenario).label
   // una linea verticale sull'ultimo mese di ogni anno: dicembre (solare) o settembre (alberghiero),
@@ -94,7 +108,7 @@ function GraficoSaldo({ d, scenario, tipoAnno }) {
         <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 12, fill: colors.textMuted }} interval={1} />
         <YAxis tickFormatter={v => `${Math.round(v / 1000)}k`} width={56} tick={{ fontSize: 12, fill: colors.textMuted }} />
-        <Tooltip content={<TooltipSaldo scenario={scenario} />} />
+        <Tooltip content={<TooltipSaldo scenario={scenario} dueLinee={dueLinee} />} />
         <Legend formatter={legendaNeutra} />
         {pastReferenceArea(dati, 'data', 'label', d.oggi)}
         <ReferenceLine y={0} stroke={colors.textMuted} />
@@ -104,7 +118,11 @@ function GraficoSaldo({ d, scenario, tipoAnno }) {
         ))}
         <Area dataKey="fascia" name="Da pessimista a ottimista" stroke="none" fill={COLORE_SALDO} fillOpacity={0.15} connectNulls={false} isAnimationActive={false} />
         <Line dataKey="reale" name="Saldo reale" stroke={colors.text} strokeWidth={2} dot={false} isAnimationActive={false} />
-        <Line dataKey="previsto" name={nomeScenario} stroke={COLORE_SALDO} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+        <Line dataKey="previsto" name={dueLinee ? `${nomeScenario}, con le spese straordinarie` : nomeScenario} stroke={COLORE_SALDO} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
+        {dueLinee && (
+          <Line dataKey="ordinario" name={`${nomeScenario}, solo spese ordinarie`} stroke={COLORE_ORDINARIO} strokeWidth={2}
+            strokeDasharray="5 3" dot={false} isAnimationActive={false} />
+        )}
         {fini.map(i => <ReferenceDot key={`p${i.label}`} x={i.label} y={i.y} r={6} fill={colors.text} stroke={colors.surface} strokeWidth={2} />)}
         <Line dataKey="soglia" name="Soglia del fido" stroke={colors.danger} strokeWidth={2} strokeDasharray="6 4" dot={false} type="stepAfter" isAnimationActive={false} />
       </ComposedChart>
@@ -214,7 +232,7 @@ function PannelloProva({ onProva, attiva, onTogli }) {
   return (
     <Card title="Prova: cosa succede se">
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
-        Sposta le rate Du Parc, degli interventi in previsione e dei compensi, o accendi e spegni gli interventi: grafico e tabella si ricalcolano, ma <strong>nulla viene salvato</strong>.
+        Sposta le rate Du Parc, delle spese straordinarie in previsione e dei compensi, o accendi e spegni le spese straordinarie: grafico e tabella si ricalcolano, ma <strong>nulla viene salvato</strong>.
         Se la prova ti convince, cambia la rata in Admin → Tesoreria → Piano affitti.
       </p>
       <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -230,8 +248,8 @@ function PannelloProva({ onProva, attiva, onTogli }) {
           ))}
         </div>
         <div>
-          <strong>Interventi</strong>
-          {interventi.length === 0 && <StatoVuoto>Nessun intervento.</StatoVuoto>}
+          <strong>Spese straordinarie</strong>
+          {interventi.length === 0 && <StatoVuoto>Nessuna spesa straordinaria.</StatoVuoto>}
           {interventi.map(i => {
             const usabile = i.importo_stimato != null && i.rate.length > 0
             return (
@@ -327,6 +345,9 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
   const [scenario, setScenario] = useState(() => {
     try { return localStorage.getItem(LS_SCENARIO) || 'realista' } catch { return 'realista' }
   })
+  const [linee, setLinee] = useState(() => {
+    try { return localStorage.getItem(LS_LINEE) || 'una' } catch { return 'una' }
+  })
 
   useEffect(() => {
     api.get('/tesoreria/previsione').then(r => setBase(r.data)).catch(e => setErrore(mostraErrore(e)))
@@ -337,6 +358,11 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
     try { localStorage.setItem(LS_SCENARIO, s) } catch { /* preferenza non salvata */ }
   }
 
+  function cambiaLinee(v) {
+    setLinee(v)
+    try { localStorage.setItem(LS_LINEE, v) } catch { /* preferenza non salvata */ }
+  }
+
   if (errore) return <Messaggio>{errore}</Messaggio>
   if (!base) return <Loading />
   const d = prova || base
@@ -344,6 +370,7 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
   // riga di totale dopo l'ultimo mese di ogni anno (solare o alberghiero, dal toggle in cima alla pagina)
   const totaliDopo = new Map((d.totali_anno?.[tipoAnno]?.[scenario] || []).map(t => [`${t.al.anno}-${t.al.mese}`, t]))
   const critici = d.scenari.pessimista.filter(r => r.stato === 'sotto_fido')
+  const totStraordinarie = righe.reduce((t, r) => t + (r.straordinarie || 0), 0)
   const kpiMin = nome => {
     const m = d.minimi[nome]
     const b = base.minimi[nome]
@@ -378,8 +405,16 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
         )}
       </div>
 
-      <Card title="Saldo dei conti a fine mese">
-        <GraficoSaldo d={d} scenario={scenario} tipoAnno={tipoAnno} />
+      <Card title="Saldo dei conti a fine mese" actions={<SegmentedControl options={LINEE} value={linee} onChange={cambiaLinee} />}>
+        {linee === 'due' && (
+          <p className="ui-text-muted" style={{ margin: '0 0 8px' }}>
+            {totStraordinarie > 0
+              ? <>La linea verde è il saldo senza le spese straordinarie previste ({formatEuroIntero(totStraordinarie)} fino a fine previsione): la distanza tra le due è quanto pesano. </>
+              : <>Nessuna spesa straordinaria in previsione: le due linee coincidono. </>}
+            Si inseriscono in Admin → Tesoreria → Spese straordinarie (solo quelle «In previsione»); quelle già pagate in passato, segnate come straordinarie, non entrano nelle stime.
+          </p>
+        )}
+        <GraficoSaldo d={d} scenario={scenario} tipoAnno={tipoAnno} dueLinee={linee === 'due'} />
       </Card>
 
       <Card title="Mese per mese" actions={<ExportMenu url={`/tesoreria/previsione/export?scenario=${scenario}&tipo_anno=${tipoAnno}`} nome={`previsione_${scenario}`} />}>
@@ -387,7 +422,7 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
         <Table compact>
           <thead>
             <tr>
-              <Th>Mese</Th><Th num>Saldo iniziale</Th><Th num>Entrate (stima)</Th><Th num>Uscite certe</Th><Th num>Uscite stimate</Th>
+              <Th>Mese</Th><Th num>Saldo iniziale</Th><Th num>Entrate (stima)</Th><Th num>Uscite certe</Th><Th num>di cui straordinarie</Th><Th num>Uscite stimate</Th>
               <Th num>Saldo finale</Th><Th num>Cassa libera a 90 gg</Th><Th></Th>
             </tr>
           </thead>
@@ -402,6 +437,7 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
                     <Td num><Importo v={r.saldo_iniziale} /></Td>
                     <Td num>{formatEuro(r.entrate)}</Td>
                     <Td num>{formatEuro(r.totale_certe)}</Td>
+                    <Td num>{r.straordinarie ? formatEuro(r.straordinarie) : '—'}</Td>
                     <Td num>{formatEuro(r.totale_stimate)}</Td>
                     <Td num tot><Importo v={r.saldo_finale} forte /></Td>
                     <Td num><Importo v={r.cassa_libera} /></Td>
@@ -413,6 +449,7 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
                       <Td num><Importo v={t.saldo_iniziale} /></Td>
                       <Td num>{formatEuro(t.entrate)}</Td>
                       <Td num>{formatEuro(t.totale_certe)}</Td>
+                      <Td num>{t.straordinarie ? formatEuro(t.straordinarie) : '—'}</Td>
                       <Td num>{formatEuro(t.totale_stimate)}</Td>
                       <Td num tot><Importo v={t.saldo_finale} forte /></Td>
                       <Td num /><Td />
