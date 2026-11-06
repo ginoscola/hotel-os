@@ -6,7 +6,7 @@ import api from '../../api/client.js'
 import { ExportMenu } from '../../components/ExportMenu.jsx'
 import { formatData, formatEuro, formatN, mostraErrore } from '../../utils/format.js'
 import {
-  Badge, Button, Card, Checkbox, Drawer, Field, Input, KpiTile, Loading, Messaggio, Modal, Paginazione, Select, StatoVuoto, Table, Td, Th,
+  Badge, Button, Card, Checkbox, Drawer, Field, Input, KpiTile, Loading, Messaggio, Modal, Paginazione, SegmentedControl, Select, StatoVuoto, Table, Td, Th,
   ThOrdinabile, useAvvisi, useConferma,
 } from '../../components/ui'
 import { Importo, etichettaAnno } from './helpers.jsx'
@@ -38,6 +38,7 @@ const annoAlberghieroOggi = () => { const d = new Date(); return d.getMonth() >=
 function ModaleAssegna({ ids, onChiudi, onFatto }) {
   const [spese, setSpese] = useState(null)
   const [scelta, setScelta] = useState('')
+  const [modo, setModo] = useState('esistente')
   const [nuova, setNuova] = useState({ descrizione: '', anno: annoAlberghieroOggi() - 1 })
   const [lavoro, setLavoro] = useState(false)
   const avvisi = useAvvisi()
@@ -51,7 +52,7 @@ function ModaleAssegna({ ids, onChiudi, onFatto }) {
     setLavoro(true)
     try {
       let id = scelta
-      if (scelta === 'nuova') {
+      if (modo === 'nuova') {
         id = (await api.post('/tesoreria/piani/interventi', { descrizione: nuova.descrizione.trim(), anno: Number(nuova.anno), stato: 'pagato' })).data.id
       }
       const r = await api.post(`/tesoreria/piani/interventi/${id}/fatture-sdi`, { fattura_ids: ids })
@@ -62,7 +63,9 @@ function ModaleAssegna({ ids, onChiudi, onFatto }) {
       onFatto()
     } catch (e) { avvisi.errore(mostraErrore(e)); setLavoro(false) }
   }
-  const valido = scelta && (scelta !== 'nuova' || nuova.descrizione.trim())
+  const valido = modo === 'nuova' ? nuova.descrizione.trim() : scelta
+  const perAnno = {}
+  ;(spese || []).forEach(sp => { (perAnno[sp.anno || 0] = perAnno[sp.anno || 0] || []).push(sp) })
   return (
     <Modal titolo={`Assegna ${ids.length} fatture a una spesa straordinaria`} onChiudi={onChiudi} larghezza={560}
       footer={<>
@@ -71,14 +74,22 @@ function ModaleAssegna({ ids, onChiudi, onFatto }) {
       </>}>
       {!spese ? <Loading /> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Field label="Spesa straordinaria">
-            <Select value={scelta} onChange={e => setScelta(e.target.value)}>
-              <option value="">—</option>
-              <option value="nuova">+ Nuova spesa…</option>
-              {spese.map(sp => <option key={sp.id} value={sp.id}>{sp.anno ? `${etichettaAnno(sp.anno, 'alberghiero')} · ` : ''}{sp.descrizione}</option>)}
-            </Select>
-          </Field>
-          {scelta === 'nuova' && (
+          <SegmentedControl value={modo} onChange={setModo} options={[
+            { value: 'esistente', label: 'Spesa già inserita' }, { value: 'nuova', label: 'Nuova spesa (anche anni passati)' },
+          ]} />
+          {modo === 'esistente' && (
+            <Field label="Spesa straordinaria">
+              <Select value={scelta} onChange={e => setScelta(e.target.value)}>
+                <option value="">—</option>
+                {Object.keys(perAnno).sort((a, b) => b - a).map(a => (
+                  <optgroup key={a} label={Number(a) ? etichettaAnno(Number(a), 'alberghiero') : 'Senza anno'}>
+                    {perAnno[a].map(sp => <option key={sp.id} value={sp.id}>{sp.descrizione}</option>)}
+                  </optgroup>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {modo === 'nuova' && (
             <div style={{ display: 'flex', gap: 8 }}>
               <Field label="Descrizione" style={{ flex: 1 }}>
                 <Input value={nuova.descrizione} placeholder="es. Sala da pranzo Du Parc" onChange={e => setNuova({ ...nuova, descrizione: e.target.value })} />
