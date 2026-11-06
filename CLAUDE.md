@@ -3665,6 +3665,10 @@ straordinarie + fatture collegate con pagamento non già straordinario, `_fattur
 `straordinarie_mese_in_corso`. Nel grafico (`datiGrafico()`) la linea verde sul passato = saldo reale + straordinarie pagate
 dall'inizio del grafico (cumulate); sul futuro **continua da lì** = saldo solo ordinario previsto + tutte le straordinarie già
 pagate, senza salto. Solo disegno: la previsione non cambia. Al 06/11/2026: 43.818 € pagati da novembre 2025.
+**v4.30.3**: la distanza **riparte da zero a ogni anno** (solare o alberghiero, dal toggle in cima): linea verde = saldo (reale
+sul passato, previsto sul futuro) + straordinarie dell'anno fino a quel mese (pagate o previste), così il 2027 non porta con sé
+quelle del 2026. Calcolo tutto nel frontend (`datiGrafico(d, scenario, tipoAnno)`), `saldo_ordinario` del backend non più usato
+dal grafico.
 
 **v4.30.1 — pagamento delle fatture straordinarie cercato anche per importo** (06/11/2026, avviso reale "a apr 2025 le fatture
 pagate con Fornitori – bonifici (12.358 €) superano le uscite"): BSD e B & T erano collegate con modalità bonifico ma non

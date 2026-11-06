@@ -34,19 +34,26 @@ const etichetta = (a, m) => `${MESI_BREVI[m - 1]} ${String(a).slice(2)}`
 const fineMese = (a, m) => isoLocale(new Date(a, m, 0))
 const nomeMese = r => etichetta(r.anno, r.mese)
 
-function datiGrafico(d, scenario) {
-  // linea "senza le spese straordinarie": sul passato saldo reale + straordinarie pagate dall'inizio del grafico,
-  // sul futuro continua da lì (saldo solo ordinario previsto + tutte le straordinarie già pagate)
+function datiGrafico(d, scenario, tipoAnno) {
+  // linea "senza le spese straordinarie": saldo (reale sul passato, previsto sul futuro) + spese straordinarie dell'anno
+  // fino a quel mese (pagate sul passato, previste sul futuro). Riparte da zero a ogni anno, solare o alberghiero.
+  let annoCorrente = null
   let cumulate = 0
-  const passato = d.storico.map(s => {
-    cumulate += s.straordinarie || 0
-    return { label: etichetta(s.anno, s.mese), data: fineMese(s.anno, s.mese), reale: s.saldo,
-      ordinario: s.saldo + cumulate, straordinarie: s.straordinarie || 0 }
-  })
-  const scarto = cumulate + (d.straordinarie_mese_in_corso || 0)
+  const accumula = (a, m, importo) => {
+    const anno = annoDi(new Date(a, m - 1, 1), tipoAnno)
+    if (anno !== annoCorrente) { annoCorrente = anno; cumulate = 0 }
+    cumulate += importo || 0
+    return cumulate
+  }
+  const passato = d.storico.map(s => ({
+    label: etichetta(s.anno, s.mese), data: fineMese(s.anno, s.mese), reale: s.saldo,
+    ordinario: s.saldo + accumula(s.anno, s.mese, s.straordinarie), straordinarie: s.straordinarie || 0,
+  }))
   const futuro = d.scenari.realista.map((r, i) => ({
     label: nomeMese(r), data: fineMese(r.anno, r.mese), previsto: d.scenari[scenario][i].saldo_finale, realista: r.saldo_finale,
-    ordinario: d.scenari[scenario][i].saldo_ordinario + scarto, straordinarie: d.scenari[scenario][i].straordinarie,
+    ordinario: d.scenari[scenario][i].saldo_finale
+      + accumula(r.anno, r.mese, d.scenari[scenario][i].straordinarie + (i === 0 ? (d.straordinarie_mese_in_corso || 0) : 0)),
+    straordinarie: d.scenari[scenario][i].straordinarie + (i === 0 ? (d.straordinarie_mese_in_corso || 0) : 0),
     pessimista: d.scenari.pessimista[i].saldo_finale, ottimista: d.scenari.ottimista[i].saldo_finale,
     fascia: [d.scenari.pessimista[i].saldo_finale, d.scenari.ottimista[i].saldo_finale], soglia: -r.fido,
   }))
@@ -104,7 +111,7 @@ function EtichettaAnno({ viewBox, testo, data, saldo, reale }) {
 }
 
 function GraficoSaldo({ d, scenario, tipoAnno, dueLinee }) {
-  const dati = useMemo(() => datiGrafico(d, scenario), [d, scenario])
+  const dati = useMemo(() => datiGrafico(d, scenario, tipoAnno), [d, scenario, tipoAnno])
   const nomeScenario = SCENARI.find(s => s.value === scenario).label
   // una linea verticale sull'ultimo mese di ogni anno: dicembre (solare) o settembre (alberghiero),
   // sul punto di cui l'etichetta riporta il saldo
@@ -429,10 +436,10 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
       <Card title="Saldo dei conti a fine mese" actions={<SegmentedControl options={LINEE} value={linee} onChange={cambiaLinee} />}>
         {linee === 'due' && (
           <p className="ui-text-muted" style={{ margin: '0 0 8px' }}>
-            La linea verde è il saldo come sarebbe stato e sarebbe senza le spese straordinarie: già pagate dall'inizio del grafico
-            {' '}({formatEuroIntero(totPagate)}: uscite in banca segnate straordinarie e fatture collegate alle spese) e previste
-            {' '}({totStraordinarie > 0 ? `${formatEuroIntero(totStraordinarie)} fino a fine previsione` : 'nessuna, per ora'}). La distanza dalle
-            {' '}altre linee è quanto pesano. 
+            La linea verde è il saldo senza le spese straordinarie dell'anno ({tipoAnno === 'alberghiero' ? 'alberghiero, da ottobre' : 'solare, da gennaio'}):
+            {' '}sul passato quelle pagate (uscite in banca segnate straordinarie e fatture collegate alle spese; {formatEuroIntero(totPagate)} nei mesi del grafico),
+            {' '}sul futuro quelle previste ({totStraordinarie > 0 ? `${formatEuroIntero(totStraordinarie)} fino a fine previsione` : 'nessuna, per ora'}).
+            {' '}A ogni inizio anno riparte dal saldo: la distanza è quanto pesano le straordinarie di quell'anno. 
             Si inseriscono in Admin → Tesoreria → Spese straordinarie (solo quelle «In previsione»); quelle già pagate in passato (pagamenti segnati come straordinari e fatture collegate, con modalità e data di pagamento) non entrano nelle stime.
           </p>
         )}
