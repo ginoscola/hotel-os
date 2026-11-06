@@ -62,7 +62,21 @@ function datiGrafico(d, scenario, tipoAnno) {
     const ultimo = passato[passato.length - 1]
     ultimo.previsto = ultimo.reale
   }
-  return [...passato, ...futuro]
+  const punti = [...passato, ...futuro]
+  // Scalino a fine anno: la linea verde arriva all'ultimo punto dell'anno (31/12 o 30/9) con tutte le straordinarie
+  // dell'anno, scende in verticale fino al saldo e da lì riparte la linea dell'anno dopo. Due serie alternate (ordA/ordB)
+  // per non unire con una diagonale la fine di un anno all'inizio del successivo.
+  const meseFine = tipoAnno === 'alberghiero' ? 9 : 12
+  punti.forEach((p, i) => {
+    const anno = annoDi(new Date(Number(p.data.slice(0, 4)), Number(p.data.slice(5, 7)) - 1, 1), tipoAnno)
+    const base = p.reale ?? p.previsto
+    p[anno % 2 ? 'ordB' : 'ordA'] = p.ordinario
+    if (Number(p.data.slice(5, 7)) === meseFine && i < punti.length - 1 && base != null) {
+      p[anno % 2 ? 'ordA' : 'ordB'] = base
+      p.scalino = { alto: p.ordinario, basso: base }
+    }
+  })
+  return punti
 }
 
 function TooltipSaldo({ active, payload, label, scenario, dueLinee }) {
@@ -139,10 +153,16 @@ function GraficoSaldo({ d, scenario, tipoAnno, dueLinee }) {
         <Area dataKey="fascia" name="Da pessimista a ottimista" stroke="none" fill={COLORE_SALDO} fillOpacity={0.15} connectNulls={false} isAnimationActive={false} />
         <Line dataKey="reale" name="Saldo reale" stroke={colors.text} strokeWidth={2} dot={false} isAnimationActive={false} />
         <Line dataKey="previsto" name={dueLinee ? `${nomeScenario}, con le spese straordinarie` : nomeScenario} stroke={COLORE_SALDO} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
-        {dueLinee && (
-          <Line dataKey="ordinario" name="Senza le spese straordinarie (pagate e previste)" stroke={COLORE_ORDINARIO} strokeWidth={2}
-            strokeDasharray="5 3" dot={false} isAnimationActive={false} />
-        )}
+        {dueLinee && <>
+          <Line dataKey="ordA" name="Senza le spese straordinarie dell'anno (pagate e previste)" stroke={COLORE_ORDINARIO} strokeWidth={2}
+            strokeDasharray="5 3" dot={false} isAnimationActive={false} connectNulls={false} />
+          <Line dataKey="ordB" legendType="none" stroke={COLORE_ORDINARIO} strokeWidth={2}
+            strokeDasharray="5 3" dot={false} isAnimationActive={false} connectNulls={false} />
+          {dati.filter(p => p.scalino && Math.abs(p.scalino.alto - p.scalino.basso) > 1).map(p => (
+            <ReferenceLine key={`s${p.label}`} segment={[{ x: p.label, y: p.scalino.alto }, { x: p.label, y: p.scalino.basso }]}
+              stroke={COLORE_ORDINARIO} strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" />
+          ))}
+        </>}
         {fini.map(i => <ReferenceDot key={`p${i.label}`} x={i.label} y={i.y} r={6} fill={colors.text} stroke={colors.surface} strokeWidth={2} />)}
         <Line dataKey="soglia" name="Soglia del fido" stroke={colors.danger} strokeWidth={2} strokeDasharray="6 4" dot={false} type="stepAfter" isAnimationActive={false} />
       </ComposedChart>

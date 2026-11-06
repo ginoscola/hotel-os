@@ -3669,6 +3669,9 @@ pagate, senza salto. Solo disegno: la previsione non cambia. Al 06/11/2026: 43.8
 sul passato, previsto sul futuro) + straordinarie dell'anno fino a quel mese (pagate o previste), così il 2027 non porta con sé
 quelle del 2026. Calcolo tutto nel frontend (`datiGrafico(d, scenario, tipoAnno)`), `saldo_ordinario` del backend non più usato
 dal grafico.
+**v4.30.4**: a fine anno uno **scalino** (richiesta dell'utente: con la diagonale dicembre→gennaio sembrava che i lavori non
+pesassero a fine anno): la linea verde arriva al 31/12 (o 30/9) con tutte le straordinarie dell'anno, scende in verticale al saldo
+(`ReferenceLine segment`) e da lì riparte l'anno dopo; due serie alternate `ordA`/`ordB` per non unire gli anni con una diagonale.
 
 **v4.30.1 — pagamento delle fatture straordinarie cercato anche per importo** (06/11/2026, avviso reale "a apr 2025 le fatture
 pagate con Fornitori – bonifici (12.358 €) superano le uscite"): BSD e B & T erano collegate con modalità bonifico ma non
