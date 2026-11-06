@@ -3615,6 +3615,24 @@ gestite anno per anno.
   in tabella.
 Effetto al 06/11/2026 (realista, solo per i 5 movimenti segnati): fine 2027 da −7.500 € a +14.700 €, aprile 2027 −83.500 €.
 
+**v4.28.0 — fatture SDI e pagamenti in banca collegati alle spese straordinarie** (richiesta dell'utente). Pulsante
+"Fatture e pagamenti" sulla spesa (`GET /piani/interventi/{id}/fatture` → `collegate`, `candidate` con `origine`
+passcom|sdi, `pagamenti`, `pagamenti_candidati`, `coperto`, `residuo`):
+- **Fatture SDI da registrare** collegabili (chiave `XML:{impronta}#{rata}`, dalle `debiti` di `stato_fatture()`); quando lo
+  studio le registra, `_migra_fatture_sdi()` (dentro `_aggiorna_interventi_pagati()`, quindi a ogni `sincronizza_piani`)
+  sposta il collegamento sulle scadenze Passcom.
+- **Pagamenti in banca** (tabella `tesoreria_intervento_movimenti`, `tes019_2026`, applicata al DB reale): `POST
+  /piani/interventi/{id}/pagamenti {movimento_id}`, `DELETE /piani/interventi/pagamenti/{id}`. Il movimento viene segnato
+  `straordinario` (al distacco torna com'era, `era_straordinario`). Candidati: uscite dei conti correnti degli ultimi 18 mesi
+  non escluse dall'operativo, ★ se `forza_nome(fornitore della spesa, controparte) ≥ 1`.
+- **Mai contato due volte**: `coperto_intervento()` = Σ fatture collegate + Σ pagamenti collegati **che non pagano** una fattura
+  collegata (abbinamento automatico/confermato); collegare un pagamento di una fattura già collegata → 409.
+  `_segna_pagamenti_straordinari()` segna straordinari i movimenti abbinati a fatture collegate, solo se l'abbinamento contiene
+  esclusivamente fatture collegate (una Ri.Ba. con fatture ordinarie resta ordinaria).
+- **Previsione**: le scadenze Passcom e le fatture SDI collegate a una spesa entrano nel gruppo `interventi` (linea delle
+  straordinarie) e non riducono la stima dei fornitori ordinari.
+- Pagata: fatture e pagamenti coprono la stima e le fatture collegate sono pagate (SDI: pagata o chiusa).
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**

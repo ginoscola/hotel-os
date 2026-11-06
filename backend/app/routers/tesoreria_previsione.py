@@ -18,7 +18,7 @@ from app.database import get_db
 from app.models.revenue import AppConfig
 from app.models.revenue import User
 from app.models.tesoreria import (
-    TesoreriaAdvertising, TesoreriaAdvertisingMese, TesoreriaCategoria, TesoreriaConto, TesoreriaImpegno, TesoreriaIntervento, TesoreriaMovimento,
+    TesoreriaAdvertising, TesoreriaAdvertisingMese, TesoreriaCategoria, TesoreriaConto, TesoreriaImpegno, TesoreriaIntervento, TesoreriaInterventoScadenza, TesoreriaMovimento,
     TesoreriaPrevisioneSalvata, TesoreriaRicorrente,
 )
 from app.routers.corrispettivi_documenti import _risposta_tabella
@@ -138,13 +138,21 @@ def _certe(db: Session, oggi: date) -> list:
         elif i.tipo == "carta":
             categoria = "carte"
         out.append(Certa(i.data_scadenza, da_pagare, gruppo, categoria, i.id, i.codice))
+    # fatture collegate a una spesa straordinaria: nel gruppo delle straordinarie e non tolte dalla stima dei fornitori
+    straordinarie = {c for (c,) in db.query(TesoreriaInterventoScadenza.chiave)}
     for s in stato_scadenze(db, oggi)["scadenze"]:
         if s["stato"] in STATI_SCADENZA_APERTA and s["aperto"] > 0:
-            out.append(Certa(s["data_scadenza"], Decimal(str(s["aperto"])), "fornitori", "fornitori_bonifici"))
+            if s["chiave"] in straordinarie:
+                out.append(Certa(s["data_scadenza"], Decimal(str(s["aperto"])), "interventi", codice=s["chiave"]))
+            else:
+                out.append(Certa(s["data_scadenza"], Decimal(str(s["aperto"])), "fornitori", "fornitori_bonifici"))
     # Fase 5: fatture arrivate allo SDI e non ancora nello scadenzario (al netto delle note di credito)
     for r, importo in stato_fatture(db, oggi)["debiti"]:
-        out.append(Certa(r.data_scadenza, importo, "fatture", CATEGORIA_DI_MODALITA.get(r.tipo_pagamento, "fornitori_bonifici"),
-                         codice=r.chiave))
+        if r.chiave in straordinarie:
+            out.append(Certa(r.data_scadenza, importo, "interventi", codice=r.chiave))
+        else:
+            out.append(Certa(r.data_scadenza, importo, "fatture", CATEGORIA_DI_MODALITA.get(r.tipo_pagamento, "fornitori_bonifici"),
+                             codice=r.chiave))
     return out
 
 

@@ -351,3 +351,30 @@ def test_iva_mensile_da_vendite_e_fatture(client, Sessione, monkeypatch):
     # agosto: 900 − 22 (autofattura esclusa) − 10 di credito = 868 da versare il 16/9
     assert mesi[8]["acquisti"] == 22.0 and mesi[8]["versamento"] == 868.0 and mesi[8]["scadenza"] == f"{anno}-09-16"
     assert r["credito_fine_anno"] == 2.2 and all(m["completo"] for m in r["mesi"])
+
+
+def test_fattura_sdi_collegata_a_spesa_straordinaria_poi_registrata(client, Sessione, test_engine):
+    from sqlalchemy import text
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_interventi, tesoreria_impegni RESTART IDENTITY CASCADE"))
+    reg = OGGI - timedelta(days=1)
+    _passcom(Sessione, reg, [("601.00001", "ALTRO", "1", date(2026, 1, 1), "10.00", OGGI + timedelta(days=200))])
+    scad = OGGI + timedelta(days=40)
+    _importa(client, zip_fatture([("1", OGGI, fattura_xml("03333333333", "Piscine Spa", "77", OGGI.isoformat(), "3050.00",
+                                                          modalita="MP05", scadenza=scad.isoformat()))]))
+    i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Piscina", "fornitore": "Piscine Spa", "importo_stimato": "10000"}).json()
+    f = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()
+    sdi = next(c for c in f["candidate"] if c["origine"] == "sdi")
+    assert sdi["suggerita"] is True and sdi["importo"] == 3050
+    r = client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture", json={"chiave": sdi["chiave"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["residuo"] == 6950
+    mese = next(x for x in client.get("/tesoreria/previsione").json()["scenari"]["realista"] if (x["anno"], x["mese"]) == (scad.year, scad.month))
+    assert mese["uscite_certe"].get("interventi") == 3050 and "fatture" not in mese["uscite_certe"]
+    # lo studio la registra: il collegamento passa alla scadenza Passcom
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_scadenze, tesoreria_scad_import RESTART IDENTITY CASCADE"))
+    _passcom(Sessione, OGGI, [("601.00002", "PISCINE SPA", "77", OGGI, "3050.00", scad)])
+    client.post("/tesoreria/impegni/genera")
+    collegate = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["collegate"]
+    assert [(c["origine"], c["importo"]) for c in collegate] == [("passcom", 3050)]

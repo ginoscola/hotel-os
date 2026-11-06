@@ -16,12 +16,15 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.tesoreria import (
     STATI_INTERVENTO, VOCI_COMPENSO, TesoreriaAdvertising, TesoreriaAdvertisingMese, TesoreriaCategoria, TesoreriaCompenso, TesoreriaConto, TesoreriaContrattoAffitto, TesoreriaImpegno,
-    TesoreriaIntervento, TesoreriaInterventoScadenza, TesoreriaRataAffitto, TesoreriaRataCompenso, TesoreriaRataIntervento, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
+    TesoreriaAbbinamento, TesoreriaAbbinamentoMovimento, TesoreriaAbbinamentoScadenza, TesoreriaCategoria, TesoreriaConto,
+    TesoreriaIntervento, TesoreriaInterventoMovimento, TesoreriaInterventoScadenza, TesoreriaMovimento, TesoreriaRataAffitto, TesoreriaRataCompenso, TesoreriaRataIntervento, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
 )
 from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno
 from app.routers.tesoreria_report import _addebiti_candidati
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.routers.tesoreria_shared import euro, puo_importare, puo_modificare, puo_vedere
+from app.services.tesoreria_abbinamento import forza_nome
+from app.services.tesoreria_fatture import PREFISSO_CHIAVE, impronta_da_chiave
 from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_piani import (
     MESI_STAGIONE, TOLLERANZA_PERCENTUALE, anno_calendario, chiudi_totale, data_addebito_advertising, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, importi_rate_intervento, nome_corrisponde, parse_piano_mutuo,
@@ -97,12 +100,38 @@ def _fatture_collegate(db: Session, intervento_id: int) -> list:
     return db.query(TesoreriaInterventoScadenza).filter(TesoreriaInterventoScadenza.intervento_id == intervento_id).all()
 
 
+def _pagamenti_collegati(db: Session, intervento_id: int) -> list:
+    return db.query(TesoreriaInterventoMovimento).filter(TesoreriaInterventoMovimento.intervento_id == intervento_id).all()
+
+
+STATI_ABBINAMENTO_VALIDI = ("automatico", "confermato")
+
+
+def _movimenti_di_fatture(db: Session, chiavi) -> set:
+    """Movimenti in banca abbinati (automatico o confermato) ad almeno una delle fatture indicate."""
+    chiavi = list(chiavi)
+    if not chiavi:
+        return set()
+    return {m for (m,) in db.query(TesoreriaAbbinamentoMovimento.movimento_id).join(
+        TesoreriaAbbinamento, TesoreriaAbbinamento.id == TesoreriaAbbinamentoMovimento.abbinamento_id,
+    ).join(TesoreriaAbbinamentoScadenza, TesoreriaAbbinamentoScadenza.abbinamento_id == TesoreriaAbbinamento.id).filter(
+        TesoreriaAbbinamento.stato.in_(STATI_ABBINAMENTO_VALIDI), TesoreriaAbbinamentoScadenza.chiave.in_(chiavi))}
+
+
+def coperto_intervento(db: Session, i: TesoreriaIntervento) -> Decimal:
+    """Parte della stima già coperta: fatture collegate (aperte = già tra le uscite certe, pagate = già uscite) più i
+    pagamenti in banca collegati che non pagano una di quelle fatture (acconti, saldi senza fattura collegata)."""
+    fatture = _fatture_collegate(db, i.id)
+    di_fatture = _movimenti_di_fatture(db, [f.chiave for f in fatture])
+    return (sum((f.importo for f in fatture), Decimal(0))
+            + sum((p.importo for p in _pagamenti_collegati(db, i.id) if p.movimento_id not in di_fatture), Decimal(0)))
+
+
 def residuo_intervento(db: Session, i: TesoreriaIntervento) -> Optional[Decimal]:
-    """Stima meno le fatture collegate, già tra le uscite certe dello scadenzario. Mai sotto zero."""
+    """Stima meno fatture e pagamenti collegati. Mai sotto zero."""
     if i.importo_stimato is None:
         return None
-    collegato = sum((f.importo for f in _fatture_collegate(db, i.id)), Decimal(0))
-    return max(i.importo_stimato - collegato, Decimal(0))
+    return max(i.importo_stimato - coperto_intervento(db, i), Decimal(0))
 
 
 def _rate_dell_intervento(db: Session, intervento_id: int) -> list:
@@ -115,8 +144,7 @@ def rate_intervento(db: Session, i: TesoreriaIntervento) -> list:
     rate = _rate_dell_intervento(db, i.id)
     if i.importo_stimato is None or not rate:
         return []
-    fatturato = sum((f.importo for f in _fatture_collegate(db, i.id)), Decimal(0))
-    calcolate = importi_rate_intervento(i.importo_stimato, [r.percentuale for r in rate], fatturato)
+    calcolate = importi_rate_intervento(i.importo_stimato, [r.percentuale for r in rate], coperto_intervento(db, i))
     return [(r, importo, residuo) for r, (importo, residuo) in zip(rate, calcolate)]
 
 
@@ -196,18 +224,77 @@ def _previsti_carte(db: Session, oggi: date) -> list:
 STATI_PAGATA = ("pagata_banca", "pagata_manuale", "pagata_carta")
 
 
+STATI_SDI_CHIUSA = STATI_PAGATA + ("chiusa",)
+
+
+def _stato_fatture_sdi(db: Session, oggi: date) -> dict:
+    """{impronta: riga di stato_fatture} (import locale: tesoreria_fatture_stato non deve dipendere dai piani)."""
+    from app.routers.tesoreria_fatture_stato import stato_fatture
+    return {r["fattura"].impronta: r for r in stato_fatture(db, oggi)["righe"]}
+
+
+def _migra_fatture_sdi(db: Session, righe_sdi: dict) -> None:
+    """Fattura SDI collegata e poi registrata dallo studio: il collegamento passa alle sue scadenze Passcom."""
+    gia = {c for (c,) in db.query(TesoreriaInterventoScadenza.chiave)}
+    viste = set()
+    for f in db.query(TesoreriaInterventoScadenza).filter(TesoreriaInterventoScadenza.chiave.like(f"{PREFISSO_CHIAVE}%")).all():
+        impronta = impronta_da_chiave(f.chiave)
+        riga = righe_sdi.get(impronta)
+        if not riga or riga["stato"] != "in_scadenzario" or not riga["passcom"]:
+            continue
+        if (f.intervento_id, impronta) not in viste:
+            viste.add((f.intervento_id, impronta))
+            for s in riga["passcom"]:
+                if s["chiave"] not in gia:
+                    gia.add(s["chiave"])
+                    db.add(TesoreriaInterventoScadenza(intervento_id=f.intervento_id, chiave=s["chiave"], fornitore=s["fornitore"],
+                                                       data_scadenza=s["data_scadenza"], numero_documento=f.numero_documento,
+                                                       importo=Decimal(str(s["importo"]))))
+        db.delete(f)
+    db.flush()
+
+
+def _segna_pagamenti_straordinari(db: Session) -> None:
+    """I pagamenti in banca delle fatture collegate a una spesa straordinaria escono dalle stime degli anni dopo.
+    Solo se il pagamento copre esclusivamente fatture collegate (una Ri.Ba. con fatture ordinarie resta ordinaria)."""
+    collegate = {c for (c,) in db.query(TesoreriaInterventoScadenza.chiave)}
+    if not collegate:
+        return
+    per_abb = {}
+    for abb_id, chiave in db.query(TesoreriaAbbinamentoScadenza.abbinamento_id, TesoreriaAbbinamentoScadenza.chiave).join(
+            TesoreriaAbbinamento, TesoreriaAbbinamento.id == TesoreriaAbbinamentoScadenza.abbinamento_id).filter(
+            TesoreriaAbbinamento.stato.in_(STATI_ABBINAMENTO_VALIDI)):
+        per_abb.setdefault(abb_id, set()).add(chiave)
+    abbinamenti = [a for a, chiavi in per_abb.items() if chiavi <= collegate]
+    if not abbinamenti:
+        return
+    ids = [m for (m,) in db.query(TesoreriaAbbinamentoMovimento.movimento_id)
+           .filter(TesoreriaAbbinamentoMovimento.abbinamento_id.in_(abbinamenti))]
+    db.query(TesoreriaMovimento).filter(TesoreriaMovimento.id.in_(ids), TesoreriaMovimento.straordinario.is_(False)) \
+        .update({TesoreriaMovimento.straordinario: True}, synchronize_session=False)
+
+
 def _aggiorna_interventi_pagati(db: Session, oggi: date) -> None:
-    """Intervento pagato: fatture a coprire tutta la stima, tutte pagate o uscite dallo scadenzario."""
-    collegati = db.query(TesoreriaIntervento).join(
-        TesoreriaInterventoScadenza, TesoreriaInterventoScadenza.intervento_id == TesoreriaIntervento.id,
-    ).filter(TesoreriaIntervento.stato != "pagato").distinct().all()
+    """Spesa pagata: fatture e pagamenti a coprire tutta la stima, fatture tutte pagate (o uscite dallo scadenzario)."""
+    con_sdi = db.query(TesoreriaInterventoScadenza.id).filter(TesoreriaInterventoScadenza.chiave.like(f"{PREFISSO_CHIAVE}%")).first()
+    righe_sdi = _stato_fatture_sdi(db, oggi) if con_sdi else {}
+    if con_sdi:
+        _migra_fatture_sdi(db, righe_sdi)
+    _segna_pagamenti_straordinari(db)
+    ids = {i for (i,) in db.query(TesoreriaInterventoScadenza.intervento_id)} | {i for (i,) in db.query(TesoreriaInterventoMovimento.intervento_id)}
+    collegati = db.query(TesoreriaIntervento).filter(TesoreriaIntervento.id.in_(ids or [0]), TesoreriaIntervento.stato != "pagato").all()
     if not collegati:
         return
     aperte = {s["chiave"]: s["stato"] for s in stato_scadenze(db, oggi)["scadenze"]}
+
+    def pagata(f) -> bool:
+        if f.chiave.startswith(PREFISSO_CHIAVE):
+            riga = righe_sdi.get(impronta_da_chiave(f.chiave))
+            return riga is None or riga["stato"] in STATI_SDI_CHIUSA
+        return f.chiave not in aperte or aperte[f.chiave] in STATI_PAGATA
+
     for i in collegati:
-        fatture = _fatture_collegate(db, i.id)
-        pagate = all(f.chiave not in aperte or aperte[f.chiave] in STATI_PAGATA for f in fatture)
-        if pagate and residuo_intervento(db, i) == 0:
+        if all(pagata(f) for f in _fatture_collegate(db, i.id)) and residuo_intervento(db, i) == 0:
             i.stato = "pagato"
 
 
@@ -562,10 +649,13 @@ def _rate_json(db: Session, i: TesoreriaIntervento) -> list:
 
 def _intervento_json(db: Session, i: TesoreriaIntervento) -> dict:
     fatture = _fatture_collegate(db, i.id)
+    pagamenti = _pagamenti_collegati(db, i.id)
     return {"id": i.id, "descrizione": i.descrizione, "struttura_code": i.struttura_code, "fornitore": i.fornitore,
             "importo_stimato": euro(i.importo_stimato), "rate": _rate_json(db, i),
             "stato": i.stato, "inclusa_in_previsione": i.inclusa_in_previsione, "nota": i.nota, "n_fatture": len(fatture),
-            "fatture_collegate": euro(sum((f.importo for f in fatture), Decimal(0))), "residuo": euro(residuo_intervento(db, i))}
+            "n_pagamenti": len(pagamenti), "fatture_collegate": euro(sum((f.importo for f in fatture), Decimal(0))),
+            "pagamenti_collegati": euro(sum((p.importo for p in pagamenti), Decimal(0))),
+            "coperto": euro(coperto_intervento(db, i)), "residuo": euro(residuo_intervento(db, i))}
 
 
 def _applica_intervento(i: TesoreriaIntervento, corpo: InterventoIn):
@@ -972,7 +1062,23 @@ class FatturaIn(BaseModel):
 
 def _fattura_json(f: TesoreriaInterventoScadenza) -> dict:
     return {"id": f.id, "chiave": f.chiave, "fornitore": f.fornitore, "data_scadenza": f.data_scadenza.isoformat(),
-            "numero_documento": f.numero_documento, "importo": euro(f.importo)}
+            "numero_documento": f.numero_documento, "importo": euro(f.importo),
+            "origine": "sdi" if f.chiave.startswith(PREFISSO_CHIAVE) else "passcom"}
+
+
+def _debiti_sdi(db: Session) -> list:
+    """Rate delle fatture arrivate allo SDI e non ancora registrate dallo studio (le stesse della previsione)."""
+    from app.routers.tesoreria_fatture_stato import stato_fatture
+    return stato_fatture(db, date.today())["debiti"]
+
+
+GIORNI_PAGAMENTI_CANDIDATI = 540
+
+
+def _pagamento_json(p: TesoreriaInterventoMovimento, m: TesoreriaMovimento, di_fatture: set) -> dict:
+    return {"id": p.id, "movimento_id": m.id, "data": m.data_contabile.isoformat(), "controparte": m.controparte,
+            "causale": m.causale or m.descrizione, "importo": euro(p.importo),
+            "di_fattura_collegata": m.id in di_fatture}
 
 
 @router.get("/piani/interventi/{intervento_id}/fatture")
@@ -988,9 +1094,44 @@ def fatture_intervento(intervento_id: int, db: Session = Depends(get_db), _=Depe
             continue
         candidate.append({"chiave": s["chiave"], "fornitore": s["fornitore"], "data_scadenza": s["data_scadenza"].isoformat(),
                           "numero_documento": s.get("numero_documento"), "importo": euro(Decimal(str(s["importo"]))),
-                          "suggerita": bool(i.fornitore) and nome_corrisponde(s["fornitore"], [i.fornitore])})
+                          "suggerita": bool(i.fornitore) and nome_corrisponde(s["fornitore"], [i.fornitore]), "origine": "passcom"})
+    for r, importo in _debiti_sdi(db):
+        if r.chiave in gia:
+            continue
+        candidate.append({"chiave": r.chiave, "fornitore": r.fornitore, "data_scadenza": r.data_scadenza.isoformat(),
+                          "numero_documento": r.numero_documento, "importo": euro(importo), "origine": "sdi",
+                          "suggerita": bool(i.fornitore) and forza_nome(i.fornitore, r.fornitore) >= 1})
     candidate.sort(key=lambda c: (not c["suggerita"], c["fornitore"], c["data_scadenza"]))
-    return {"collegate": [_fattura_json(f) for f in _fatture_collegate(db, i.id)], "candidate": candidate[:300]}
+    fatture = _fatture_collegate(db, i.id)
+    di_fatture = _movimenti_di_fatture(db, [f.chiave for f in fatture])
+    collegati = _pagamenti_collegati(db, i.id)
+    movimenti = {m.id: m for m in db.query(TesoreriaMovimento).filter(TesoreriaMovimento.id.in_([p.movimento_id for p in collegati] or [0]))}
+    return {"collegate": [_fattura_json(f) for f in fatture], "candidate": candidate[:300],
+            "pagamenti": [_pagamento_json(p, movimenti[p.movimento_id], di_fatture) for p in collegati],
+            "pagamenti_candidati": _pagamenti_candidati(db, i, di_fatture),
+            "coperto": euro(coperto_intervento(db, i)), "residuo": euro(residuo_intervento(db, i))}
+
+
+def _pagamenti_candidati(db: Session, i: TesoreriaIntervento, di_fatture: set) -> list:
+    """Uscite in banca degli ultimi 18 mesi non ancora collegate e non pagamenti di fatture già collegate; prima quelle
+    con il nome del fornitore della spesa."""
+    gia = {m for (m,) in db.query(TesoreriaInterventoMovimento.movimento_id)}
+    righe = db.query(TesoreriaMovimento).join(TesoreriaConto, TesoreriaConto.id == TesoreriaMovimento.conto_id).outerjoin(
+        TesoreriaCategoria, TesoreriaCategoria.id == TesoreriaMovimento.categoria_id).filter(
+        TesoreriaConto.tipo == "conto", TesoreriaMovimento.importo < 0,
+        TesoreriaMovimento.data_contabile >= date.fromordinal(date.today().toordinal() - GIORNI_PAGAMENTI_CANDIDATI),
+        (TesoreriaCategoria.escludi_da_operativo.is_(False)) | (TesoreriaCategoria.id.is_(None)),
+    ).order_by(TesoreriaMovimento.data_contabile.desc()).all()
+    out = []
+    for m in righe:
+        if m.id in gia or m.id in di_fatture:
+            continue
+        suggerito = bool(i.fornitore) and forza_nome(i.fornitore, m.controparte or m.descrizione) >= 1
+        out.append({"movimento_id": m.id, "data": m.data_contabile.isoformat(), "controparte": m.controparte,
+                    "causale": m.causale or m.descrizione, "importo": euro(-m.importo), "straordinario": m.straordinario,
+                    "suggerito": suggerito})
+    out.sort(key=lambda c: not c["suggerito"])
+    return out[:300]
 
 
 @router.post("/piani/interventi/{intervento_id}/fatture")
@@ -1000,11 +1141,19 @@ def collega_fattura(intervento_id: int, corpo: FatturaIn, db: Session = Depends(
         raise HTTPException(404, "Intervento non trovato")
     if db.query(TesoreriaInterventoScadenza).filter(TesoreriaInterventoScadenza.chiave == corpo.chiave).first():
         raise HTTPException(409, "Fattura già collegata a un intervento")
-    s = next((x for x in stato_scadenze(db, date.today())["scadenze"] if x["chiave"] == corpo.chiave), None)
-    if s is None:
-        raise HTTPException(404, "Scadenza non trovata nello scadenzario attuale")
-    db.add(TesoreriaInterventoScadenza(intervento_id=i.id, chiave=s["chiave"], fornitore=s["fornitore"], data_scadenza=s["data_scadenza"],
-                                       numero_documento=s.get("numero_documento"), importo=Decimal(str(s["importo"]))))
+    if corpo.chiave.startswith(PREFISSO_CHIAVE):
+        debito = next(((r, imp) for r, imp in _debiti_sdi(db) if r.chiave == corpo.chiave), None)
+        if debito is None:
+            raise HTTPException(404, "Fattura non trovata tra quelle da registrare")
+        r, importo = debito
+        db.add(TesoreriaInterventoScadenza(intervento_id=i.id, chiave=r.chiave, fornitore=r.fornitore, data_scadenza=r.data_scadenza,
+                                           numero_documento=r.numero_documento, importo=importo))
+    else:
+        s = next((x for x in stato_scadenze(db, date.today())["scadenze"] if x["chiave"] == corpo.chiave), None)
+        if s is None:
+            raise HTTPException(404, "Scadenza non trovata nello scadenzario attuale")
+        db.add(TesoreriaInterventoScadenza(intervento_id=i.id, chiave=s["chiave"], fornitore=s["fornitore"], data_scadenza=s["data_scadenza"],
+                                           numero_documento=s.get("numero_documento"), importo=Decimal(str(s["importo"]))))
     db.flush()
     _applica(db)
     return _intervento_json(db, i)
@@ -1016,6 +1165,44 @@ def scollega_fattura(fattura_id: int, db: Session = Depends(get_db), _=Depends(p
     if f is None:
         raise HTTPException(404, "Collegamento non trovato")
     db.delete(f)
+    db.flush()
+    _applica(db)
+    return {"ok": True}
+
+
+class PagamentoIn(BaseModel):
+    movimento_id: int
+
+
+@router.post("/piani/interventi/{intervento_id}/pagamenti")
+def collega_pagamento(intervento_id: int, corpo: PagamentoIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    """Pagamento in banca (acconto, saldo) collegato alla spesa: riduce la stima ed esce dalle stime degli anni dopo."""
+    i = db.get(TesoreriaIntervento, intervento_id)
+    if i is None:
+        raise HTTPException(404, "Spesa straordinaria non trovata")
+    m = db.get(TesoreriaMovimento, corpo.movimento_id)
+    if m is None or m.importo >= 0:
+        raise HTTPException(400, "Il movimento deve essere un'uscita")
+    if db.query(TesoreriaInterventoMovimento).filter(TesoreriaInterventoMovimento.movimento_id == m.id).first():
+        raise HTTPException(409, "Pagamento già collegato a una spesa straordinaria")
+    if m.id in _movimenti_di_fatture(db, [c for (c,) in db.query(TesoreriaInterventoScadenza.chiave)]):
+        raise HTTPException(409, "È il pagamento di una fattura già collegata: è già contato")
+    db.add(TesoreriaInterventoMovimento(intervento_id=i.id, movimento_id=m.id, importo=-m.importo, era_straordinario=m.straordinario))
+    m.straordinario = True
+    db.flush()
+    _applica(db)
+    return _intervento_json(db, i)
+
+
+@router.delete("/piani/interventi/pagamenti/{collegamento_id}")
+def scollega_pagamento(collegamento_id: int, db: Session = Depends(get_db), _=Depends(puo_modificare)):
+    p = db.get(TesoreriaInterventoMovimento, collegamento_id)
+    if p is None:
+        raise HTTPException(404, "Collegamento non trovato")
+    m = db.get(TesoreriaMovimento, p.movimento_id)
+    if m is not None:
+        m.straordinario = p.era_straordinario
+    db.delete(p)
     db.flush()
     _applica(db)
     return {"ok": True}

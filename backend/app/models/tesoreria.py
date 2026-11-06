@@ -495,6 +495,18 @@ class TesoreriaInterventoScadenza(Base):
     importo          = Column(Numeric(14, 2), nullable=False)
 
 
+class TesoreriaInterventoMovimento(Base):
+    """Pagamento in banca collegato a una spesa straordinaria (acconti, saldi senza fattura collegata): riduce la
+    stima della spesa. Il movimento viene segnato `straordinario`; `era_straordinario` ricorda com'era prima."""
+    __tablename__ = "tesoreria_intervento_movimenti"
+
+    id                = Column(Integer, primary_key=True, autoincrement=True)
+    intervento_id     = Column(Integer, ForeignKey("tesoreria_interventi.id", ondelete="CASCADE"), nullable=False, index=True)
+    movimento_id      = Column(Integer, ForeignKey("tesoreria_movimenti.id", ondelete="CASCADE"), nullable=False, unique=True)
+    importo           = Column(Numeric(14, 2), nullable=False)          # positivo (uscita)
+    era_straordinario = Column(Boolean, nullable=False, default=False)
+
+
 # ── Fase 5: fatture elettroniche ricevute (ZIP scaricati dal portale AdE) ──────
 
 class TesoreriaFattureImport(Base):

@@ -503,3 +503,50 @@ def test_permessi_viewer(client):
     utente_corrente["u"] = VIEWER
     assert client.get("/tesoreria/piani/affitti").status_code == 200
     assert client.post("/tesoreria/piani/interventi", json={"descrizione": "x"}).status_code == 403
+
+
+def _piscina(client, importo="10000"):
+    i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Piscina", "fornitore": "PISCINE SRL", "importo_stimato": importo,
+                                                        "inclusa_in_previsione": True}).json()
+    _rata_intervento(client, i["id"], f"{FUTURO}-03-31")
+    return i
+
+
+def _straordinario(test_engine, movimento_id):
+    with test_engine.begin() as conn:
+        return conn.execute(text("SELECT straordinario FROM tesoreria_movimenti WHERE id = :i"), {"i": movimento_id}).scalar()
+
+
+def test_pagamento_collegato_riduce_la_stima_ed_e_straordinario(client, test_engine):
+    client.put("/tesoreria/impegni/parametri", json={"orizzonte": f"{FUTURO}-12-31"})
+    i = _piscina(client)
+    m = _movimento(test_engine, "personale", date.today() - timedelta(days=10), -3000, "PISCINE SRL")
+    f = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()
+    assert f["pagamenti_candidati"][0]["movimento_id"] == m and f["pagamenti_candidati"][0]["suggerito"] is True
+    r = client.post(f"/tesoreria/piani/interventi/{i['id']}/pagamenti", json={"movimento_id": m})
+    assert r.status_code == 200, r.text
+    assert r.json()["residuo"] == 7000 and r.json()["n_pagamenti"] == 1
+    assert _impegni_intervento(client)[0]["importo"] == 7000
+    assert _straordinario(test_engine, m) is True
+    assert client.post(f"/tesoreria/piani/interventi/{i['id']}/pagamenti", json={"movimento_id": m}).status_code == 409
+    pid = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["pagamenti"][0]["id"]
+    assert client.delete(f"/tesoreria/piani/interventi/pagamenti/{pid}").status_code == 200
+    assert _straordinario(test_engine, m) is False
+    assert _impegni_intervento(client)[0]["importo"] == 10000
+
+
+def test_pagamento_di_fattura_collegata_non_conta_due_volte(client, test_engine):
+    _scadenza(test_engine, importo=3000)
+    i = _piscina(client)
+    m = _movimento(test_engine, "personale", date.today() - timedelta(days=5), -3000, "PISCINE SRL")
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_abbinamenti RESTART IDENTITY CASCADE"))
+        conn.execute(text("INSERT INTO tesoreria_abbinamenti (stato, regola, codice_fornitore, fornitore) VALUES ('confermato', 'bonifico', 'F1', 'PISCINE SRL')"))
+        conn.execute(text("INSERT INTO tesoreria_abbinamento_scadenze (abbinamento_id, chiave, data_scadenza, importo) VALUES (1, 'K1', :d, 3000)"),
+                     {"d": date.today()})
+        conn.execute(text("INSERT INTO tesoreria_abbinamento_movimenti (abbinamento_id, movimento_id) VALUES (1, :m)"), {"m": m})
+    assert client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture", json={"chiave": "K1"}).json()["residuo"] == 7000
+    assert _straordinario(test_engine, m) is True       # pagamento di una fattura della spesa: fuori dalle stime
+    f = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()
+    assert all(c["movimento_id"] != m for c in f["pagamenti_candidati"])
+    assert client.post(f"/tesoreria/piani/interventi/{i['id']}/pagamenti", json={"movimento_id": m}).status_code == 409
