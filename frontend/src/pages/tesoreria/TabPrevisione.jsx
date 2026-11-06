@@ -136,7 +136,8 @@ function BadgeStato({ stato }) {
   return null
 }
 
-function DettaglioMese({ riga, onChiudi }) {
+function DettaglioMese({ riga, tolte = [], onChiudi }) {
+  const tolteMese = tolte.filter(t => t.mese === riga.mese && (riga.riferimento_uscite || []).includes(t.anno))
   const [impegni, setImpegni] = useState(null)
   useEffect(() => {
     const primo = isoLocale(new Date(riga.anno, riga.mese - 1, 1))
@@ -164,6 +165,12 @@ function DettaglioMese({ riga, onChiudi }) {
         </p>
       )}
       {Object.entries(riga.uscite_stimate).filter(([, v]) => v > 0).map(([k, v]) => <div key={k}>{NOMI_STIMATE[k] || k}: {formatEuro(v)}</div>)}
+      {tolteMese.length > 0 && (
+        <p className="ui-text-muted" style={{ margin: '6px 0 0' }}>
+          Dallo storico di {MESI_BREVI[riga.mese - 1]} sono state tolte le fatture delle spese straordinarie:{' '}
+          {tolteMese.map(t => `${t.categoria_nome} ${t.anno} ${formatEuro(t.importo)}`).join(', ')}.
+        </p>
+      )}
       <h4 style={{ margin: '12px 0 6px' }}>Impegni del mese</h4>
       {!impegni ? <Loading /> : impegni.length === 0 ? <StatoVuoto>Nessun impegno.</StatoVuoto> : (
         <Table compact>
@@ -411,7 +418,7 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
             {totStraordinarie > 0
               ? <>La linea verde è il saldo senza le spese straordinarie previste ({formatEuroIntero(totStraordinarie)} fino a fine previsione): la distanza tra le due è quanto pesano. </>
               : <>Nessuna spesa straordinaria in previsione: le due linee coincidono. </>}
-            Si inseriscono in Admin → Tesoreria → Spese straordinarie (solo quelle «In previsione»); quelle già pagate in passato, segnate come straordinarie, non entrano nelle stime.
+            Si inseriscono in Admin → Tesoreria → Spese straordinarie (solo quelle «In previsione»); quelle già pagate in passato (pagamenti segnati come straordinari e fatture collegate, con modalità e data di pagamento) non entrano nelle stime.
           </p>
         )}
         <GraficoSaldo d={d} scenario={scenario} tipoAnno={tipoAnno} dueLinee={linee === 'due'} />
@@ -464,7 +471,7 @@ export default function TabPrevisione({ permessi, tipoAnno = 'solare' }) {
 
       <PannelloProva onProva={setProva} attiva={!!prova} onTogli={() => setProva(null)} />
       <PrevisioniSalvate permessi={permessi} />
-      {dettaglio && <DettaglioMese riga={dettaglio} onChiudi={() => setDettaglio(null)} />}
+      {dettaglio && <DettaglioMese riga={dettaglio} tolte={d.straordinarie_tolte} onChiudi={() => setDettaglio(null)} />}
     </div>
   )
 }

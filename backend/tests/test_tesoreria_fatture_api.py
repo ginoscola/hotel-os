@@ -378,3 +378,55 @@ def test_fattura_sdi_collegata_a_spesa_straordinaria_poi_registrata(client, Sess
     client.post("/tesoreria/impegni/genera")
     collegate = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["collegate"]
     assert [(c["origine"], c["importo"]) for c in collegate] == [("passcom", 3050)]
+
+
+def test_fattura_chiusa_assegnata_a_spesa_esce_dallo_storico(client, Sessione, test_engine):
+    """Fattura vecchia e chiusa assegnata dalla scheda Fatture: modalità e data proposte dalla fattura, modificabili;
+    l'importo esce dallo storico delle uscite (Ri.Ba.) del mese di pagamento, mai oltre quanto uscito."""
+    from app.models.tesoreria import TesoreriaCategoria
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_interventi, tesoreria_impegni, tesoreria_categorie RESTART IDENTITY CASCADE"))
+    reg = OGGI - timedelta(days=1)
+    _passcom(Sessione, reg, [("601.00001", "ALTRO", "1", date(2026, 1, 1), "10.00", OGGI + timedelta(days=200))])
+    ricevuta = OGGI - timedelta(days=300)
+    scad = ricevuta + timedelta(days=30)
+    _importa(client, zip_fatture([
+        ("1", ricevuta, fattura_xml("03333333333", "Arredi Spa", "77", ricevuta.isoformat(), "305.00",
+                                    modalita="MP12", scadenza=scad.isoformat())),
+        ("2", ricevuta, fattura_xml("03333333333", "Arredi Spa", "78", ricevuta.isoformat(), "50.00", tipo="TD17")),
+    ]))
+    with Sessione() as db:
+        cat = TesoreriaCategoria(codice="fornitori_riba", nome="Fornitori Ri.Ba.", tipo="uscita")
+        db.add(cat)
+        db.commit()
+        cat_id = cat.id
+    _uscita(Sessione, scad, "-1000.00", "RIBA CUMULATIVA", abi="31//48")
+    with Sessione() as db:
+        db.query(TesoreriaMovimento).update({TesoreriaMovimento.categoria_id: cat_id})
+        db.commit()
+    elenco = client.get("/tesoreria/fatture", params={"per_pagina": 500}).json()["fatture"]
+    ids = {f["numero"]: f["id"] for f in elenco}
+    assert {f["numero"]: f["stato"] for f in elenco}["77"] == "chiusa"
+    i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Sala da pranzo", "anno": 2026}).json()
+    assert i["anno"] == 2026
+    r = client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture-sdi", json={"fattura_ids": [ids["77"], ids["78"]]})
+    assert r.status_code == 200, r.text
+    assert r.json()["n_nuove"] == 1 and len(r.json()["saltate"]) == 1      # l'autofattura non si assegna
+    assert r.json()["spesa"]["costo_finale"] == 305
+    f = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["collegate"][0]
+    assert f["modalita_pagamento"] == "riba" and f["data_pagamento"] == scad.isoformat()
+    # la scheda Fatture mostra la spesa e filtra
+    assegnate = client.get("/tesoreria/fatture", params={"spesa": "si"}).json()["fatture"]
+    assert [x["numero"] for x in assegnate] == ["77"] and assegnate[0]["spesa"]["descrizione"] == "Sala da pranzo"
+    p = client.get("/tesoreria/previsione").json()
+    assert p["straordinarie_tolte"] == [{"categoria": "fornitori_riba", "categoria_nome": "Fornitori Ri.Ba.",
+                                         "anno": scad.year, "mese": scad.month, "importo": 305.0}]
+    # contanti: niente da togliere
+    assert client.put(f"/tesoreria/piani/interventi/fatture/{f['id']}", json={"modalita_pagamento": "contanti"}).status_code == 200
+    assert client.get("/tesoreria/previsione").json()["straordinarie_tolte"] == []
+    assert client.put(f"/tesoreria/piani/interventi/fatture/{f['id']}", json={"modalita_pagamento": "xx"}).status_code == 400
+    # riassegnata a un'altra spesa: si sposta con la sua modalità
+    j = client.post("/tesoreria/piani/interventi", json={"descrizione": "Altro lavoro"}).json()
+    r = client.post(f"/tesoreria/piani/interventi/{j['id']}/fatture-sdi", json={"fattura_ids": [ids["77"]]})
+    assert r.json()["n_spostate"] == 1
+    assert client.get(f"/tesoreria/piani/interventi/{j['id']}/fatture").json()["collegate"][0]["modalita_pagamento"] == "contanti"

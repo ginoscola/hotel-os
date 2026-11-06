@@ -31,7 +31,8 @@ from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti
 from app.routers.tesoreria_fatture_stato import stato_fatture
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.services.tesoreria_fatture import CATEGORIA_DI_MODALITA
-from app.routers.tesoreria_piani import rate_intervento
+from app.routers.tesoreria_piani import _movimenti_per_chiave, rate_intervento
+from app.services.tesoreria_spese_straordinarie import FatturaSpesa, applica_allo_storico, da_togliere
 from app.routers.tesoreria_caparre import caparre_db, caparre_per_mese, senza_periodo_db
 from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, puo_vedere
 from app.services.budget_ristoranti import totale_budget_anno
@@ -170,11 +171,24 @@ def dati_previsione(db: Session, oggi: date) -> DatiPrevisione:
     entrate, uscite = _storico_banca(db)
     ricavi, budget = _ricavi_e_budget(db, range(oggi.year - 3, orizzonte.year + 1))
     certe = _certe(db, oggi) + certe_stipendi(netti_per_mese(db), uscite.get("personale", {}), oggi)
+    uscite, tolte, avvisi_straord = applica_allo_storico(uscite, da_togliere(_fatture_straordinarie(db, certe), oggi))
     return DatiPrevisione(
+        straordinarie_tolte=tolte, avvisi_straordinarie=avvisi_straord,
         oggi=oggi, orizzonte=orizzonte, saldo_iniziale=saldo, entrate=entrate, uscite=uscite, certe=certe,
         budget=budget, ricavi=ricavi, fidi=[(c.fido, c.fido_scadenza) for c in conti if c.fido],
         parametri=leggi_parametri(db), advertising=_advertising_addebitato(db), caparre=_caparre(db, oggi, orizzonte),
     )
+
+
+def _fatture_straordinarie(db: Session, certe: list) -> list:
+    """Fatture collegate alle spese straordinarie, con il loro pagamento: quelle ancora aperte sono tra le uscite certe
+    (gruppo interventi), quelle pagate da un movimento già straordinario sono già fuori dallo storico."""
+    aperte = {c.codice for c in certe if c.gruppo == "interventi" and c.codice}
+    collegate = db.query(TesoreriaInterventoScadenza).all()
+    movimenti = _movimenti_per_chiave(db, [f.chiave for f in collegate])
+    return [FatturaSpesa(f.chiave, f.importo, f.modalita_pagamento, f.data_pagamento,
+                         gia_fuori=bool(movimenti.get(f.chiave) and movimenti[f.chiave][2]), aperta=f.chiave in aperte)
+            for f in collegate]
 
 
 def _caparre(db: Session, oggi: date, orizzonte: date) -> dict:
@@ -245,8 +259,16 @@ def _risposta(d: DatiPrevisione, db: Session) -> dict:
         prima = d.oggi.replace(day=1) - timedelta(days=1)
         avvisi.append(f"Nessuna previsione salvata a {MESI_IT[d.oggi.month - 1]}: si salva da sola caricando un estratto "
                       f"conto che arriva a fine {MESI_IT[prima.month - 1]}, oppure con «Salva previsione» qui sotto")
+    nomi_cat = {c.codice: c.nome for c in db.query(TesoreriaCategoria)}
+    for a in d.avvisi_straordinarie:
+        avvisi.append(f"Spese straordinarie: a {MESI_IT[a['mese'] - 1]} {a['anno']} le fatture pagate con "
+                      f"«{nomi_cat.get(a['categoria'], a['categoria'])}» ({euro(a['importo'])} €) superano le uscite in banca "
+                      f"di quella categoria ({euro(a['uscito'])} €): controllare data o modalità di pagamento")
+    tolte = [{"categoria": c, "categoria_nome": nomi_cat.get(c, c), "anno": y, "mese": m, "importo": euro(v)}
+             for c, mesi in d.straordinarie_tolte.items() for (y, m), v in sorted(mesi.items())]
     return {
         "avvisi": avvisi,
+        "straordinarie_tolte": tolte,
         "oggi": d.oggi.isoformat(), "saldo_iniziale": euro(d.saldo_iniziale),
         "budget": {str(a): euro(v) for a, v in d.budget.items()}, "ricavi": {str(a): euro(v) for a, v in d.ricavi.items()},
         "fattore_budget": round(float(fattore_budget(anno_budget, d.budget, d.ricavi)), 4) if anno_budget else None,

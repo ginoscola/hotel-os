@@ -3633,6 +3633,32 @@ passcom|sdi, `pagamenti`, `pagamenti_candidati`, `coperto`, `residuo`):
   straordinarie) e non riducono la stima dei fornitori ordinari.
 - Pagata: fatture e pagamenti coprono la stima e le fatture collegate sono pagate (SDI: pagata o chiusa).
 
+**v4.29.0 — spese straordinarie per anno, lavori già fatti e fatture pagate tolte dallo storico** (06/11/2026, richiesta
+dell'utente: rifacimento sala da pranzo Du Parc 2025, spese grosse e tante piccole; prima si collegava una fattura alla volta da
+una tendina di sole fatture aperte). Migrazione `tes020_2026` (applicata al DB reale):
+- `tesoreria_interventi.anno` = **anno alberghiero** (1/10–30/9, anno di fine: la piscina fatta a novembre 2026 è un lavoro
+  2027), default all'inserimento = anno alberghiero di oggi; le 3 spese esistenti → 2027. Admin: selettore anno ("fatti / in
+  corso / in programma", `localStorage('tesoreria_spese_anno')`), colonna Anno, "Costo finora" (= `coperto`, tooltip per
+  modalità `per_modalita`), badge "N da completare" (`n_senza_pagamento`).
+- `tesoreria_intervento_scadenze.modalita_pagamento` (bonifico|riba|sdd|assegno|carta|contanti) e `data_pagamento` (giorno
+  dell'addebito in banca), proposti al collegamento da `predefiniti()`: pagamento trovato in banca (abbinamento automatico o
+  confermato: categoria del movimento + data) > fornitore pagato con carta > modalità della fattura (Passcom/MP) + scadenza.
+  `PUT /piani/interventi/fatture/{id}`. `_migra_fatture_sdi()` li porta sulle scadenze Passcom.
+- **Assegnare fatture anche chiuse**: `POST /piani/interventi/{id}/fatture-sdi {fattura_ids}` (fattura nello scadenzario attuale →
+  sue scadenze Passcom, altrimenti rate del file `XML:{impronta}#{n}`; già in un'altra spesa → spostata; autofatture saltate).
+  `POST /piani/interventi/{id}/fatture` accetta `chiavi` (più fatture aperte). Scheda **Fatture**: caselle di selezione, "Assegna a
+  spesa straordinaria" (esistente o nuova, `ModaleAssegna`), badge della spesa, filtro `spesa=si|no|<id>` (`spese_per_fattura()`),
+  spesa nel dettaglio. Finestra "Fatture e pagamenti" in Admin rifatta: modalità e data in riga (salvate subito), aggiunta da
+  "Tutte le fatture ricevute" (ricerca su `/tesoreria/fatture`) o "Aperte" (ricerca, selezione multipla, ★ del fornitore), pagamenti
+  in banca con ricerca.
+- **Previsione** (`services/tesoreria_spese_straordinarie.py`, `_fatture_straordinarie()` in `tesoreria_previsione.py`):
+  `da_togliere()` → per categoria della modalità (`CATEGORIA_MODALITA`: fornitori_bonifici/riba/sdd, assegni, carte) e mese della
+  data di pagamento; niente per contanti, data mancante o futura, fattura ancora aperta (è tra le uscite certe, gruppo interventi)
+  o pagata da un movimento già `straordinario`. `applica_allo_storico()` toglie da `uscite` di `_storico_banca` mai sotto zero
+  (eccesso → avviso in Previsione: data o modalità sbagliate). Risposta `straordinarie_tolte`, mostrate nel dettaglio del mese.
+  Limite noto: un bonifico singolo collegato come "pagamento senza fattura" **e** la sua fattura con modalità bonifico verrebbero
+  tolti due volte (la finestra avvisa di non farlo).
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**

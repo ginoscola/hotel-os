@@ -1,15 +1,15 @@
 // Fatture ricevute dallo SDI (Fase 5): stato rispetto allo scadenzario Passcom e alla banca, "da registrare" da
 // segnalare allo studio (entrano in previsione), dettaglio con righe IVA, rate e abbinamenti. Gli ZIP si caricano in
-// "Import e saldi".
+// "Import e saldi". Più fatture selezionate (anche già pagate e chiuse) si assegnano a una spesa straordinaria.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../../api/client.js'
 import { ExportMenu } from '../../components/ExportMenu.jsx'
 import { formatData, formatEuro, formatN, mostraErrore } from '../../utils/format.js'
 import {
-  Badge, Button, Card, Drawer, Field, Input, KpiTile, Loading, Messaggio, Paginazione, Select, StatoVuoto, Table, Td, Th,
+  Badge, Button, Card, Checkbox, Drawer, Field, Input, KpiTile, Loading, Messaggio, Modal, Paginazione, Select, StatoVuoto, Table, Td, Th,
   ThOrdinabile, useAvvisi, useConferma,
 } from '../../components/ui'
-import { Importo } from './helpers.jsx'
+import { Importo, etichettaAnno } from './helpers.jsx'
 import { ModaleManuale, ModalePagate } from './TabScadenzario.jsx'
 
 const PER_PAGINA = 50
@@ -30,6 +30,74 @@ const STATI_AZIONI = ['da_registrare', 'da_confermare']
 function BadgeStato({ stato }) {
   const [nome, tono] = STATI[stato] || [stato, 'neutral']
   return <Badge tono={tono}>{nome}</Badge>
+}
+
+const annoAlberghieroOggi = () => { const d = new Date(); return d.getMonth() >= 9 ? d.getFullYear() + 1 : d.getFullYear() }
+
+/** Assegna le fatture selezionate a una spesa straordinaria esistente o nuova. */
+function ModaleAssegna({ ids, onChiudi, onFatto }) {
+  const [spese, setSpese] = useState(null)
+  const [scelta, setScelta] = useState('')
+  const [nuova, setNuova] = useState({ descrizione: '', anno: annoAlberghieroOggi() - 1 })
+  const [lavoro, setLavoro] = useState(false)
+  const avvisi = useAvvisi()
+  useEffect(() => {
+    api.get('/tesoreria/piani/interventi').then(r => setSpese(r.data)).catch(e => avvisi.errore(mostraErrore(e)))
+  }, [avvisi])
+  const corrente = annoAlberghieroOggi()
+  const anni = [corrente + 1, corrente, corrente - 1, corrente - 2]
+
+  async function assegna() {
+    setLavoro(true)
+    try {
+      let id = scelta
+      if (scelta === 'nuova') {
+        id = (await api.post('/tesoreria/piani/interventi', { descrizione: nuova.descrizione.trim(), anno: Number(nuova.anno), stato: 'pagato' })).data.id
+      }
+      const r = await api.post(`/tesoreria/piani/interventi/${id}/fatture-sdi`, { fattura_ids: ids })
+      avvisi.successo(`Assegnate a «${r.data.spesa.descrizione}»: ${r.data.n_nuove} rate collegate` +
+        `${r.data.n_spostate ? `, ${r.data.n_spostate} spostate da un'altra spesa` : ''}${r.data.n_gia ? `, ${r.data.n_gia} già presenti` : ''}. ` +
+        'Controlla come e quando sono state pagate in Admin → Spese straordinarie.')
+      r.data.saltate.forEach(t => avvisi.attenzione(t))
+      onFatto()
+    } catch (e) { avvisi.errore(mostraErrore(e)); setLavoro(false) }
+  }
+  const valido = scelta && (scelta !== 'nuova' || nuova.descrizione.trim())
+  return (
+    <Modal titolo={`Assegna ${ids.length} fatture a una spesa straordinaria`} onChiudi={onChiudi} larghezza={560}
+      footer={<>
+        <Button variant="secondary" onClick={onChiudi}>Annulla</Button>
+        <Button onClick={assegna} disabled={!valido || lavoro}>{lavoro ? 'Assegnazione…' : 'Assegna'}</Button>
+      </>}>
+      {!spese ? <Loading /> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label="Spesa straordinaria">
+            <Select value={scelta} onChange={e => setScelta(e.target.value)}>
+              <option value="">—</option>
+              <option value="nuova">+ Nuova spesa…</option>
+              {spese.map(sp => <option key={sp.id} value={sp.id}>{sp.anno ? `${etichettaAnno(sp.anno, 'alberghiero')} · ` : ''}{sp.descrizione}</option>)}
+            </Select>
+          </Field>
+          {scelta === 'nuova' && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Field label="Descrizione" style={{ flex: 1 }}>
+                <Input value={nuova.descrizione} placeholder="es. Sala da pranzo Du Parc" onChange={e => setNuova({ ...nuova, descrizione: e.target.value })} />
+              </Field>
+              <Field label="Anno alberghiero">
+                <Select value={nuova.anno} onChange={e => setNuova({ ...nuova, anno: e.target.value })}>
+                  {anni.map(a => <option key={a} value={a}>{etichettaAnno(a, 'alberghiero')}</option>)}
+                </Select>
+              </Field>
+            </div>
+          )}
+          <p className="ui-text-muted" style={{ margin: 0 }}>
+            Modalità e data di pagamento vengono proposte dalla fattura (o dal pagamento trovato in banca): si correggono in Admin →
+            Tesoreria → Spese straordinarie → «Fatture e pagamenti». Una fattura già in un'altra spesa viene spostata; le autofatture non si assegnano.
+          </p>
+        </div>
+      )}
+    </Modal>
+  )
 }
 
 function Riga({ etichetta, children }) {
@@ -89,6 +157,7 @@ function DettaglioFattura({ id, permessi, onChiudi, onCambio }) {
             {d.fatture_collegate.length > 0 && (
               <Riga etichetta="Fatture collegate">{d.fatture_collegate.map(c => `${c.numero || '?'}${c.data ? ` del ${formatData(c.data)}` : ''}`).join(', ')}</Riga>
             )}
+            {d.spesa && <Riga etichetta="Spesa straordinaria">{d.spesa.anno ? `${etichettaAnno(d.spesa.anno, 'alberghiero')} · ` : ''}{d.spesa.descrizione}</Riga>}
             <Riga etichetta="File">{d.nome_file}{d.n_ddt ? ` — ${d.n_ddt} DDT` : ''}{d.ha_allegati ? ' — con PDF allegato' : ''}</Riga>
           </div>
 
@@ -190,7 +259,9 @@ function DettaglioFattura({ id, permessi, onChiudi, onCambio }) {
 }
 
 export default function TabFatture({ permessi, onVaiA }) {
-  const [filtri, setFiltri] = useState({ stato: '', tipo: '', ricevuta_da: '', ricevuta_a: '' })
+  const [filtri, setFiltri] = useState({ stato: '', tipo: '', ricevuta_da: '', ricevuta_a: '', spesa: '' })
+  const [scelte, setScelte] = useState(new Set())
+  const [assegna, setAssegna] = useState(false)
   const [testo, setTesto] = useState('')
   const [q, setQ] = useState('')
   const [ordine, setOrdine] = useState({ per: 'data_ricezione', direzione: 'desc' })
@@ -228,6 +299,11 @@ export default function TabFatture({ permessi, onVaiA }) {
   const imp = s => c[s]?.importo || 0
   const pagate = ['pagata_banca', 'pagata_manuale', 'pagata_carta']
   const vuoto = dati && Object.keys(c).length === 0
+  const puoAssegnare = permessi.puo_modificare
+  const assegnabili = (dati?.fatture || []).filter(f => f.stato !== 'autofattura')
+  const cambiaScelta = (id, si) => setScelte(x => { const n = new Set(x); if (si) n.add(id); else n.delete(id); return n })
+  const tuttePagina = assegnabili.length > 0 && assegnabili.every(f => scelte.has(f.id))
+  const cambiaPagina = si => setScelte(x => { const n = new Set(x); assegnabili.forEach(f => (si ? n.add(f.id) : n.delete(f.id))); return n })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -277,12 +353,24 @@ export default function TabFatture({ permessi, onVaiA }) {
             </Field>
             <Field label="Ricevute dal"><Input type="date" value={filtri.ricevuta_da} onChange={e => setFiltro({ ricevuta_da: e.target.value })} /></Field>
             <Field label="al"><Input type="date" value={filtri.ricevuta_a} onChange={e => setFiltro({ ricevuta_a: e.target.value })} /></Field>
+            <Field label="Spesa straordinaria">
+              <Select value={filtri.spesa} onChange={e => setFiltro({ spesa: e.target.value })}>
+                <option value="">Tutte</option><option value="si">Assegnate</option><option value="no">Non assegnate</option>
+              </Select>
+            </Field>
+            {puoAssegnare && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <Button onClick={() => setAssegna(true)} disabled={!scelte.size}>Assegna a spesa straordinaria ({scelte.size})</Button>
+                {scelte.size > 0 && <Button variant="ghost" onClick={() => setScelte(new Set())}>Deseleziona</Button>}
+              </div>
+            )}
           </div>
           {!dati ? <Loading /> : dati.fatture.length === 0 ? <StatoVuoto>Nessuna fattura con questi filtri.</StatoVuoto> : (
             <>
               <Table compact maxHeight="60vh">
                 <thead>
                   <tr>
+                    {puoAssegnare && <Th><Checkbox checked={tuttePagina} onChange={cambiaPagina} /></Th>}
                     <ThOrdinabile campo="data_ricezione" ordinaPer={ordine.per} direzione={ordine.direzione} onOrdina={ordina}>Ricevuta</ThOrdinabile>
                     <ThOrdinabile campo="fornitore" ordinaPer={ordine.per} direzione={ordine.direzione} onOrdina={ordina}>Fornitore</ThOrdinabile>
                     <Th>Documento</Th>
@@ -295,8 +383,14 @@ export default function TabFatture({ permessi, onVaiA }) {
                   {dati.fatture.map(f => (
                     <tr key={f.id} onClick={() => setAperta(f.id)} style={{ cursor: 'pointer' }}
                       className={f.stato === 'da_registrare' ? 'ui-riga-avviso' : undefined}>
+                      {puoAssegnare && (
+                        <Td onClick={e => e.stopPropagation()}>
+                          {f.stato !== 'autofattura' && <Checkbox checked={scelte.has(f.id)} onChange={x => cambiaScelta(f.id, x)} />}
+                        </Td>
+                      )}
                       <Td>{f.data_ricezione ? formatData(f.data_ricezione.slice(0, 10)) : '—'}</Td>
-                      <Td>{f.cedente_denominazione}</Td>
+                      <Td>{f.cedente_denominazione}
+                        {f.spesa && <div><Badge tono="info" title="Spesa straordinaria">{f.spesa.descrizione}</Badge></div>}</Td>
                       <Td><span title={TIPI[f.tipo_documento]}>{f.tipo_documento}</span> {f.numero}</Td>
                       <Td>{formatData(f.data_documento)}</Td>
                       <Td num><Importo v={f.totale} /></Td>
@@ -312,6 +406,8 @@ export default function TabFatture({ permessi, onVaiA }) {
           )}
         </Card>
       )}
+      {assegna && <ModaleAssegna ids={[...scelte]} onChiudi={() => setAssegna(false)}
+        onFatto={() => { setAssegna(false); setScelte(new Set()); carica() }} />}
       {aperta && <DettaglioFattura id={aperta} permessi={permessi} onChiudi={() => setAperta(null)} onCambio={carica} />}
     </div>
   )

@@ -176,6 +176,10 @@ class DatiPrevisione:
     # {(anno in corso, mese): {gruppo: uscite}} dei mesi non ancora conclusi dell'anno in corso, dalla previsione
     # realista: completano l'anno come riferimento (vedi anni_riferimento_uscite). None = da calcolare.
     completamento: Optional[dict] = None
+    # spese straordinarie tolte dallo storico delle uscite ({categoria: {(y, m): importo}}) e avvisi (mese con più
+    # straordinarie che uscite): solo informativi, `uscite` è già al netto
+    straordinarie_tolte: dict = field(default_factory=dict)
+    avvisi_straordinarie: list = field(default_factory=list)
 
 
 def _crescita(gruppo: str, fattore: Decimal, parametri: dict) -> Decimal:

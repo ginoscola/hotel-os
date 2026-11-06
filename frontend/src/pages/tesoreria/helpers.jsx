@@ -238,3 +238,9 @@ export function ModaleRegola({ iniziale, categorie, onChiudi, onSalvata }) {
     </Modal>
   )
 }
+
+/** Modalità di pagamento delle fatture collegate a una spesa straordinaria (come services/tesoreria_spese_straordinarie). */
+export const MODALITA_PAGAMENTO = [
+  { value: 'bonifico', label: 'Bonifico' }, { value: 'riba', label: 'Ri.Ba.' }, { value: 'sdd', label: 'Addebito diretto (SDD)' },
+  { value: 'assegno', label: 'Assegno' }, { value: 'carta', label: 'Carta' }, { value: 'contanti', label: 'Contanti' },
+]

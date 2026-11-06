@@ -6,9 +6,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import api from '../../api/client.js'
 import { formatEuro, formatData, mostraErrore } from '../../utils/format.js'
 import {
-  Badge, Button, Card, Checkbox, Field, FileButton, Input, Loading, Modal, Select, StatoVuoto, Table, Td, Th, useAvvisi, useConferma,
+  Badge, Button, Card, Checkbox, Field, FileButton, Input, Loading, Modal, SegmentedControl, Select, StatoVuoto, Table, Td, Th, useAvvisi, useConferma,
 } from '../../components/ui'
-import { ETICHETTE_SEGNO, ETICHETTE_TIPO_CONTO, ModaleRegola } from '../tesoreria/helpers.jsx'
+import { ETICHETTE_SEGNO, ETICHETTE_TIPO_CONTO, MODALITA_PAGAMENTO, ModaleRegola, etichettaAnno } from '../tesoreria/helpers.jsx'
 
 const oggi = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const TIPI_CATEGORIA = { entrata: 'Entrata', uscita: 'Uscita', neutra: 'Neutra' }
@@ -502,12 +502,15 @@ export function AdminTesoreriaAffitti() {
 
 const STATI_INTERVENTO = { idea: 'Idea', approvato: 'Approvato', ordinato: 'Ordinato', fatturato: 'Fatturato', pagato: 'Pagato' }
 const STRUTTURE_INTERVENTO = ['DPH', 'CLB', 'INT', 'BON']
+const LS_ANNO_SPESE = 'tesoreria_spese_anno'
+const annoAlberghieroOggi = () => { const d = new Date(); return d.getMonth() >= 9 ? d.getFullYear() + 1 : d.getFullYear() }
 
 export function AdminTesoreriaInterventi() {
   const [interventi, setInterventi] = useState(null)
   const [nuovo, setNuovo] = useState('')
   const [fatture, setFatture] = useState(null)
   const [rateDi, setRateDi] = useState(null)
+  const [annoFiltro, setAnnoFiltro] = useState(() => { try { return localStorage.getItem(LS_ANNO_SPESE) || 'tutti' } catch { return 'tutti' } })
   const { bozze, modifica, scarta } = useBozze()
   const avvisi = useAvvisi()
   const conferma = useConferma()
@@ -521,6 +524,7 @@ export function AdminTesoreriaInterventi() {
     try {
       const b = { ...bozze[i.id] }
       if ('importo_stimato' in b) b.importo_stimato = String(b.importo_stimato ?? '').replace(',', '.')
+      if ('anno' in b) b.anno = Number(b.anno)
       await api.put(`/tesoreria/piani/interventi/${i.id}`, b)
       scarta(i.id); carica()
     } catch (e) { avvisi.errore(mostraErrore(e)) }
@@ -528,7 +532,7 @@ export function AdminTesoreriaInterventi() {
 
   async function aggiungi() {
     try {
-      await api.post('/tesoreria/piani/interventi', { descrizione: nuovo.trim() })
+      await api.post('/tesoreria/piani/interventi', { descrizione: nuovo.trim(), ...(annoFiltro !== 'tutti' ? { anno: Number(annoFiltro) } : {}) })
       setNuovo(''); carica()
     } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
@@ -539,28 +543,47 @@ export function AdminTesoreriaInterventi() {
   }
 
   if (!interventi) return <Loading />
+  const corrente = annoAlberghieroOggi()
+  const anni = [...new Set([...interventi.map(i => i.anno).filter(Boolean), corrente, corrente + 1])].sort((a, b) => b - a)
+  const anniScelta = [...new Set([...anni, corrente - 1, corrente - 2])].sort((a, b) => b - a)
+  const cambiaAnno = v => { setAnnoFiltro(v); try { localStorage.setItem(LS_ANNO_SPESE, v) } catch { /* preferenza non salvata */ } }
+  const visibili = interventi.filter(i => annoFiltro === 'tutti' || String(i.anno) === annoFiltro)
+  const costoTotale = visibili.reduce((s, i) => s + (i.costo_finale || 0), 0)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-    <Card title="Spese straordinarie previste">
+    <Card title="Spese straordinarie" actions={
+      <Select value={annoFiltro} onChange={e => cambiaAnno(e.target.value)} title="Anno alberghiero (1/10–30/9)">
+        <option value="tutti">Tutti gli anni</option>
+        {anniScelta.map(a => <option key={a} value={String(a)}>{etichettaAnno(a, 'alberghiero')}{a < corrente ? ' — fatti' : a === corrente ? ' — in corso' : ' — in programma'}</option>)}
+      </Select>
+    }>
       <p className="ui-text-muted" style={{ marginBottom: 8 }}>
         Lavori, attrezzature, software, consulenze una tantum: tutto ciò che non si ripete ogni anno. Vanno inserite qui anno per anno,
         con importo e rate (data e percentuale; l'ultima chiude il 100%): in Previsione il toggle «Ordinarie e straordinarie» le mostra
         come seconda linea. Una spesa entra in previsione solo con «In previsione» attivo, importo e almeno una rata; finché mancano le cifre
         può restare qui come promemoria. Con «Fatture e pagamenti» colleghi le fatture (dello scadenzario o appena arrivate allo SDI)
         e i pagamenti in banca (acconti, saldi): la stima si riduce partendo dalla prima rata; quando fatture e pagamenti coprono
-        la stima e le fatture sono pagate, la spesa diventa «Pagato».
+        la stima e le fatture sono pagate, la spesa diventa «Pagato». Anche i lavori già fatti si raccolgono qui, per anno alberghiero
+        (un lavoro dell'inverno 2026/27 è del 2027): colleghi le fatture, anche già pagate, da Tesoreria → Fatture o da «Fatture e pagamenti»,
+        con come e quando sono state pagate. Così hai il costo finale del lavoro e le spese escono dalle stime degli anni dopo.
       </p>
-      {interventi.length === 0 ? <StatoVuoto>Nessuna spesa straordinaria</StatoVuoto> : (
+      {visibili.length === 0 ? <StatoVuoto>Nessuna spesa straordinaria{annoFiltro !== 'tutti' ? ' in questo anno' : ''}</StatoVuoto> : (
         <Table compact>
           <thead>
-            <tr><Th>Descrizione</Th><Th>Struttura</Th><Th>Fornitore</Th><Th num>Importo (€)</Th><Th>Pagamenti</Th><Th>Stato</Th><Th center>In previsione</Th><Th num>Ancora da coprire</Th><Th></Th></tr>
+            <tr><Th>Anno</Th><Th>Descrizione</Th><Th>Struttura</Th><Th>Fornitore</Th><Th num>Importo (€)</Th><Th>Pagamenti</Th><Th>Stato</Th><Th center>In previsione</Th><Th num>Costo finora</Th><Th num>Ancora da coprire</Th><Th></Th></tr>
           </thead>
           <tbody>
-            {interventi.map(i => {
+            {visibili.map(i => {
               const v = { ...i, ...(bozze[i.id] || {}) }
               const set = patch => modifica(i.id, patch)
               return (
                 <tr key={i.id} className={bozze[i.id] ? 'ui-riga-modificata' : undefined}>
+                  <Td>
+                    <Select value={v.anno ?? ''} onChange={e => set({ anno: e.target.value })}>
+                      {v.anno == null && <option value="">—</option>}
+                      {anniScelta.map(a => <option key={a} value={a}>{etichettaAnno(a, 'alberghiero')}</option>)}
+                    </Select>
+                  </Td>
                   <Td><Input value={v.descrizione} style={{ width: 220 }} onChange={e => set({ descrizione: e.target.value })} /></Td>
                   <Td>
                     <Select value={v.struttura_code || ''} onChange={e => set({ struttura_code: e.target.value })}>
@@ -580,6 +603,10 @@ export function AdminTesoreriaInterventi() {
                     </Select>
                   </Td>
                   <Td center><Checkbox checked={v.inclusa_in_previsione} onChange={x => set({ inclusa_in_previsione: x })} /></Td>
+                  <Td num title={(i.per_modalita || []).map(m => `${m.nome}: ${formatEuro(m.importo)}`).join('\n')}>
+                    {i.costo_finale ? formatEuro(i.costo_finale) : '—'}
+                    {i.n_senza_pagamento > 0 && <div><Badge tono="warn" title="Fatture senza modalità o data di pagamento">{i.n_senza_pagamento} da completare</Badge></div>}
+                  </Td>
                   <Td num>{i.residuo != null ? formatEuro(i.residuo) : '—'}</Td>
                   <Td style={{ whiteSpace: 'nowrap' }}>
                     <Button size="sm" variant="secondary" onClick={() => setFatture(i)}>Fatture e pagamenti ({i.n_fatture + (i.n_pagamenti || 0)})</Button>{' '}
@@ -594,8 +621,9 @@ export function AdminTesoreriaInterventi() {
           </tbody>
         </Table>
       )}
+      {visibili.length > 1 && <div className="ui-text-muted" style={{ marginTop: 6 }}>Costo finora delle spese elencate: <b>{formatEuro(costoTotale)}</b></div>}
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
-        <Field label="Nuova spesa straordinaria"><Input value={nuovo} style={{ width: 260 }} onChange={e => setNuovo(e.target.value)} /></Field>
+        <Field label={`Nuova spesa straordinaria${annoFiltro !== 'tutti' ? ` (${etichettaAnno(Number(annoFiltro), 'alberghiero')})` : ''}`}><Input value={nuovo} style={{ width: 260 }} onChange={e => setNuovo(e.target.value)} /></Field>
         <Button onClick={aggiungi} disabled={!nuovo.trim()}>Aggiungi</Button>
       </div>
       {fatture && <ModaleFatture intervento={fatture} onChiudi={() => { setFatture(null); carica() }} />}
@@ -1024,71 +1052,211 @@ export function AdminTesoreriaAdvertising() {
   )
 }
 
-const ORIGINE_FATTURA = { passcom: 'Scadenzario', sdi: 'SDI, da registrare' }
+const ORIGINE_FATTURA = { passcom: 'Scadenzario', sdi: 'SDI' }
+
+function contiene(testo, q) {
+  return !q || (testo || '').toLowerCase().includes(q.toLowerCase())
+}
+
+/** Riga di una fattura collegata: come e quando è stata pagata, salvati appena cambiano. */
+function RigaFatturaCollegata({ f, onCambia, onTogli }) {
+  const avvisi = useAvvisi()
+  async function salva(patch) {
+    try { await api.put(`/tesoreria/piani/interventi/fatture/${f.id}`, patch); onCambia() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  const banca = MODALITA_PAGAMENTO.some(m => m.value === f.modalita_pagamento) && f.modalita_pagamento !== 'contanti'
+  const manca = !f.modalita_pagamento || (banca && !f.data_pagamento)
+  return (
+    <tr className={manca ? 'ui-riga-avviso' : undefined}>
+      <Td>{f.fornitore}<div className="ui-text-muted">{ORIGINE_FATTURA[f.origine]}</div></Td>
+      <Td>{f.numero_documento || '—'}</Td><Td>{formatData(f.data_scadenza)}</Td>
+      <Td num>{formatEuro(f.importo)}</Td>
+      <Td>
+        <Select value={f.modalita_pagamento || ''} onChange={e => salva({ modalita_pagamento: e.target.value })}>
+          <option value="">—</option>
+          {MODALITA_PAGAMENTO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </Select>
+      </Td>
+      <Td>
+        <Input type="date" value={f.data_pagamento || ''} onChange={e => salva({ data_pagamento: e.target.value })} />
+        {f.pagamento_banca && <div className="ui-text-muted">trovato in banca il {formatData(f.pagamento_banca.data)}{f.pagamento_banca.straordinario ? ' (già straordinario)' : ''}</div>}
+      </Td>
+      <Td><Button size="sm" variant="ghost" onClick={onTogli}>Togli</Button></Td>
+    </tr>
+  )
+}
+
+/** Fatture ricevute dallo SDI (anche già pagate e chiuse) cercate per fornitore, numero o testo. */
+function CercaFattureSdi({ intervento, onAssegnate }) {
+  const [q, setQ] = useState('')
+  const [elenco, setElenco] = useState(null)
+  const [scelte, setScelte] = useState(new Set())
+  const avvisi = useAvvisi()
+  useEffect(() => {
+    if (q.trim().length < 3) { setElenco(null); return }
+    const t = setTimeout(() => {
+      api.get('/tesoreria/fatture', { params: { q: q.trim(), per_pagina: 200, ordina_per: 'data_documento', direzione: 'desc' } })
+        .then(r => setElenco(r.data.fatture)).catch(e => avvisi.errore(mostraErrore(e)))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [q, avvisi])
+  const selezionabili = (elenco || []).filter(f => f.spesa?.id !== intervento.id && !f.tipo_documento.match(/^TD(1[6-9]|2[0-3]|2[6-8])$/))
+  const cambia = (id, si) => setScelte(s => { const n = new Set(s); if (si) n.add(id); else n.delete(id); return n })
+  async function assegna() {
+    try {
+      const r = await api.post(`/tesoreria/piani/interventi/${intervento.id}/fatture-sdi`, { fattura_ids: [...scelte] })
+      avvisi.successo(`Collegate ${r.data.n_nuove} rate${r.data.n_spostate ? `, ${r.data.n_spostate} spostate da un'altra spesa` : ''}`)
+      r.data.saltate.forEach(t => avvisi.attenzione(t))
+      setScelte(new Set()); onAssegnate()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  return <>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+      <Field label="Cerca tra tutte le fatture ricevute (fornitore, numero, partita IVA: almeno 3 lettere)" style={{ flex: 1 }}>
+        <Input value={q} onChange={e => setQ(e.target.value)} placeholder="es. arredi" />
+      </Field>
+      <Button onClick={assegna} disabled={!scelte.size}>Collega selezionate ({scelte.size})</Button>
+    </div>
+    {elenco && (elenco.length === 0 ? <StatoVuoto>Nessuna fattura trovata.</StatoVuoto> : (
+      <Table compact maxHeight="40vh">
+        <thead><tr><Th></Th><Th>Fornitore</Th><Th>N.</Th><Th>Data</Th><Th>Stato</Th><Th num>Totale</Th></tr></thead>
+        <tbody>
+          {elenco.map(f => {
+            const ok = selezionabili.includes(f)
+            return (
+              <tr key={f.id} className={ok ? undefined : 'ui-riga-attenuata'}>
+                <Td>{ok && <Checkbox checked={scelte.has(f.id)} onChange={x => cambia(f.id, x)} />}</Td>
+                <Td>{f.cedente_denominazione}{f.spesa && <div className="ui-text-muted">in «{f.spesa.descrizione}»</div>}</Td>
+                <Td>{f.numero}</Td><Td>{formatData(f.data_documento)}</Td><Td muted>{f.stato_etichetta}</Td>
+                <Td num>{formatEuro(f.totale)}</Td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </Table>
+    ))}
+  </>
+}
+
+/** Fatture aperte: scadenzario Passcom e SDI da registrare. */
+function ScegliAperte({ intervento, candidate, onCollegate }) {
+  const [q, setQ] = useState('')
+  const [tutte, setTutte] = useState(false)
+  const [scelte, setScelte] = useState(new Set())
+  const avvisi = useAvvisi()
+  const suggerite = candidate.some(c => c.suggerita)
+  const visibili = candidate.filter(c => (tutte || !suggerite || c.suggerita || q) && (contiene(c.fornitore, q) || contiene(c.numero_documento, q)))
+  const cambia = (k, si) => setScelte(s => { const n = new Set(s); if (si) n.add(k); else n.delete(k); return n })
+  async function collega() {
+    try {
+      await api.post(`/tesoreria/piani/interventi/${intervento.id}/fatture`, { chiavi: [...scelte] })
+      setScelte(new Set()); onCollegate()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  return <>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <Field label="Cerca fornitore o numero" style={{ flex: 1 }}><Input value={q} onChange={e => setQ(e.target.value)} /></Field>
+      {suggerite && <Checkbox label="Anche gli altri fornitori" checked={tutte} onChange={setTutte} />}
+      <Button onClick={collega} disabled={!scelte.size}>Collega selezionate ({scelte.size})</Button>
+    </div>
+    {visibili.length === 0 ? <StatoVuoto>Nessuna fattura aperta {q ? 'trovata' : 'del fornitore della spesa'}.</StatoVuoto> : (
+      <Table compact maxHeight="40vh">
+        <thead><tr><Th></Th><Th>Fornitore</Th><Th>N.</Th><Th>Scadenza</Th><Th>Da</Th><Th num>Importo</Th></tr></thead>
+        <tbody>
+          {visibili.slice(0, 300).map(c => (
+            <tr key={c.chiave}>
+              <Td><Checkbox checked={scelte.has(c.chiave)} onChange={x => cambia(c.chiave, x)} /></Td>
+              <Td>{c.suggerita ? '★ ' : ''}{c.fornitore}</Td><Td>{c.numero_documento || 's.n.'}</Td>
+              <Td>{formatData(c.data_scadenza)}</Td><Td muted>{c.origine === 'sdi' ? 'SDI, da registrare' : 'Scadenzario'}</Td>
+              <Td num>{formatEuro(c.importo)}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    )}
+  </>
+}
+
+function ScegliPagamento({ intervento, candidati, onCollegato }) {
+  const [q, setQ] = useState('')
+  const avvisi = useAvvisi()
+  const suggeriti = candidati.some(c => c.suggerito)
+  const visibili = candidati.filter(c => (q ? contiene(`${c.controparte || ''} ${c.causale || ''} ${c.importo}`, q) : (!suggeriti || c.suggerito)))
+  async function collega(c) {
+    try { await api.post(`/tesoreria/piani/interventi/${intervento.id}/pagamenti`, { movimento_id: c.movimento_id }); onCollegato() } catch (e) { avvisi.errore(mostraErrore(e)) }
+  }
+  return <>
+    <Field label={`Cerca tra le uscite in banca degli ultimi 18 mesi (controparte, causale, importo)${suggeriti ? ' — senza ricerca: solo quelle con il nome del fornitore della spesa' : ''}`}>
+      <Input value={q} onChange={e => setQ(e.target.value)} />
+    </Field>
+    {(q || suggeriti) && (visibili.length === 0 ? <StatoVuoto>Nessuna uscita trovata.</StatoVuoto> : (
+      <Table compact maxHeight="30vh">
+        <thead><tr><Th>Data</Th><Th>Controparte</Th><Th>Causale</Th><Th num>Importo</Th><Th></Th></tr></thead>
+        <tbody>
+          {visibili.slice(0, 200).map(c => (
+            <tr key={c.movimento_id}>
+              <Td>{formatData(c.data)}</Td><Td>{c.suggerito ? '★ ' : ''}{c.controparte || '—'}</Td>
+              <Td style={{ whiteSpace: 'normal' }}>{(c.causale || '').slice(0, 80)}</Td><Td num>{formatEuro(c.importo)}</Td>
+              <Td><Button size="sm" variant="secondary" onClick={() => collega(c)}>Collega</Button></Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    ))}
+  </>
+}
 
 function ModaleFatture({ intervento, onChiudi }) {
   const [dati, setDati] = useState(null)
-  const [scelta, setScelta] = useState('')
-  const [pagamento, setPagamento] = useState('')
+  const [fonte, setFonte] = useState('tutte')
   const avvisi = useAvvisi()
   const carica = useCallback(async () => {
     try { setDati((await api.get(`/tesoreria/piani/interventi/${intervento.id}/fatture`)).data) } catch (e) { avvisi.errore(mostraErrore(e)) }
   }, [intervento.id, avvisi])
   useEffect(() => { carica() }, [carica])
 
-  async function collega() {
-    try { await api.post(`/tesoreria/piani/interventi/${intervento.id}/fatture`, { chiave: scelta }); setScelta(''); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
-  }
   async function scollega(f) {
     try { await api.delete(`/tesoreria/piani/interventi/fatture/${f.id}`); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
-  }
-  async function collegaPagamento() {
-    try { await api.post(`/tesoreria/piani/interventi/${intervento.id}/pagamenti`, { movimento_id: Number(pagamento) }); setPagamento(''); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
   async function scollegaPagamento(p) {
     try { await api.delete(`/tesoreria/piani/interventi/pagamenti/${p.id}`); carica() } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
+  const totale = dati ? dati.collegate.reduce((s, f) => s + f.importo, 0) : 0
 
   return (
-    <Modal titolo={`Fatture e pagamenti — ${intervento.descrizione}`} onChiudi={onChiudi} larghezza={760} footer={<Button onClick={onChiudi}>Chiudi</Button>}>
+    <Modal titolo={`Fatture e pagamenti — ${intervento.descrizione}`} onChiudi={onChiudi} larghezza={980} footer={<Button onClick={onChiudi}>Chiudi</Button>}>
       {!dati ? <Loading /> : <>
         <p className="ui-text-muted" style={{ marginTop: 0 }}>
-          Fatture e pagamenti collegati riducono la stima della spesa, partendo dalla prima rata.
-          {intervento.importo_stimato != null && <> Coperto {formatEuro(dati.coperto)} su {formatEuro(intervento.importo_stimato)}, ancora da coprire {formatEuro(dati.residuo)}.</>}
-          {' '}Le fatture non ancora pagate restano tra le uscite certe (nella linea delle straordinarie); il pagamento di una fattura collegata è già contato e non va collegato di nuovo.
+          Costo del lavoro finora: <b>{formatEuro(dati.coperto)}</b>
+          {intervento.importo_stimato != null && <> su {formatEuro(intervento.importo_stimato)} previsti, ancora da coprire {formatEuro(dati.residuo)}</>}.
+          {' '}Per ogni fattura indica <b>come è stata pagata</b> e <b>il giorno dell'addebito in banca</b> (proposti dalla fattura o dal
+          pagamento trovato in banca): l'importo esce dalle uscite stimate degli anni dopo. Le fatture pagate in contanti contano solo
+          nel costo; quelle ancora da pagare restano tra le uscite certe della previsione.
         </p>
-        <h4 style={{ margin: '8px 0 6px' }}>Fatture</h4>
+        <h4 style={{ margin: '8px 0 6px' }}>Fatture collegate ({dati.collegate.length}, {formatEuro(totale)})</h4>
         {dati.collegate.length === 0 ? <StatoVuoto>Nessuna fattura collegata.</StatoVuoto> : (
-          <Table compact>
-            <thead><tr><Th>Fornitore</Th><Th>N.</Th><Th>Scadenza</Th><Th>Da</Th><Th num>Importo</Th><Th></Th></tr></thead>
+          <Table compact maxHeight="40vh">
+            <thead><tr><Th>Fornitore</Th><Th>N.</Th><Th>Scadenza</Th><Th num>Importo</Th><Th>Pagata con</Th><Th>Addebito in banca</Th><Th></Th></tr></thead>
             <tbody>
-              {dati.collegate.map(f => (
-                <tr key={f.id}>
-                  <Td>{f.fornitore}</Td><Td>{f.numero_documento || '—'}</Td><Td>{formatData(f.data_scadenza)}</Td>
-                  <Td>{ORIGINE_FATTURA[f.origine]}</Td><Td num>{formatEuro(f.importo)}</Td>
-                  <Td><Button size="sm" variant="ghost" onClick={() => scollega(f)}>Togli</Button></Td>
-                </tr>
-              ))}
+              {dati.collegate.map(f => <RigaFatturaCollegata key={f.id} f={f} onCambia={carica} onTogli={() => scollega(f)} />)}
             </tbody>
           </Table>
         )}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 8 }}>
-          <Field label="Fattura dello scadenzario o arrivata allo SDI (prima quelle del fornitore della spesa)" style={{ flex: 1 }}>
-            <Select value={scelta} onChange={e => setScelta(e.target.value)}>
-              <option value="">—</option>
-              {dati.candidate.map(c => (
-                <option key={c.chiave} value={c.chiave}>
-                  {c.suggerita ? '★ ' : ''}{c.fornitore} · {c.numero_documento || 's.n.'} · {formatData(c.data_scadenza)} · {formatEuro(c.importo)}{c.origine === 'sdi' ? ' · SDI' : ''}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Button onClick={collega} disabled={!scelta}>Collega</Button>
+
+        <h4 style={{ margin: '16px 0 6px' }}>Aggiungi fatture</h4>
+        <SegmentedControl value={fonte} onChange={setFonte} options={[
+          { value: 'tutte', label: 'Tutte le fatture ricevute (anche pagate)' },
+          { value: 'aperte', label: 'Aperte: scadenzario e da registrare' },
+        ]} />
+        <div style={{ marginTop: 8 }}>
+          {fonte === 'tutte'
+            ? <CercaFattureSdi intervento={intervento} onAssegnate={carica} />
+            : <ScegliAperte intervento={intervento} candidate={dati.candidate} onCollegate={carica} />}
         </div>
 
-        <h4 style={{ margin: '16px 0 6px' }}>Pagamenti in banca</h4>
-        <p className="ui-text-muted" style={{ margin: '0 0 6px' }}>Acconti o saldi senza fattura collegata. Il pagamento viene segnato come straordinario (esce dalle stime degli anni dopo).</p>
-        {dati.pagamenti.length === 0 ? <StatoVuoto>Nessun pagamento collegato.</StatoVuoto> : (
+        <h4 style={{ margin: '16px 0 6px' }}>Pagamenti in banca senza fattura</h4>
+        <p className="ui-text-muted" style={{ margin: '0 0 6px' }}>Acconti o saldi senza fattura collegata. Il pagamento viene segnato come straordinario (esce dalle stime degli anni dopo). Il pagamento di una fattura già collegata non va collegato di nuovo.</p>
+        {dati.pagamenti.length > 0 && (
           <Table compact>
             <thead><tr><Th>Data</Th><Th>Controparte</Th><Th>Causale</Th><Th num>Importo</Th><Th></Th></tr></thead>
             <tbody>
@@ -1103,18 +1271,8 @@ function ModaleFatture({ intervento, onChiudi }) {
             </tbody>
           </Table>
         )}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 8 }}>
-          <Field label="Uscita in banca degli ultimi 18 mesi (★ = nome del fornitore della spesa)" style={{ flex: 1 }}>
-            <Select value={pagamento} onChange={e => setPagamento(e.target.value)}>
-              <option value="">—</option>
-              {dati.pagamenti_candidati.map(c => (
-                <option key={c.movimento_id} value={c.movimento_id}>
-                  {c.suggerito ? '★ ' : ''}{formatData(c.data)} · {c.controparte || (c.causale || '').slice(0, 40)} · {formatEuro(c.importo)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Button onClick={collegaPagamento} disabled={!pagamento}>Collega</Button>
+        <div style={{ marginTop: 8 }}>
+          <ScegliPagamento intervento={intervento} candidati={dati.pagamenti_candidati} onCollegato={carica} />
         </div>
       </>}
     </Modal>

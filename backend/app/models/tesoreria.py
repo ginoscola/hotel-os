@@ -409,6 +409,7 @@ class TesoreriaIntervento(Base):
     stato           = Column(String(12), nullable=False, default="idea", server_default="idea")  # STATI_INTERVENTO
     inclusa_in_previsione = Column(Boolean, nullable=False, default=False, server_default="false")
     nota            = Column(String(255), nullable=True)
+    anno            = Column(Integer, nullable=True)       # anno alberghiero (1/10–30/9, anno di fine)
 
 
 class TesoreriaRataIntervento(Base):
@@ -493,6 +494,8 @@ class TesoreriaInterventoScadenza(Base):
     data_scadenza    = Column(Date, nullable=False)
     numero_documento = Column(String(30), nullable=True)
     importo          = Column(Numeric(14, 2), nullable=False)
+    modalita_pagamento = Column(String(12), nullable=True)   # MODALITA di services/tesoreria_spese_straordinarie
+    data_pagamento   = Column(Date, nullable=True)           # giorno dell'addebito in banca
 
 
 class TesoreriaInterventoMovimento(Base):

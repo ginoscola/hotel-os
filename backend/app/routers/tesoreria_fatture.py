@@ -41,7 +41,9 @@ from app.routers.tesoreria_import import _pulisci_anteprime_scadute
 from app.routers.tesoreria_shared import (
     cella_data, cella_importo, euro, nome_sicuro, puo_importare, puo_vedere, storage_dir,
 )
-from app.models.tesoreria import TesoreriaAbbinamento, TesoreriaAbbinamentoScadenza
+from app.models.tesoreria import (
+    TesoreriaAbbinamento, TesoreriaAbbinamentoScadenza, TesoreriaIntervento, TesoreriaInterventoScadenza,
+)
 from app.services.tesoreria_fatture import NOMI_MODALITA, PREFISSO_CHIAVE
 from app.services.tesoreria_fatture_parser import parse_zip_fatture
 from app.services.tesoreria_parser import ErroreImportTesoreria
@@ -284,6 +286,25 @@ def _riga_json(r: dict) -> dict:
     }
 
 
+def spese_per_fattura(db: Session, righe: list) -> dict:
+    """{id fattura: spesa straordinaria} delle fatture collegate a una spesa (con le rate del file o con le scadenze
+    Passcom)."""
+    spese = {i.id: i for i in db.query(TesoreriaIntervento)}
+    per_chiave = {c: spese.get(i) for c, i in db.query(TesoreriaInterventoScadenza.chiave, TesoreriaInterventoScadenza.intervento_id)}
+    if not per_chiave:
+        return {}
+    out = {}
+    for r in righe:
+        f = r["fattura"]
+        chiavi = [x.chiave for x in r["rate"]] + [p["chiave"] for p in r["passcom"]]
+        spesa = next((per_chiave[c] for c in chiavi if per_chiave.get(c) is not None), None)
+        if spesa is None:
+            spesa = next((sp for c, sp in per_chiave.items() if sp is not None and c.startswith(f"{PREFISSO_CHIAVE}{f.impronta}#")), None)
+        if spesa is not None:
+            out[f.id] = {"id": spesa.id, "descrizione": spesa.descrizione, "anno": spesa.anno}
+    return out
+
+
 def _filtra(righe: list, stato, tipo, q, ricevuta_da, ricevuta_a) -> list:
     testo = (q or "").strip().lower()
     out = []
@@ -307,6 +328,7 @@ def _filtra(righe: list, stato, tipo, q, ricevuta_da, ricevuta_a) -> list:
 def elenco(
     stato: Optional[str] = None, tipo: Optional[str] = None, q: Optional[str] = None,
     ricevuta_da: Optional[date] = None, ricevuta_a: Optional[date] = None,
+    spesa: Optional[str] = Query(None, pattern="^(si|no|[0-9]+)$"),
     ordina_per: str = Query("data_ricezione", pattern="^(data_ricezione|data_documento|fornitore|totale)$"),
     direzione: str = Query("desc", pattern="^(asc|desc)$"),
     pagina: int = Query(1, ge=1), per_pagina: int = Query(50, ge=1, le=500),
@@ -314,6 +336,13 @@ def elenco(
 ):
     st = stato_fatture(db)
     righe = _filtra(st["righe"], stato, tipo, q, ricevuta_da, ricevuta_a)
+    spese = spese_per_fattura(db, st["righe"])
+    if spesa == "si":
+        righe = [r for r in righe if r["fattura"].id in spese]
+    elif spesa == "no":
+        righe = [r for r in righe if r["fattura"].id not in spese]
+    elif spesa:
+        righe = [r for r in righe if spese.get(r["fattura"].id, {}).get("id") == int(spesa)]
     chiave = {
         "data_ricezione": lambda r: (r["fattura"].data_ricezione.date() if r["fattura"].data_ricezione
                                      else r["fattura"].data_documento),
@@ -330,7 +359,7 @@ def elenco(
         "conteggi": {s: {"n": v["n"], "importo": euro(v["importo"]), "etichetta": ETICHETTE_STATO[s]}
                      for s, v in st["conteggi"].items()},
         "totale": len(righe), "pagina": pagina, "per_pagina": per_pagina,
-        "fatture": [_riga_json(r) for r in righe[inizio:inizio + per_pagina]],
+        "fatture": [{**_riga_json(r), "spesa": spese.get(r["fattura"].id)} for r in righe[inizio:inizio + per_pagina]],
     }
 
 
@@ -368,6 +397,7 @@ def dettaglio(fattura_id: int, xml: bool = False, db: Session = Depends(get_db),
         TesoreriaAbbinamentoScadenza, TesoreriaAbbinamentoScadenza.abbinamento_id == TesoreriaAbbinamento.id,
     ).filter(TesoreriaAbbinamentoScadenza.chiave.like(f"{PREFISSO_CHIAVE}{f.impronta}#%")).distinct().all()
     out = _riga_json(riga)
+    out["spesa"] = spese_per_fattura(db, [riga]).get(f.id)
     out.update({
         "nome_file": f.nome_file, "causale": f.causale, "fatture_collegate": f.fatture_collegate or [],
         "n_ddt": f.n_ddt, "ha_allegati": f.ha_allegati, "totale_calcolato": f.totale_calcolato,
