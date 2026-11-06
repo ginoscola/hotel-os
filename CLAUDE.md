@@ -3659,6 +3659,13 @@ una tendina di sole fatture aperte). Migrazione `tes020_2026` (applicata al DB r
   Limite noto: un bonifico singolo collegato come "pagamento senza fattura" **e** la sua fattura con modalità bonifico verrebbero
   tolti due volte (la finestra avvisa di non farlo).
 
+**v4.30.2 — linea "senza le spese straordinarie" anche sul passato** (06/11/2026, scelta (a) dell'utente): ogni punto di
+`storico` ha `straordinarie` del mese (`_straordinarie_pagate()` in `tesoreria_previsione.py`: uscite dei conti banca segnate
+straordinarie + fatture collegate con pagamento non già straordinario, `_fatture_straordinarie()`, una volta sola) e la risposta
+`straordinarie_mese_in_corso`. Nel grafico (`datiGrafico()`) la linea verde sul passato = saldo reale + straordinarie pagate
+dall'inizio del grafico (cumulate); sul futuro **continua da lì** = saldo solo ordinario previsto + tutte le straordinarie già
+pagate, senza salto. Solo disegno: la previsione non cambia. Al 06/11/2026: 43.818 € pagati da novembre 2025.
+
 **v4.30.1 — pagamento delle fatture straordinarie cercato anche per importo** (06/11/2026, avviso reale "a apr 2025 le fatture
 pagate con Fornitori – bonifici (12.358 €) superano le uscite"): BSD e B & T erano collegate con modalità bonifico ma non
 abbinate in banca (troppo vecchie per l'abbinamento automatico), mentre i loro bonifici erano già segnati straordinari → tolte una

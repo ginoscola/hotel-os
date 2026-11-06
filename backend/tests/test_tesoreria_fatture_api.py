@@ -496,3 +496,8 @@ def test_fattura_vecchia_pagata_da_bonifico_gia_straordinario_non_tolta_due_volt
     assert f["data_pagamento"] == pagato.isoformat() and f["pagamento_banca"] == {"data": pagato.isoformat(), "straordinario": True}
     p = client.get("/tesoreria/previsione").json()
     assert p["straordinarie_tolte"] == [] and not any("Spese straordinarie" in a for a in p["avvisi"])
+    # linea "senza le spese straordinarie" sul passato: il bonifico straordinario conta una volta sola
+    from app.routers.tesoreria_previsione import _straordinarie_pagate, dati_previsione
+    with Sessione() as db:
+        pagate = _straordinarie_pagate(db, dati_previsione(db, OGGI), date(2000, 1, 1))
+    assert pagate == {(pagato.year, pagato.month): Decimal("5544.90")}

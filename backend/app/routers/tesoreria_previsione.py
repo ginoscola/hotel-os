@@ -32,7 +32,9 @@ from app.routers.tesoreria_fatture_stato import stato_fatture
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.services.tesoreria_fatture import CATEGORIA_DI_MODALITA
 from app.routers.tesoreria_piani import pagamenti_fatture, rate_intervento
-from app.services.tesoreria_spese_straordinarie import MODALITA_DA_CATEGORIA, FatturaSpesa, applica_allo_storico, da_togliere
+from app.services.tesoreria_spese_straordinarie import (
+    CATEGORIA_MODALITA, MODALITA_DA_CATEGORIA, FatturaSpesa, applica_allo_storico, da_togliere,
+)
 from app.routers.tesoreria_caparre import caparre_db, caparre_per_mese, senza_periodo_db
 from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, puo_vedere
 from app.services.budget_ristoranti import totale_budget_anno
@@ -246,6 +248,27 @@ def _storico_saldi(db: Session, oggi: date, n_mesi: int = 12) -> list:
     return out
 
 
+def _straordinarie_pagate(db: Session, d: DatiPrevisione, da: date) -> dict:
+    """{(anno, mese): spese straordinarie già pagate} da `da` a oggi, per la linea "senza le spese straordinarie" del
+    grafico sul passato: uscite in banca segnate straordinarie + fatture collegate a una spesa con un pagamento non già
+    straordinario (es. dentro una Ri.Ba.), contate una volta sola."""
+    out = {}
+
+    def somma(giorno: date, importo: Decimal):
+        out[(giorno.year, giorno.month)] = out.get((giorno.year, giorno.month), Decimal(0)) + importo
+
+    conti = db.query(TesoreriaConto.id).filter(TesoreriaConto.tipo.in_(TIPI_BANCA))
+    for giorno, importo in db.query(TesoreriaMovimento.data_contabile, TesoreriaMovimento.importo).filter(
+            TesoreriaMovimento.conto_id.in_(conti), TesoreriaMovimento.straordinario.is_(True), TesoreriaMovimento.importo < 0,
+            TesoreriaMovimento.data_contabile >= da, TesoreriaMovimento.data_contabile <= d.oggi):
+        somma(giorno, -importo)
+    for f in _fatture_straordinarie(db, d.certe):
+        categoria = f.categoria or CATEGORIA_MODALITA.get(f.modalita or "")
+        if categoria and f.data_pagamento and da <= f.data_pagamento <= d.oggi and not f.gia_fuori and not f.aperta:
+            somma(f.data_pagamento, f.importo)
+    return out
+
+
 def _totale_json(t: dict) -> dict:
     return {"anno": t["anno"], "etichetta": t["etichetta"], "n_mesi": t["n_mesi"], "completo": t["completo"],
             "dal": {"anno": t["dal"][0], "mese": t["dal"][1]}, "al": {"anno": t["al"][0], "mese": t["al"][1]},
@@ -266,6 +289,10 @@ def _risposta(d: DatiPrevisione, db: Session) -> dict:
         prima = d.oggi.replace(day=1) - timedelta(days=1)
         avvisi.append(f"Nessuna previsione salvata a {MESI_IT[d.oggi.month - 1]}: si salva da sola caricando un estratto "
                       f"conto che arriva a fine {MESI_IT[prima.month - 1]}, oppure con «Salva previsione» qui sotto")
+    storico = _storico_saldi(db, d.oggi)
+    pagate = _straordinarie_pagate(db, d, date(storico[0]["anno"], storico[0]["mese"], 1) if storico else d.oggi.replace(day=1))
+    for s in storico:
+        s["straordinarie"] = euro(pagate.get((s["anno"], s["mese"]), Decimal(0)))
     nomi_cat = {c.codice: c.nome for c in db.query(TesoreriaCategoria)}
     for a in d.avvisi_straordinarie:
         avvisi.append(f"Spese straordinarie: a {MESI_IT[a['mese'] - 1]} {a['anno']} le fatture pagate con "
@@ -279,7 +306,8 @@ def _risposta(d: DatiPrevisione, db: Session) -> dict:
         "oggi": d.oggi.isoformat(), "saldo_iniziale": euro(d.saldo_iniziale),
         "budget": {str(a): euro(v) for a, v in d.budget.items()}, "ricavi": {str(a): euro(v) for a, v in d.ricavi.items()},
         "fattore_budget": round(float(fattore_budget(anno_budget, d.budget, d.ricavi)), 4) if anno_budget else None,
-        "parametri": d.parametri, "scenari": scenari, "totali_anno": totali_anno, "storico": _storico_saldi(db, d.oggi),
+        "parametri": d.parametri, "scenari": scenari, "totali_anno": totali_anno, "storico": storico,
+        "straordinarie_mese_in_corso": euro(pagate.get((d.oggi.year, d.oggi.month), Decimal(0))),
         "caparre": [{"anno": y, "mese": m, "incassate": euro(ora), "anno_prima": euro(rif),
                      "fattore": round(float(fattore_budget(y, d.budget, d.ricavi)), 4),
                      "rettifica": euro(rettifica_caparre(d, y, m))} for (y, m), (ora, rif) in sorted(d.caparre.items())],
