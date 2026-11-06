@@ -113,12 +113,25 @@ def parole(nome: Optional[str]) -> list:
             sigla += p
             continue
         if sigla:
-            unite.append(sigla)
+            unite.append(_chiudi_sigla(sigla))
             sigla = ""
         unite.append(p)
     if sigla:
-        unite.append(sigla)
+        unite.append(_chiudi_sigla(sigla))
     return [p for p in unite if p not in PAROLE_VUOTE and len(p) >= 2]
+
+
+FORME_IN_SIGLA = ("SRLS", "SRL", "SPA", "SAS", "SNC")
+
+
+def _chiudi_sigla(sigla: str) -> str:
+    """Lettere singole unite: la forma societaria puntata finisce attaccata alla sigla ('B & T S.r.l.' → 'BTSRL',
+    'E C. S.N.C.' → 'ECSNC'): si toglie, e si toglie anche la «e C.» (e compagni) che resta da sola."""
+    for forma in FORME_IN_SIGLA:
+        if sigla.endswith(forma) and len(sigla) > len(forma):
+            sigla = sigla[:-len(forma)]
+            break
+    return "" if sigla in ("EC", "C") else sigla
 
 
 def normalizza_nome(nome: Optional[str]) -> str:

@@ -32,7 +32,7 @@ from app.services.tesoreria_piani import (
 )
 from app.services.tesoreria_report import stato_carta
 from app.services.tesoreria_spese_straordinarie import (
-    CATEGORIA_MODALITA, MODALITA, NOMI_MODALITA, anno_alberghiero, predefiniti,
+    CATEGORIA_MODALITA, GIORNI_RICERCA_PAGAMENTO, MODALITA, NOMI_MODALITA, abbina_per_importo, anno_alberghiero, predefiniti,
 )
 from app.utils.locale_it import MESI_IT
 
@@ -1148,6 +1148,41 @@ def _movimenti_per_chiave(db: Session, chiavi) -> dict:
     return out
 
 
+def pagamenti_fatture(db: Session, voci) -> dict:
+    """{chiave: (codice categoria, data contabile, straordinario)} del pagamento in banca delle fatture collegate.
+    voci: [(chiave, fornitore, importo, data di scadenza)]. Prima gli abbinamenti con la banca (automatici o confermati),
+    poi, per le fatture non abbinate (es. troppo vecchie per l'abbinamento automatico), un'uscita dei conti correnti con
+    lo stesso importo, nome compatibile ed entro 90 giorni (`abbina_per_importo`). Così un bonifico già segnato
+    straordinario non viene tolto due volte dallo storico, e la data è quella vera del pagamento."""
+    from datetime import timedelta
+    voci = list(voci)
+    out = _movimenti_per_chiave(db, [v[0] for v in voci])
+    resto = [v for v in voci if v[0] not in out and v[2] is not None and v[2] > 0 and v[3] is not None]
+    if not resto:
+        return out
+    margine = timedelta(days=GIORNI_RICERCA_PAGAMENTO)
+    da, a = min(v[3] for v in resto) - margine, max(v[3] for v in resto) + margine
+    righe = db.query(TesoreriaMovimento, TesoreriaCategoria.codice).join(
+        TesoreriaConto, TesoreriaConto.id == TesoreriaMovimento.conto_id).outerjoin(
+        TesoreriaCategoria, TesoreriaCategoria.id == TesoreriaMovimento.categoria_id).filter(
+        TesoreriaConto.tipo == "conto", TesoreriaMovimento.importo.in_({-v[2] for v in resto}),
+        TesoreriaMovimento.data_contabile >= da, TesoreriaMovimento.data_contabile <= a).all()
+    gia = {m for (m,) in db.query(TesoreriaAbbinamentoMovimento.movimento_id).join(
+        TesoreriaAbbinamento, TesoreriaAbbinamento.id == TesoreriaAbbinamentoMovimento.abbinamento_id).filter(
+        TesoreriaAbbinamento.stato.in_(STATI_ABBINAMENTO_VALIDI))}
+    movimenti = {m.id: (m, cat) for m, cat in righe if m.id not in gia}
+    trovati = abbina_per_importo(resto, [(m.id, m.data_contabile, -m.importo, m.controparte or m.descrizione)
+                                         for m, _ in movimenti.values()])
+    for chiave, mid in trovati.items():
+        m, cat = movimenti[mid]
+        out[chiave] = (cat, m.data_contabile, m.straordinario)
+    return out
+
+
+def _voci(collegate) -> list:
+    return [(f.chiave, f.fornitore, f.importo, f.data_scadenza) for f in collegate]
+
+
 def _nuovo_collegamento(db: Session, intervento_id: int, chiave: str, fornitore: str, data_scadenza: date,
                         numero_documento: Optional[str], importo: Decimal, tipo_pagamento: Optional[str],
                         con_carta: bool, sposta: bool = False) -> str:
@@ -1160,7 +1195,7 @@ def _nuovo_collegamento(db: Session, intervento_id: int, chiave: str, fornitore:
             return "altra"
         esistente.intervento_id = intervento_id
         return "spostato"
-    m = _movimenti_per_chiave(db, [chiave]).get(chiave)
+    m = pagamenti_fatture(db, [(chiave, fornitore, importo, data_scadenza)]).get(chiave)
     modalita, data = predefiniti(tipo_pagamento, data_scadenza, con_carta, (m[0], m[1]) if m else None)
     db.add(TesoreriaInterventoScadenza(intervento_id=intervento_id, chiave=chiave, fornitore=fornitore,
                                        data_scadenza=data_scadenza, numero_documento=numero_documento, importo=importo,
@@ -1208,7 +1243,7 @@ def fatture_intervento(intervento_id: int, db: Session = Depends(get_db), _=Depe
     di_fatture = _movimenti_di_fatture(db, [f.chiave for f in fatture])
     collegati = _pagamenti_collegati(db, i.id)
     movimenti = {m.id: m for m in db.query(TesoreriaMovimento).filter(TesoreriaMovimento.id.in_([p.movimento_id for p in collegati] or [0]))}
-    movimenti_f = _movimenti_per_chiave(db, [f.chiave for f in fatture])
+    movimenti_f = pagamenti_fatture(db, _voci(fatture))
     sdi_f = _fatture_sdi_per_chiave(db, [f.chiave for f in fatture] + [c["chiave"] for c in candidate[:500]])
     for c in candidate[:500]:
         c["fattura_id"] = sdi_f.get(c["chiave"])
@@ -1332,7 +1367,7 @@ def modifica_pagamento_fattura(fattura_id: int, corpo: PagamentoFatturaIn, db: S
         except ValueError:
             raise HTTPException(400, "Data di pagamento non valida")
     db.commit()
-    return _fattura_json(f, _movimenti_per_chiave(db, [f.chiave]))
+    return _fattura_json(f, pagamenti_fatture(db, _voci([f])))
 
 
 @router.delete("/piani/interventi/fatture/{fattura_id}")

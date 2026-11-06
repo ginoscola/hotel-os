@@ -3659,6 +3659,18 @@ una tendina di sole fatture aperte). Migrazione `tes020_2026` (applicata al DB r
   Limite noto: un bonifico singolo collegato come "pagamento senza fattura" **e** la sua fattura con modalità bonifico verrebbero
   tolti due volte (la finestra avvisa di non farlo).
 
+**v4.30.1 — pagamento delle fatture straordinarie cercato anche per importo** (06/11/2026, avviso reale "a apr 2025 le fatture
+pagate con Fornitori – bonifici (12.358 €) superano le uscite"): BSD e B & T erano collegate con modalità bonifico ma non
+abbinate in banca (troppo vecchie per l'abbinamento automatico), mentre i loro bonifici erano già segnati straordinari → tolte una
+seconda volta dallo storico (7.871 € di bonifici ordinari di aprile 2025 spariti dalla stima). `pagamenti_fatture()` in
+`tesoreria_piani.py` (usata da previsione, finestra della spesa e collegamento): dopo gli abbinamenti, `abbina_per_importo()`
+cerca un'uscita dei conti correnti con lo **stesso importo**, nome compatibile (`nome_compatibile()`: anche una sola parola o
+sigla in comune) ed entro **90 giorni** dalla scadenza (Boghi pagato 64 giorni dopo); trovata → data e categoria di quel
+movimento, già straordinario = niente da togliere. Non segna nulla come straordinario: togliere la fattura di pari importo
+dallo storico ha lo stesso effetto ed è reversibile. Corretta anche `parole()` di `tesoreria_abbinamento.py`: le lettere
+singole incollavano la forma societaria ('B & T S.r.l.' → 'BTSRL', 'E C. S.N.C.' → 'ECSNC'); ora `_chiudi_sigla()` la toglie
+(14 nomi su 2.844 cambiano, 84 abbinamenti identici prima e dopo). Allineati data e modalità dei 7 collegamenti esistenti.
+
 **v4.30.0 — vedere la fattura** (06/11/2026, richiesta dell'utente). `pages/tesoreria/VistaFattura.jsx` (popup), aperto da
 Fatture → dettaglio ("Vedi fattura") e da Admin → Spese straordinarie → "Fatture e pagamenti" (numero della fattura collegata,
 "Vedi" nelle ricerche; `fattura_id` dato da `_fatture_sdi_per_chiave()` in `tesoreria_piani.py`: rate XML dall'impronta, scadenze

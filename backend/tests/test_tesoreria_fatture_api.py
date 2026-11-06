@@ -464,3 +464,35 @@ def test_fattura_leggibile_e_pdf_del_fornitore(client):
     r = client.get(f"/tesoreria/fatture/{fid}/allegati/1")
     assert r.headers["content-type"] == "application/octet-stream" and r.headers["content-disposition"].startswith("attachment")
     assert client.get(f"/tesoreria/fatture/{fid}/allegati/5").status_code == 404
+
+
+def test_fattura_vecchia_pagata_da_bonifico_gia_straordinario_non_tolta_due_volte(client, Sessione, test_engine):
+    """Fattura chiusa, non abbinata, pagata da un bonifico di pari importo già segnato straordinario: niente da togliere
+    e data vera del bonifico proposta al collegamento."""
+    from app.models.tesoreria import TesoreriaCategoria
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_interventi, tesoreria_impegni, tesoreria_categorie RESTART IDENTITY CASCADE"))
+    _passcom(Sessione, OGGI - timedelta(days=1), [("601.00001", "ALTRO", "1", date(2026, 1, 1), "10.00", OGGI + timedelta(days=200))])
+    ricevuta = OGGI - timedelta(days=300)
+    scad = ricevuta + timedelta(days=30)
+    _importa(client, zip_fatture([("1", ricevuta, fattura_xml("03333333333", "B &amp; T S.r.l.", "77", ricevuta.isoformat(),
+                                                              "5544.90", modalita="MP05", scadenza=scad.isoformat()))]))
+    with Sessione() as db:
+        cat = TesoreriaCategoria(codice="fornitori_bonifici", nome="Fornitori – bonifici", tipo="uscita")
+        db.add(cat)
+        db.commit()
+        cat_id = cat.id
+    pagato = scad - timedelta(days=1)
+    _uscita(Sessione, pagato, "-5544.90", "B&T srl Dorelan")
+    _uscita(Sessione, pagato, "-1000.00", "ALTRO FORNITORE")
+    with Sessione() as db:
+        db.query(TesoreriaMovimento).update({TesoreriaMovimento.categoria_id: cat_id})
+        db.query(TesoreriaMovimento).filter(TesoreriaMovimento.importo == Decimal("-5544.90")).update({TesoreriaMovimento.straordinario: True})
+        db.commit()
+    fid = client.get("/tesoreria/fatture").json()["fatture"][0]["id"]
+    i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Progetto 4 stelle", "anno": 2025}).json()
+    assert client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture-sdi", json={"fattura_ids": [fid]}).status_code == 200
+    f = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["collegate"][0]
+    assert f["data_pagamento"] == pagato.isoformat() and f["pagamento_banca"] == {"data": pagato.isoformat(), "straordinario": True}
+    p = client.get("/tesoreria/previsione").json()
+    assert p["straordinarie_tolte"] == [] and not any("Spese straordinarie" in a for a in p["avvisi"])

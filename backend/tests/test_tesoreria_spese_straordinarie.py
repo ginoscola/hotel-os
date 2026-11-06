@@ -51,3 +51,21 @@ def test_applica_allo_storico_mai_sotto_zero():
     assert tolto == {"fornitori_riba": {(2025, 4): D("100")}, "carte": {(2025, 5): D("70")}}
     assert [(a["categoria"], a["importo"], a["uscito"]) for a in avvisi] == [("fornitori_riba", D("130"), D("100")), ("assegni", D("10"), D("0"))]
     assert uscite["fornitori_riba"][(2025, 4)] == D("100")           # l'originale non cambia
+
+
+def test_abbina_per_importo():
+    from app.services.tesoreria_spese_straordinarie import abbina_per_importo
+    voci = [("a", "B & T S.r.l.", D("5544.90"), date(2025, 4, 15)), ("b", "MARCO BOGHI", D("8000.00"), date(2026, 5, 27)),
+            ("c", "MARCO BOGHI", D("8000.00"), date(2026, 5, 28)), ("d", "ALTRO SRL", D("100.00"), date(2025, 1, 1))]
+    movimenti = [(1, date(2025, 4, 14), D("5544.90"), "B&T srl Dorelan"), (2, date(2026, 7, 30), D("8000.00"), "BOGHI MARCO"),
+                 (3, date(2026, 7, 31), D("8000.00"), "BOGHI MARCO"), (4, date(2025, 1, 2), D("100.00"), "ROSSI SNC"),
+                 (5, date(2025, 9, 1), D("5544.90"), "B&T srl")]
+    # stesso importo, nome compatibile (anche solo la sigla), entro 90 giorni; un movimento per una sola fattura
+    assert abbina_per_importo(voci, movimenti) == {"a": 1, "b": 2, "c": 3}
+
+
+def test_parole_sigla_con_forma_societaria():
+    from app.services.tesoreria_abbinamento import parole
+    assert parole("B & T S.r.l.") == ["BT"]
+    assert parole("MANCINI ANDREA E C. S.N.C.") == ["MANCINI", "ANDREA"]
+    assert parole("C.I.L. SRL") == ["CIL"]

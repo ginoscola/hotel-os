@@ -31,8 +31,8 @@ from app.routers.tesoreria_report import TIPI_BANCA, _saldi_e_movimenti
 from app.routers.tesoreria_fatture_stato import stato_fatture
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.services.tesoreria_fatture import CATEGORIA_DI_MODALITA
-from app.routers.tesoreria_piani import _movimenti_per_chiave, rate_intervento
-from app.services.tesoreria_spese_straordinarie import FatturaSpesa, applica_allo_storico, da_togliere
+from app.routers.tesoreria_piani import pagamenti_fatture, rate_intervento
+from app.services.tesoreria_spese_straordinarie import MODALITA_DA_CATEGORIA, FatturaSpesa, applica_allo_storico, da_togliere
 from app.routers.tesoreria_caparre import caparre_db, caparre_per_mese, senza_periodo_db
 from app.routers.tesoreria_shared import cella_importo, euro, puo_modificare, puo_vedere
 from app.services.budget_ristoranti import totale_budget_anno
@@ -185,10 +185,17 @@ def _fatture_straordinarie(db: Session, certe: list) -> list:
     (gruppo interventi), quelle pagate da un movimento già straordinario sono già fuori dallo storico."""
     aperte = {c.codice for c in certe if c.gruppo == "interventi" and c.codice}
     collegate = db.query(TesoreriaInterventoScadenza).all()
-    movimenti = _movimenti_per_chiave(db, [f.chiave for f in collegate])
-    return [FatturaSpesa(f.chiave, f.importo, f.modalita_pagamento, f.data_pagamento,
-                         gia_fuori=bool(movimenti.get(f.chiave) and movimenti[f.chiave][2]), aperta=f.chiave in aperte)
-            for f in collegate]
+    pagamenti = pagamenti_fatture(db, [(f.chiave, f.fornitore, f.importo, f.data_scadenza) for f in collegate])
+    out = []
+    for f in collegate:
+        p = pagamenti.get(f.chiave)
+        if p is None:
+            out.append(FatturaSpesa(f.chiave, f.importo, f.modalita_pagamento, f.data_pagamento, aperta=f.chiave in aperte))
+        else:   # pagamento trovato in banca: vale la sua data e la sua categoria; già straordinario = già fuori
+            cat, data, straord = p
+            out.append(FatturaSpesa(f.chiave, f.importo, MODALITA_DA_CATEGORIA.get(cat, "bonifico"), data,
+                                    gia_fuori=straord, aperta=f.chiave in aperte, categoria=cat))
+    return out
 
 
 def _caparre(db: Session, oggi: date, orizzonte: date) -> dict:
