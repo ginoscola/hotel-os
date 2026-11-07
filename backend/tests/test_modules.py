@@ -229,3 +229,33 @@ class TestDettaglioModulo:
         """GET /modules/codice_inesistente restituisce 404."""
         resp = client.get("/modules/inesistente_xyz", headers=_headers("admin"))
         assert resp.status_code == 404
+
+
+class TestOrdineModuli:
+    def test_admin_riordina_moduli(self, client, setup_db, TestSession):
+        """PUT /modules/admin/ordine cambia davvero l'ordine.
+
+        Fino alla v4.30.6 la rotta era dichiarata dopo PUT /admin/{code}, che la catturava
+        con code='ordine' → 422: le frecce di riordino in Admin → Moduli non funzionavano.
+        """
+        db = TestSession()
+        try:
+            codici = [m.code for m in db.query(Module).order_by(Module.ordine, Module.code).all()]
+        finally:
+            db.close()
+        assert 'test_mod' in codici
+        nuovo = ['test_mod'] + [c for c in codici if c != 'test_mod']
+
+        resp = client.put("/modules/admin/ordine", json={"ordine": nuovo}, headers=_headers("admin"))
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"ok": True}
+
+        db = TestSession()
+        try:
+            assert db.query(Module).filter(Module.code == 'test_mod').one().ordine == 1
+        finally:
+            db.close()
+
+    def test_viewer_non_puo_riordinare(self, client, setup_db):
+        resp = client.put("/modules/admin/ordine", json={"ordine": ['test_mod']}, headers=_headers("viewer"))
+        assert resp.status_code == 403

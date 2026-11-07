@@ -13,7 +13,30 @@ from app.models.revenue import User
 
 load_dotenv()
 
-SECRET_KEY = os.getenv('SECRET_KEY', 'chiave_segreta_da_cambiare')
+CHIAVI_DI_ESEMPIO = {
+    'chiave_segreta_da_cambiare',
+    'CAMBIA_QUESTA_CHIAVE_CON_UNA_STRINGA_CASUALE_LUNGA',
+}
+LUNGHEZZA_MINIMA_CHIAVE = 32
+
+
+def leggi_secret_key(valore: str | None) -> str:
+    """Chiave di firma dei token: senza una chiave vera il backend non deve partire.
+
+    Prima c'era un valore di ripiego fisso: se .env non veniva letto, i token
+    erano firmati con una chiave pubblica (presente nel repository) e chiunque
+    poteva costruirsene uno valido.
+    """
+    if not valore or valore in CHIAVI_DI_ESEMPIO or len(valore) < LUNGHEZZA_MINIMA_CHIAVE:
+        raise RuntimeError(
+            'SECRET_KEY mancante, di esempio o più corta di '
+            f'{LUNGHEZZA_MINIMA_CHIAVE} caratteri: impostarla in backend/.env '
+            "(es. python3 -c \"import secrets; print(secrets.token_hex(32))\")"
+        )
+    return valore
+
+
+SECRET_KEY = leggi_secret_key(os.getenv('SECRET_KEY'))
 ALGORITHM = 'HS256'
 ACCESS_TOKEN_EXPIRE_HOURS = 8
 

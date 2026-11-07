@@ -344,8 +344,10 @@ function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoP
   function kpiDelta(key) { return calcolaDelta(kpi[key], kpiComp?.[key]) }
   function kpiCompV(key, fmt) { return kpiComp ? (kpiComp[key] != null ? fmt(kpiComp[key]) : '—') : null }
 
+  // La snapshot è obbligatoria per avere gli stessi numeri dello schermo (senza, il
+  // backend usa la più recente per ogni giorno).
   const exportParams = dati.periodo_da && dati.periodo_a
-    ? `?da=${dati.periodo_da}&a=${dati.periodo_a}` : ''
+    ? `?da=${dati.periodo_da}&a=${dati.periodo_a}${snapshotDate ? `&snapshot=${snapshotDate}` : ''}` : ''
 
   // Merge per week_start (non per indice) per evitare confronti sfasati
   // tra snapshot con numero di settimane diverso.

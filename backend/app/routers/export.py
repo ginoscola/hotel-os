@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.auth import richiedi_utente_attivo
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 import openpyxl
@@ -120,26 +120,55 @@ def export_hotel_giornaliero(
 # Endpoint gruppo — settimanale + dettaglio hotel
 # ---------------------------------------------------------------------------
 
+def _righe_ultima_snapshot(db: Session, da: Optional[date], a: Optional[date]) -> List[RigaRevenue]:
+    """Per ogni hotel e giorno la riga della snapshot più recente (come Forecast e USALI)."""
+    ultima = select(
+        DailyRevenue.hotel_code,
+        DailyRevenue.data,
+        func.max(DailyRevenue.snapshot_date).label("snap"),
+    ).group_by(DailyRevenue.hotel_code, DailyRevenue.data)
+    if da:
+        ultima = ultima.where(DailyRevenue.data >= da)
+    if a:
+        ultima = ultima.where(DailyRevenue.data <= a)
+    ultima = ultima.subquery()
+    q = (
+        select(DailyRevenue)
+        .join(ultima, and_(
+            DailyRevenue.hotel_code == ultima.c.hotel_code,
+            DailyRevenue.data == ultima.c.data,
+            DailyRevenue.snapshot_date == ultima.c.snap,
+        ))
+        .order_by(DailyRevenue.hotel_code, DailyRevenue.data)
+    )
+    return [_db_a_riga(r) for r in db.execute(q).scalars().all()]
+
+
 @router.get("/gruppo")
 def export_gruppo(
     da: Optional[date] = Query(None),
     a: Optional[date] = Query(None),
+    snapshot: Optional[date] = Query(None),
     formato: str = Query("xlsx", pattern="^(xlsx|csv|pdf)$"),
     db: Session = Depends(get_db),
 ):
-    """Esporta aggregati settimanali di gruppo e dettaglio per hotel in Excel, CSV o PDF."""
-    q = select(DailyRevenue).order_by(DailyRevenue.hotel_code, DailyRevenue.data)
-    if da:
-        q = q.where(DailyRevenue.data >= da)
-    if a:
-        q = q.where(DailyRevenue.data <= a)
-    rows = db.execute(q).scalars().all()
-    if not rows:
+    """Esporta aggregati settimanali di gruppo e dettaglio per hotel in Excel, CSV o PDF.
+
+    Con `snapshot` usa solo quella snapshot (la stessa mostrata nella Dashboard Gruppo);
+    senza, per ogni hotel e giorno la snapshot più recente. Fino alla v4.30.6 sommava le
+    righe di TUTTE le snapshot importate: ricavi e camere moltiplicati per il numero di
+    snapshot (es. 8–14/08/2026: 3,6 milioni € invece di 167.616 €).
+    """
+    if snapshot:
+        righe = _carica_righe(db, snapshot_date=snapshot, da=da, a=a)
+    else:
+        righe = _righe_ultima_snapshot(db, da, a)
+    if not righe:
         raise HTTPException(status_code=404, detail="Nessun dato nel periodo selezionato.")
 
     per_hotel: Dict[str, List[RigaRevenue]] = defaultdict(list)
-    for row in rows:
-        per_hotel[row.hotel_code].append(_db_a_riga(row))
+    for r in righe:
+        per_hotel[r.hotel_code].append(r)
 
     hotel_nomi = {h.code: h.name for h in db.query(Hotel).all()}
     settimane  = aggrega_gruppo_settimanale(per_hotel)

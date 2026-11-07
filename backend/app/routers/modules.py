@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -141,6 +141,22 @@ def dettaglio_modulo(code: str, db: Session = Depends(get_db)):
 # Endpoint admin
 # ---------------------------------------------------------------------------
 
+@router.put("/admin/ordine", dependencies=[Depends(richiedi_admin)])
+def aggiorna_ordine(body: OrdineUpdate, db: Session = Depends(get_db)):
+    """Aggiorna l'ordine di tutti i moduli.
+
+    ⚠️ Deve restare dichiarata PRIMA di PUT /admin/{code}: FastAPI prova le rotte in
+    ordine e /admin/{code} catturerebbe "ordine" come codice modulo (422). Fino alla
+    v4.30.6 era dopo e le frecce di riordino in Admin → Moduli non funzionavano.
+    """
+    for idx, code in enumerate(body.ordine):
+        m = db.query(Module).filter(Module.code == code).first()
+        if m:
+            m.ordine = idx + 1
+    db.commit()
+    return {"ok": True}
+
+
 @router.put("/admin/{code}", response_model=ModuleSchema, dependencies=[Depends(richiedi_admin)])
 def aggiorna_modulo(code: str, body: ModuleUpdate, db: Session = Depends(get_db)):
     """Modifica nome, icona, route, ordine, stato attivo o colore di un modulo."""
@@ -156,17 +172,6 @@ def aggiorna_modulo(code: str, body: ModuleUpdate, db: Session = Depends(get_db)
         icon=m.icon, route=m.route, ordine=m.ordine,
         attivo=m.attivo, colore=m.colore,
     )
-
-
-@router.put("/admin/ordine", dependencies=[Depends(richiedi_admin)])
-def aggiorna_ordine(body: OrdineUpdate, db: Session = Depends(get_db)):
-    """Aggiorna l'ordine di tutti i moduli. Route statica prima di /admin/{code} per evitare conflitti."""
-    for idx, code in enumerate(body.ordine):
-        m = db.query(Module).filter(Module.code == code).first()
-        if m:
-            m.ordine = idx + 1
-    db.commit()
-    return {"ok": True}
 
 
 @router.put("/admin/{code}/permissions/{ruolo}", dependencies=[Depends(richiedi_admin)])

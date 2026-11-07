@@ -350,3 +350,23 @@ def test_logout_restituisce_messaggio(client, utente_admin):
     resp = client.post("/auth/logout", headers=headers)
     assert resp.status_code == 200
     assert "logout" in resp.json()["message"].lower()
+
+
+class TestSecretKey:
+    """Senza una chiave vera il backend non deve partire (prima: ripiego fisso pubblico)."""
+
+    def test_rifiuta_chiave_mancante(self):
+        from app.auth import leggi_secret_key
+        for valore in (None, ""):
+            with pytest.raises(RuntimeError):
+                leggi_secret_key(valore)
+
+    def test_rifiuta_chiavi_di_esempio_e_corte(self):
+        from app.auth import CHIAVI_DI_ESEMPIO, leggi_secret_key
+        for valore in list(CHIAVI_DI_ESEMPIO) + ["x" * 31]:
+            with pytest.raises(RuntimeError):
+                leggi_secret_key(valore)
+
+    def test_accetta_chiave_valida(self):
+        from app.auth import leggi_secret_key
+        assert leggi_secret_key("a" * 64) == "a" * 64

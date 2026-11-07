@@ -99,7 +99,9 @@ Chiavi attive: `week_start_weekday`='5', `anno_confronto_giorni_offset`='364', `
 Ruoli: `admin` (accesso completo) / `viewer` (sola lettura).
 JWT HS256, 8h, `SECRET_KEY` da .env. Token in `localStorage('auth_token')`.
 Dipendenze FastAPI: `richiedi_utente_attivo` / `richiedi_admin`.
-Credenziali default: admin / admin2024.
+L'utente `admin` creato all'installazione (password di default nella migrazione) è **disattivato** dal
+07/11/2026: l'app è pubblica. Mai riattivarlo senza cambiare la password; gli admin sono utenti nominativi.
+`SECRET_KEY` obbligatoria in `backend/.env` (≥ 32 caratteri, non quella di esempio): senza, il backend non parte.
 - Lettura (dashboard, export, config): `richiedi_utente_attivo`
 - Scrittura (upload, budget, admin/*): `richiedi_admin`
 - Login: nessuna auth (rate limit 5/15min per IP)

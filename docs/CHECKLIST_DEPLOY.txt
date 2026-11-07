@@ -83,7 +83,8 @@ PASSO 6 — (SOLO PRODUZIONE) SERVER WEB
 ─────────────────────────────────────────────────────────────────
 PASSO 7 — VERIFICA FINALE
 ─────────────────────────────────────────────────────────────────
-  [ ] Login funziona con admin / admin2024
+  [ ] Login funziona con un utente admin nominativo (l'utente "admin" di default va
+      disattivato o con password cambiata subito: l'app è raggiungibile da internet)
   [ ] Dashboard gruppo carica i dati
   [ ] Dashboard hotel carica i dati
   [ ] Export Excel/PDF funziona

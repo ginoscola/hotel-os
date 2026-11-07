@@ -446,8 +446,10 @@ function GestioneModuli() {
     const target = idx + dir
     if (target < 0 || target >= nuovoOrdine.length) return
     ;[nuovoOrdine[idx], nuovoOrdine[target]] = [nuovoOrdine[target], nuovoOrdine[idx]]
-    await api.put('/modules/admin/ordine', { ordine: nuovoOrdine.map(m => m.code) })
-    carica()
+    try {
+      await api.put('/modules/admin/ordine', { ordine: nuovoOrdine.map(m => m.code) })
+      carica()
+    } catch (e) { avvisi.errore(mostraErrore(e)) }
   }
 
   const ruoli = ['admin', 'viewer']
