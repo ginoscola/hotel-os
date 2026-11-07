@@ -1,0 +1,2 @@
+# Strumenti di sviluppo, non servono in produzione
+ruff==0.17.4

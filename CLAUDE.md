@@ -231,6 +231,8 @@ launchd, `it.hotelos.backend`/`frontend`/`backup` spostati fuori da `~/Library/L
 cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev
 cd backend && source venv/bin/activate && pytest tests/ -v
+cd backend && source venv/bin/activate && ruff check app tests   # controllo statico (ruff.toml, requirements-dev.txt)
+cd frontend && npm run lint                                       # eslint (eslint.config.js): trova identificatori non definiti che vite build non vede
 ```
 **Riavvio sul server**: `./restart_server.sh` (= `sudo systemctl restart hotelos-backend` + attesa
 backend pronto + status), `./restart_server.sh --build` per ricompilare anche il frontend.

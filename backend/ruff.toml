@@ -1,0 +1,13 @@
+# Controllo statico del backend: `ruff check app tests`
+# Solo regole che trovano difetti veri (non lo stile).
+target-version = "py314"
+extend-exclude = ["alembic/versions"]
+
+[lint]
+select = ["F", "E9", "B"]
+# B905 (zip senza strict) escluso: troppo rumore, da valutare caso per caso
+ignore = [
+  "B008",  # Depends()/Query() negli argomenti: pattern FastAPI
+  "B904",  # raise ... from err dentro except
+  "B905",  # zip() senza strict=
+]
