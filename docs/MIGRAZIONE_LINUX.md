@@ -67,7 +67,7 @@ regola a parte, non tocca la policy "solo io" già esistente per l'accesso umano
   toccare le altre — scelta consigliata, non imposta tecnicamente (le stesse credenziali
   funzionerebbero comunque se copiate).
 
-**⏳ In sospeso (22 settembre 2026): stesso accesso per il Mac di casa dell'utente**, per poter
+**✅ Fatto il 07/11/2026 (preparato il 22 settembre 2026): stesso accesso per il Mac di casa dell'utente**, per poter
 lavorare con Claude Code/VSCode Remote-SSH anche da lì, non solo da questo Mac. Fatto fin qui:
 - Nuovo service token dedicato **`claude-code-mac-casa`** creato (Access controls → **Service
   credentials**, non più "Service Tokens" nella UI attuale — rinominato), Client ID/Secret salvati
@@ -99,6 +99,22 @@ EOF
 Poi `ssh kmdimare-remote` (accetta la nuova host key la prima volta) — stesso pattern già testato e
 funzionante su questo Mac. Una volta dentro: VSCode → Remote-SSH: Connect to Host → `kmdimare-remote`
 → apri `/srv/progetti/hotel-os`.
+
+**Come è stato fatto davvero (07/11/2026)**, diverso dai comandi sopra:
+- Il Mac di casa è **Intel x86_64** senza Command Line Tools: `brew install cloudflared` non
+  funziona. Scaricato `cloudflared-darwin-amd64.tgz` da github.com/cloudflare/cloudflared/releases
+  con Safari, poi `tar -xzf`, `xattr -c cloudflared`, `sudo mv cloudflared /usr/local/bin/`
+  (versione 2026.10.7).
+- **Nessun service token**: `~/.ssh/config` con login via browser (policy "solo io" esistente):
+  ```
+  Host kmdimare-remote
+          HostName ssh.kmdimare-hub.com
+          User gino
+          ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h
+  ```
+  Il token `claude-code-mac-casa` resta inutilizzato (revocabile).
+- ⚠️ Scrivendo a mano in nano, il tasto option premuto per errore inseriva `†` (option+T) nel
+  file: se `ssh kmdimare-remote` fallisce, controllare prima `cat ~/.ssh/config`.
 
 **Decisione presa (21 settembre 2026): niente Cloudflare Access sull'hostname HTTP di HotelOS.**
 Ripensato rispetto alla nota del 17 settembre sotto (lista email/Access Group) — l'utente ha
@@ -575,8 +591,6 @@ voce `it.hotelos.*`) e `lsof` su entrambe le porte (8000/5173 libere) dopo il fi
 ## Non ancora fatto
 - Restore fresco finale del DB sul server (i dati di oggi sono comunque aggiornati ad oggi —
   rifarlo solo se passano altri giorni prima di considerare la migrazione definitivamente chiusa)
-- Accesso da Mac di casa dell'utente (service token e policy Cloudflare già pronti, comandi in
-  attesa — vedi sezione dedicata sopra)
 
 ## Idee / note sparse
 _(aggiungere qui nel tempo)_
