@@ -79,8 +79,10 @@ completi, rigenerare il lock con le sole dipendenze di produzione (non `pip free
 gli strumenti di sviluppo), riavvio backend. `bcrypt` resta a 4.0.1 per compatibilità con passlib 1.7.4.
 Aggiornamento del 08/11/2026 (v4.30.10): pillow 12.3→13.0, pyasn1 0.6.4→0.6.5, dnspython 2.8→2.9.2
 per le vulnerabilità segnalate da pip-audit; provato prima in un venv separato (1000 test, lettura dei
-PDF reali di payroll/corrispettivi/TARI e 5 PDF generati: identici). Restano segnalati `python-jose` ed
-`ecdsa`, senza correzione e non sfruttabili qui (JWT HS256 con chiave segreta); passaggio a PyJWT da valutare.
+PDF reali di payroll/corrispettivi/TARI e 5 PDF generati: identici). Restavano segnalati `python-jose` ed
+`ecdsa`, senza correzione: **sostituita `python-jose` con PyJWT** (v4.30.15, stesso giorno). Formato token invariato (HS256,
+`sub`/`role`/`exp`): verificato che i token già emessi restano validi nei due sensi, nessuno viene disconnesso. Usciti dal
+lock `python-jose`, `ecdsa`, `rsa`, `pyasn1`, `six`; `pip-audit`: nessuna vulnerabilità nota.
 
 **Endpoint tolti il 08/11/2026 (v4.30.13, mai chiamati dal frontend né da script)**: `GET /corrispettivi/documenti`,
 `PUT /corrispettivi/scontrini|fatture|manuali/{id}` (la modifica passa da `PUT /corrispettivi/documenti/{id}`),

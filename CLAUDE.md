@@ -97,7 +97,7 @@ Chiavi attive: `week_start_weekday`='5', `anno_confronto_giorni_offset`='364', `
 
 ## Autenticazione
 Ruoli: `admin` (accesso completo) / `viewer` (sola lettura).
-JWT HS256, 8h, `SECRET_KEY` da .env. Token in `localStorage('auth_token')`.
+JWT HS256 (libreria PyJWT, non python-jose), 8h, `SECRET_KEY` da .env. Token in `localStorage('auth_token')`.
 Dipendenze FastAPI: `richiedi_utente_attivo` / `richiedi_admin`.
 L'utente `admin` creato all'installazione (password di default nella migrazione) è **disattivato** dal
 07/11/2026: l'app è pubblica. Mai riattivarlo senza cambiare la password; gli admin sono utenti nominativi.

@@ -1,5 +1,5 @@
 # Ambiente di produzione completo (dipendenze dirette + indirette), generato da
-# requirements.txt il 08/11/2026 (pillow, pyasn1, dnspython aggiornati per pip-audit). Installazione: pip install -r requirements-lock.txt
+# requirements.txt il 08/11/2026 (python-jose sostituita da PyJWT). Installazione: pip install -r requirements-lock.txt
 # Non modificare a mano: rigenerare dopo ogni aggiornamento (vedi deploy-sviluppo.md).
 alembic==1.20.0
 annotated-doc==0.0.5
@@ -12,7 +12,6 @@ click==8.5.0
 cryptography==50.0.1
 Deprecated==1.3.1
 dnspython==2.9.2
-ecdsa==0.19.2
 email-validator==2.3.0
 et_xmlfile==2.0.0
 fastapi==0.141.1
@@ -30,18 +29,15 @@ pdfminer.six==20260107
 pdfplumber==0.11.10
 pillow==13.0.0
 psycopg2-binary==2.9.13
-pyasn1==0.6.5
 pycparser==3.0
 pydantic==2.13.5
 pydantic_core==2.46.5
+PyJWT==2.15.1
 pypdfium2==5.13.0
 python-dotenv==1.2.3
-python-jose==3.5.0
 python-multipart==0.0.32
 PyYAML==6.0.3
 reportlab==5.0.1
-rsa==4.9.1
-six==1.17.0
 slowapi==0.1.10
 SQLAlchemy==2.0.54
 starlette==1.6.0

@@ -1,10 +1,10 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
@@ -53,7 +53,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def crea_token_accesso(username: str, ruolo: str) -> str:
-    expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     to_encode = {
         'sub': username,
         'role': ruolo,
@@ -74,7 +74,7 @@ def verifica_token(token: str) -> dict:
                 headers={'WWW-Authenticate': 'Bearer'},
             )
         return {'username': username, 'role': ruolo}
-    except JWTError:
+    except jwt.PyJWTError:   # firma errata, token scaduto o malformato (PyJWT dal 08/11/2026, prima python-jose)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Token non valido o scaduto',

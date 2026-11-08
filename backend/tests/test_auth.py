@@ -370,3 +370,50 @@ class TestSecretKey:
     def test_accetta_chiave_valida(self):
         from app.auth import leggi_secret_key
         assert leggi_secret_key("a" * 64) == "a" * 64
+
+
+# ---------------------------------------------------------------------------
+# Token con PyJWT (08/11/2026, prima python-jose): stesso formato HS256, quindi
+# i token già emessi restano validi (verificato al passaggio nei due sensi).
+# ---------------------------------------------------------------------------
+
+class TestTokenPyJWT:
+    def _rifiutato(self, token):
+        from fastapi import HTTPException
+        from app.auth import verifica_token
+        with pytest.raises(HTTPException) as e:
+            verifica_token(token)
+        assert e.value.status_code == 401
+
+    def _token(self, payload, chiave=None, algoritmo='HS256'):
+        import jwt
+        from app.auth import SECRET_KEY
+        return jwt.encode(payload, chiave or SECRET_KEY, algorithm=algoritmo)
+
+    def test_token_creato_e_letto(self):
+        from app.auth import verifica_token
+        assert verifica_token(crea_token_accesso('mario', 'viewer')) == {'username': 'mario', 'role': 'viewer'}
+
+    def test_token_scaduto_rifiutato(self):
+        import time
+        self._rifiutato(self._token({'sub': 'mario', 'role': 'admin', 'exp': int(time.time()) - 10}))
+
+    def test_token_firmato_con_altra_chiave_rifiutato(self):
+        import time
+        self._rifiutato(self._token({'sub': 'mario', 'role': 'admin', 'exp': int(time.time()) + 600},
+                                    chiave='unaltra_chiave_lunga_almeno_32_caratteri_xxxxx'))
+
+    def test_token_senza_firma_rifiutato(self):
+        """alg 'none': un token non firmato non deve mai passare."""
+        import base64
+        import json
+        import time
+        b64 = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip('=')  # noqa: E731
+        self._rifiutato(b64({'alg': 'none', 'typ': 'JWT'}) + '.' + b64({'sub': 'mario', 'role': 'admin', 'exp': int(time.time()) + 600}) + '.')
+
+    def test_token_senza_ruolo_rifiutato(self):
+        import time
+        self._rifiutato(self._token({'sub': 'mario', 'exp': int(time.time()) + 600}))
+
+    def test_token_malformato_rifiutato(self):
+        self._rifiutato('abc.def.ghi')
