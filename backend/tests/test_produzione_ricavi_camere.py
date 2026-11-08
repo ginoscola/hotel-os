@@ -21,7 +21,7 @@ from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import Base, get_db
 from app.main import app
 from app.models.produzione import ProdCategoria, ProdImport, ProdRiga  # noqa: F401
-from app.models.rooms import Room  # noqa: F401
+from app.models.rooms import Room
 
 from tests._db import TEST_DB_URL  # noqa: E402
 
@@ -204,3 +204,13 @@ def test_export_tutti_i_formati(client, formato, vista):
     assert r.status_code == 200
     assert len(r.content) > 100
     assert f".{formato}" in r.headers["content-disposition"]
+
+
+def test_includi_zero_esclude_camere_disattivate(client, TestSession):
+    """Le camere disattivate (es. le OVER virtuali di DPH) non compaiono tra le camere a zero."""
+    with TestSession() as db:
+        db.query(Room).filter(Room.code == "D999").update({"attiva": False})
+        db.commit()
+    con_zero = client.get("/produzione/ricavi-camere",
+                          params={"hotel_code": "DPH", "includi_zero": "true"}).json()
+    assert "D999" not in {c["camera"] for c in con_zero["camere"]}

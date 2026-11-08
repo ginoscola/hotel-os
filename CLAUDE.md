@@ -178,7 +178,10 @@ da aggiornare quando si aggiunge un componente.
 
 ## Modulo Camere (Rooms)
 Tabella `rooms`: code PK, hotel_id FK, struttura_code, tipo_risorsa, nome_tipo, posti_letto, piano, attiva, note.
-Endpoint: `GET|POST /rooms/`, `GET|PUT|DELETE /rooms/{code}`.
+Endpoint: `GET|POST /rooms/`, `GET|PUT|DELETE /rooms/{code}`. UI: Admin → Comune → **Hotel e camere** (`?s=hotel-camere`,
+`pages/admin/AdminHotelCamere.jsx`, v4.31.0): niente Elimina, una camera dismessa/virtuale si **disattiva** (continua a
+risolvere la struttura degli addebiti, esclusa dalle camere a zero di Ricavi camere). Codice e struttura non modificabili.
+DPH ha 45 righe = 43 camere + 2 virtuali OVER (`SOL`, `LUNA`).
 
 ## Tabelle condivise
 `tipi_pagamento` in `shared.py`: codice unique, descrizione, categoria, attivo, ordine.

@@ -10,6 +10,7 @@ import AdminBudgetPrevisione from './admin/AdminBudgetPrevisione.jsx'
 import AdminWave from './admin/AdminWave.jsx'
 import AdminUsaliFnb from './admin/AdminUsaliFnb.jsx'
 import AdminAttivita from './admin/AdminAttivita.jsx'
+import AdminHotelCamere from './admin/AdminHotelCamere.jsx'
 import {
   AdminTesoreriaAdvertising, AdminTesoreriaAffitti, AdminTesoreriaCategorie, AdminTesoreriaCompensi, AdminTesoreriaConti, AdminTesoreriaFiscale, AdminTesoreriaInterventi, AdminTesoreriaMutuo,
   AdminTesoreriaPrevisione, AdminTesoreriaRegole, AdminTesoreriaRicorrenti, AdminTesoreriaSoglie,
@@ -29,6 +30,7 @@ const SEZIONI = [
     voci: [
       { id: 'utenti',   label: 'Utenti' },
       { id: 'stagioni', label: 'Stagioni operative' },
+      { id: 'hotel-camere', label: 'Hotel e camere' },
       { id: 'moduli',   label: 'Gestione moduli' },
       { id: 'attivita', label: 'Attività ricorrenti' },
     ],
@@ -211,6 +213,7 @@ export default function AdminUnificato() {
 function Contenuto({ sezione }) {
   if (sezione === 'utenti')        return <AdminUtenti />
   if (sezione === 'stagioni')      return <GestioneStagioni />
+  if (sezione === 'hotel-camere')  return <AdminHotelCamere />
   if (sezione === 'moduli')        return <GestioneModuli />
   if (sezione === 'home-soglie')   return <AdminCruscottoSoglie />
   if (sezione === 'revenue-import') return <RevenueImportMassivo />

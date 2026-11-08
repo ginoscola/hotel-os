@@ -10,7 +10,7 @@ DELETE /rooms/{code}             — elimina camera (admin)
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth import richiedi_admin, richiedi_utente_attivo
@@ -43,25 +43,26 @@ class RoomOut(BaseModel):
 
 
 class RoomIn(BaseModel):
-    code: str
+    code: str = Field(min_length=1, max_length=30)
     struttura_code: str
-    tipo_risorsa: Optional[str] = None
-    nome_tipo: Optional[str] = None
-    posti_letto: Optional[int] = None
-    letti_aggiunti: Optional[int] = None
-    piano: Optional[int] = None
+    tipo_risorsa: Optional[str] = Field(None, max_length=20)
+    nome_tipo: Optional[str] = Field(None, max_length=100)
+    posti_letto: Optional[int] = Field(None, ge=0, le=20)
+    letti_aggiunti: Optional[int] = Field(None, ge=0, le=10)
+    piano: Optional[int] = Field(None, ge=-5, le=20)
     attiva: bool = True
-    note: Optional[str] = None
+    note: Optional[str] = Field(None, max_length=255)
 
 
 class RoomUpdate(BaseModel):
-    tipo_risorsa: Optional[str] = None
-    nome_tipo: Optional[str] = None
-    posti_letto: Optional[int] = None
-    letti_aggiunti: Optional[int] = None
-    piano: Optional[int] = None
+    """Codice e struttura non si cambiano: decidono a quale hotel vanno gli addebiti importati."""
+    tipo_risorsa: Optional[str] = Field(None, max_length=20)
+    nome_tipo: Optional[str] = Field(None, max_length=100)
+    posti_letto: Optional[int] = Field(None, ge=0, le=20)
+    letti_aggiunti: Optional[int] = Field(None, ge=0, le=10)
+    piano: Optional[int] = Field(None, ge=-5, le=20)
     attiva: Optional[bool] = None
-    note: Optional[str] = None
+    note: Optional[str] = Field(None, max_length=255)
 
 
 # ---------------------------------------------------------------------------
@@ -108,11 +109,12 @@ def crea_camera(
     hotel = db.query(Hotel).filter(Hotel.code == body.struttura_code.upper()).first()
     if not hotel:
         raise HTTPException(400, f"Hotel '{body.struttura_code}' non trovato")
-    if db.query(Room).filter(Room.code == body.code.upper()).first():
-        raise HTTPException(409, f"Camera '{body.code}' già esistente")
+    codice = body.code.strip().upper()
+    if db.query(Room).filter(Room.code == codice).first():
+        raise HTTPException(409, f"Camera '{codice}' già esistente")
 
     room = Room(
-        code=body.code.upper(),
+        code=codice,
         hotel_id=hotel.id,
         struttura_code=hotel.code,
         tipo_risorsa=body.tipo_risorsa,

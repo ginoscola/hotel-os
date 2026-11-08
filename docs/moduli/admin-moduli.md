@@ -31,7 +31,8 @@ invece di cadere nel fallback "non ancora implementato". **Budget e Usali non to
 richiesto): mostrano ancora "in sviluppo" finché non verrà chiesto esplicitamente anche per loro.
 
 ## Area Admin (`/admin` → AdminUnificato.jsx, sidebar `?s=`)
-**Comune**: `utenti` (CRUD), `stagioni` (stagioni operative), `moduli` (attiva/disattiva/permessi), `attivita` (frequenze dello scadenziario, vedi "Attività ricorrenti")
+**Comune**: `utenti` (CRUD), `stagioni` (stagioni operative), `hotel-camere` (nome e camere di default degli hotel, anagrafica
+camere con disattivazione al posto dell'eliminazione — `AdminHotelCamere.jsx`, v4.31.0; test `test_rooms_hotels.py`), `moduli` (attiva/disattiva/permessi), `attivita` (frequenze dello scadenziario, vedi "Attività ricorrenti")
 **Revenue**: `revenue-import` (bulk import), `revenue-test` (cancella is_test)
 **Dipendenti**: `dip-cc` (AdminCentriDiCosto), `dip-colori` (colori CC), `dip-test`
 **Corrispettivi**: `corr-tipi-doc`, `corr-pagamenti`, `corr-classificazione` (CorrClassificazioneTrattamenti)

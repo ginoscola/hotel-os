@@ -152,9 +152,10 @@ def _calcola(
         r['per_trattamento'].setdefault(nome_tr, _z())
         _somma(r['per_trattamento'][nome_tr], lo, im, iv)
 
-    # Camere a zero (opzionale): tutte le camere in anagrafica per la/le struttura/e
+    # Camere a zero (opzionale): le camere ATTIVE in anagrafica per la/le struttura/e (le
+    # disattivate, es. le OVER virtuali di DPH, compaiono solo se hanno addebiti — 08/11/2026)
     if includi_zero:
-        q_rooms = db.query(Room)
+        q_rooms = db.query(Room).filter(Room.attiva.is_(True))
         q_rooms = (q_rooms.filter(Room.struttura_code == struttura) if struttura
                    else q_rooms.filter(Room.struttura_code.in_(STRUTTURE_HOTEL)))
         for room in q_rooms.all():

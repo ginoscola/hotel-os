@@ -74,11 +74,18 @@ def setup_db(TestSession):
                     attivo=True,
                 ))
         # Hotel + stampante RT di test, necessari per /rt-chiusure/import-da-stampante
-        if not db.query(Hotel).filter(Hotel.code == 'DPH').first():
+        # Ripetibile: la stampante (ip UNIQUE) può essere rimasta da un giro precedente anche se
+        # un altro file di test ha svuotato hotels; e un DPH lasciato da altri va collegato a lei.
+        printer = db.query(RtPrinter).filter(RtPrinter.ip == '10.0.0.1').first()
+        if not printer:
             printer = RtPrinter(nome='Test RT1', ip='10.0.0.1')
             db.add(printer)
             db.flush()
+        hotel = db.query(Hotel).filter(Hotel.code == 'DPH').first()
+        if not hotel:
             db.add(Hotel(code='DPH', name='Test Du Parc', default_rooms=10, rt_printer_id=printer.id))
+        elif hotel.rt_printer_id is None:
+            hotel.rt_printer_id = printer.id
         db.commit()
     finally:
         db.close()

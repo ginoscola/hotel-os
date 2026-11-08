@@ -236,7 +236,7 @@ struttura `[DPH][CLB][INT][Gruppo]`. Toggle vista **Per categoria** ↔ **Per tr
 (`localStorage('prod_ricavi_camere_vista')`, hotel in `prod_ricavi_camere_hotel`): stesse righe
 (camere), colonne diverse (categorie di ricavo `prod_categorie` con swatch colore | tipi di
 trattamento BB/HB/FB/AI/Solo Pernottamento/OTA/n·d). Checkbox "Mostra camere a zero" (join con
-anagrafica `rooms`). Camere ordinate per numero crescente (prefisso hotel escluso: `D101`→101;
+anagrafica `rooms`, **solo camere attive** dalla v4.31.0: le disattivate, es. OVER di DPH, compaiono solo se hanno addebiti). Camere ordinate per numero crescente (prefisso hotel escluso: `D101`→101;
 `_num_camera()` backend, `numCamera()` frontend — camere senza cifre, es. FUEGO/AIRE, in fondo),
 raggruppate per struttura; click su "TOTALE" nell'header passa all'ordine per ricavo decrescente.
 Casella di ricerca testo (client-side): se combacia con codice/tipo camera filtra le righe, se

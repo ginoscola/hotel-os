@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -43,8 +43,8 @@ class HotelCreate(BaseModel):
 
 class HotelUpdate(BaseModel):
     """Schema per l'aggiornamento parziale di un hotel."""
-    name: Optional[str] = None
-    default_rooms: Optional[int] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    default_rooms: Optional[int] = Field(None, ge=1, le=999)
 
 
 # ---------------------------------------------------------------------------
