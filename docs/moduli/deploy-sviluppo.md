@@ -93,6 +93,16 @@ Recuperabili dallo storico git. **Tenuti di proposito** pur senza chiamate dal f
 /corrispettivi/incasso-storico` (unica via per correggere il pregresso MMS/BON, vedi `corrispettivi.md`), CRUD
 `/rooms` e `PUT /hotels/{code}` (pronti per una futura pagina Admin di camere e hotel).
 
+**Frontend a pezzi e compressione (08/11/2026)**: nginx comprime JS/CSS/JSON (`gzip_types` e simili attivati in
+`/etc/nginx/nginx.conf`, copia `nginx.conf.bak-20261108`): il bundle passava da 1,48 MB a 384 KB. Dalla v4.30.14
+ogni pagina è un file separato (`React.lazy` via `utils/lazyConRicarica.js` in `App.jsx`, Login escluso): la Home
+a freddo scarica ~640 KB invece di 1,44 MB (non compressi), dopo un aggiornamento si riscaricano solo i pezzi
+cambiati. Se il file di una pagina non esiste più (app aperta durante un aggiornamento) la pagina si ricarica
+**una volta** per sessione; se fallisce ancora, `components/ErrorePagina.jsx` mostra un messaggio con "Ricarica"
+invece della schermata bianca (intercetta anche gli errori di disegno delle pagine; la NavBar resta utilizzabile).
+Verificato con browser automatico (vecchia vs nuova build con API simulate, ricarica con file mancante una volta/sempre).
+Nuove pagine: importarle in `App.jsx` con `lazyConRicarica(() => import(...))`, non con `import` statico.
+
 **Modelli e DB allineati (v4.30.9)**: indici e vincoli creati dalle migrazioni vanno dichiarati anche
 nel modello (`Index(...)` in `__table_args__`), altrimenti il DB di test (`create_all()`) ne è privo e i
 test non li vedono. Dopo ogni migrazione: `alembic check`.

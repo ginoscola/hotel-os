@@ -1,24 +1,30 @@
+import { Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import NavBar from './components/NavBar.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import ErrorePagina from './components/ErrorePagina.jsx'
 import Login from './pages/Login.jsx'
-import HomeCruscotto from './pages/HomeCruscotto.jsx'
-import Import from './pages/Import.jsx'
-import ImportBulk from './pages/ImportBulk.jsx'
-import DashboardHotel from './pages/DashboardHotel.jsx'
-import DashboardGruppo from './pages/DashboardGruppo.jsx'
-import AdminUtenti from './pages/AdminUtenti.jsx'
-import Budget from './pages/Budget.jsx'
-import Usali from './pages/Usali.jsx'
-import StatisticheProduzione from './pages/StatisticheProduzione.jsx'
-import Dipendenti from './pages/Dipendenti.jsx'
-import Corrispettivi from './pages/Corrispettivi.jsx'
-import AdminCentriDiCosto from './pages/AdminCentriDiCosto.jsx'
-import Forecast from './pages/Forecast.jsx'
-import AdminUnificato from './pages/AdminUnificato.jsx'
-import Tesoreria from './pages/Tesoreria.jsx'
-import Attivita from './pages/Attivita.jsx'
-import { UiProvider } from './components/ui'
+import { Loading, UiProvider } from './components/ui'
+import lazyConRicarica from './utils/lazyConRicarica.js'
+
+// Ogni pagina è scaricata solo quando la si apre (un file per pagina invece di un unico
+// pacchetto da 1,4 MB): v4.30.14. Login resta nel pacchetto iniziale, è la prima pagina.
+const HomeCruscotto = lazyConRicarica(() => import('./pages/HomeCruscotto.jsx'))
+const Import = lazyConRicarica(() => import('./pages/Import.jsx'))
+const ImportBulk = lazyConRicarica(() => import('./pages/ImportBulk.jsx'))
+const DashboardHotel = lazyConRicarica(() => import('./pages/DashboardHotel.jsx'))
+const DashboardGruppo = lazyConRicarica(() => import('./pages/DashboardGruppo.jsx'))
+const AdminUtenti = lazyConRicarica(() => import('./pages/AdminUtenti.jsx'))
+const Budget = lazyConRicarica(() => import('./pages/Budget.jsx'))
+const Usali = lazyConRicarica(() => import('./pages/Usali.jsx'))
+const StatisticheProduzione = lazyConRicarica(() => import('./pages/StatisticheProduzione.jsx'))
+const Dipendenti = lazyConRicarica(() => import('./pages/Dipendenti.jsx'))
+const Corrispettivi = lazyConRicarica(() => import('./pages/Corrispettivi.jsx'))
+const AdminCentriDiCosto = lazyConRicarica(() => import('./pages/AdminCentriDiCosto.jsx'))
+const Forecast = lazyConRicarica(() => import('./pages/Forecast.jsx'))
+const AdminUnificato = lazyConRicarica(() => import('./pages/AdminUnificato.jsx'))
+const Tesoreria = lazyConRicarica(() => import('./pages/Tesoreria.jsx'))
+const Attivita = lazyConRicarica(() => import('./pages/Attivita.jsx'))
 
 export default function App() {
   return (
@@ -26,6 +32,8 @@ export default function App() {
     <BrowserRouter>
       <NavBar />
       <main style={{ padding: '1.5rem 2rem' }}>
+        <ErrorePagina>
+        <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/login" element={<Login />} />
 
@@ -87,6 +95,8 @@ export default function App() {
             <ProtectedRoute moduleCode="tesoreria"><Tesoreria /></ProtectedRoute>
           } />
         </Routes>
+        </Suspense>
+        </ErrorePagina>
       </main>
     </BrowserRouter>
     </UiProvider>

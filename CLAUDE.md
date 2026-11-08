@@ -112,7 +112,7 @@ L'utente `admin` creato all'installazione (password di default nella migrazione)
 ## Architettura modulare (dettagli in `docs/moduli/admin-moduli.md`)
 Moduli: `revenue` (/dashboard/gruppo), `produzione` (/statistiche-produzione), `budget` (/budget), `usali` (/usali), `dipendenti` (/dipendenti), `corrispettivi` (/corrispettivi), `forecast` (/forecast), `tesoreria` (/tesoreria). Home (`/home`) e Attività (`/attivita`) non sono moduli.
 Tabelle: `modules` (code PK, name, icon, route, ordine, attivo, colore), `module_permissions` (module_code, ruolo, puo_vedere, puo_modificare, puo_importare).
-**Aggiungere modulo**: riga in `modules` → righe `module_permissions` → pagina JSX → `<Route moduleCode="">` in App.jsx
+**Aggiungere modulo**: riga in `modules` → righe `module_permissions` → pagina JSX → import con `lazyConRicarica()` e `<Route moduleCode="">` in App.jsx
 → **prefisso della route in `rilevaModuloAttivo()`** e caso in `getSubnav()` di `NavBar.jsx` (passi manuali,
 altrimenti tab non evidenziato / banner "in sviluppo").
 Area Admin: `/admin` → `AdminUnificato.jsx`, sezioni con `?s=` (elenco in `admin-moduli.md`); un nuovo gruppo in `SEZIONI` eredita sidebar collassabile e persistenza.
