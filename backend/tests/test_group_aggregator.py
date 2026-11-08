@@ -21,7 +21,6 @@ from app.services.group_aggregator import (
     aggrega_gruppo_periodo,
     aggrega_gruppo_settimanale,
 )
-from app.services.kpi_calculator import calcola_kpi
 
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "uploads")
 
@@ -160,9 +159,8 @@ class TestADRGruppoNonMediaSemplice:
             ra = sum(r.rooms_available for r in righe)
             occ_per_hotel[codice] = rs / ra * 100 if ra > 0 else 0
 
-        occ_media_semplice = sum(occ_per_hotel.values()) / 3
-
-        # Con capacità omogenee (45+43+45) la differenza è piccola ma presente
+        # Con capacità omogenee (45+43+45) la differenza dalla media semplice dei
+        # singoli hotel (occ_per_hotel) è piccola ma presente
         # Verifica che il calcolo in agg viene dai totali, non dalla media
         occ_dai_totali = agg.rooms_sold / agg.rooms_available * 100
         assert agg.kpi.occupancy == pytest.approx(occ_dai_totali, rel=1e-6)

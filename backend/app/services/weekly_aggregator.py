@@ -13,7 +13,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 from functools import lru_cache
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from app.services.file_parser import RigaRevenue
 from app.services.kpi_calculator import KPICalcolati, calcola_kpi

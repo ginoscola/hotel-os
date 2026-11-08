@@ -1,11 +1,11 @@
 """Endpoint per la lista delle snapshot disponibili per hotel."""
 
 from datetime import date
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import richiedi_utente_attivo

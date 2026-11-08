@@ -15,7 +15,6 @@ Uso tipico:
     per_settimana = aggrega_gruppo_settimanale(hotel_dati)
 """
 
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 from typing import Dict, List, Optional

@@ -2,7 +2,6 @@
 correzione e ripristino del valore automatico."""
 import os
 import sys
-from datetime import date
 from types import SimpleNamespace
 
 import pytest

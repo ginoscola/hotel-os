@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.tesoreria import (
-    STATI_INTERVENTO, VOCI_COMPENSO, TesoreriaAdvertising, TesoreriaAdvertisingMese, TesoreriaCategoria, TesoreriaCompenso, TesoreriaConto, TesoreriaContrattoAffitto, TesoreriaImpegno,
+    STATI_INTERVENTO, VOCI_COMPENSO, TesoreriaAdvertising, TesoreriaAdvertisingMese, TesoreriaCompenso, TesoreriaContrattoAffitto, TesoreriaImpegno,
     TesoreriaAbbinamento, TesoreriaAbbinamentoMovimento, TesoreriaAbbinamentoScadenza, TesoreriaCategoria, TesoreriaConto,
     TesoreriaIntervento, TesoreriaInterventoMovimento, TesoreriaInterventoScadenza, TesoreriaMovimento, TesoreriaRataAffitto, TesoreriaRataCompenso, TesoreriaRataIntervento, TesoreriaRataMutuo, TesoreriaRicorrente, TesoreriaSaldo,
 )
@@ -27,7 +27,7 @@ from app.services.tesoreria_abbinamento import forza_nome
 from app.services.tesoreria_fatture import PREFISSO_CHIAVE, impronta_da_chiave
 from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_piani import (
-    MESI_STAGIONE, TOLLERANZA_PERCENTUALE, anno_calendario, chiudi_totale, data_addebito_advertising, data_addebito_carta, date_ricorrente, fine_mese, importi_rate, importi_rate_intervento, nome_corrisponde, parse_piano_mutuo,
+    MESI_STAGIONE, TOLLERANZA_PERCENTUALE, anno_calendario, chiudi_totale, data_addebito_advertising, data_addebito_carta, date_ricorrente, importi_rate, importi_rate_intervento, nome_corrisponde, parse_piano_mutuo,
     percentuali_effettive,
 )
 from app.services.tesoreria_report import stato_carta

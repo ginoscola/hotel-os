@@ -28,7 +28,7 @@ import io
 from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -36,7 +36,7 @@ from openpyxl.styles import Font
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
@@ -120,14 +120,6 @@ class BudgetSettimanaOutput(BaseModel):
 class NuovaVersioneInput(BaseModel):
     source_version: str
     new_version: str
-    note: Optional[str] = None
-
-
-class BudgetConfigInput(BaseModel):
-    costo_pasto: Optional[float] = None
-    costo_colazione: Optional[float] = None
-    altro_rev_presenza: Optional[float] = None
-    notti_medie_soggiorno: Optional[float] = None
     note: Optional[str] = None
 
 
@@ -979,50 +971,6 @@ def leggi_config(
         'notti_medie_soggiorno': _dec(cfg.notti_medie_soggiorno),
         'note': cfg.note,
     }
-
-
-@router.put("/{hotel_code}/{season_year}/config")
-def salva_config(
-    hotel_code: str,
-    season_year: int,
-    body: BudgetConfigInput,
-    version: str = Query('v1'),
-    db: Session = Depends(get_db),
-    utente=Depends(richiedi_admin),
-):
-    """Crea o aggiorna i parametri di configurazione budget."""
-    hotel = _hotel_o_404(hotel_code, db)
-    cfg = (
-        db.query(BudgetConfig)
-        .filter(
-            BudgetConfig.hotel_id == hotel.id,
-            BudgetConfig.season_year == season_year,
-            BudgetConfig.version == version,
-        )
-        .first()
-    )
-    if cfg:
-        cfg.costo_pasto = body.costo_pasto
-        cfg.costo_colazione = body.costo_colazione
-        cfg.altro_rev_presenza = body.altro_rev_presenza
-        cfg.notti_medie_soggiorno = body.notti_medie_soggiorno
-        cfg.note = body.note
-    else:
-        cfg = BudgetConfig(
-            hotel_id=hotel.id,
-            season_year=season_year,
-            version=version,
-            costo_pasto=body.costo_pasto,
-            costo_colazione=body.costo_colazione,
-            altro_rev_presenza=body.altro_rev_presenza,
-            notti_medie_soggiorno=body.notti_medie_soggiorno,
-            note=body.note,
-            created_by=utente.id,
-        )
-        db.add(cfg)
-    db.commit()
-    db.refresh(cfg)
-    return {'ok': True, 'id': cfg.id}
 
 
 @router.post("/{hotel_code}/{season_year}/import-excel")

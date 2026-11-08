@@ -260,7 +260,6 @@ class TestParserExcel:
 class TestToggleLordoNetto:
     def test_netto_10pct(self):
         """Netto di 110€ al 10% = 100€."""
-        from app.services.corrispettivi_excel_parser import _calcola_aliquota
         # 110 lordo, 10% → netto = 110 / 1.10 = 100
         netto = 110 / (1 + 10 / 100)
         assert abs(netto - 100.0) < 0.01

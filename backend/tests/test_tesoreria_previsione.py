@@ -245,7 +245,7 @@ def test_export(client, formato):
     r = client.get(f"/tesoreria/previsione/export?scenario=pessimista&formato={formato}")
     assert r.status_code == 200 and len(r.content) > 100
     assert client.get("/tesoreria/previsione/export?scenario=boh").status_code == 400
-    r = client.get(f"/tesoreria/previsione/export?scenario=realista&formato=csv&tipo_anno=alberghiero")
+    r = client.get("/tesoreria/previsione/export?scenario=realista&formato=csv&tipo_anno=alberghiero")
     assert r.status_code == 200 and "TOTALE " in r.content.decode("utf-8-sig", errors="ignore")
     assert client.get("/tesoreria/previsione/export?tipo_anno=boh").status_code == 400
 

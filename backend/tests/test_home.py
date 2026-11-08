@@ -11,7 +11,6 @@ un sottoinsieme minimo di quelle reali.
 """
 import os
 import sys
-from datetime import date
 from types import SimpleNamespace
 
 import pytest

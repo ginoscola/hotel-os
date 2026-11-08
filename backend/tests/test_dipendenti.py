@@ -323,7 +323,7 @@ def test_override_manuale_cc(dati_pdf_isolato, db_pulito):
 def test_report_mensile_totali(dati_pdf_isolato, db_pulito):
     """Il report mensile deve restituire i totali corretti."""
     db = db_pulito
-    report_import = importa_payroll(db, dati_pdf_isolato, "test_aprile_2026.pdf", user_id=None, is_test=True)
+    importa_payroll(db, dati_pdf_isolato, "test_aprile_2026.pdf", user_id=None, is_test=True)
 
     # Simula la query del report
     imp = db.query(PayrollImport).filter(PayrollImport.mese == MESE_TEST, PayrollImport.anno == ANNO_TEST).first()

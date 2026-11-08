@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models.revenue import CostCenter, EmployeeCCDefault
+from app.models.revenue import EmployeeCCDefault
 
 TOLLERANZA_PERC = Decimal("0.02")
 

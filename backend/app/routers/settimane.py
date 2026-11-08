@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 from datetime import date, timedelta
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select

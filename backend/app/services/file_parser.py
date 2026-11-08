@@ -36,7 +36,7 @@ Convenzione nome file:
 
 import csv
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple

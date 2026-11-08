@@ -82,10 +82,7 @@ def pulisci_e_popola(test_engine):
         """))
         # Dati per due settimane (sab 30/05 e sab 06/06), due hotel (CLB e DPH)
         # Settimana 1: 30/05 – 05/06 (7 giorni per CLB, 7 per DPH)
-        for giorno in range(7):
-            d = f"2026-05-{30 + giorno:02d}" if 30 + giorno <= 31 else f"2026-06-{giorno - 2:02d}"
-            # Calcolo corretto delle date
-        # Inserisco con date esplicite
+        # Date esplicite
         rows = [
             # (hotel_code, data, rooms_sold, rooms_available, rev_rooms, rev_fnb, rev_extra, rev_total)
             ("CLB", "2026-05-30", 20, 45, 1000.00, 300.00, 50.00, 1350.00),

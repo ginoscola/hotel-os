@@ -12,7 +12,6 @@ Formato file reparti:
   Bar;11,50 €;0,10%
 """
 
-import io
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal

@@ -62,7 +62,7 @@ launchd, `it.hotelos.backend`/`frontend`/`backup` spostati fuori da `~/Library/L
 cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev
 cd backend && source venv/bin/activate && pytest tests/ -v
-cd backend && source venv/bin/activate && ruff check app tests   # controllo statico (ruff.toml, requirements-dev.txt)
+cd backend && source venv/bin/activate && ruff check app tests   # controllo statico: deve dare 0 avvisi (ruff.toml, requirements-dev.txt)
 cd frontend && npm run lint                                       # eslint (eslint.config.js): trova identificatori non definiti che vite build non vede
 cd backend && source venv/bin/activate && alembic check           # modelli = DB reale? deve dire "No new upgrade operations detected"
 cd backend && source venv/bin/activate && pip-audit -r requirements-lock.txt --no-deps --disable-pip   # vulnerabilità note pacchetti Python

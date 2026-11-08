@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.services.kpi_calculator import (
-    KPICalcolati, TotaliRighe, aggrega_totali_righe, calcola_kpi, kpi_da_riga, _safe_div,
+    aggrega_totali_righe, calcola_kpi, kpi_da_riga, _safe_div,
 )
 from app.services.file_parser import ParserCSV, RigaRevenue
 from datetime import date

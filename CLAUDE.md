@@ -123,9 +123,9 @@ Sviluppo sul server Linux `kmdimare-server`, cartella `/srv/progetti/hotel-os` (
 cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev
 cd backend && source venv/bin/activate && pytest tests/ -v
-cd backend && source venv/bin/activate && ruff check app tests   # controllo statico (ruff.toml, requirements-dev.txt)
+cd backend && source venv/bin/activate && ruff check app tests   # controllo statico: deve dare 0 avvisi (ruff.toml, requirements-dev.txt)
 cd backend && source venv/bin/activate && alembic check     # modelli allineati al DB reale (dopo ogni migrazione)
-cd frontend && npm run lint                                       # eslint (eslint.config.js): trova identificatori non definiti che vite build non vede
+cd frontend && npm run lint                                       # eslint (eslint.config.js): trova identificatori non definiti che vite build non vede (0 errori)
 ```
 - **Produzione**: nginx serve `frontend/dist/` (file statici) + reverse proxy verso uvicorn (systemd
   `hotelos-backend`, utente `hotelos`), su origini/porte separate. Dopo modifiche frontend serve

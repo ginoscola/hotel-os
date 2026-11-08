@@ -19,7 +19,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.services.file_parser import ParserCSV
 from app.services.weekly_aggregator import settimana_di, aggrega_settimane
-from app.services.kpi_calculator import calcola_kpi
 
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "uploads")
 
@@ -270,9 +269,8 @@ class TestKPISettimanaleNonEMediaSemplice:
         giorni = [r for r in righe_clb if settimana_di(r.data) == prima_ws]
 
         occ_totali = sum(r.rooms_sold for r in giorni) / sum(r.rooms_available for r in giorni) * 100
-        occ_media = sum(r.rooms_sold / r.rooms_available * 100 for r in giorni) / len(giorni)
-
-        # rooms_available è costante (45/giorno) quindi qui occ_totali == occ_media
+        # rooms_available è costante (45/giorno) quindi qui coincide con la media delle
+        # occupancy giornaliere,
         # ma verifichiamo che il calcolo dai totali sia quello corretto
         assert occ_totali == pytest.approx(settimane_clb[0].kpi.occupancy, rel=1e-4)
 

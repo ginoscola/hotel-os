@@ -25,7 +25,7 @@ from app.models.tesoreria import TesoreriaFattura, TesoreriaImpegno
 from app.routers.corrispettivi_report import report_fatturati
 from app.routers.tesoreria_shared import euro, puo_vedere
 from app.services.tesoreria_iva import (
-    acquisti_completi, credito_fine_anno, fine_mese, iva_acquisti_per_mese, liquidazioni, vendite_complete,
+    acquisti_completi, credito_fine_anno, iva_acquisti_per_mese, liquidazioni, vendite_complete,
 )
 
 router = APIRouter()

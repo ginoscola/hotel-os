@@ -479,7 +479,7 @@ def report_fatturati(
 
     # ── Totale anno per struttura ─────────────────────────────────────────────
     totale_anno_cats: dict = {s: _empty_cats() for s in strutture_presenti}
-    for m, per_sc in per_mese.items():
+    for per_sc in per_mese.values():
         for sc, cats in per_sc.items():
             if sc in totale_anno_cats:
                 for c in CATEGORIE:
@@ -843,7 +843,7 @@ def _calcola_pagamenti(db: Session, anno: int, is_test: bool, key_fn, ordine_pri
         residuo = round(atteso - (c + b + a_ + e), 2)
         pesi = base_mese.get(sc, {})
         tot_pesi = round(sum(pesi.values()), 2)
-        for cat, val, dest in (
+        for _cat, val, dest in (
             ('Contante', c, key_fn('Contante')),
             ('Bonifico', b, key_fn('Bonifico')),
             ('Assegno', a_, key_fn('Assegno')),
@@ -1319,7 +1319,6 @@ def export_fatturati(
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
-    from app.utils.locale_it import MESI_IT
 
     # Riusa la logica di report_fatturati
     dati = report_fatturati(anno=anno, lordo=lordo, is_test=is_test, db=db, _=None)

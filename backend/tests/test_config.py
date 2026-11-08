@@ -10,7 +10,6 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from datetime import date
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker

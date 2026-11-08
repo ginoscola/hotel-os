@@ -5,7 +5,6 @@ maggio/giugno/luglio/settembre presenti, agosto assente (→ KPI per camera vuot
 gennaio–aprile fuori stagione (→ chiuso: solo costi). Categorie KPI = seed della migrazione.
 """
 import importlib.util
-import io
 import os
 import sys
 from datetime import date, timedelta

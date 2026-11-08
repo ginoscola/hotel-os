@@ -3,7 +3,6 @@
 import os
 import tempfile
 from datetime import date
-from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -20,10 +19,7 @@ from app.models.revenue import (
 from app.services.cc_default_service import (
     get_default_attuale,
     get_default_effettivo,
-    get_storico_default,
     salva_default,
-    valida_percentuali,
-    valida_no_duplicati,
 )
 from app.services.cost_center_service import (
     aggiorna_assegnazioni_mensili,
@@ -458,8 +454,6 @@ def elimina_test_data(
 
 def _cc_attivo(db: Session, employee_id: int):
     """Restituisce il primo CC attivo corrente (anno_fine IS NULL) per il dipendente."""
-    from datetime import date as dt
-    oggi = dt.today()
     r = (
         db.query(EmployeeCCDefault)
         .filter(
@@ -571,7 +565,7 @@ def mesi_dipendente_anno(
 
     # Mappa mese → dati
     per_mese: dict[int, dict] = {}
-    for em, imp in righe:
+    for _em, imp in righe:
         cc_mensili = (
             db.query(EmployeeCostCenterMonthly)
             .filter(

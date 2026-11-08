@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
-import { PieChart, Pie, Cell, Tooltip as ReTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { useState, useEffect, useCallback, Fragment } from 'react'
+import { PieChart, Pie, Cell, Tooltip as ReTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import api from '../api/client'
 import { formatEuro, formatPerc, mostraErrore, percentualiA100 } from '../utils/format'
 import {
@@ -20,7 +20,6 @@ export default function Dipendenti() {
   const [mese, setMese] = useState(mesePrecedente.getMonth() + 1)
   const [anno, setAnno] = useState(mesePrecedente.getFullYear())
   const [report, setReport] = useState(null)
-  const [centri, setCentri] = useState([])
   const [dipendenti, setDipendenti] = useState([])
   const [storici, setStorici] = useState([])
   const [annoAnagrafica, setAnnoAnagrafica] = useState(new Date().getFullYear())
@@ -30,20 +29,10 @@ export default function Dipendenti() {
   const [errore, setErrore] = useState(null)
   const [uploadState, setUploadState] = useState({ stato: 'idle', messaggio: '', risultato: null })
   const [isTest, setIsTest] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
   const [voceExpanded, setVoceExpanded] = useState(null)
-  const [testStats, setTestStats] = useState(null)
-  const [cancellandoTest, setCancellandoTest] = useState(false)
-  const [ccColori, setCcColori] = useState(null)
-  const [ccColoriModificato, setCcColoriModificato] = useState(false)
-  const [ccColoriSalvando, setCcColoriSalvando] = useState(false)
-  const [ccColoriEsito, setCcColoriEsito] = useState(null)
-  const [nuovoNomeColore, setNuovoNomeColore] = useState('')
-  const [nuovaTintaColore, setNuovaTintaColore] = useState(120)
   const [reportTab, setReportTab] = useState('dipendenti')
   const [albero, setAlbero] = useState([])
   const [ricalcolandoTutto, setRicalcolandoTutto] = useState(false)
-  const [esitoRicalcoloTutto, setEsitoRicalcoloTutto] = useState(null)
   const avvisi = useAvvisi()
   const conferma = useConferma()
 
@@ -54,12 +43,6 @@ export default function Dipendenti() {
     } catch { return false }
   }
 
-  const caricaTestStats = useCallback(() => {
-    if (isAdmin()) {
-      api.get('/dipendenti/admin/test-stats').then(r => setTestStats(r.data)).catch(() => {})
-    }
-  }, [])
-
   const handleRicalcolaTutto = async () => {
     if (!(await conferma({
       titolo: `Ricalcolare le ripartizioni CC di tutti i dipendenti per il ${anno}?`,
@@ -67,7 +50,6 @@ export default function Dipendenti() {
       confermaLabel: 'Ricalcola',
     }))) return
     setRicalcolandoTutto(true)
-    setEsitoRicalcoloTutto(null)
     try {
       const { data } = await api.post('/dipendenti/ricalcola-cc-anno', null, { params: { anno } })
       avvisi.successo(data.messaggio)
@@ -83,14 +65,11 @@ export default function Dipendenti() {
   useEffect(() => {
     api.get('/config/cc-colori/mappa').then(r => {
       aggiornaColoriCC(r.data)
-      setCcColori(r.data)
     }).catch(() => {})
     api.get('/cost-centers/albero').then(r => setAlbero(r.data)).catch(() => {})
-    api.get('/cost-centers/').then(r => setCentri(r.data)).catch(() => {})
-    api.get('/dipendenti/', { params: { anno: annoAnagrafica } }).then(r => setDipendenti(r.data)).catch(() => {})
+    // la lista dipendenti la carica l'effetto su annoAnagrafica (parte anche all'apertura)
     if (isAdmin()) {
       api.get('/dipendenti/import/storico').then(r => setStorici(r.data)).catch(() => {})
-      caricaTestStats()
     }
   }, [])
 
@@ -149,49 +128,8 @@ export default function Dipendenti() {
       caricaReport()
       api.get('/dipendenti/').then(r => setDipendenti(r.data)).catch(() => {})
       api.get('/dipendenti/import/storico').then(r => setStorici(r.data)).catch(() => {})
-      caricaTestStats()
     } catch (e) {
       setUploadState({ stato: 'errore', messaggio: mostraErrore(e, "Errore durante l'importazione"), risultato: null })
-    }
-  }
-
-  const aggiornaCCMensile = async (monthlyId, ccId, ccName) => {
-    try {
-      await api.put(`/dipendenti/monthly/${monthlyId}/centro-di-costo`, { cost_center_id: ccId })
-      caricaReport()
-    } catch {
-      avvisi.errore('Errore aggiornamento centro di costo')
-    }
-  }
-
-  const eliminaTestData = async () => {
-    if (!(await conferma({ titolo: 'Cancellare tutti gli import di test (payroll)?', messaggio: 'Verranno cancellati anche i dati collegati.', pericolo: true }))) return
-    setCancellandoTest(true)
-    try {
-      const r = await api.delete('/dipendenti/admin/test-data')
-      avvisi.successo(r.data.messaggio)
-      caricaReport()
-      api.get('/dipendenti/import/storico').then(r => setStorici(r.data)).catch(() => {})
-      caricaTestStats()
-    } catch (e) {
-      avvisi.errore(mostraErrore(e, 'Errore cancellazione dati di test'))
-    } finally {
-      setCancellandoTest(false)
-    }
-  }
-
-  const salvaColoriCC = async () => {
-    setCcColoriSalvando(true)
-    setCcColoriEsito(null)
-    try {
-      await api.put('/config/cc-colori/mappa', ccColori)
-      aggiornaColoriCC(ccColori)
-      setCcColoriModificato(false)
-      setCcColoriEsito({ ok: true, msg: 'Colori salvati correttamente.' })
-    } catch (e) {
-      setCcColoriEsito({ ok: false, msg: mostraErrore(e, 'Errore nel salvataggio.') })
-    } finally {
-      setCcColoriSalvando(false)
     }
   }
 
@@ -210,7 +148,6 @@ export default function Dipendenti() {
 
   const vociAzienda = (d, codici) => codici.reduce((s, c) => s + (d.voci.find(v => v.code === c)?.importo || 0), 0)
   const quota = (v) => report?.totale_costo_aziendale > 0 ? formatPerc(v / report.totale_costo_aziendale * 100) : '—'
-  const vuoto = { padding: 32, textAlign: 'center' }
 
   return (
     <div>
