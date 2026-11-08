@@ -48,8 +48,17 @@ export function formatEuroK(v) {
 export function addDays(isoDate, giorni) {
   const d = new Date(isoDate + 'T00:00:00')
   d.setDate(d.getDate() + giorni)
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  return isoLocale(d)
 }
+
+/** Data locale in formato ISO YYYY-MM-DD. Mai `toISOString()`: lavora in UTC, quindi in Italia
+ *  tra mezzanotte e l'1/le 2 di notte restituisce il giorno prima. */
+export function isoLocale(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Oggi in formato ISO, in ora locale. */
+export const oggiIso = () => isoLocale(new Date())
 
 /** Calcola delta % tra due numeri; null se non calcolabile. */
 export function calcolaDelta(corrente, confronto) {

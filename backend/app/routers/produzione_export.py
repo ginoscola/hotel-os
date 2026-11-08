@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.auth import richiedi_utente_attivo
 from app.database import get_db
 from app.routers.produzione_report import _categorie_attive, _per_dimensione, report_giornaliero, report_mensile
+from app.utils.locale_it import MESI_IT
 
 router = APIRouter(dependencies=[Depends(richiedi_utente_attivo)])
 
@@ -103,8 +104,9 @@ def export_mensile(
 ):
     dati = report_mensile(anno=anno, mese=None, struttura_code=struttura_code, canale=None,
                           trattamento=None, is_test=is_test, db=db)
-    from app.utils.locale_it import MESI_IT
-    nomi_mesi = {v: k.capitalize() for k, v in MESI_IT.items()}
+    # MESI_IT è una lista ("gen"…"dic"): prima veniva usata come dizionario e l'export
+    # andava sempre in errore (corretto il 08/11/2026, test in test_produzione.py).
+    nomi_mesi = {i + 1: nome.capitalize() for i, nome in enumerate(MESI_IT)}
 
     intestazioni = ['Mese'] + list(dati['mesi'][0]['per_struttura'].keys()) + ['Totale']
     righe = []

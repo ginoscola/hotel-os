@@ -374,7 +374,7 @@ def parse_excel(file_path: str) -> RisultatoParsing:
     for row_idx in range(2, ws.max_row + 1):
         def _val(nome: str):
             c = _col(nome)
-            return ws.cell(row_idx, c).value if c else None
+            return ws.cell(row_idx, c).value if c else None  # noqa: B023 — usata solo nello stesso giro del ciclo
 
         raw_data     = _val('Data')
         raw_suffisso = str(_val('Suffisso') or '').strip()

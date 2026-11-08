@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../api/client';
 import { Badge, Button, Field, Input, Loading, PageHeader, useAvvisi } from '../components/ui';
 import { colors } from '../styles/tokens.js';
+import { mostraErrore } from '../utils/format.js';
 
 export default function AdminCentriDiCosto() {
   const [albero, setAlbero] = useState([]);
@@ -22,8 +23,8 @@ export default function AdminCentriDiCosto() {
     try {
       const r = await api.get('/cost-centers/albero');
       setAlbero(r.data);
-    } catch {
-      avvisi.errore('Errore caricamento centri di costo');
+    } catch (err) {
+      avvisi.errore(mostraErrore(err));
     } finally {
       setLoading(false);
     }
@@ -46,7 +47,7 @@ export default function AdminCentriDiCosto() {
       mostraMsg('ok', 'Aggiornato');
       await caricaAlbero();
     } catch (err) {
-      mostraMsg('errore', err.response?.data?.detail || 'Errore aggiornamento');
+      mostraMsg('errore', mostraErrore(err));
     }
   }
 
@@ -56,7 +57,7 @@ export default function AdminCentriDiCosto() {
       mostraMsg('ok', attuale ? 'Disattivato' : 'Attivato');
       await caricaAlbero();
     } catch (err) {
-      mostraMsg('errore', err.response?.data?.detail || 'Errore');
+      mostraMsg('errore', mostraErrore(err));
     }
   }
 
@@ -79,7 +80,7 @@ export default function AdminCentriDiCosto() {
       setFormDati({ code: '', name: '' });
       await caricaAlbero();
     } catch (err) {
-      mostraMsg('errore', err.response?.data?.detail || 'Errore creazione');
+      mostraMsg('errore', mostraErrore(err));
     }
   }
 

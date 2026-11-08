@@ -1,5 +1,6 @@
 import { ReferenceArea } from 'recharts'
 import { colors } from '../styles/tokens.js'
+import { oggiIso } from '../utils/format.js'
 
 // Funzione (non componente) che restituisce un <ReferenceArea> diretto per Recharts.
 // Recharts riconosce i figli per tipo: un componente wrapper viene ignorato,
@@ -11,7 +12,7 @@ import { colors } from '../styles/tokens.js'
 export default function pastReferenceArea(data, dateKey, displayKey, refDate) {
   const dk = displayKey || dateKey
   if (!data || data.length < 2) return null
-  const oggi = refDate || new Date().toISOString().slice(0, 10)
+  const oggi = refDate || oggiIso()
   let cutoff = null
   for (const d of data) {
     if (d[dateKey] <= oggi) cutoff = d[dk]

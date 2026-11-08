@@ -7,6 +7,7 @@ Lo scostamento confronta solo le settimane chiuse con budget e consuntivo.
 """
 
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import func

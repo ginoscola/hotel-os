@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api/client'
-import { formatEuro, mostraErrore } from '../utils/format'
+import { formatEuro, mostraErrore, oggiIso as oggiLocale } from '../utils/format'
 import { isAdmin, fmtD, meseNome } from '../utils/corrispettiviHelpers'
 import {
   Button, Card, Field, Input, Loading, Messaggio, Select, Table, Td, Th, useConferma,
@@ -8,7 +8,7 @@ import {
 import { colors } from '../styles/tokens.js'
 
 const annoCorrente = new Date().getFullYear()
-const oggiIso = new Date().toISOString().slice(0, 10)
+const oggiIso = oggiLocale()
 
 const TIPI = [
   ['versamento', 'Versamento in banca', colors.danger],

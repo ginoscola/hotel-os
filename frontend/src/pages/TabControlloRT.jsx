@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api/client'
-import { formatEuro, mostraErrore, addDays } from '../utils/format'
+import { formatEuro, mostraErrore, addDays, oggiIso } from '../utils/format'
 import { isAdmin, fmtD, giornoSettimana } from '../utils/corrispettiviHelpers'
 import {
   Badge, Button, Card, Field, Input, Loading, Messaggio, Modal, NavMese, SegmentedControl, Select,
@@ -220,7 +220,7 @@ export default function TabControlloRT() {
   const [importMsg, setImportMsg] = useState(null)   // { tipo: 'success'|'warning'|'info', testo }
   const [importModalita, setImportModalita] = useState('cartella')   // 'cartella' | 'locale'
   // Default = ieri: i dati RT sono disponibili solo dopo la chiusura del giorno precedente
-  const [importDataCartella, setImportDataCartella] = useState(() => addDays(new Date().toISOString().slice(0, 10), -1))
+  const [importDataCartella, setImportDataCartella] = useState(() => addDays(oggiIso(), -1))
 
   const carica = useCallback(async () => {
     setCaricamento(true)
@@ -345,7 +345,7 @@ export default function TabControlloRT() {
 
   const apriDialogImport = () => {
     setImportRt('RT1'); setImportFiles([]); setImportOnConflict('salta'); setImportMsg(null)
-    setImportModalita('cartella'); setImportDataCartella(addDays(new Date().toISOString().slice(0, 10), -1))
+    setImportModalita('cartella'); setImportDataCartella(addDays(oggiIso(), -1))
     setDialogImport(true)
   }
 

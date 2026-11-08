@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
 
@@ -255,18 +255,39 @@ def _carica_righe(
 
     Tutti i parametri sono opzionali e combinabili:
     - hotel_code: filtra per hotel (None = tutti gli hotel)
-    - snapshot_date: filtra per snapshot
+    - snapshot_date: solo quella snapshot; se None, per ogni hotel e giorno la riga della
+      snapshot più recente (mai tutte le snapshot insieme: daily_revenue ha una riga per
+      snapshot, e sommarle moltiplicava ricavi e camere — bug dell'export gruppo fino alla
+      v4.30.6 e latente nelle modalità senza snapshot fino alla v4.30.11)
     - da / a: filtra per intervallo di date
     """
-    query = select(DailyRevenue).order_by(DailyRevenue.hotel_code, DailyRevenue.data)
+    filtri = []
     if hotel_code:
-        query = query.where(DailyRevenue.hotel_code == hotel_code)
+        filtri.append(DailyRevenue.hotel_code == hotel_code)
+    if da:
+        filtri.append(DailyRevenue.data >= da)
+    if a:
+        filtri.append(DailyRevenue.data <= a)
+
+    query = select(DailyRevenue).where(*filtri).order_by(DailyRevenue.hotel_code, DailyRevenue.data)
     if snapshot_date:
         query = query.where(DailyRevenue.snapshot_date == snapshot_date)
-    if da:
-        query = query.where(DailyRevenue.data >= da)
-    if a:
-        query = query.where(DailyRevenue.data <= a)
+    else:
+        ultima = (
+            select(
+                DailyRevenue.hotel_code.label("hc"),
+                DailyRevenue.data.label("giorno"),
+                func.max(DailyRevenue.snapshot_date).label("snap"),
+            )
+            .where(*filtri)
+            .group_by(DailyRevenue.hotel_code, DailyRevenue.data)
+            .subquery()
+        )
+        query = query.join(ultima, and_(
+            DailyRevenue.hotel_code == ultima.c.hc,
+            DailyRevenue.data == ultima.c.giorno,
+            DailyRevenue.snapshot_date == ultima.c.snap,
+        ))
     return [_db_a_riga(r) for r in db.execute(query).scalars().all()]
 
 

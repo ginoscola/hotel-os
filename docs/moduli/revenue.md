@@ -21,6 +21,10 @@ prenotazioni di gruppo. Non serve controllare i nomi file: il controllo è sul c
 
 ## Dashboard Hotel
 - Snapshot: `GET /snapshots/{hotel_code}` → navigazione con frecce. Settimana di riferimento = settimana Sab–Ven contenente snapshot_date.
+- **Chiamate senza snapshot** (modalità legacy `?da=&a=` di Dashboard Hotel/Gruppo, export hotel e gruppo): dal 08/11/2026
+  (v4.30.11) `_carica_righe()` prende per ogni hotel e giorno la snapshot più recente. Prima sommava le righe di tutte
+  le snapshot (ricavi e camere moltiplicati): bug reale nell'export gruppo (corretto v4.30.7), latente negli altri
+  perché il frontend passa sempre `snapshot`. Test in `test_export_gruppo_snapshot.py`.
 - `kpi_periodo` = KPI solo sulla settimana di riferimento; evidenziata in grafici (ReferenceArea) e tabella.
 - Confronto snapshot precedente (mutuamente esclusivo con anno precedente, offset 364gg ±30gg tolleranza).
 - Revenue giornaliero: senza confronto → BarChart impilato (Camere/F&B/Extra); con confronto → LineChart `revenue_total` corrente vs confronto.

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import api from '../../api/client.js'
 import { getPermessiModuli } from '../../components/ProtectedRoute.jsx'
 import { colors } from '../../styles/tokens.js'
-import { formatData, formatEuro, mostraErrore } from '../../utils/format.js'
+import { formatData, formatEuro, isoLocale, mostraErrore, oggiIso } from '../../utils/format.js'
 import { isAdmin } from '../../utils/auth.js'
 import {
   Badge, Button, Field, Input, Messaggio, Modal, Select, Table, Td, Textarea, Th, useAvvisi,
@@ -34,11 +34,9 @@ export const STRUTTURE = [{ code: 'DPH', nome: 'Du Parc' }, { code: 'CLB', nome:
 
 export const MESI_BREVI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
 
-/** Data locale in formato ISO (mai toISOString: in Italia la mezzanotte diventa il giorno prima in UTC). */
-export function isoLocale(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-export const oggiISO = () => isoLocale(new Date())
+// Data locale in formato ISO: definita una volta sola in utils/format.js, qui riesportata.
+export { isoLocale }
+export const oggiISO = oggiIso
 
 // ── Anno solare (1/1–31/12) o alberghiero (1/10–30/9, identificato dall'anno di fine: 2026 = 2025/26) ──
 export const LS_TIPO_ANNO = 'tesoreria_tipo_anno'

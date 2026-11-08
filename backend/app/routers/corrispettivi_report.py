@@ -196,7 +196,7 @@ def report_giornaliero(
             })
 
             def _cat_dict(t: str) -> dict:
-                cats = dati_sc[t]['cat']
+                cats = dati_sc[t]['cat']  # noqa: B023 — usata solo nello stesso giro del ciclo
                 return {
                     cat: _v(cats.get(cat, 0.0), cat)
                     for cat in CATEGORIE

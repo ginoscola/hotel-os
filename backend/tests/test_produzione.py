@@ -575,3 +575,17 @@ class TestVincoliDichiaratiNelModello:
             db.add(ProdDettaglioCategoria(dettaglio_originale='QUOTA CENA', categoria_id=cena.id))
             with pytest.raises(IntegrityError):
                 db.commit()
+
+
+class TestExportMensile:
+    """L'export del Report mensile andava sempre in errore (MESI_IT usato come dizionario)."""
+
+    @pytest.mark.parametrize('formato', ['xlsx', 'csv', 'pdf'])
+    def test_export_mensile_tutti_i_formati(self, client, TestSession, formato):
+        TestSommeNelDatabase()._righe(TestSession, [{'data': date(2026, 6, 1), 'lordo': 70}])
+        r = client.get("/produzione/export/mensile", params={'anno': 2026, 'formato': formato, 'is_test': True})
+        assert r.status_code == 200
+        assert len(r.content) > 0
+        if formato == 'csv':
+            testo = r.content.decode('utf-8-sig')
+            assert 'Giu' in testo and 'ANNO' in testo

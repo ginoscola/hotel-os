@@ -75,7 +75,7 @@ Divisioni per zero → None. KPISchema include `revenue_total: Optional[float]`.
 
 ## Funzioni centrali — non duplicare
 - `aggrega_totali_righe(righe)` in `kpi_calculator.py` → unica funzione per sommare RigaRevenue
-- `_carica_righe(db, hotel_code, snapshot_date, da, a)` in `dashboard.py` → unica funzione per leggere daily_revenue; `_raggruppa_per_hotel(righe)` per dict hotel→righe
+- `_carica_righe(db, hotel_code, snapshot_date, da, a)` in `dashboard.py` → unica funzione per leggere daily_revenue (senza `snapshot_date`: per ogni hotel e giorno la snapshot più recente, mai la somma di tutte); `_raggruppa_per_hotel(righe)` per dict hotel→righe
 - `kpi_stagione` è il campo canonico in DashboardHotelResponse (non `kpi_periodo`)
 - Merge confronto settimanale in DashboardGruppo.jsx: per chiave `week_start`, non per indice
 - Tra moduli si leggono i dati **chiamando le funzioni esistenti** (molti endpoint sono funzioni Python
@@ -150,11 +150,11 @@ cd frontend && npm run lint                                       # eslint (esli
 UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % (mai €).
 
 ## Utility frontend (format.js)
-- `formatEuro(v)`, `formatEuroK(v)` (≥1000 → "Xk €"), `formatEuroIntero(v)`, `formatPerc(v)`, `formatN(v)`, `formatData(iso)`, `addDays(isoDate, n)`, `calcolaDelta(val, ref)`
+- `formatEuro(v)`, `formatEuroK(v)` (≥1000 → "Xk €"), `formatEuroIntero(v)`, `formatPerc(v)`, `formatN(v)`, `formatData(iso)`, `addDays(isoDate, n)`, `isoLocale(date)`, `oggiIso()`, `calcolaDelta(val, ref)`
 - `percentualiA100(valori, decimali=1)` — percentuali di ripartizione che, arrotondate, sommano sempre esattamente 100 (metodo del resto maggiore). Usarla per ogni legenda/colonna "% sul totale" che l'utente usa per ripartire costi.
 - `mostraErrore(e)` — **OBBLIGATORIO in ogni catch block**. Se `localStorage('debug_errori')==='true'` → stack trace completo; altrimenti prima riga. **Mai** usare inline `e.response?.data?.detail || e.message`.
 - **Mai `toISOString()` per ricavare una data da un `Date` locale** (in Italia mezzanotte → giorno prima in UTC):
-  formattare in ora locale (es. `isoLocale()` in `pages/tesoreria/helpers.jsx`). Bug reale in Budget.
+  usare `isoLocale(d)` / `oggiIso()` di `utils/format.js`. Bug reale in Budget e in altri 5 punti (corretti v4.30.11).
 - Mai leggere stato React dentro un `setTimeout` di debounce: usare un ref o passare il valore (bug reale in Budget).
 - `key` React nelle liste: sul Fragment restituito dal `.map()` (`<Fragment key=…>`), non sui figli.
 

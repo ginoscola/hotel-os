@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.auth import richiedi_utente_attivo
-from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 import openpyxl
@@ -23,8 +22,8 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 
 from app.database import get_db
-from app.models.revenue import DailyRevenue, Hotel
-from app.routers.dashboard import _carica_righe, _db_a_riga
+from app.models.revenue import Hotel
+from app.routers.dashboard import _carica_righe
 from app.services.file_parser import RigaRevenue
 from app.services.kpi_calculator import calcola_kpi
 from app.services.wave import periodo_di
@@ -120,30 +119,6 @@ def export_hotel_giornaliero(
 # Endpoint gruppo — settimanale + dettaglio hotel
 # ---------------------------------------------------------------------------
 
-def _righe_ultima_snapshot(db: Session, da: Optional[date], a: Optional[date]) -> List[RigaRevenue]:
-    """Per ogni hotel e giorno la riga della snapshot più recente (come Forecast e USALI)."""
-    ultima = select(
-        DailyRevenue.hotel_code,
-        DailyRevenue.data,
-        func.max(DailyRevenue.snapshot_date).label("snap"),
-    ).group_by(DailyRevenue.hotel_code, DailyRevenue.data)
-    if da:
-        ultima = ultima.where(DailyRevenue.data >= da)
-    if a:
-        ultima = ultima.where(DailyRevenue.data <= a)
-    ultima = ultima.subquery()
-    q = (
-        select(DailyRevenue)
-        .join(ultima, and_(
-            DailyRevenue.hotel_code == ultima.c.hotel_code,
-            DailyRevenue.data == ultima.c.data,
-            DailyRevenue.snapshot_date == ultima.c.snap,
-        ))
-        .order_by(DailyRevenue.hotel_code, DailyRevenue.data)
-    )
-    return [_db_a_riga(r) for r in db.execute(q).scalars().all()]
-
-
 @router.get("/gruppo")
 def export_gruppo(
     da: Optional[date] = Query(None),
@@ -159,10 +134,7 @@ def export_gruppo(
     righe di TUTTE le snapshot importate: ricavi e camere moltiplicati per il numero di
     snapshot (es. 8–14/08/2026: 3,6 milioni € invece di 167.616 €).
     """
-    if snapshot:
-        righe = _carica_righe(db, snapshot_date=snapshot, da=da, a=a)
-    else:
-        righe = _righe_ultima_snapshot(db, da, a)
+    righe = _carica_righe(db, snapshot_date=snapshot, da=da, a=a)
     if not righe:
         raise HTTPException(status_code=404, detail="Nessun dato nel periodo selezionato.")
 

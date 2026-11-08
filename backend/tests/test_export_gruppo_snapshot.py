@@ -108,3 +108,33 @@ def test_senza_snapshot_usa_la_piu_recente_per_giorno(client):
 def test_snapshot_senza_dati_404(client):
     resp = client.get("/export/gruppo?da=2026-08-08&a=2026-08-14&snapshot=2026-01-01&formato=csv")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Stessa regola per tutte le letture senza snapshot (v4.30.11): _carica_righe senza
+# snapshot_date prende per ogni hotel e giorno la snapshot più recente.
+# ---------------------------------------------------------------------------
+
+def test_dashboard_hotel_senza_snapshot_usa_la_piu_recente(client):
+    resp = client.get("/dashboard/hotel/CLB?da=2026-08-08&a=2026-08-14")
+    assert resp.status_code == 200, resp.text
+    kpi = resp.json()["kpi_stagione"]
+    assert kpi["revenue_total"] == 7 * 150.0     # non 7 × (100 + 150)
+    assert kpi["rooms_available"] == 7 * 40
+
+
+def test_dashboard_gruppo_senza_snapshot_usa_la_piu_recente(client):
+    resp = client.get("/dashboard/gruppo?da=2026-08-08&a=2026-08-14")
+    assert resp.status_code == 200, resp.text
+    kpi = resp.json()["kpi_gruppo"]
+    assert kpi["revenue_total"] == 7 * 150.0 + 7 * 80.0
+    assert kpi["rooms_available"] == 2 * 7 * 40
+
+
+@pytest.mark.parametrize("vista", ["settimanale", "mensile", "giornaliero"])
+def test_export_hotel_senza_snapshot_usa_la_piu_recente(client, vista):
+    resp = client.get(f"/export/hotel/CLB/{vista}?da=2026-08-08&a=2026-08-14&formato=csv")
+    assert resp.status_code == 200, resp.text
+    testo = resp.content.decode("utf-8-sig")
+    assert "1050" in testo.replace(".", "").replace(",", "")   # 7 × 150 €
+    assert "1750" not in testo.replace(".", "").replace(",", "")  # 7 × (100 + 150)

@@ -61,6 +61,10 @@ parametri (PostgreSQL vedrebbe SELECT e GROUP BY diversi). Verificato su 118 ris
 (2025–2026, gruppo e strutture, con filtri): valori e ordine identici. Solo `/righe` (drawer di
 dettaglio) legge ancora riga per riga. Un nuovo report su `prod_righe` deve seguire lo stesso schema.
 
+**Export del Report mensile** (`GET /produzione/export/mensile`): fino alla v4.30.10 andava sempre in errore, in
+ogni formato, perché usava `MESI_IT` (una lista) come dizionario; nessun test lo chiamava. Corretto il 08/11/2026,
+test `TestExportMensile` (xlsx/csv/pdf).
+
 **Categorie NON hardcoded, incluso il mapping testo→categoria** (non solo la definizione delle
 categorie): tabella `prod_categorie` (code, name, includi_report, ordine, colore, attivo) +
 `prod_dettaglio_categoria` (testo esatto colonna `Articolo` del file → categoria, match

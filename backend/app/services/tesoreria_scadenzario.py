@@ -135,8 +135,8 @@ def compensa_pareggi(righe: list) -> None:
             for r in ordinate:
                 if credito <= 0:
                     break
-                quota = min(credito, resto[id(r)])
-                resto[id(r)] -= quota
+                quota = min(credito, resto[id(r)])  # noqa: B023 — usata solo nello stesso giro del ciclo
+                resto[id(r)] -= quota  # noqa: B023
                 credito -= quota
             return credito
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api/client.js'
-import { formatEuro, formatDataIt, mostraErrore } from '../utils/format.js'
+import { formatEuro, formatDataIt, mostraErrore, oggiIso } from '../utils/format.js'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine, ResponsiveContainer,
@@ -469,7 +469,7 @@ function TabMaturato({ anno, hotels, hotelSelezionato, onAggiornato }) {
   // Form inserimento
   const [formHotel, setFormHotel] = useState(hotelSelezionato !== 'all' ? hotelSelezionato : '')
   const [formMese, setFormMese] = useState(new Date().getMonth() + 1)
-  const [formData, setFormData] = useState(new Date().toISOString().slice(0, 10))
+  const [formData, setFormData] = useState(oggiIso)
   const [formRevenue, setFormRevenue] = useState('')
   const [formRoomNights, setFormRoomNights] = useState('')
   const [formNote, setFormNote] = useState('')
