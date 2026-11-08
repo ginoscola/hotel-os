@@ -522,7 +522,3 @@ def lista_canali(db: Session = Depends(get_db)):
 def lista_trattamenti(db: Session = Depends(get_db)):
     return _valori_distinti(db, ProdRiga.trattamento)
 
-
-@router.get("/tipi-ospite/lista")
-def lista_tipi_ospite(db: Session = Depends(get_db)):
-    return _valori_distinti(db, ProdRiga.tipo_ospite)

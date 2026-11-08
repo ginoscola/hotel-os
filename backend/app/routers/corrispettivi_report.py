@@ -2,7 +2,6 @@
 
 Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
   GET    /report/giornaliero    → aggregato per giorno e struttura
-  GET    /report/mensile        → aggregato per mese e struttura
   GET    /check                 → totali per struttura
   GET    /report/fatturati      → riepilogo fatturati per mese/struttura
   GET    /report/pagamenti      → riepilogo per tipo di pagamento grezzo (metodo Welcome)
@@ -233,65 +232,6 @@ def report_giornaliero(
         })
 
     return risultato
-
-
-@router.get("/report/mensile")
-def report_mensile(
-    mese: int = Query(..., ge=1, le=12),
-    anno: int = Query(..., ge=2020, le=2030),
-    struttura_code: Optional[str] = Query(None),
-    tipo: str = Query('tutti'),
-    lordo: bool = Query(True),
-    is_test: bool = Query(False),
-    db: Session = Depends(get_db),
-    _=Depends(richiedi_utente_attivo),
-):
-    import calendar
-    primo = date(anno, mese, 1)
-    ultimo = date(anno, mese, calendar.monthrange(anno, mese)[1])
-
-    risposta_gg = report_giornaliero(
-        data_da=primo, data_a=ultimo,
-        struttura_code=struttura_code,
-        tipo=tipo, lordo=lordo, is_test=is_test,
-        db=db, _=None,
-    )
-
-    aggregati: dict = {}
-    for giorno in risposta_gg:
-        for s in giorno['strutture']:
-            sc = s['struttura_code']
-            if sc not in aggregati:
-                aggregati[sc] = {
-                    'struttura_code': sc,
-                    'struttura_nome': s['struttura_nome'],
-                    'scontrini': {c: 0.0 for c in CATEGORIE + ['totale']},
-                    'fatture':   {c: 0.0 for c in CATEGORIE + ['totale']},
-                    'manuale': 0.0, 'totale': 0.0,
-                    'n_scontrini': 0, 'n_fatture': 0, 'n_annullati': 0,
-                }
-            agg = aggregati[sc]
-            for cat in CATEGORIE + ['totale']:
-                agg['scontrini'][cat] += s['scontrini'].get(cat, 0)
-                agg['fatture'][cat]   += s['fatture'].get(cat, 0)
-            agg['manuale']      += s['manuale']
-            agg['totale']       += s['totale']
-            agg['n_scontrini']  += s['n_scontrini']
-            agg['n_fatture']    += s['n_fatture']
-            agg['n_annullati']  += s['n_annullati']
-
-    strutture_out = [aggregati[sc] for sc in STRUTTURE_ORDINE if sc in aggregati]
-    for sc in sorted(aggregati):
-        if sc not in STRUTTURE_ORDINE and sc not in [s['struttura_code'] for s in strutture_out]:
-            strutture_out.append(aggregati[sc])
-
-    totale_generale = sum(s['totale'] for s in strutture_out)
-    return {
-        'mese': mese,
-        'anno': anno,
-        'strutture': strutture_out,
-        'totale_generale': round(totale_generale, 2),
-    }
 
 
 @router.get("/check")

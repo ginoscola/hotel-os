@@ -1,6 +1,6 @@
 """
 Test per:
-  - Navigazione settimanale (/settimane/{hotel_code}, /settimane/gruppo)
+  - Navigazione settimanale (/settimane/gruppo)
   - Logica confronto anno precedente (stessa settimana commerciale sab–ven)
   - Logica confronto settimana precedente
   - Export Excel e CSV con dati reali
@@ -108,26 +108,29 @@ def _importa_hotel(client, hotel_code):
 
 
 # ---------------------------------------------------------------------------
-# Test: navigazione settimanale — hotel
+# Test: navigazione settimanale
 # ---------------------------------------------------------------------------
 
-class TestListaSettimaneHotel:
+class TestListaSettimane:
+    """Lista settimane di navigazione (/settimane/gruppo; con il solo CLB importato coincide con
+    le settimane di CLB). /settimane/{hotel_code} tolta il 08/11/2026: mai usata dal frontend."""
+
     def test_lista_vuota_senza_dati(self, client):
-        resp = client.get("/settimane/CLB")
+        resp = client.get("/settimane/gruppo")
         assert resp.status_code == 200
         assert resp.json()["settimane"] == []
 
     @richiede_csv
     def test_lista_non_vuota_dopo_import(self, client):
         _importa_hotel(client, "CLB")
-        resp = client.get("/settimane/CLB")
+        resp = client.get("/settimane/gruppo")
         j = resp.json()
         assert len(j["settimane"]) > 0
 
     @richiede_csv
     def test_prima_settimana_e_la_piu_recente(self, client):
         _importa_hotel(client, "CLB")
-        j = client.get("/settimane/CLB").json()
+        j = client.get("/settimane/gruppo").json()
         settimane = j["settimane"]
         # ordinate dalla più recente: la prima deve avere week_start > dell'ultima
         assert settimane[0]["week_start"] > settimane[-1]["week_start"]
@@ -135,7 +138,7 @@ class TestListaSettimaneHotel:
     @richiede_csv
     def test_ultima_settimana_e_la_piu_antica(self, client):
         _importa_hotel(client, "CLB")
-        j = client.get("/settimane/CLB").json()
+        j = client.get("/settimane/gruppo").json()
         settimane = j["settimane"]
         date_ws = [date.fromisoformat(s["week_start"]) for s in settimane]
         assert date_ws == sorted(date_ws, reverse=True)
@@ -143,7 +146,7 @@ class TestListaSettimaneHotel:
     @richiede_csv
     def test_week_start_e_sempre_sabato(self, client):
         _importa_hotel(client, "CLB")
-        j = client.get("/settimane/CLB").json()
+        j = client.get("/settimane/gruppo").json()
         for s in j["settimane"]:
             ws = date.fromisoformat(s["week_start"])
             assert ws.weekday() == 5, f"{ws} non è sabato"
@@ -151,7 +154,7 @@ class TestListaSettimaneHotel:
     @richiede_csv
     def test_week_end_e_sempre_venerdi(self, client):
         _importa_hotel(client, "CLB")
-        j = client.get("/settimane/CLB").json()
+        j = client.get("/settimane/gruppo").json()
         for s in j["settimane"]:
             we = date.fromisoformat(s["week_end"])
             assert we.weekday() == 4, f"{we} non è venerdì"
@@ -159,7 +162,7 @@ class TestListaSettimaneHotel:
     @richiede_csv
     def test_label_formato_italiano(self, client):
         _importa_hotel(client, "CLB")
-        j = client.get("/settimane/CLB").json()
+        j = client.get("/settimane/gruppo").json()
         # La label deve contenere nomi mese in italiano
         mesi = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"]
         for s in j["settimane"]:
@@ -169,13 +172,13 @@ class TestListaSettimaneHotel:
     def test_numero_settimane_clb(self, client):
         """CLB: 113 giorni → 17 settimane commerciali."""
         _importa_hotel(client, "CLB")
-        j = client.get("/settimane/CLB").json()
+        j = client.get("/settimane/gruppo").json()
         assert len(j["settimane"]) == 17
 
     @richiede_csv
     def test_snapshot_date_presente(self, client):
         _importa_hotel(client, "CLB")
-        j = client.get("/settimane/CLB").json()
+        j = client.get("/settimane/gruppo").json()
         # Almeno una settimana deve avere snapshot_date
         assert any(s["snapshot_date"] is not None for s in j["settimane"])
 
@@ -187,28 +190,15 @@ class TestListaSettimaneHotel:
 class TestListaSettimaneGruppo:
     @richiede_csv
     def test_gruppo_unisce_settimane_di_tutti_gli_hotel(self, client):
-        for code in ["CLB", "DPH", "INT"]:
+        """DPH apre il 01/05, CLB il 01/06: aggiungendo DPH e INT il gruppo conserva le
+        settimane di CLB e ne aggiunge altre."""
+        _importa_hotel(client, "CLB")
+        ws_solo_clb = {s["week_start"] for s in client.get("/settimane/gruppo").json()["settimane"]}
+        for code in ["DPH", "INT"]:
             _importa_hotel(client, code)
-        j_clb   = client.get("/settimane/CLB").json()
-        j_dph   = client.get("/settimane/DPH").json()
-        j_gruppo = client.get("/settimane/gruppo").json()
-
-        ws_clb   = {s["week_start"] for s in j_clb["settimane"]}
-        ws_dph   = {s["week_start"] for s in j_dph["settimane"]}
-        ws_gruppo = {s["week_start"] for s in j_gruppo["settimane"]}
-
-        # Il gruppo deve contenere almeno tutte le settimane dei singoli hotel
-        assert ws_clb.issubset(ws_gruppo)
-        assert ws_dph.issubset(ws_gruppo)
-
-    @richiede_csv
-    def test_gruppo_piu_settimane_di_ogni_hotel_singolo(self, client):
-        """DPH apre il 01/05, CLB il 01/06: il gruppo ha più settimane di CLB."""
-        for code in ["CLB", "DPH", "INT"]:
-            _importa_hotel(client, code)
-        n_clb   = len(client.get("/settimane/CLB").json()["settimane"])
-        n_gruppo = len(client.get("/settimane/gruppo").json()["settimane"])
-        assert n_gruppo > n_clb
+        ws_gruppo = {s["week_start"] for s in client.get("/settimane/gruppo").json()["settimane"]}
+        assert ws_solo_clb.issubset(ws_gruppo)
+        assert len(ws_gruppo) > len(ws_solo_clb)
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +219,7 @@ class TestConfrontoSettimanaPrecedente:
     def test_confronto_sett_prec_endpoint(self, client):
         """L'endpoint dashboard con periodo di una sola settimana funziona."""
         _importa_hotel(client, "CLB")
-        j = client.get("/settimane/CLB").json()
+        j = client.get("/settimane/gruppo").json()
         settimane = j["settimane"]
         if len(settimane) < 2:
             pytest.skip("Meno di 2 settimane disponibili")
@@ -283,7 +273,7 @@ class TestConfrontoAnnoPrecedente:
     def test_confronto_anno_prec_dati_non_disponibili(self, client):
         """Se i dati dell'anno precedente non esistono, l'endpoint restituisce 404."""
         _importa_hotel(client, "CLB")
-        j = client.get("/settimane/CLB").json()
+        j = client.get("/settimane/gruppo").json()
         ws = j["settimane"][0]["week_start"]
         we = j["settimane"][0]["week_end"]
 

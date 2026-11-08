@@ -54,8 +54,8 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
 
 ### Endpoint API (prefix `/corrispettivi`)
 - `POST /import?is_test=&on_conflict=salta|aggiorna`
-- `GET|PUT /documenti/{id}`, `GET /scontrini`, `GET /fatture` (alias)
-- `POST|PUT|GET /manuali`
+- `PUT /documenti/{id}` (correzione manuale, unico endpoint di modifica), `GET /scontrini`, `GET /fatture`, `GET /penali`
+- `POST|GET /manuali`
 - `PUT /incasso-storico` (upsert, admin), `DELETE /incasso-storico/{id}` → pregresso MMS/BON ripartito una-tantum (vedi sezione dedicata)
 - `GET /report/giornaliero?data_da=&data_a=&struttura_code=&tipo=` → valori lordi; toggle IVA client-side
 - `GET /export/giornaliero?anno=&mese=&tipo=&lordo=` → export Excel della tabella mensile di

@@ -68,13 +68,3 @@ def lista_settimane_gruppo(db: Session = Depends(get_db)):
     ).all()
     return _costruisci_lista(rows)
 
-
-@router.get("/{hotel_code}", response_model=ListaSettimane)
-def lista_settimane_hotel(hotel_code: str, db: Session = Depends(get_db)):
-    """Lista di tutte le settimane con dati per un hotel, dalla più recente."""
-    rows = db.execute(
-        select(DailyRevenue.data, DailyRevenue.snapshot_date)
-        .where(DailyRevenue.hotel_code == hotel_code.upper())
-        .order_by(DailyRevenue.data)
-    ).all()
-    return _costruisci_lista(rows)

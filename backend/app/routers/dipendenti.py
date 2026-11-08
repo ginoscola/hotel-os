@@ -148,11 +148,6 @@ class EmployeeOut(BaseModel):
         from_attributes = True
 
 
-class EmployeeContactInput(BaseModel):
-    email: Optional[str] = None
-    cellulare: Optional[str] = None
-
-
 class VoceCostoOut(BaseModel):
     code: str
     name: str
@@ -210,10 +205,6 @@ class ReportMensileOut(BaseModel):
     dipendenti: list[DipendenteMensileOut]
     totali_per_cc: dict[str, float]
     totali_per_struttura: list[TotaleStruttura] = []
-
-
-class CostCenterInput(BaseModel):
-    cost_center_id: int
 
 
 class CostCenterCreate(BaseModel):
@@ -452,21 +443,6 @@ def elimina_test_data(
 # Anagrafica dipendenti
 # ---------------------------------------------------------------------------
 
-def _cc_attivo(db: Session, employee_id: int):
-    """Restituisce il primo CC attivo corrente (anno_fine IS NULL) per il dipendente."""
-    r = (
-        db.query(EmployeeCCDefault)
-        .filter(
-            EmployeeCCDefault.employee_id == employee_id,
-            EmployeeCCDefault.anno_fine == None,  # noqa: E711
-        )
-        .first()
-    )
-    if r and r.cost_center:
-        return r.cost_center
-    return None
-
-
 @router.get("/dipendenti/", response_model=list[EmployeeOut])
 def lista_dipendenti(
     anno: Optional[int] = Query(None),
@@ -599,50 +575,6 @@ def mesi_dipendente_anno(
                          "override_manuale": False, "centri_di_costo": []})
         for m in range(1, 13)
     ]
-
-
-@router.get("/dipendenti/{dipendente_id}", response_model=EmployeeOut)
-def dettaglio_dipendente(
-    dipendente_id: int,
-    db: Session = Depends(get_db),
-    utente=Depends(richiedi_utente_attivo),
-):
-    """Dettaglio dipendente con centro di costo corrente."""
-    emp = db.query(Employee).filter(Employee.id == dipendente_id).first()
-    if not emp:
-        raise HTTPException(404, "Dipendente non trovato")
-    cc = _cc_attivo(db, emp.id)
-    return EmployeeOut(
-        id=emp.id,
-        codice_fiscale=emp.codice_fiscale,
-        cognome=emp.cognome,
-        nome=emp.nome,
-        qualifica=emp.qualifica,
-        mansione=emp.mansione,
-        livello=emp.livello,
-        email=emp.email,
-        cellulare=emp.cellulare,
-        attivo=emp.attivo,
-        centro_di_costo=cc.name if cc else None,
-        centro_di_costo_id=cc.id if cc else None,
-    )
-
-
-@router.put("/dipendenti/{dipendente_id}/contatti")
-def aggiorna_contatti(
-    dipendente_id: int,
-    dati: EmployeeContactInput,
-    db: Session = Depends(get_db),
-    utente=Depends(richiedi_admin),
-):
-    """Aggiorna email e cellulare di un dipendente."""
-    emp = db.query(Employee).filter(Employee.id == dipendente_id).first()
-    if not emp:
-        raise HTTPException(404, "Dipendente non trovato")
-    emp.email = dati.email
-    emp.cellulare = dati.cellulare
-    db.commit()
-    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -926,32 +858,6 @@ def ricalcola_cc_anno(
 # ---------------------------------------------------------------------------
 # Vecchio endpoint (100% su singolo CC) — mantenuto per compatibilità
 # ---------------------------------------------------------------------------
-
-@router.put("/dipendenti/{dipendente_id}/centro-di-costo")
-def aggiorna_cc_default_singolo(
-    dipendente_id: int,
-    dati: CostCenterInput,
-    db: Session = Depends(get_db),
-    utente=Depends(richiedi_admin),
-):
-    """Imposta un singolo CC al 100% con decorrenza al mese corrente (compatibilità)."""
-    emp = db.query(Employee).filter(Employee.id == dipendente_id).first()
-    if not emp:
-        raise HTTPException(404, "Dipendente non trovato")
-    cc = db.query(CostCenter).filter(CostCenter.id == dati.cost_center_id).first()
-    if not cc:
-        raise HTTPException(404, "Centro di costo non trovato")
-
-    oggi = date.today()
-    nuova = [{"cost_center_id": dati.cost_center_id, "percentuale": 100.0}]
-    try:
-        salva_default(db, dipendente_id, nuova, oggi.year, oggi.month)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-    db.commit()
-    return {"ok": True, "centro_di_costo": cc.name}
-
 
 # ---------------------------------------------------------------------------
 # Report mensile
@@ -1595,26 +1501,6 @@ def dettaglio_cc_annuale(
         ],
         key=lambda x: -x["costo_anno"],
     )
-
-
-@router.put("/dipendenti/monthly/{monthly_id}/centro-di-costo")
-def override_cc_mensile(
-    monthly_id: int,
-    dati: CostCenterInput,
-    db: Session = Depends(get_db),
-    utente=Depends(richiedi_admin),
-):
-    """Modifica manuale del CC primario per un mese specifico (legacy)."""
-    m = db.query(EmployeeMonthly).filter(EmployeeMonthly.id == monthly_id).first()
-    if not m:
-        raise HTTPException(404, "Record mensile non trovato")
-    cc = db.query(CostCenter).filter(CostCenter.id == dati.cost_center_id).first()
-    if not cc:
-        raise HTTPException(404, "Centro di costo non trovato")
-    m.cost_center_id = dati.cost_center_id
-    m.override_manuale = True
-    db.commit()
-    return {"ok": True, "centro_di_costo": cc.name}
 
 
 # ---------------------------------------------------------------------------

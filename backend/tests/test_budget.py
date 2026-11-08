@@ -551,20 +551,6 @@ def test_confronto_mensile_raggruppa_per_mese(client):
 
 
 # ===========================================================================
-# TEST SETTIMANE MANCANTI
-# ===========================================================================
-
-def test_settimane_mancanti(client):
-    """settimane-mancanti elenca le settimane della stagione senza budget."""
-    client.put("/budget/DPH/2026/2026-06-06", json={'occupancy': 70.0, 'adr': 80.0})
-    resp = client.get("/budget/DPH/2026/settimane-mancanti?version=v1")
-    assert resp.status_code == 200
-    d = resp.json()
-    # n_mancanti = totale - 1 (quella inserita)
-    assert d['n_mancanti'] == d['n_settimane_totali'] - 1
-
-
-# ===========================================================================
 # TEST BULK
 # ===========================================================================
 

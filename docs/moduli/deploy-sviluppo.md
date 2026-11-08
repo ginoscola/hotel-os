@@ -82,6 +82,17 @@ per le vulnerabilità segnalate da pip-audit; provato prima in un venv separato 
 PDF reali di payroll/corrispettivi/TARI e 5 PDF generati: identici). Restano segnalati `python-jose` ed
 `ecdsa`, senza correzione e non sfruttabili qui (JWT HS256 con chiave segreta); passaggio a PyJWT da valutare.
 
+**Endpoint tolti il 08/11/2026 (v4.30.13, mai chiamati dal frontend né da script)**: `GET /corrispettivi/documenti`,
+`PUT /corrispettivi/scontrini|fatture|manuali/{id}` (la modifica passa da `PUT /corrispettivi/documenti/{id}`),
+`GET /corrispettivi/report/mensile`, `GET /dipendenti/{id}`, `PUT /dipendenti/{id}/centro-di-costo`,
+`PUT /dipendenti/{id}/contatti`, `PUT /dipendenti/monthly/{id}/centro-di-costo`, `GET /produzione/tipi-ospite/lista`,
+`GET /settimane/{hotel_code}`, `GET /budget/{h}/{a}/config` (tabella `budget_config` vuota, modello lasciato),
+`GET /budget/{h}/{a}/settimane-mancanti`; prima, nella v4.30.12, `PUT /budget/{h}/{a}/config` (irraggiungibile).
+Recuperabili dallo storico git. **Tenuti di proposito** pur senza chiamate dal frontend: `/auth/me`, `/auth/logout`,
+`GET /config/`, `GET /corrispettivi/report/pagamenti` (la funzione serve alla Home), `PUT/DELETE
+/corrispettivi/incasso-storico` (unica via per correggere il pregresso MMS/BON, vedi `corrispettivi.md`), CRUD
+`/rooms` e `PUT /hotels/{code}` (pronti per una futura pagina Admin di camere e hotel).
+
 **Modelli e DB allineati (v4.30.9)**: indici e vincoli creati dalle migrazioni vanno dichiarati anche
 nel modello (`Index(...)` in `__table_args__`), altrimenti il DB di test (`create_all()`) ne è privo e i
 test non li vedono. Dopo ogni migrazione: `alembic check`.

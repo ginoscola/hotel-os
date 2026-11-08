@@ -1,19 +1,16 @@
 """Sotto-router Corrispettivi — CRUD documenti (scontrini/fatture) e manuali (MMS/BON).
 
 Endpoint (montati sotto /corrispettivi dall'aggregatore corrispettivi.py):
-  GET    /documenti             → lista unificata con filtri e paginazione
-  GET    /scontrini             → alias documenti tipo=scontrino
-  GET    /fatture                → alias documenti tipo=fattura
+  GET    /scontrini             → documenti tipo=scontrino, con filtri e paginazione
+  GET    /fatture                → documenti tipo=fattura
   GET    /penali                 → alias documenti categoria=penali, esclusi importo=0
   PUT    /documenti/{id}        → correzione manuale unificata
-  PUT    /scontrini/{id}        → alias → PUT /documenti/{id}
-  PUT    /fatture/{id}          → alias → PUT /documenti/{id}
 
   POST   /manuali               → inserimento MMS/BON
-  PUT    /manuali/{id}          → modifica MMS/BON
   GET    /manuali               → lista con filtri
   PUT    /incasso-storico       → upsert ripartizione una-tantum pregresso MMS/BON
   DELETE /incasso-storico/{id}  → annulla la ripartizione una-tantum
+  (incasso-storico: nessun pannello UI, è la via prevista per correggere il pregresso)
 
   GET    /export/penali         → export tabella Penali (xlsx/csv/pdf)
 """
@@ -223,26 +220,6 @@ def _lista_documenti(
             'documenti': [_fmt_documento(d) for d in docs]}
 
 
-@router.get("/documenti")
-def lista_documenti(
-    tipo: Optional[str] = Query(None, description="'scontrino'|'fattura'|'escluso'|None=tutti"),
-    data_da: Optional[date] = Query(None),
-    data_a: Optional[date] = Query(None),
-    struttura_code: Optional[str] = Query(None),
-    categoria: Optional[str] = Query(None),
-    annullato: Optional[bool] = Query(None),
-    numero: Optional[str] = Query(None),
-    camera: Optional[str] = Query(None),
-    is_test: bool = Query(False),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db),
-    _=Depends(richiedi_utente_attivo),
-):
-    return _lista_documenti(tipo, data_da, data_a, struttura_code, categoria,
-                             annullato, is_test, page, per_page, db, numero, camera)
-
-
 @router.get("/scontrini")
 def lista_scontrini(
     data_da: Optional[date] = Query(None),
@@ -355,26 +332,6 @@ def modifica_documento(
     return _modifica_documento(doc_id, body, db, utente)
 
 
-@router.put("/scontrini/{doc_id}")
-def modifica_scontrino(
-    doc_id: int,
-    body: dict,
-    db: Session = Depends(get_db),
-    utente=Depends(richiedi_admin),
-):
-    return _modifica_documento(doc_id, body, db, utente)
-
-
-@router.put("/fatture/{doc_id}")
-def modifica_fattura(
-    doc_id: int,
-    body: dict,
-    db: Session = Depends(get_db),
-    utente=Depends(richiedi_admin),
-):
-    return _modifica_documento(doc_id, body, db, utente)
-
-
 @router.post("/manuali")
 def crea_manuale(
     body: dict,
@@ -452,32 +409,6 @@ def crea_manuale(
             updated_by=utente.id,
         )
         db.add(m)
-
-    db.commit()
-    return _fmt_manuale(m)
-
-
-@router.put("/manuali/{manuale_id}")
-def modifica_manuale(
-    manuale_id: int,
-    body: dict,
-    db: Session = Depends(get_db),
-    utente=Depends(richiedi_admin),
-):
-    m = db.query(CorrispettiviManuale).filter(CorrispettiviManuale.id == manuale_id).first()
-    if not m:
-        raise HTTPException(status_code=404, detail="Record non trovato")
-
-    if any(c in body for c in CAMPI_INCASSO_MANUALE):
-        for c in CAMPI_INCASSO_MANUALE:
-            if c in body:
-                setattr(m, c, _d(float(body[c] or 0)))
-        m.arrangiamenti_lordo = _d(round(sum(float(getattr(m, c) or 0) for c in CAMPI_INCASSO_MANUALE), 2))
-    elif 'arrangiamenti_lordo' in body:
-        m.arrangiamenti_lordo = _d(body['arrangiamenti_lordo'])
-    if 'note' in body:
-        m.note = body['note']
-    m.updated_by = utente.id
 
     db.commit()
     return _fmt_manuale(m)

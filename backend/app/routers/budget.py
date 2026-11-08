@@ -12,9 +12,6 @@ Struttura endpoint:
     GET  /budget/{hotel_code}/{season_year}/confronto/mensile  → confronto aggregato per mese
     GET  /budget/{hotel_code}/{season_year}/proiezione    → proiezione fine stagione
     GET  /budget/{hotel_code}/{season_year}/export        → export tab Inserimento (xlsx reimportabile)
-    GET  /budget/{hotel_code}/{season_year}/settimane-mancanti → settimane senza budget
-    GET  /budget/{hotel_code}/{season_year}/config        → config hotel/anno
-    PUT  /budget/{hotel_code}/{season_year}/config        → salva config
     POST /budget/{hotel_code}/{season_year}/import-excel  → importa da .xlsx
     POST /budget/{hotel_code}/{season_year}/precompila-anno-precedente → riempie dal consuntivo anno-1
     GET  /budget/gruppo/{season_year}/confronto           → confronto gruppo
@@ -40,7 +37,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
-from app.models.revenue import BudgetConfig, BudgetEntry, DailyRevenue, Hotel, HotelSeason
+from app.models.revenue import BudgetEntry, DailyRevenue, Hotel, HotelSeason
 from app.services.budget_calculator import KPIBudget, calcola_kpi_budget, calcola_mese_contabile
 from app.services.budget_importer import importa_budget_excel
 from app.services.budget_ristoranti import riepilogo_gruppo as riepilogo_ristoranti_gruppo
@@ -906,71 +903,6 @@ def proiezione_fine_stagione(
     if p is None:
         raise HTTPException(status_code=404, detail="Nessun budget inserito")
     return p
-
-
-@router.get("/{hotel_code}/{season_year}/settimane-mancanti")
-def settimane_mancanti(
-    hotel_code: str,
-    season_year: int,
-    version: str = Query('v1'),
-    db: Session = Depends(get_db),
-):
-    """Settimane della stagione per cui non è stato inserito il budget."""
-    hotel = _hotel_o_404(hotel_code, db)
-    settimane = _settimane_stagione(hotel, season_year, db)
-    se_con_budget = {
-        e.week_start
-        for e in db.query(BudgetEntry.week_start).filter(
-            BudgetEntry.hotel_id == hotel.id,
-            BudgetEntry.season_year == season_year,
-            BudgetEntry.version == version,
-        ).all()
-    }
-    mancanti = [
-        {'week_start': ws.isoformat(), 'week_end': we.isoformat()}
-        for ws, we in settimane if ws not in se_con_budget
-    ]
-    return {
-        'hotel_code': hotel.code,
-        'season_year': season_year,
-        'version': version,
-        'n_settimane_totali': len(settimane),
-        'n_mancanti': len(mancanti),
-        'mancanti': mancanti,
-    }
-
-
-@router.get("/{hotel_code}/{season_year}/config")
-def leggi_config(
-    hotel_code: str,
-    season_year: int,
-    version: str = Query('v1'),
-    db: Session = Depends(get_db),
-):
-    """Legge i parametri di configurazione budget per hotel e anno."""
-    hotel = _hotel_o_404(hotel_code, db)
-    cfg = (
-        db.query(BudgetConfig)
-        .filter(
-            BudgetConfig.hotel_id == hotel.id,
-            BudgetConfig.season_year == season_year,
-            BudgetConfig.version == version,
-        )
-        .first()
-    )
-    if not cfg:
-        return {'hotel_id': hotel.id, 'season_year': season_year, 'version': version}
-    return {
-        'id': cfg.id,
-        'hotel_id': cfg.hotel_id,
-        'season_year': cfg.season_year,
-        'version': cfg.version,
-        'costo_pasto': _dec(cfg.costo_pasto),
-        'costo_colazione': _dec(cfg.costo_colazione),
-        'altro_rev_presenza': _dec(cfg.altro_rev_presenza),
-        'notti_medie_soggiorno': _dec(cfg.notti_medie_soggiorno),
-        'note': cfg.note,
-    }
 
 
 @router.post("/{hotel_code}/{season_year}/import-excel")
