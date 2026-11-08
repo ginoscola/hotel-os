@@ -1,6 +1,6 @@
 """Modelli database per il modulo Analisi Ricavi (trattamenti e reparti mensili)."""
 
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -72,6 +72,9 @@ class AnalisiRicaviTrattamento(Base):
     __table_args__ = (
         UniqueConstraint('hotel_id', 'anno', 'mese', 'codice',
                          name='uq_analisi_trattamento_hotel_mese_codice'),
+        # Indici già presenti nel DB (creati dalle migrazioni), dichiarati anche qui dal
+        # 08/11/2026 così il DB di test, costruito da create_all(), è uguale a quello reale.
+        Index('ix_analisi_trattamenti_hotel_mese', 'hotel_id', 'anno', 'mese'),
     )
 
 
@@ -97,4 +100,7 @@ class AnalisiRicaviReparto(Base):
     __table_args__ = (
         UniqueConstraint('hotel_id', 'anno', 'mese', 'reparto',
                          name='uq_analisi_reparto_hotel_mese_reparto'),
+        # Indici già presenti nel DB (creati dalle migrazioni), dichiarati anche qui dal
+        # 08/11/2026 così il DB di test, costruito da create_all(), è uguale a quello reale.
+        Index('ix_analisi_reparti_hotel_mese', 'hotel_id', 'anno', 'mese'),
     )

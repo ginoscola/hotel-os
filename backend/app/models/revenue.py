@@ -139,7 +139,7 @@ class RtPrinter(Base):
 
     __tablename__ = "rt_printers"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     nome = Column(String(100), nullable=False)
     ip = Column(String(50), unique=True, nullable=False)
 
@@ -192,8 +192,9 @@ class DailyRevenue(Base):
     revenue_total = Column(Float, nullable=False, default=0.0)  # rooms + fnb + extra
 
     nome_file = Column(String(255), nullable=True)
-    # Data di snapshot del forecast (estratta dal nome file: YYYYMMDD_...)
-    snapshot_date = Column(Date, nullable=True)
+    # Data di snapshot del forecast (estratta dal nome file: YYYYMMDD_...). NOT NULL nel DB:
+    # ogni lettura sceglie una snapshot (o la più recente per data), mai tutte insieme.
+    snapshot_date = Column(Date, nullable=False)
     # True se importato come dato di test (cancellabile dall'area admin)
     is_test = Column(Boolean, nullable=False, default=False, server_default="false")
     # FK verso hotels (nullable per compatibilità con righe precedenti alla migrazione)

@@ -64,7 +64,23 @@ cd frontend && npm run dev
 cd backend && source venv/bin/activate && pytest tests/ -v
 cd backend && source venv/bin/activate && ruff check app tests   # controllo statico (ruff.toml, requirements-dev.txt)
 cd frontend && npm run lint                                       # eslint (eslint.config.js): trova identificatori non definiti che vite build non vede
+cd backend && source venv/bin/activate && alembic check           # modelli = DB reale? deve dire "No new upgrade operations detected"
+cd backend && source venv/bin/activate && pip-audit -r requirements-lock.txt --no-deps --disable-pip   # vulnerabilità note pacchetti Python
+cd frontend && npm audit                                          # vulnerabilità note pacchetti npm
 ```
+**Dipendenze Python (dal 08/11/2026, v4.30.9)**: `requirements.txt` = dipendenze dirette con versione
+esatta (`==`); `requirements-lock.txt` = ambiente di produzione completo, comprese le dipendenze
+indirette (è quello da installare su un server nuovo o dopo un ripristino);
+`requirements-dev.txt` = ruff, pytest, httpx, pip-audit. Prima c'erano solo minimi (`>=`): una
+reinstallazione avrebbe preso versioni mai provate (es. FastAPI 0.162 invece di 0.141). Produzione e
+sviluppo usano lo **stesso venv** (`backend/venv`, vedi unit systemd). **Aggiornare un pacchetto** =
+lavoro a sé: cambiare la versione in `requirements.txt`, `pip install -r requirements.txt`, test
+completi, rigenerare il lock con le sole dipendenze di produzione (non `pip freeze` nudo: includerebbe
+gli strumenti di sviluppo), riavvio backend. `bcrypt` resta a 4.0.1 per compatibilità con passlib 1.7.4.
+
+**Modelli e DB allineati (v4.30.9)**: indici e vincoli creati dalle migrazioni vanno dichiarati anche
+nel modello (`Index(...)` in `__table_args__`), altrimenti il DB di test (`create_all()`) ne è privo e i
+test non li vedono. Dopo ogni migrazione: `alembic check`.
 **Riavvio sul server**: `./restart_server.sh` (= `sudo systemctl restart hotelos-backend` + attesa
 backend pronto + status), `./restart_server.sh --build` per ricompilare anche il frontend.
 Lanciabile da qualsiasi cartella come **`hotelos-restart`** (`hotelos-restart --build`): link

@@ -1,7 +1,7 @@
 """Modelli database per il modulo Corrispettivi v4 (tabella unificata documenti)."""
 
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint,
+    Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
@@ -114,6 +114,12 @@ class CorrispettiviDocumento(Base):
         # sulla stessa chiave (vedi migrazioni corrfix001_2026, corrfix002_2026).
         UniqueConstraint('struttura_code', 'data_documento', 'numero', 'suffisso',
                          'camera', 'codice_prenotazione', 'numero_scontrino', name='uq_documento'),
+        # Indici già presenti nel DB (creati dalle migrazioni), dichiarati anche qui dal
+        # 08/11/2026 così il DB di test, costruito da create_all(), è uguale a quello reale.
+        Index('ix_corr_doc_data', 'data_documento'),
+        Index('ix_corr_doc_import', 'import_id'),
+        Index('ix_corr_doc_struttura', 'struttura_code'),
+        Index('ix_corr_doc_tipo', 'tipo'),
     )
 
     importazione = relationship("CorrispettiviImport", back_populates="documenti",
@@ -241,4 +247,7 @@ class RtChiusura(Base):
 
     __table_args__ = (
         UniqueConstraint('data_chiusura', 'rt_code', name='uq_rt_chiusura_data_codice'),
+        # Indici già presenti nel DB (creati dalle migrazioni), dichiarati anche qui dal
+        # 08/11/2026 così il DB di test, costruito da create_all(), è uguale a quello reale.
+        Index('ix_rt_chiusure_data', 'data_chiusura'),
     )

@@ -124,6 +124,7 @@ cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8
 cd frontend && npm run dev
 cd backend && source venv/bin/activate && pytest tests/ -v
 cd backend && source venv/bin/activate && ruff check app tests   # controllo statico (ruff.toml, requirements-dev.txt)
+cd backend && source venv/bin/activate && alembic check     # modelli allineati al DB reale (dopo ogni migrazione)
 cd frontend && npm run lint                                       # eslint (eslint.config.js): trova identificatori non definiti che vite build non vede
 ```
 - **Produzione**: nginx serve `frontend/dist/` (file statici) + reverse proxy verso uvicorn (systemd
@@ -136,7 +137,8 @@ cd frontend && npm run lint                                       # eslint (esli
 - `cors_origins` in DB letto solo all'avvio (serve il riavvio).
 - **Test**: DB dedicato `hotel_os_test` (`TEST_DATABASE_URL` in `backend/.env`, letto solo da
   `tests/_db.py` — mai un URL nel test, mai `SessionLocal` nei test). Schema da `create_all()`, non dalle
-  migrazioni (i test non vedono il drift modello↔migrazioni↔DB: in caso di dubbio `alembic current` e `\d tabella`).
+  migrazioni: ogni indice/vincolo creato da una migrazione va dichiarato anche nel modello, poi
+  `alembic check` (deve dire "No new upgrade operations detected"), altrimenti i test non lo vedono.
 - La fixture `client` deve sovrascrivere anche `richiedi_admin`/`richiedi_utente_attivo` (non solo
   `get_db`): `app.dependency_overrides[richiedi_admin] = lambda: SimpleNamespace(id=None)`. Senza, i 401
   a cascata nascondono bug reali.

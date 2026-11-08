@@ -564,3 +564,14 @@ class TestSommeNelDatabase:
         assert luglio['totale']['cena'] == 2
         assert luglio['totale']['totale'] == 2
         assert resp.json()['totale_anno']['totale'] == 2
+
+
+class TestVincoliDichiaratiNelModello:
+    def test_mapping_unico_senza_distinguere_maiuscole(self, TestSession):
+        """uq_prod_dettaglio_categoria_lower è nel modello (v4.30.9): vale anche nel DB di test."""
+        from sqlalchemy.exc import IntegrityError
+        with TestSession() as db:
+            cena = db.query(ProdCategoria).filter_by(code='cena').one()
+            db.add(ProdDettaglioCategoria(dettaglio_originale='QUOTA CENA', categoria_id=cena.id))
+            with pytest.raises(IntegrityError):
+                db.commit()

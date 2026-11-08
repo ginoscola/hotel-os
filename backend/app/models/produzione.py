@@ -4,7 +4,7 @@ Registro gestionale, distinto dal registro fiscale di Corrispettivi (listaConti.
 """
 
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String,
+    Boolean, Column, Date, DateTime, ForeignKey, Index, Integer, Numeric, String,
     Text, UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -57,6 +57,12 @@ class ProdDettaglioCategoria(Base):
     # vedi migrazione prod006_2026 per il bug reale che ha reso necessario questo flag.
     conta_come_pasto    = Column(Boolean, nullable=False, default=False, server_default='false')
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Una voce di mapping per testo, senza distinguere maiuscole/minuscole (già nel DB dalla
+        # migrazione; dichiarato qui dal 08/11/2026 perché valga anche nel DB di test).
+        Index('uq_prod_dettaglio_categoria_lower', func.lower(dettaglio_originale), unique=True),
+    )
 
     categoria = relationship("ProdCategoria")
 
@@ -142,6 +148,10 @@ class ProdRiga(Base):
         # collasserebbe erroneamente in una sola. is_test incluso: un import reale che si
         # sovrappone a dati di test non deve essere scartato come "duplicato" di quelli.
         UniqueConstraint("is_test", "oid_welcome", name="uq_prod_riga_antiduplicati"),
+        # Indici già presenti nel DB (creati dalle migrazioni), dichiarati anche qui dal
+        # 08/11/2026 così il DB di test, costruito da create_all(), è uguale a quello reale.
+        Index('ix_prod_righe_data_struttura', 'data_riferimento', 'struttura_code'),
+        Index('ix_prod_righe_import', 'import_id'),
     )
 
 
