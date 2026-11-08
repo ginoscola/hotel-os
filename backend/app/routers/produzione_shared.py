@@ -1,14 +1,19 @@
 """Costanti e helper condivisi tra i sotto-router di Statistiche Produzione."""
 
+from collections.abc import Iterable
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.produzione import ProdCategoria, ProdRiga
 from app.routers.corrispettivi_shared import STRUTTURE_HOTEL  # riuso, non ridefinire
 
-__all__ = ['STRUTTURE_HOTEL', 'query_report']
+__all__ = ['STRUTTURE_HOTEL', 'aggrega_somme', 'query_report', 'somme_per']
+
+ZERO = Decimal(0)
 
 
 def query_report(
@@ -50,8 +55,31 @@ def query_report(
     return q
 
 
-def aggrega(righe: list[ProdRiga]) -> dict:
-    """Somma un gruppo di righe in {lordo, imponibile, iva, n_righe}.
+def somme_per(q, *chiavi) -> dict[tuple, tuple]:
+    """Somme di lordo/imponibile/iva e numero righe calcolate dal database, raggruppate per
+    `chiavi` (colonne o espressioni SQL): {(valori chiave): (lordo, imponibile, iva, n_righe)}.
+
+    `q` è una query di `query_report()` (così i filtri restano definiti in un punto solo).
+    Prima i report caricavano tutte le righe come oggetti e sommavano in Python: con ~70.000
+    righe la Home impiegava 3,6 s; il GROUP BY nel database restituisce poche decine di righe.
+    Le somme restano Decimal (esatte) fino ad `aggrega_somme()`.
+    """
+    righe = (
+        q.with_entities(
+            *chiavi,
+            func.sum(ProdRiga.prezzo_lordo), func.sum(ProdRiga.imponibile), func.sum(ProdRiga.iva),
+            func.count(ProdRiga.id),
+        )
+        .group_by(*chiavi)
+        .all()
+    )
+    n = len(chiavi)
+    return {tuple(r[:n]): (r[n] or ZERO, r[n + 1] or ZERO, r[n + 2] or ZERO, r[n + 3]) for r in righe}
+
+
+def aggrega_somme(valori: Iterable[tuple]) -> dict:
+    """Somma tuple (lordo, imponibile, iva, n_righe) di `somme_per()` in
+    {lordo, imponibile, iva, n_righe}.
 
     Il backend restituisce SEMPRE lordo + imponibile + iva già calcolati (mai
     lordo - iva): il toggle IVA inclusa/esclusa è applicato client-side
@@ -59,12 +87,16 @@ def aggrega(righe: list[ProdRiga]) -> dict:
     reso più preciso perché l'imponibile è la somma esatta per riga e non
     un'approssimazione via aliquota unica di categoria.
     """
-    lordo = sum(float(r.prezzo_lordo) for r in righe)
-    imponibile = sum(float(r.imponibile) for r in righe)
-    iva = sum(float(r.iva) for r in righe)
+    lordo = imponibile = iva = ZERO
+    n_righe = 0
+    for lo, im, iv, n in valori:
+        lordo += lo
+        imponibile += im
+        iva += iv
+        n_righe += n
     return {
-        'lordo': round(lordo, 2),
-        'imponibile': round(imponibile, 2),
-        'iva': round(iva, 2),
-        'n_righe': len(righe),
+        'lordo': round(float(lordo), 2),
+        'imponibile': round(float(imponibile), 2),
+        'iva': round(float(iva), 2),
+        'n_righe': n_righe,
     }

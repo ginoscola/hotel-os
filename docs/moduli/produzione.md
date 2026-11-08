@@ -49,6 +49,18 @@ prima è l'implementazione effettiva usata dai router per comporre filtri dinami
 accesso diretto/BI — stessa condizione WHERE in entrambe: `is_riassetto=false AND
 categoria.includi_report=true`).
 
+**Somme nel database, non in Python (v4.30.8, 08/11/2026)**: i report (giornaliero, settimanale,
+mensile, canali/trattamenti/tipo ospite, conteggio pasti, pasti di Occupazione) e la Home non caricano
+più le righe con `query_report().all()` per sommarle una a una: con ~70.000 righe la Home impiegava
+3,6 s, il report mensile 1,4 s. Si usa `somme_per(query_report(...), *chiavi)` di `produzione_shared.py`
+(GROUP BY → `{chiave: (lordo, imponibile, iva, n_righe)}` in Decimal esatti) e `aggrega_somme()` per il
+formato `{lordo, imponibile, iva, n_righe}`; mese come chiave = `MESE` di `produzione_report.py`;
+pasti = `conta_pasti_per()`. Le settimane commerciali si ricompongono in Python dai giorni
+(`settimana_di`). Nelle espressioni di raggruppamento le costanti vanno come `literal_column`, non come
+parametri (PostgreSQL vedrebbe SELECT e GROUP BY diversi). Verificato su 118 risposte reali
+(2025–2026, gruppo e strutture, con filtri): valori e ordine identici. Solo `/righe` (drawer di
+dettaglio) legge ancora riga per riga. Un nuovo report su `prod_righe` deve seguire lo stesso schema.
+
 **Categorie NON hardcoded, incluso il mapping testo→categoria** (non solo la definizione delle
 categorie): tabella `prod_categorie` (code, name, includi_report, ordine, colore, attivo) +
 `prod_dettaglio_categoria` (testo esatto colonna `Articolo` del file → categoria, match
@@ -180,8 +192,8 @@ anche dopo che il browser ha già mostrato l'errore.
 Numero di colazioni/colazioni extra/pranzi/cene (non il ricavo) per mese, struttura (DPH/CLB/INT —
 BON escluso, coerente col resto del modulo) e complessivo gruppo. `GET
 /produzione/report/conteggio-pasti?anno=&struttura_code=` in `produzione_report.py`, stesso pattern
-di `/report/mensile` (`query_report()` + iterazione sui 12 mesi) ma `_conta_pasti()` al posto di
-`aggrega()`: **`COUNT(*)` per categoria, non `SUM(quantita)`** — ogni riga di `prod_righe` è già un
+di `/report/mensile` (`query_report()`, una sola query raggruppata per mese) ma `conta_pasti_per()`
+al posto di `somme_per()`: **`COUNT(*)` per categoria, non `SUM(quantita)`** — ogni riga di `prod_righe` è già un
 singolo pasto/persona (un Oid Welcome = un addebito, mai una riga aggregata con quantità multipla,
 vedi `UniqueConstraint` sul modello), quindi contare le righe è l'unico conteggio coerente col resto
 del modulo; il campo `quantita` sul modello resta comunque non utilizzato da nessun report. Colazioni

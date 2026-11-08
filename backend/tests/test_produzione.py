@@ -20,7 +20,7 @@ from starlette.testclient import TestClient
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import Base, get_db
 from app.main import app
-from app.models.produzione import ProdCategoria, ProdImport, ProdRiga  # noqa: F401
+from app.models.produzione import ProdCategoria, ProdDettaglioCategoria, ProdImport, ProdRiga  # noqa: F401
 from app.models.rooms import Room  # noqa: F401
 from app.services.prod_parser import _carica_mapping_dettagli, _categoria_da_prezzo, parse_xlsx
 from app.utils.struttura_resolver import carica_mappa_rooms, struttura_da_camera
@@ -461,3 +461,106 @@ class TestReport:
         assert totale_pct == pytest.approx(100.0, abs=0.5)
         for c in dati:
             assert sum(v['lordo'] for v in c['per_struttura'].values()) == pytest.approx(c['lordo'], abs=0.5)
+
+
+# ---------------------------------------------------------------------------
+# Somme nel database (v4.30.8): i report non caricano più le righe una a una
+# ---------------------------------------------------------------------------
+
+class TestSommeNelDatabase:
+    """Casi delicati delle aggregazioni spostate in SQL (GROUP BY), su righe sintetiche."""
+
+    def _righe(self, TestSession, righe):
+        from decimal import Decimal
+        db = TestSession()
+        cat = {c.code: c.id for c in db.query(ProdCategoria).all()}
+        imp = ProdImport(nome_file='sintetico.xlsx', data_da=date(2026, 5, 1), data_a=date(2026, 9, 30), is_test=True)
+        db.add(imp)
+        db.flush()
+        for i, r in enumerate(righe):
+            lordo = Decimal(str(r.get('lordo', 10)))
+            db.add(ProdRiga(
+                import_id=imp.id, oid_welcome=9_000_000 + i, is_test=True,
+                data_riferimento=r['data'], struttura_code=r.get('sc', 'DPH'),
+                categoria_id=cat[r.get('cat', 'alloggio')], dettaglio_originale=r.get('dettaglio'),
+                prezzo_lordo=lordo, prezzo_netto=lordo - Decimal(str(r.get('commissione', 0))),
+                imponibile=lordo / Decimal('1.1'), iva=lordo - lordo / Decimal('1.1'),
+                canale=r.get('canale'), trattamento=r.get('trattamento'),
+                codice_prenotazione=r.get('pren'),
+            ))
+        db.commit()
+        db.close()
+
+    def test_canale_vuoto_e_nullo_uniti_e_prenotazioni_distinte(self, client, TestSession):
+        g = date(2026, 6, 10)
+        self._righe(TestSession, [
+            {'data': g, 'canale': 'Booking', 'pren': 'P1', 'lordo': 100},
+            {'data': g, 'canale': 'Booking', 'pren': 'P1', 'lordo': 50, 'sc': 'CLB'},
+            {'data': g, 'canale': 'Booking', 'pren': '', 'lordo': 25},
+            {'data': g, 'canale': None, 'pren': 'P2', 'lordo': 15},
+            {'data': g, 'canale': '', 'pren': None, 'lordo': 10},
+        ])
+        resp = client.get("/produzione/report/canali", params={'data_da': '2026-06-01', 'data_a': '2026-06-30', 'is_test': True})
+        assert resp.status_code == 200
+        per_canale = {c['canale']: c for c in resp.json()['per_canale']}
+        assert set(per_canale) == {'Booking', 'Non specificato'}
+        booking = per_canale['Booking']
+        assert booking['lordo'] == 175.0
+        assert booking['n_righe'] == 3
+        assert booking['n_prenotazioni'] == 1          # P1 contata una volta, '' esclusa
+        assert booking['pct_totale'] == 87.5
+        assert booking['per_struttura']['DPH']['lordo'] == 125.0
+        assert booking['per_struttura']['CLB']['lordo'] == 50.0
+        assert booking['per_struttura']['INT'] == {'lordo': 0.0, 'imponibile': 0.0, 'iva': 0.0, 'n_righe': 0}
+        assert per_canale['Non specificato']['lordo'] == 25.0
+        assert per_canale['Non specificato']['n_prenotazioni'] == 1
+
+    def test_settimana_a_cavallo_di_due_mesi(self, client, TestSession):
+        from app.services.weekly_aggregator import settimana_di
+        self._righe(TestSession, [
+            {'data': date(2026, 5, 30), 'lordo': 40},
+            {'data': date(2026, 6, 2), 'lordo': 60, 'cat': 'cena'},
+        ])
+        resp = client.get("/produzione/report/settimanale", params={'data_da': '2026-05-01', 'data_a': '2026-06-30', 'is_test': True})
+        dati = resp.json()
+        assert len(dati) == 1
+        assert dati[0]['week_start'] == settimana_di(date(2026, 5, 30)).isoformat()
+        assert dati[0]['totale']['lordo'] == 100.0
+        assert dati[0]['per_categoria']['alloggio']['lordo'] == 40.0
+        assert dati[0]['per_categoria']['cena']['lordo'] == 60.0
+
+    def test_report_mensile_divide_per_mese_e_confronti(self, client, TestSession):
+        self._righe(TestSession, [
+            {'data': date(2026, 5, 31), 'lordo': 30},
+            {'data': date(2026, 6, 1), 'lordo': 70, 'sc': 'INT'},
+        ])
+        resp = client.get("/produzione/report/mensile", params={'anno': 2026, 'mese': 6, 'is_test': True})
+        dati = resp.json()
+        mesi = {m['mese']: m for m in dati['mesi']}
+        assert mesi[5]['totale']['lordo'] == 30.0
+        assert mesi[6]['totale']['lordo'] == 70.0
+        assert mesi[6]['per_struttura']['INT']['per_categoria']['alloggio']['lordo'] == 70.0
+        assert mesi[7]['totale']['n_righe'] == 0
+        assert dati['totale_anno']['lordo'] == 100.0
+        assert dati['confronto_mese_precedente']['lordo'] == 30.0
+        assert dati['confronto_anno_precedente'] is None   # giugno 2025 senza righe
+
+    def test_conteggio_pasti_solo_voci_conta_come_pasto(self, client, TestSession):
+        with TestSession() as db:
+            cena = db.query(ProdCategoria).filter_by(code='cena').one()
+            db.query(ProdDettaglioCategoria).filter_by(dettaglio_originale='Quota Cena').update({'conta_come_pasto': True})
+            db.add(ProdDettaglioCategoria(dettaglio_originale='Acqua', categoria_id=cena.id))
+            db.commit()
+        g = date(2026, 7, 5)
+        self._righe(TestSession, [
+            {'data': g, 'cat': 'cena', 'dettaglio': 'Quota Cena'},
+            {'data': g, 'cat': 'cena', 'dettaglio': ' quota cena '},   # spazi e minuscole: conta
+            {'data': g, 'cat': 'cena', 'dettaglio': 'Acqua'},          # piatto/bevanda: non conta
+            {'data': g, 'cat': 'cena', 'dettaglio': 'Quota Cena', 'sc': 'BON'},  # struttura fuori modulo
+        ])
+        resp = client.get("/produzione/report/conteggio-pasti", params={'anno': 2026, 'is_test': True})
+        luglio = resp.json()['mesi'][6]
+        assert luglio['per_struttura']['DPH']['cena'] == 2
+        assert luglio['totale']['cena'] == 2
+        assert luglio['totale']['totale'] == 2
+        assert resp.json()['totale_anno']['totale'] == 2

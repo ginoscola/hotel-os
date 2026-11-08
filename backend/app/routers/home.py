@@ -30,7 +30,7 @@ from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
 from app.models.corrispettivi import CorrispettiviDocumento, CorrispettiviImport
 from app.models.home import DashboardKpiSoglia
-from app.models.produzione import ProdImport
+from app.models.produzione import ProdImport, ProdRiga
 from app.models.revenue import DailyRevenue, Hotel, HotelSeason, PayrollImport
 from app.routers.budget import _confronto_gruppo_dati
 from app.routers.corrispettivi_report import report_pagamenti
@@ -40,7 +40,7 @@ from app.routers.dashboard import _carica_righe, _kpi_schema, _max_snapshot, _ra
 from app.routers.dipendenti import _costo_lavoro_per_struttura
 from app.routers.forecast import _pace_punti
 from app.routers.produzione_report import _categorie_attive, _per_categoria, report_canali, report_tipo_ospite, report_trattamenti
-from app.routers.produzione_shared import query_report
+from app.routers.produzione_shared import query_report, somme_per
 from app.utils.locale_it import MESI_IT
 
 router = APIRouter(prefix="/home", tags=["home"])
@@ -317,10 +317,18 @@ def _commissioni_ota(stagione: dict, hc_sel: str, oggi: date, db: Session) -> di
     """Placeholder: prezzo_lordo == prezzo_netto su tutte le righe finché Welcome non
     valorizza la colonna Commissione per canale (vedi nota in produzione.py)."""
     struttura_filtro = None if hc_sel == 'GRUPPO' else hc_sel
-    righe = query_report(db, stagione['open_date'], min(stagione['close_date'], oggi),
-                          struttura_filtro, None, None, None, False).all()
-    commissione = sum(float(r.prezzo_lordo) - float(r.prezzo_netto) for r in righe)
-    lordo_ota = sum(float(r.prezzo_lordo) for r in righe if (r.canale or '').strip().lower() not in ('', 'diretto', 'direct'))
+    q = query_report(db, stagione['open_date'], min(stagione['close_date'], oggi),
+                     struttura_filtro, None, None, None, False)
+    # Somme per canale dal database; la regola "canale OTA" resta in Python sui pochi valori distinti.
+    per_canale = (
+        q.with_entities(ProdRiga.canale, func.sum(ProdRiga.prezzo_lordo),
+                        func.sum(ProdRiga.prezzo_lordo - ProdRiga.prezzo_netto))
+        .group_by(ProdRiga.canale)
+        .all()
+    )
+    commissione = sum(float(diff or 0) for _, _, diff in per_canale)
+    lordo_ota = sum(float(lordo or 0) for canale, lordo, _ in per_canale
+                    if (canale or '').strip().lower() not in ('', 'diretto', 'direct'))
     return {
         'commissione_stimata': round(commissione, 2),
         'lordo_ota': round(lordo_ota, 2),
@@ -391,9 +399,10 @@ def cruscotto(
         struttura_filtro = None if hc_sel == 'GRUPPO' else hc_sel
         mix_canali = report_canali(data_da=stagione['open_date'], data_a=fino_a,
                                     struttura_code=struttura_filtro, is_test=False, db=db)['per_canale']
-        righe_prod = query_report(db, stagione['open_date'], fino_a, struttura_filtro, None, None, None, False).all()
+        q_prod = query_report(db, stagione['open_date'], fino_a, struttura_filtro, None, None, None, False)
+        somme_cat = somme_per(q_prod, ProdRiga.categoria_id)
         categorie = _categorie_attive(db)
-        agg_cat = _per_categoria(righe_prod, categorie)
+        agg_cat = _per_categoria({cat_id: [valori] for (cat_id,), valori in somme_cat.items()}, categorie)
         mix_categorie = [
             {'code': c.code, 'name': c.name, 'colore': c.colore, **agg_cat.get(c.code, {})}
             for c in categorie

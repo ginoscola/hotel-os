@@ -35,10 +35,10 @@ from sqlalchemy.orm import Session
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
 from app.models.prenotazioni import PrenotazioneCancellata
-from app.models.produzione import ProdCategoria, ProdOccupazioneConsumo
+from app.models.produzione import ProdOccupazioneConsumo
 from app.models.revenue import Hotel, HotelSeason
-from app.routers.produzione_report import _carica_conta_come_pasto, _conta_pasti
-from app.routers.produzione_shared import STRUTTURE_HOTEL, query_report
+from app.routers.produzione_report import MESE, conta_pasti_per, conteggio_vuoto
+from app.routers.produzione_shared import STRUTTURE_HOTEL, query_report, somme_per
 from app.services.usali_contabile_kpi import produzione_mensile
 
 router = APIRouter(dependencies=[Depends(richiedi_utente_attivo)])
@@ -98,13 +98,12 @@ def _arrivi(db: Session, struttura: str, anno: int) -> dict[int, tuple[int, int]
 
 
 def _pasti(db: Session, struttura: str, anno: int) -> dict[int, dict]:
-    categorie_by_id = {c.id: c for c in db.query(ProdCategoria).all()}
-    conta_pasto = _carica_conta_come_pasto(db)
-    righe = query_report(db, date(anno, 1, 1), date(anno, 12, 31), struttura, None, None, None, False).all()
-    per_mese = defaultdict(list)
-    for r in righe:
-        per_mese[r.data_riferimento.month].append(r)
-    return {m: _conta_pasti(rr, categorie_by_id, conta_pasto) for m, rr in per_mese.items()}
+    """{mese: conteggio pasti} per i mesi con almeno una riga di Produzione (mese senza
+    righe = assente → None a valle, mai zero inventato)."""
+    q = query_report(db, date(anno, 1, 1), date(anno, 12, 31), struttura, None, None, None, False)
+    mesi_con_righe = {m for (m,) in somme_per(q, MESE)}
+    conteggi = conta_pasti_per(db, q, MESE)
+    return {m: conteggi.get((m,)) or conteggio_vuoto() for m in mesi_con_righe}
 
 
 def _valori_automatici(db: Session, struttura: str, anno: int) -> dict[str, dict[int, Optional[float]]]:

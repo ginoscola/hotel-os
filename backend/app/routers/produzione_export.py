@@ -21,7 +21,6 @@ from sqlalchemy.orm import Session
 
 from app.auth import richiedi_utente_attivo
 from app.database import get_db
-from app.models.produzione import ProdCategoria
 from app.routers.produzione_report import _categorie_attive, _per_dimensione, report_giornaliero, report_mensile
 
 router = APIRouter(dependencies=[Depends(richiedi_utente_attivo)])

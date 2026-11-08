@@ -14,7 +14,8 @@ più povero:
   7gg, ritmo prenotazioni (mese corrente + confronto anno precedente se disponibile — oggi non lo è,
   primi dati 2026), mix canali/categorie (Produzione), % contante e tassa di soggiorno incassata
   (Corrispettivi), commissioni OTA (placeholder, sempre 0 finché Welcome non valorizza la colonna),
-  semaforo per hotel, striscia di freschezza dati.
+  semaforo per hotel, striscia di freschezza dati. I blocchi Produzione (mix, commissioni) usano le
+  somme nel database (`somme_per()`, vedi `produzione.md`): cruscotto da 3,6 s a ~0,4 s (v4.30.8).
 - `GET /home/cruscotto/admin` (`richiedi_admin`) → costo del lavoro per struttura, labor cost ratio,
   margine di contribuzione parziale (ricavi − solo costo lavoro, nessun altro costo operativo), Δ RT
   vs PMS sull'intera stagione, mix trattamento/tipo ospite, heatmap occupancy per giorno di stagione.

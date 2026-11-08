@@ -10,13 +10,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import Integer, cast, extract, func, literal_column
 from sqlalchemy.orm import Session
 
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.database import get_db
 from app.models.produzione import ProdCategoria, ProdDettaglioCategoria, ProdRiga
-from app.routers.produzione_shared import STRUTTURE_HOTEL, aggrega, query_report
+from app.routers.produzione_shared import STRUTTURE_HOTEL, aggrega_somme, query_report, somme_per
 from app.services.prod_parser import _carica_mapping_dettagli, _categoria_id_da_articolo
 from app.services.weekly_aggregator import settimana_di
 
@@ -32,36 +32,39 @@ def _categorie_attive(db: Session) -> list[ProdCategoria]:
     )
 
 
-def _per_categoria(righe: list[ProdRiga], categorie: list[ProdCategoria]) -> dict:
+# Mese di data_riferimento come intero, da usare come chiave di GROUP BY (senza parametri
+# legati, quindi identico nella SELECT e nel GROUP BY).
+MESE = cast(extract('month', ProdRiga.data_riferimento), Integer)
+
+
+def _per_categoria(somme_per_cat: dict, categorie: list[ProdCategoria]) -> dict:
+    """{categoria_id: [tuple di somme_per()]} → {code categoria attiva: aggregato}.
+
+    Le righe di categorie non attive non compaiono nel dettaglio (restano nel totale)."""
     cat_by_id = {c.id: c for c in categorie}
-    per_cat: dict[str, list[ProdRiga]] = defaultdict(list)
-    for r in righe:
-        cat = cat_by_id.get(r.categoria_id)
-        per_cat[cat.code if cat else 'altro'].append(r)
-
-    out = {}
-    for cat in categorie:
-        rr = per_cat.get(cat.code, [])
-        out[cat.code] = aggrega(rr)
-    return out
+    per_code: dict[str, list] = defaultdict(list)
+    for cat_id, valori in somme_per_cat.items():
+        cat = cat_by_id.get(cat_id)
+        per_code[cat.code if cat else 'altro'].extend(valori)
+    return {cat.code: aggrega_somme(per_code.get(cat.code, [])) for cat in categorie}
 
 
-def _raggruppa_per_giorno_struttura(
-    db: Session, righe: list[ProdRiga], data_da: date, data_a: date,
-    per_settimana: bool = False,
-) -> list[dict]:
+def _raggruppa_per_giorno_struttura(db: Session, q, per_settimana: bool = False) -> list[dict]:
+    """`q` = query_report(); somme per (giorno, struttura, categoria) dal database, poi
+    ricomposte per settimana commerciale in Python (settimana_di legge app_config)."""
     categorie = _categorie_attive(db)
-    gruppi: dict[tuple, list[ProdRiga]] = defaultdict(list)
-    for r in righe:
-        chiave_data = settimana_di(r.data_riferimento) if per_settimana else r.data_riferimento
-        gruppi[(chiave_data, r.struttura_code)].append(r)
+    somme = somme_per(q, ProdRiga.data_riferimento, ProdRiga.struttura_code, ProdRiga.categoria_id)
+    gruppi: dict[tuple, dict] = defaultdict(lambda: defaultdict(list))
+    for (giorno, sc, cat_id), valori in somme.items():
+        chiave_data = settimana_di(giorno) if per_settimana else giorno
+        gruppi[(chiave_data, sc)][cat_id].append(valori)
 
     out = []
-    for (chiave_data, sc), rr in sorted(gruppi.items()):
+    for (chiave_data, sc), per_cat in sorted(gruppi.items()):
         voce = {
             'struttura_code': sc,
-            'per_categoria': _per_categoria(rr, categorie),
-            'totale': aggrega(rr),
+            'per_categoria': _per_categoria(per_cat, categorie),
+            'totale': aggrega_somme(v for vv in per_cat.values() for v in vv),
         }
         if per_settimana:
             voce['week_start'] = chiave_data.isoformat()
@@ -110,8 +113,8 @@ def report_giornaliero(
     is_test: bool = Query(False),
     db: Session = Depends(get_db),
 ):
-    righe = query_report(db, data_da, data_a, struttura_code, categoria_code, canale, trattamento, is_test).all()
-    return _raggruppa_per_giorno_struttura(db, righe, data_da, data_a, per_settimana=False)
+    q = query_report(db, data_da, data_a, struttura_code, categoria_code, canale, trattamento, is_test)
+    return _raggruppa_per_giorno_struttura(db, q, per_settimana=False)
 
 
 @router.get("/report/settimanale")
@@ -126,17 +129,18 @@ def report_settimanale(
     db: Session = Depends(get_db),
 ):
     """Aggregata per settimana commerciale (sab-ven, week_start_weekday da app_config)."""
-    righe = query_report(db, data_da, data_a, struttura_code, categoria_code, canale, trattamento, is_test).all()
-    return _raggruppa_per_giorno_struttura(db, righe, data_da, data_a, per_settimana=True)
+    q = query_report(db, data_da, data_a, struttura_code, categoria_code, canale, trattamento, is_test)
+    return _raggruppa_per_giorno_struttura(db, q, per_settimana=True)
 
 
 def _totale_mese(db: Session, anno: int, mese: int, struttura_code: Optional[str], is_test: bool) -> Optional[dict]:
     da = date(anno, mese, 1)
     a = date(anno, mese, calendar.monthrange(anno, mese)[1])
-    righe = query_report(db, da, a, struttura_code, None, None, None, is_test).all()
-    if not righe:
+    somme = somme_per(query_report(db, da, a, struttura_code, None, None, None, is_test))
+    valori = somme.get((), (0, 0, 0, 0))
+    if not valori[3]:
         return None
-    return aggrega(righe)
+    return aggrega_somme([valori])
 
 
 @router.get("/report/mensile")
@@ -154,16 +158,23 @@ def report_mensile(
     categorie = _categorie_attive(db)
     strutture = [struttura_code] if struttura_code else STRUTTURE_HOTEL
 
+    q = query_report(db, date(anno, 1, 1), date(anno, 12, 31), struttura_code, None, canale, trattamento, is_test)
+    per_mese: dict[int, list] = defaultdict(list)
+    per_mese_struttura: dict[tuple, dict] = defaultdict(lambda: defaultdict(list))
+    for (m, sc, cat_id), valori in somme_per(q, MESE, ProdRiga.struttura_code, ProdRiga.categoria_id).items():
+        per_mese[m].append(valori)
+        per_mese_struttura[(m, sc)][cat_id].append(valori)
+
     mesi_out = []
     for m in range(1, 13):
-        da = date(anno, m, 1)
-        a = date(anno, m, calendar.monthrange(anno, m)[1])
-        righe = query_report(db, da, a, struttura_code, None, canale, trattamento, is_test).all()
         per_struttura = {}
         for sc in strutture:
-            rr = [r for r in righe if r.struttura_code == sc]
-            per_struttura[sc] = {'totale': aggrega(rr), 'per_categoria': _per_categoria(rr, categorie)}
-        mesi_out.append({'mese': m, 'per_struttura': per_struttura, 'totale': aggrega(righe)})
+            per_cat = per_mese_struttura.get((m, sc), {})
+            per_struttura[sc] = {
+                'totale': aggrega_somme(v for vv in per_cat.values() for v in vv),
+                'per_categoria': _per_categoria(per_cat, categorie),
+            }
+        mesi_out.append({'mese': m, 'per_struttura': per_struttura, 'totale': aggrega_somme(per_mese.get(m, []))})
 
     # totale_anno: somma dei totali mensili già calcolati (evita una seconda query)
     totale_anno = {
@@ -194,17 +205,48 @@ def _carica_conta_come_pasto(db: Session) -> set[str]:
     return {r.dettaglio_originale.strip().lower() for r in righe}
 
 
-def _conta_pasti(righe: list[ProdRiga], categorie_by_id: dict, conta_pasto: set[str]) -> dict:
+def conteggio_vuoto() -> dict:
+    out = {code: 0 for code in CODICI_PASTI}
+    out['totale'] = 0
+    return out
+
+
+def _somma_conteggi(conteggi) -> dict:
+    out = conteggio_vuoto()
+    for c in conteggi:
+        for code in CODICI_PASTI + ['totale']:
+            out[code] += c[code]
+    return out
+
+
+def conta_pasti_per(db: Session, q, *chiavi) -> dict[tuple, dict]:
     """Conta (non somma importi) solo le righe 'quota' delle 4 categorie pasto — un Oid Welcome
     con dettaglio_originale marcato conta_come_pasto=true è un pasto/persona vero; le altre righe
-    della stessa categoria (piatti/bevande/coperti) sono escluse dal conteggio."""
-    conteggio = {code: 0 for code in CODICI_PASTI}
+    della stessa categoria (piatti/bevande/coperti) sono escluse dal conteggio.
+
+    `q` = query_report(). Il database conta per (chiavi, categoria, dettaglio_originale); il
+    confronto con le voci conta_come_pasto (strip/lower) resta in Python sui pochi valori
+    distinti, identico a prima. Restituisce solo le chiavi con almeno un pasto."""
+    categorie_pasto = {
+        c.id: c.code for c in db.query(ProdCategoria).filter(ProdCategoria.code.in_(CODICI_PASTI)).all()
+    }
+    conta_pasto = _carica_conta_come_pasto(db)
+    righe = (
+        q.filter(ProdRiga.categoria_id.in_(list(categorie_pasto)))
+        .with_entities(*chiavi, ProdRiga.categoria_id, ProdRiga.dettaglio_originale, func.count(ProdRiga.id))
+        .group_by(*chiavi, ProdRiga.categoria_id, ProdRiga.dettaglio_originale)
+        .all()
+    )
+    n = len(chiavi)
+    out: dict[tuple, dict] = {}
     for r in righe:
-        cat = categorie_by_id.get(r.categoria_id)
-        if cat and cat.code in conteggio and (r.dettaglio_originale or '').strip().lower() in conta_pasto:
-            conteggio[cat.code] += 1
-    conteggio['totale'] = sum(conteggio[c] for c in CODICI_PASTI)
-    return conteggio
+        cat_id, dettaglio, quante = r[n], r[n + 1], r[n + 2]
+        if (dettaglio or '').strip().lower() not in conta_pasto:
+            continue
+        conteggio = out.setdefault(tuple(r[:n]), conteggio_vuoto())
+        conteggio[categorie_pasto[cat_id]] += quante
+        conteggio['totale'] += quante
+    return out
 
 
 @router.get("/report/conteggio-pasti")
@@ -216,18 +258,14 @@ def report_conteggio_pasti(
 ):
     """Conteggio (non ricavo) di colazioni/colazione extra/pranzi/cene per mese, struttura
     (solo DPH/CLB/INT, coerente col resto del modulo — BON escluso) e complessivo gruppo."""
-    categorie_by_id = {c.id: c for c in db.query(ProdCategoria).all()}
-    conta_pasto = _carica_conta_come_pasto(db)
     strutture = [struttura_code] if struttura_code else STRUTTURE_HOTEL
+    q = query_report(db, date(anno, 1, 1), date(anno, 12, 31), struttura_code, None, None, None, is_test)
+    conteggi = conta_pasti_per(db, q, MESE, ProdRiga.struttura_code)
 
     mesi_out = []
     for m in range(1, 13):
-        da = date(anno, m, 1)
-        a = date(anno, m, calendar.monthrange(anno, m)[1])
-        righe = query_report(db, da, a, struttura_code, None, None, None, is_test).all()
-        righe = [r for r in righe if r.struttura_code in strutture]
-        per_struttura = {sc: _conta_pasti([r for r in righe if r.struttura_code == sc], categorie_by_id, conta_pasto) for sc in strutture}
-        mesi_out.append({'mese': m, 'per_struttura': per_struttura, 'totale': _conta_pasti(righe, categorie_by_id, conta_pasto)})
+        per_struttura = {sc: conteggi.get((m, sc)) or conteggio_vuoto() for sc in strutture}
+        mesi_out.append({'mese': m, 'per_struttura': per_struttura, 'totale': _somma_conteggi(per_struttura.values())})
 
     totale_anno = {code: sum(mo['totale'][code] for mo in mesi_out) for code in CODICI_PASTI + ['totale']}
     return {'anno': anno, 'mesi': mesi_out, 'totale_anno': totale_anno}
@@ -237,25 +275,34 @@ def _per_dimensione(
     db: Session, campo: str, data_da: date, data_a: date,
     struttura_code: Optional[str], is_test: bool,
 ) -> list[dict]:
-    righe = query_report(db, data_da, data_a, struttura_code, None, None, None, is_test).all()
-    totale_lordo = sum(float(r.prezzo_lordo) for r in righe)
-
-    gruppi: dict[str, list[ProdRiga]] = defaultdict(list)
-    for r in righe:
-        valore = getattr(r, campo) or 'Non specificato'
-        gruppi[valore].append(r)
+    q = query_report(db, data_da, data_a, struttura_code, None, None, None, is_test)
+    # NULL e '' confluiscono in 'Non specificato' (costanti come literal_column: un parametro
+    # legato renderebbe diverse la SELECT e il GROUP BY per PostgreSQL).
+    valore = func.coalesce(
+        func.nullif(getattr(ProdRiga, campo), literal_column("''")), literal_column("'Non specificato'"),
+    )
+    somme = somme_per(q, valore, ProdRiga.struttura_code)
+    prenotazioni = dict(
+        q.with_entities(valore, func.count(func.distinct(func.nullif(ProdRiga.codice_prenotazione, literal_column("''")))))
+        .group_by(valore)
+        .all()
+    )
+    per_valore: dict[str, dict] = defaultdict(dict)
+    for (v, sc), valori in somme.items():
+        per_valore[v][sc] = valori
+    totale_lordo = sum(valori[0] for valori in somme.values())
 
     out = []
-    for valore, rr in gruppi.items():
-        lordo = sum(float(x.prezzo_lordo) for x in rr)
-        per_struttura = {sc: aggrega([x for x in rr if x.struttura_code == sc]) for sc in STRUTTURE_HOTEL}
+    for v, per_sc in per_valore.items():
+        lordo = sum(valori[0] for valori in per_sc.values())
+        totale = aggrega_somme(per_sc.values())
         out.append({
-            campo: valore,
-            'lordo': round(lordo, 2),
-            'n_prenotazioni': len({x.codice_prenotazione for x in rr if x.codice_prenotazione}),
-            'n_righe': len(rr),
-            'pct_totale': round(lordo / totale_lordo * 100, 2) if totale_lordo else 0.0,
-            'per_struttura': per_struttura,
+            campo: v,
+            'lordo': totale['lordo'],
+            'n_prenotazioni': prenotazioni.get(v, 0),
+            'n_righe': totale['n_righe'],
+            'pct_totale': round(float(lordo / totale_lordo * 100), 2) if totale_lordo else 0.0,
+            'per_struttura': {sc: aggrega_somme([per_sc[sc]] if sc in per_sc else []) for sc in STRUTTURE_HOTEL},
         })
     out.sort(key=lambda x: -x['lordo'])
     return out
