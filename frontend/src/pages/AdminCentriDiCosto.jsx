@@ -16,6 +16,7 @@ export default function AdminCentriDiCosto() {
   const [formAperto, setFormAperto] = useState(null);
   const [formDati, setFormDati] = useState({ code: '', name: '' });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- caricamento solo all'apertura; caricaAlbero è ricreata a ogni disegno
   useEffect(() => { caricaAlbero(); }, []);
 
   async function caricaAlbero() {

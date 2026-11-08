@@ -311,7 +311,6 @@ function TabellaReparti({ hotelCode, anno, mese, meseFine, isAdmin, mostraDelta,
   if (!dati || !dati.reparti.length) return <StatoVuoto>Nessun dato per questo periodo.</StatoVuoto>
 
   const rev = dati.revenue_module
-  const deltaRev = mostraDelta && rev ? rev.revenue_totale : null
   const repartiCon = assegnaColori(dati.reparti.map(r => ({ ...r, nome_display: r.reparto })))
 
   return (

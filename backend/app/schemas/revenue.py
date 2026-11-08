@@ -1,6 +1,6 @@
 """Schemi Pydantic per validazione e serializzazione dei dati revenue e stagioni."""
 
-from datetime import date, datetime
+from datetime import date
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
@@ -86,41 +86,6 @@ class HotelSeasonRead(HotelSeasonBase):
 
 
 # ---------------------------------------------------------------------------
-# Revenue giornaliero
-# ---------------------------------------------------------------------------
-
-class RigaGiornaliera(BaseModel):
-    hotel_code: str
-    data: date
-    rooms_sold: int
-    rooms_available: int
-    pax: int
-    revenue_rooms: float
-    revenue_fnb: float
-    revenue_extra: float
-    revenue_total: float
-
-
-class KPIGiornalieri(BaseModel):
-    hotel_code: str
-    data: date
-    rooms_sold: int
-    rooms_available: int
-    revenue_rooms: float
-    revenue_fnb: float
-    revenue_extra: float
-    revenue_total: float
-    occupancy: Optional[float]
-    adr: Optional[float]
-    revpar: Optional[float]
-    trevpar: Optional[float]
-    rmc: Optional[float]
-    inc_fnb: Optional[float]
-    inc_rooms: Optional[float]
-    inc_extra: Optional[float]
-
-
-# ---------------------------------------------------------------------------
 # Report importazione
 # ---------------------------------------------------------------------------
 
@@ -167,24 +132,6 @@ class RisultatoUpload(BaseModel):
     anomalie: List[AnomaliaImport]
     warnings: List[str]        # date fuori stagione scartate con motivo
     messaggio: str
-
-
-class ImportSessionRead(BaseModel):
-    """Schema di lettura per una sessione di import registrata nel DB."""
-    id: int
-    hotel_code: str
-    snapshot_date: date
-    file1_nome: Optional[str]
-    file2_nome: Optional[str]
-    righe_lette: int
-    righe_inserite: int
-    righe_aggiornate: int
-    righe_scartate: int
-    anomalie: Optional[list]
-    stato: str
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
 
 
 class RisultatoBulk(BaseModel):

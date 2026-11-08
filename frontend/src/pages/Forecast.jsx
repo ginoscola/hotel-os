@@ -63,6 +63,7 @@ export default function Forecast() {
 
   useEffect(() => {
     if (tabAttiva === 'riepilogo') caricaSummary()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- si ricarica quando cambiano anno/hotel/tab, gli unici input di caricaSummary
   }, [anno, hotelSelezionato, tabAttiva])
 
   async function caricaSummary() {
@@ -362,6 +363,7 @@ function TabPace({ anno, hotels, hotelIniziale }) {
 
   useEffect(() => {
     if (hotelPace) caricaPace()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- si ricarica quando cambiano hotel/mese/anno, gli unici input di caricaPace
   }, [hotelPace, mesePace, anno])
 
   async function caricaPace() {
@@ -718,6 +720,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
     } finally {
       setCaricandoDati(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- paramsFiltri è ricostruito a ogni disegno: elencati qui i suoi singoli filtri
   }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
 
   const caricaTasso = useCallback(async () => {
@@ -727,6 +730,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
     } catch {
       setDatiTasso(null)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- paramsFiltri è ricostruito a ogni disegno: elencati qui i suoi singoli filtri
   }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
 
   const caricaRighe = useCallback(async () => {
@@ -736,6 +740,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
       })
       setRighe(r.data)
     } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- paramsFiltri è ricostruito a ogni disegno: elencati qui i suoi singoli filtri
   }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, ricerca, ordinaPer, direzione, pagina])
 
   useEffect(() => { caricaReport() }, [caricaReport])

@@ -36,6 +36,7 @@ export default function TabPenali({ refreshKey }) {
     } finally {
       setLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey NON è inutile: è il segnale del genitore per ricaricare dopo un import
   }, [page, filtri, refreshKey])
 
   useEffect(() => { carica() }, [carica])

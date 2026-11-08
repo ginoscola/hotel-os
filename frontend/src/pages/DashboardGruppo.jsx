@@ -21,6 +21,9 @@ const COLORE_TREVPAR = coloreSerie(0)
 const COLORE_REVPAR = coloreSerie(1)
 const COLORE_REVENUE = coloreSerie(2)
 const COLORE_OCCUPAZIONE = colors.info
+// Array vuoto condiviso per i dati mancanti: `x || []` ne creava uno nuovo a ogni disegno e
+// faceva ricalcolare inutilmente i useMemo che lo usano. Mai modificarlo sul posto.
+const VUOTO = []
 
 export default function DashboardGruppo() {
   const [modalita, setModalita] = useState(
@@ -263,7 +266,7 @@ function SezionePace() {
     return Object.values(perData).sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
   }, [dati])
 
-  const codiciHotel = dati ? dati.strutture.map(s => s.hotel_code) : []
+  const codiciHotel = useMemo(() => (dati ? dati.strutture.map(s => s.hotel_code) : VUOTO), [dati])
   const nessunDato = dati && chartData.length === 0
 
   // Vista indicizzata (base 100 alla prima snapshot disponibile per hotel): confronta la
@@ -338,8 +341,8 @@ function SezionePace() {
 function ContenutoDashboardGruppo({ dati, datiComp, compLabel, modalita, isAnnoPrecedente, settimanePerHotel = {}, snapshotDate }) {
   const kpi      = dati.kpi_gruppo
   const kpiComp  = datiComp?.kpi_gruppo || null
-  const contributi = dati.contributi || []
-  const settimane  = dati.settimane  || []
+  const contributi = dati.contributi || VUOTO
+  const settimane  = dati.settimane  || VUOTO
 
   function kpiDelta(key) { return calcolaDelta(kpi[key], kpiComp?.[key]) }
   function kpiCompV(key, fmt) { return kpiComp ? (kpiComp[key] != null ? fmt(kpiComp[key]) : '—') : null }

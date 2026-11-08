@@ -141,6 +141,7 @@ export default function TabRicaviCamere({ lordo }) {
       colFinali.forEach(c => { cols[c.key] += valore(r, c.key) })
     })
     return { tot: Math.round(tot * 100) / 100, cols }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- valore dipende solo da F e vista, già elencati
   }, [righeFiltrate, colFinali, F, vista])
 
   const cell = (v) => (!v ? <span style={{ color: colors.borderStrong }}>—</span> : formatEuro(Math.round(v * 100) / 100))

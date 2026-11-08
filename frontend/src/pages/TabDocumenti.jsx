@@ -118,6 +118,7 @@ function ModalModifica({ doc, tipo, onSalva, onChiudi }) {
         }
       }
     }).catch(e => setErr(mostraErrore(e)))
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- la finestra si ricrea per ogni documento (montata con {docMod && …}): doc non cambia
   }, [])
 
   if (!doc) return null
@@ -433,6 +434,7 @@ export default function TabDocumenti({ endpoint, tipo, lordo, refreshKey }) {
     } finally {
       setLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey NON è inutile: è il segnale del genitore per ricaricare dopo un import
   }, [endpoint, page, filtri, refreshKey])
 
   useEffect(() => { carica() }, [carica])

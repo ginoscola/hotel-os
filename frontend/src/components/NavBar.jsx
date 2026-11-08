@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { getUtenteCorrente } from './ProtectedRoute.jsx'
 import api from '../api/client.js'
 import { APP_VERSION } from '../version.js'

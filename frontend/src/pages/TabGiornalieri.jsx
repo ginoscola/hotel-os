@@ -215,17 +215,6 @@ export default function TabGiornalieri({ lordo }) {
   const byData = {}
   datiGG.forEach(g => { byData[g.data] = g })
 
-  const getStruttura = (data, sc) => {
-    const g = byData[data]
-    if (!g) return null
-    return g.strutture?.find(s => s.struttura_code === sc) || null
-  }
-
-  const getCat = (struttura, catKey, tipoKey) => {
-    if (!struttura) return 0
-    return struttura[tipoKey]?.[catKey] || 0
-  }
-
   const getTot = (struttura, tipoKey) => {
     if (!struttura) return 0
     if (tipoKey === 'tutti') return (struttura.scontrini?.totale || 0) + (struttura.fatture?.totale || 0)

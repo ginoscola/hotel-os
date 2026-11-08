@@ -44,6 +44,7 @@ function ModaleImport({ strutture, onChiudi, onImportato }) {
   useEffect(() => {
     setAnteprima(null)
     if (xlsx) caricaAnteprima('')
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- nuova anteprima solo quando cambiano i file; caricaAnteprima è ricreata a ogni disegno
   }, [xlsx, csv])
 
   async function conferma() {

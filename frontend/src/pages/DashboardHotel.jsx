@@ -62,6 +62,9 @@ function totaliAggregati(righe) {
 
 const HOTEL_CODES = ['CLB', 'DPH', 'INT']
 const HOTEL_NOMI = { CLB: 'Club Hotel', DPH: 'Hotel Du Parc', INT: 'Hotel International' }
+// Array vuoto condiviso per i dati mancanti: `x || []` ne creava uno nuovo a ogni disegno e
+// faceva ricalcolare inutilmente i useMemo che lo usano. Mai modificarlo sul posto.
+const VUOTO = []
 
 const MESI_IT = [
   'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -847,8 +850,8 @@ function ContenutoDashboard({
 }) {
   const kpi      = dati.kpi_stagione ?? {}
   const kpiComp  = datiComp?.kpi_stagione ?? null
-  const giorni   = dati.giorni || []
-  const settimane = dati.settimane || []
+  const giorni   = dati.giorni || VUOTO
+  const settimane = dati.settimane || VUOTO
   const refStart  = dati.settimana_ref_start || null
   const refEnd    = dati.settimana_ref_end || null
 
