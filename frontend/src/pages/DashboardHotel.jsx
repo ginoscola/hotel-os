@@ -12,12 +12,10 @@ import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import SpiegazioneWave from '../components/SpiegazioneWave.jsx'
 import TooltipConTotale from '../components/TooltipConTotale.jsx'
 import { useSnapshotConfronto } from '../hooks/useSnapshotConfronto.js'
-import {
-  formatEuro, formatPerc, formatN, formatData, addDays, calcolaDelta, mostraErrore,
-} from '../utils/format.js'
+import { formatEuro, formatPerc, formatN, formatData, addDays, calcolaDelta, mostraErrore, erroreDaSegnalare } from '../utils/format.js'
 import {
   Badge, Card, KpiTile, Loading, Messaggio, PageHeader, SegmentedControl, SezioneApribile, StatoVuoto,
-  Table, Td, Th,
+  Table, Td, Th, useAvvisi
 } from '../components/ui'
 import { colors, coloreSerie, COLORI_REVENUE, STILE_CONFRONTO } from '../styles/tokens.js'
 
@@ -226,6 +224,7 @@ function CelleAggregato({ m }) {
 }
 
 export default function DashboardHotel() {
+  const avvisi = useAvvisi()
   const { hotelCode } = useParams()
   const navigate = useNavigate()
   const [hotel, setHotel] = useState((hotelCode || 'CLB').toUpperCase())
@@ -257,9 +256,9 @@ export default function DashboardHotel() {
     setSnapIdx(0)
     api.get(`/snapshots/${hotel}`)
       .then(({ data }) => setSnapshots(data.snapshots || []))
-      .catch(() => setSnapshots([]))
+      .catch(e => { setSnapshots([]); const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
     setGiornalieriEspansi(false)   // sempre compresso all'apertura, come i "Dati mensili"
-  }, [hotel])
+  }, [hotel, avvisi])
 
   const currentSnap = snapshots[snapIdx] || null
 

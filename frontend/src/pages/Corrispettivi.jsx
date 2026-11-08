@@ -52,7 +52,7 @@ export default function Corrispettivi() {
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
-    api.get('/hotels/').then(r => setHotels(r.data)).catch(() => {})
+    api.get('/hotels/').then(r => setHotels(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
   }, [])
 
   const cambiaTab = (id) => {

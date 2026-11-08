@@ -94,9 +94,9 @@ export default function NavBar() {
   // Carica nome app, moduli e hotel dopo il login
   useEffect(() => {
     if (!utente) return
-    api.get('/config/app_name').then(({ data }) => setAppName(data.value)).catch(() => {})
-    api.get('/modules/').then(({ data }) => setModuli(data)).catch(() => {})
-    api.get('/hotels/').then(({ data }) => setHotels(data)).catch(() => {})
+    api.get('/config/app_name').then(({ data }) => setAppName(data.value)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
+    api.get('/modules/').then(({ data }) => setModuli(data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
+    api.get('/hotels/').then(({ data }) => setHotels(data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
   }, [utente])
 
   function handleLogout() {

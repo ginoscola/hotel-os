@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client.js'
-import { mostraErrore } from '../../utils/format.js'
+import { erroreDaSegnalare, mostraErrore } from '../../utils/format.js'
 import {
   Badge, Button, Card, KpiTile, Loading, Messaggio, Modal, PageHeader, SegmentedControl, SezioneApribile, Table, Td, Th,
   useAvvisi,
@@ -45,11 +45,11 @@ export default function AdminBackup() {
   const [erroreIstruzioni, setErroreIstruzioni] = useState(null)
 
   const carica = useCallback(() => {
-    api.get('/admin/backup/status').then(r => setStatus(r.data)).catch(() => {})
+    api.get('/admin/backup/status').then(r => setStatus(r.data)).catch(e => { const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
     api.get('/admin/backup/logs', { params: { limit: 30, esito: filtroEsito || undefined } })
-      .then(r => setLogs(r.data)).catch(() => {})
-    api.get('/admin/backup/files').then(r => setFiles(r.data)).catch(() => {})
-  }, [filtroEsito])
+      .then(r => setLogs(r.data)).catch(() => { /* stessa causa dello stato, già segnalata */ })
+    api.get('/admin/backup/files').then(r => setFiles(r.data)).catch(() => { /* stessa causa dello stato, già segnalata */ })
+  }, [filtroEsito, avvisi])
 
   useEffect(() => { carica() }, [carica])
 

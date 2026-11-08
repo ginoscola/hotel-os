@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import api from '../api/client.js'
 import { useAvvisi } from './ui'
+import { leggiErroreBlob, mostraErrore } from '../utils/format.js'
 
 /**
  * Pulsante di export con selezione formato (xlsx/csv/pdf).
@@ -28,8 +29,8 @@ export function ExportMenu({ url, nome, onClick, snapshot }) {
       a.download = `${nomeFile}.${formato}`
       a.click()
       URL.revokeObjectURL(href)
-    } catch {
-      avvisi.errore('Errore durante l\'export')
+    } catch (err) {
+      avvisi.errore(mostraErrore(await leggiErroreBlob(err), 'Errore durante l\'export'))
     } finally {
       setLoading(false)
     }

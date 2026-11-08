@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import api from '../api/client.js'
-import { formatData, formatEuro, formatPerc, formatN, mostraErrore } from '../utils/format.js'
+import { formatData, formatEuro, formatPerc, formatN, mostraErrore, erroreDaSegnalare } from '../utils/format.js'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import { ExportMenu } from '../components/ExportMenu.jsx'
 import SpiegazionePrevisione from '../components/SpiegazionePrevisione.jsx'
@@ -232,8 +232,9 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
         if (idx >= 0) return prev.map((s, i) => i === idx ? resp.data : s)
         return [...prev, resp.data].sort((a, b) => a.week_start.localeCompare(b.week_start))
       })
-    } catch {
+    } catch (e) {
       setSalvataggio(p => ({ ...p, [ws]: 'err' }))
+      avvisi.errore(mostraErrore(e, 'Salvataggio della settimana non riuscito'))
     }
   }
 
@@ -473,6 +474,7 @@ function TabInserimento({ hotel, anno, version, onVersionChange }) {
 // TAB 2 — Confronto Actual vs Budget
 // ─────────────────────────────────────────────────────────────────────────────
 function TabConfronto({ hotel, anno, version }) {
+  const avvisi = useAvvisi()
   const [dati, setDati] = useState(null)
   const [modalita, setModalita] = useState('settimanale')
   const [loading, setLoading] = useState(false)
@@ -484,9 +486,9 @@ function TabConfronto({ hotel, anno, version }) {
       : `/budget/${hotel}/${anno}/confronto?version=${version}`
     api.get(ep)
       .then(r => setDati(r.data))
-      .catch(() => setDati(null))
+      .catch(e => { setDati(null); const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
       .finally(() => setLoading(false))
-  }, [hotel, anno, version, modalita])
+  }, [hotel, anno, version, modalita, avvisi])
 
   const selettore = (
     <div style={{ marginBottom: 16 }}>
@@ -680,6 +682,7 @@ function RigaMeseProiezione({ etichetta, n, t, className }) {
 }
 
 function TabProiezione({ hotel, anno, version }) {
+  const avvisi = useAvvisi()
   const [dati, setDati] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -687,9 +690,9 @@ function TabProiezione({ hotel, anno, version }) {
     setLoading(true)
     api.get(`/budget/${hotel}/${anno}/proiezione?version=${version}`)
       .then(r => setDati(r.data))
-      .catch(() => setDati(null))
+      .catch(e => { setDati(null); const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
       .finally(() => setLoading(false))
-  }, [hotel, anno, version])
+  }, [hotel, anno, version, avvisi])
 
   if (loading) return <Loading />
   if (!dati) return <StatoVuoto>Nessun budget inserito per questo hotel/anno.</StatoVuoto>
@@ -829,6 +832,7 @@ function TabProiezione({ hotel, anno, version }) {
 // TAB 4 — Budget Gruppo
 // ─────────────────────────────────────────────────────────────────────────────
 function TabGruppo({ anno, version }) {
+  const avvisi = useAvvisi()
   const [conf, setConf] = useState(null)
   const [proj, setProj] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -841,8 +845,8 @@ function TabGruppo({ anno, version }) {
     ]).then(([r1, r2]) => {
       setConf(r1.data)
       setProj(r2.data)
-    }).catch(() => {}).finally(() => setLoading(false))
-  }, [anno, version])
+    }).catch(e => { const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) }).finally(() => setLoading(false))
+  }, [anno, version, avvisi])
 
   if (loading) return <Loading />
   if (!conf) return <StatoVuoto>Nessun dato di gruppo disponibile.</StatoVuoto>

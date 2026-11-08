@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api/client.js'
-import { formatEuro, formatDataIt, mostraErrore, oggiIso } from '../utils/format.js'
+import { formatEuro, formatDataIt, mostraErrore, oggiIso, erroreDaSegnalare } from '../utils/format.js'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ReferenceLine, ResponsiveContainer,
@@ -58,7 +58,7 @@ export default function Forecast() {
   const [errore, setErrore] = useState(null)
 
   useEffect(() => {
-    api.get('/hotels/').then(r => setHotels(r.data)).catch(() => {})
+    api.get('/hotels/').then(r => setHotels(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
   }, [])
 
   useEffect(() => {
@@ -140,6 +140,7 @@ function BadgeDelta({ pct }) {
 }
 
 function TabRiepilogo({ dati, caricando, errore, anno, hotelCode, hotels, onAggiornato }) {
+  const avvisi = useAvvisi()
   const [editCell, setEditCell] = useState(null)   // { mese, campo: 'budget'|'pickup' }
   const [editVal, setEditVal] = useState('')
   const [salvataggio, setSalvataggio] = useState({})
@@ -171,7 +172,8 @@ function TabRiepilogo({ dati, caricando, errore, anno, hotelCode, hotels, onAggi
       setSalvataggio(s => ({ ...s, [mese]: 'ok' }))
       setTimeout(() => setSalvataggio(s => { const c = { ...s }; delete c[mese]; return c }), 2000)
       onAggiornato()
-    } catch {
+    } catch (e) {
+      avvisi.errore(mostraErrore(e, 'Salvataggio del pickup non riuscito'))
       setSalvataggio(s => ({ ...s, [mese]: 'err' }))
       setTimeout(() => setSalvataggio(s => { const c = { ...s }; delete c[mese]; return c }), 3000)
     }
@@ -489,8 +491,8 @@ function TabMaturato({ anno, hotels, hotelSelezionato, onAggiornato }) {
         params: { anno, hotel_code: hotelSelezionato },
       })
       setLista(r.data)
-    } catch {}
-  }, [anno, hotelSelezionato])
+    } catch (e) { const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) }
+  }, [anno, hotelSelezionato, avvisi])
 
   useEffect(() => { caricaLista() }, [caricaLista])
 
@@ -695,7 +697,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
   useEffect(() => {
     api.get('/prenotazioni-cancellate/canali', {
       params: { anno, hotel_code: hotelFiltro, arrivo_da: arrivoDa || undefined, arrivo_a: arrivoA || undefined, prenotazione_da: prenotazioneDa || undefined, prenotazione_a: prenotazioneA || undefined },
-    }).then(r => setCanaliDisponibili(r.data.canali)).catch(() => {})
+    }).then(r => setCanaliDisponibili(r.data.canali)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
   }, [anno, hotelFiltro, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
 
   const paramsFiltri = {
@@ -728,7 +730,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
       const r = await api.get('/prenotazioni-cancellate/tasso-cancellazione', { params: paramsFiltri })
       setDatiTasso(r.data)
     } catch {
-      setDatiTasso(null)
+      setDatiTasso(null)   // errore già mostrato dal report caricato insieme (caricaReport)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- paramsFiltri è ricostruito a ogni disegno: elencati qui i suoi singoli filtri
   }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA])
@@ -739,7 +741,7 @@ function TabCancellazioni({ anno, hotelCode, hotels }) {
         params: { ...paramsFiltri, q: ricerca || undefined, ordina_per: ordinaPer, direzione, pagina, per_pagina: 20 },
       })
       setRighe(r.data)
-    } catch {}
+    } catch { /* errore già mostrato dal report caricato insieme (caricaReport) */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- paramsFiltri è ricostruito a ogni disegno: elencati qui i suoi singoli filtri
   }, [anno, hotelFiltro, canaliSelezionati, arrivoDa, arrivoA, prenotazioneDa, prenotazioneA, ricerca, ordinaPer, direzione, pagina])
 
@@ -1179,7 +1181,7 @@ function TabImportaCancellazioni() {
     try {
       const r = await api.get('/prenotazioni-cancellate/import/storico')
       setStorico(r.data)
-    } catch {}
+    } catch { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ }
   }, [])
 
   useEffect(() => { caricaStorico() }, [caricaStorico])

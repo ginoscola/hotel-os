@@ -6,10 +6,10 @@ import {
 import api from '../../api/client.js'
 import pastReferenceArea from '../../components/PastReferenceArea.jsx'
 import {
-  Badge, Card, KpiTile, Loading, SectionTitle, SegmentedControl, StatoVuoto, Table, Td, Th,
+  Badge, Card, KpiTile, Loading, SectionTitle, SegmentedControl, StatoVuoto, Table, Td, Th, useAvvisi
 } from '../../components/ui'
 import { colors } from '../../styles/tokens.js'
-import { formatEuro } from '../../utils/format.js'
+import { formatEuro, erroreDaSegnalare } from '../../utils/format.js'
 import { COLORE_ACTUAL, COLORE_BUDGET, NOTA_MESI, TREND, coloreSegno, conSegno, labelSettimana } from './helpers.js'
 
 const MESI = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
@@ -25,15 +25,16 @@ const pct = (v) => `${v.toFixed(1)}%`
 const conSegnoEuro = (v) => conSegno(v, formatEuro)
 
 function useRiepilogo(anno, version) {
+  const avvisi = useAvvisi()
   const [dati, setDati] = useState(null)
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     setLoading(true)
     api.get(`/budget-ristoranti/${anno}?version=${version}`)
       .then(r => setDati(r.data))
-      .catch(() => setDati(null))
+      .catch(e => { setDati(null); const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
       .finally(() => setLoading(false))
-  }, [anno, version])
+  }, [anno, version, avvisi])
   return { dati, loading }
 }
 

@@ -8,9 +8,9 @@ import { ExportMenu } from '../components/ExportMenu.jsx'
 import NavigazioneSnapshot from '../components/NavigazioneSnapshot.jsx'
 import pastReferenceArea from '../components/PastReferenceArea.jsx'
 import TooltipConTotale from '../components/TooltipConTotale.jsx'
-import { formatEuro, formatEuroK, formatPerc, formatN, formatData, addDays, calcolaDelta, mostraErrore } from '../utils/format.js'
+import { formatEuro, formatEuroK, formatPerc, formatN, formatData, addDays, calcolaDelta, mostraErrore, erroreDaSegnalare } from '../utils/format.js'
 import {
-  Card, Dot, KpiTile, Loading, Messaggio, NavMese, PageHeader, SegmentedControl, StatoVuoto, Table, Td, Th,
+  Card, Dot, KpiTile, Loading, Messaggio, NavMese, PageHeader, SegmentedControl, StatoVuoto, Table, Td, Th, useAvvisi
 } from '../components/ui'
 import { colors, coloreStruttura, coloreSerie, COLORI_REVENUE, STILE_CONFRONTO } from '../styles/tokens.js'
 
@@ -26,6 +26,7 @@ const COLORE_OCCUPAZIONE = colors.info
 const VUOTO = []
 
 export default function DashboardGruppo() {
+  const avvisi = useAvvisi()
   const [modalita, setModalita] = useState(
     () => localStorage.getItem(MODALITA_KEY) || 'settimana'
   )
@@ -63,11 +64,11 @@ export default function DashboardGruppo() {
   useEffect(() => {
     api.get('/settimane/gruppo')
       .then(({ data }) => setSettimane(data.settimane || []))
-      .catch(() => setSettimane([]))
+      .catch(() => setSettimane([]))   // errore già segnalato dall'elenco snapshot qui sotto (stessa causa)
     api.get('/dashboard/gruppo/snapshots')
       .then(({ data }) => setSnapshots(data.snapshots || []))
-      .catch(() => setSnapshots([]))
-  }, [])
+      .catch(e => { setSnapshots([]); const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
+  }, [avvisi])
 
   const currentWeek = settimane[weekIdx] || null
   const currentSnap = snapshots[snapIdx] || null

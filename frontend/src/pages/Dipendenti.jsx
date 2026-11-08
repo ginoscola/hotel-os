@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import api from '../api/client'
-import { formatEuro, formatPerc, mostraErrore, percentualiA100 } from '../utils/format'
+import { formatEuro, formatPerc, mostraErrore, percentualiA100, erroreDaSegnalare } from '../utils/format'
 import {
   Badge, Button, Card, Checkbox, Dot, DropZone, HotelTag, Input, KpiTile, Loading, Messaggio, PageHeader,
   SectionTitle, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
@@ -65,18 +65,19 @@ export default function Dipendenti() {
   useEffect(() => {
     api.get('/config/cc-colori/mappa').then(r => {
       aggiornaColoriCC(r.data)
-    }).catch(() => {})
-    api.get('/cost-centers/albero').then(r => setAlbero(r.data)).catch(() => {})
+    }).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
+    api.get('/cost-centers/albero').then(r => setAlbero(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
     // la lista dipendenti la carica l'effetto su annoAnagrafica (parte anche all'apertura)
     if (isAdmin()) {
-      api.get('/dipendenti/import/storico').then(r => setStorici(r.data)).catch(() => {})
+      api.get('/dipendenti/import/storico').then(r => setStorici(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
     }
   }, [])
 
   // Ricarica dipendenti quando cambia anno anagrafica
   useEffect(() => {
-    api.get('/dipendenti/', { params: { anno: annoAnagrafica } }).then(r => setDipendenti(r.data)).catch(() => {})
-  }, [annoAnagrafica])
+    api.get('/dipendenti/', { params: { anno: annoAnagrafica } }).then(r => setDipendenti(r.data))
+      .catch(e => { const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
+  }, [annoAnagrafica, avvisi])
 
   // Filtra dipendenti per testo di ricerca
   const dipendentiFiltrati = cercaDipendente.trim() === ''
@@ -126,8 +127,8 @@ export default function Dipendenti() {
       setUploadState({ stato: 'ok', messaggio: '', risultato: r.data })
       // Ricarica dati
       caricaReport()
-      api.get('/dipendenti/').then(r => setDipendenti(r.data)).catch(() => {})
-      api.get('/dipendenti/import/storico').then(r => setStorici(r.data)).catch(() => {})
+      api.get('/dipendenti/').then(r => setDipendenti(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
+      api.get('/dipendenti/import/storico').then(r => setStorici(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
     } catch (e) {
       setUploadState({ stato: 'errore', messaggio: mostraErrore(e, "Errore durante l'importazione"), risultato: null })
     }
@@ -553,7 +554,7 @@ function AnagraficaCard({ d, idx, anno, albero }) {
     if (espanso && ccDefaults === null) {
       api.get(`/dipendenti/${d.id}/centri-di-costo`)
         .then(r => setCcDefaults(r.data))
-        .catch(() => setCcDefaults([]))
+        .catch(e => { setCcDefaults([]); const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
     }
   }, [espanso, d.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -692,14 +693,15 @@ function CCDefaultView({ defaults, onEdit }) {
 // ─── PANEL MESI ANNO ──────────────────────────────────────────────────────────
 
 function MesiAnnoPanel({ dipendente, anno, albero }) {
+  const avvisi = useAvvisi()
   const [mesi, setMesi] = useState(null)
   const [meseAperto, setMeseAperto] = useState(null)
 
   useEffect(() => {
     api.get(`/dipendenti/${dipendente.id}/anno/${anno}`)
       .then(r => setMesi(r.data))
-      .catch(() => setMesi([]))
-  }, [dipendente.id, anno])
+      .catch(e => { setMesi([]); const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
+  }, [dipendente.id, anno, avvisi])
 
   if (mesi === null) return <Loading />
 
@@ -886,19 +888,7 @@ function CCSplitEditor({ dipendente, albero, onClose, onSaved, inline = false, m
         if (!inline) onClose()
       }
     } catch (err) {
-      console.error('Errore salvataggio CC:', err.response || err)
-      const detail = err.response?.data?.detail
-      let msg
-      if (Array.isArray(detail)) {
-        msg = detail.map(e => `${e.loc?.slice(-1)[0] ?? ''}: ${e.msg}`).join(' | ')
-      } else if (detail) {
-        msg = detail
-      } else if (err.response?.status) {
-        msg = `Errore ${err.response.status} — ${err.response.statusText || 'risposta non valida dal server'}`
-      } else {
-        msg = err.message || 'Errore di rete'
-      }
-      setErrore(msg)
+      setErrore(mostraErrore(err, 'Errore nel salvataggio'))   // legge anche gli errori di validazione (422)
     } finally {
       setSalvando(false)
     }
@@ -980,6 +970,7 @@ function IncidenzaBadge({ valore, suSfondoScuro = false }) {
 const MESI_BREVI = ['', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
 
 function AnalisiCC() {
+  const avvisi = useAvvisi()
   const annoCorrente = new Date().getFullYear()
   const [anno, setAnno] = useState(annoCorrente)
   const [confronta, setConfronta] = useState(false)
@@ -1025,7 +1016,7 @@ function AnalisiCC() {
         const tutteCategorie = new Set(r1.data.centri.filter(c => c.parent_name).map(c => c.parent_name))
         setCategorieSel(tutteCategorie)
       })
-      .catch(() => setErrore('Errore caricamento dati'))
+      .catch(e => setErrore(mostraErrore(e, 'Errore caricamento dati')))
       .finally(() => setCaricando(false))
   }, [anno, confronta, meseDaEff, meseAEff])
 
@@ -1493,7 +1484,7 @@ function AnalisiCC() {
               params.mese_a = meseAEff
               api.get('/dipendenti/report/annuale/dettaglio-cc', { params })
                 .then(r => setDettaglioDip(r.data))
-                .catch(() => setDettaglioDip([]))
+                .catch(e => { setDettaglioDip([]); const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
                 .finally(() => setDettaglioCaricando(false))
             }
 

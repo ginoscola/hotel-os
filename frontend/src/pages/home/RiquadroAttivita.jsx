@@ -8,6 +8,7 @@ import { Messaggio } from '../../components/ui'
 export default function RiquadroAttivita() {
   const [r, setR] = useState(null)
   useEffect(() => {
+    // Endpoint solo admin: per gli altri utenti l'errore (403) è previsto e il riquadro resta nascosto
     api.get('/attivita/riepilogo').then(x => setR(x.data)).catch(() => setR(null))
   }, [])
   if (!r || (!r.in_ritardo && !r.da_fare_7gg)) return null

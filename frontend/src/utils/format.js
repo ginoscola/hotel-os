@@ -92,8 +92,31 @@ export function percentualiA100(valori, decimali = 1) {
  */
 export function mostraErrore(e, fallback = 'Errore nel caricamento') {
   const debug = localStorage.getItem('debug_errori') === 'true'
-  const detail = e?.response?.data?.detail || e?.message || fallback
+  let detail = e?.response?.data?.detail || e?.message || fallback
   if (debug) return typeof detail === 'string' ? detail : JSON.stringify(detail)
+  // Errori di validazione del backend (422): elenco di { loc, msg } → "campo: messaggio | …"
+  if (Array.isArray(detail)) {
+    detail = detail.map(d => (d?.msg ? [d.loc?.slice(-1)[0], d.msg].filter(x => x != null && x !== '').join(': ') : ''))
+      .filter(Boolean).join(' | ')
+  }
   if (typeof detail !== 'string') return fallback
   return detail.split('\n')[0].split('[SQL:')[0].trim() || fallback
+}
+
+/** Come `mostraErrore`, ma `null` per il 404: molti endpoint rispondono 404 quando i dati non ci
+ *  sono ancora (es. budget non inserito) e la pagina mostra già "nessun dato". Usarla per i
+ *  caricamenti dei dati principali: `.catch(e => { const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })`. */
+/** Download (`responseType: 'blob'`): anche la risposta d'errore arriva come file, quindi il motivo
+ *  (JSON `{detail}`) va letto da lì prima di passarlo a `mostraErrore`. */
+export async function leggiErroreBlob(err) {
+  if (!(err?.response?.data instanceof Blob)) return err
+  try {
+    return { response: { status: err.response.status, data: JSON.parse(await err.response.data.text()) } }
+  } catch {
+    return {}   // non è JSON: mostraErrore userà il messaggio di ripiego
+  }
+}
+
+export function erroreDaSegnalare(e, fallback) {
+  return e?.response?.status === 404 ? null : mostraErrore(e, fallback)
 }

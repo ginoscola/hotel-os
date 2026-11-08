@@ -152,7 +152,14 @@ UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % 
 ## Utility frontend (format.js)
 - `formatEuro(v)`, `formatEuroK(v)` (≥1000 → "Xk €"), `formatEuroIntero(v)`, `formatPerc(v)`, `formatN(v)`, `formatData(iso)`, `addDays(isoDate, n)`, `isoLocale(date)`, `oggiIso()`, `calcolaDelta(val, ref)`
 - `percentualiA100(valori, decimali=1)` — percentuali di ripartizione che, arrotondate, sommano sempre esattamente 100 (metodo del resto maggiore). Usarla per ogni legenda/colonna "% sul totale" che l'utente usa per ripartire costi.
-- `mostraErrore(e)` — **OBBLIGATORIO in ogni catch block**. Se `localStorage('debug_errori')==='true'` → stack trace completo; altrimenti prima riga. **Mai** usare inline `e.response?.data?.detail || e.message`.
+- `mostraErrore(e)` — **OBBLIGATORIO in ogni catch block**. Se `localStorage('debug_errori')==='true'` → stack trace completo; altrimenti prima riga (legge anche gli errori di validazione 422, elenco `{loc,msg}`). **Mai** usare inline `e.response?.data?.detail || e.message`.
+  - `erroreDaSegnalare(e)` = `mostraErrore` ma `null` sul 404 (molti endpoint rispondono 404 per "nessun dato"): per i
+    caricamenti dei **dati principali** di una pagina → `if (m) avvisi.errore(m)`.
+  - `await leggiErroreBlob(e)` prima di `mostraErrore` nei **download** (`responseType: 'blob'`: il motivo è dentro il file).
+  - **Eccezioni ammesse (catch silenziosi), sempre con un commento che dice perché**: liste di supporto (tendine, nome app,
+    storico, conteggi test: l'errore lo segnala già il caricamento principale), caricamenti che falliscono per la stessa
+    causa di uno già segnalato, confronti opzionali che possono non esistere (snapshot/anno precedente), endpoint solo
+    admin chiamati anche per altri ruoli, letture di preferenze da `localStorage`, Login/Stampante RT con messaggi propri.
 - **Mai `toISOString()` per ricavare una data da un `Date` locale** (in Italia mezzanotte → giorno prima in UTC):
   usare `isoLocale(d)` / `oggiIso()` di `utils/format.js`. Bug reale in Budget e in altri 5 punti (corretti v4.30.11).
 - Mai leggere stato React dentro un `setTimeout` di debounce: usare un ref o passare il valore (bug reale in Budget).

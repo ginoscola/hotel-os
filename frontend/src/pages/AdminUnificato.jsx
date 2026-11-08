@@ -268,7 +268,7 @@ function GestioneStagioni() {
   const [loadingAnno, setLoadingAnno] = useState(false)
 
   useEffect(() => {
-    api.get('/hotels/').then(({ data }) => setHotels(data)).catch(() => {})
+    api.get('/hotels/').then(({ data }) => setHotels(data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
   }, [])
 
   useEffect(() => {
@@ -637,8 +637,8 @@ function DipColoriCC() {
   const avvisi = useAvvisi()
 
   useEffect(() => {
-    api.get('/cost-centers/albero').then(r => setAlbero(r.data)).catch(() => {})
-    api.get('/config/cc-colori/mappa').then(r => setColori(r.data)).catch(() => {})
+    api.get('/cost-centers/albero').then(r => setAlbero(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
+    api.get('/config/cc-colori/mappa').then(r => setColori(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
   }, [])
 
   const hexPerNome = (nome) => {
@@ -749,7 +749,7 @@ function DipDatiTest() {
   const conferma = useConferma()
 
   const carica = useCallback(async () => {
-    api.get('/dipendenti/admin/test-stats').then(r => setStats(r.data)).catch(() => {})
+    api.get('/dipendenti/admin/test-stats').then(r => setStats(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
   }, [])
 
   useEffect(() => { carica() }, [carica])

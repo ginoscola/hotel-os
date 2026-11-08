@@ -225,9 +225,9 @@ export default function TabGiornaliera({ lordo }) {
   const a = ultimoGiorno(anno, mese)
 
   useEffect(() => {
-    api.get('/produzione/categorie').then(r => setCategorie(r.data.filter(c => c.includi_report && c.attivo))).catch(() => {})
-    api.get('/produzione/canali/lista').then(r => setCanaliLista(r.data)).catch(() => {})
-    api.get('/produzione/trattamenti/lista').then(r => setTrattamentiLista(r.data)).catch(() => {})
+    api.get('/produzione/categorie').then(r => setCategorie(r.data.filter(c => c.includi_report && c.attivo))).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
+    api.get('/produzione/canali/lista').then(r => setCanaliLista(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
+    api.get('/produzione/trattamenti/lista').then(r => setTrattamentiLista(r.data)).catch(() => { /* lista di supporto: errore non mostrato (vedi CLAUDE.md, catch silenziosi) */ })
   }, [])
 
   const carica = useCallback(async () => {

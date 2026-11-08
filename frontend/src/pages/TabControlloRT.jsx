@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api/client'
-import { formatEuro, mostraErrore, addDays, oggiIso } from '../utils/format'
+import { formatEuro, mostraErrore, addDays, oggiIso, erroreDaSegnalare } from '../utils/format'
 import { isAdmin, fmtD, giornoSettimana } from '../utils/corrispettiviHelpers'
 import {
   Badge, Button, Card, Field, Input, Loading, Messaggio, Modal, NavMese, SegmentedControl, Select,
@@ -242,8 +242,8 @@ export default function TabControlloRT() {
   useEffect(() => {
     api.get(`/corrispettivi/rt-chiusure/riepilogo-stagione?anno=${anno}`)
       .then(r => setRiepilogoStagione(r.data))
-      .catch(() => setRiepilogoStagione(null))
-  }, [anno])
+      .catch(e => { setRiepilogoStagione(null); const m = erroreDaSegnalare(e); if (m) avvisi.errore(m) })
+  }, [anno, avvisi])
 
   const sommaMese = dati?.giorni ? {
     RT1: dati.giorni.reduce((s, g) => s + (g.rt1.delta ?? 0), 0),

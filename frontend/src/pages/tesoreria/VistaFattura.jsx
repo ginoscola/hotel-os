@@ -2,7 +2,7 @@
 // (quando è incorporato nell'XML, estratto al momento dallo ZIP originale). Usato da Fatture e da Admin → Spese straordinarie.
 import { useEffect, useState } from 'react'
 import api from '../../api/client.js'
-import { formatData, formatEuro, mostraErrore } from '../../utils/format.js'
+import { formatData, formatEuro, leggiErroreBlob, mostraErrore } from '../../utils/format.js'
 import { Button, Loading, Messaggio, Modal, SegmentedControl, StatoVuoto, Table, Td, Th } from '../../components/ui'
 import { scarica } from '../usaliContabile/helpers.jsx'
 
@@ -172,7 +172,7 @@ export default function VistaFattura({ id, onChiudi }) {
             ]} />
             {altri.map(a => (
               <Button key={a.indice} size="sm" variant="ghost"
-                onClick={() => scarica(`/tesoreria/fatture/${id}/allegati/${a.indice}`, {}, a.nome).catch(() => {})}>
+                onClick={() => scarica(`/tesoreria/fatture/${id}/allegati/${a.indice}`, {}, a.nome).catch(async e => setErrore(mostraErrore(await leggiErroreBlob(e), 'Download dell\'allegato non riuscito')))}>
                 Scarica allegato «{a.nome}»
               </Button>
             ))}
