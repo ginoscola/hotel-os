@@ -77,6 +77,10 @@ sviluppo usano lo **stesso venv** (`backend/venv`, vedi unit systemd). **Aggiorn
 lavoro a sé: cambiare la versione in `requirements.txt`, `pip install -r requirements.txt`, test
 completi, rigenerare il lock con le sole dipendenze di produzione (non `pip freeze` nudo: includerebbe
 gli strumenti di sviluppo), riavvio backend. `bcrypt` resta a 4.0.1 per compatibilità con passlib 1.7.4.
+Aggiornamento del 08/11/2026 (v4.30.10): pillow 12.3→13.0, pyasn1 0.6.4→0.6.5, dnspython 2.8→2.9.2
+per le vulnerabilità segnalate da pip-audit; provato prima in un venv separato (1000 test, lettura dei
+PDF reali di payroll/corrispettivi/TARI e 5 PDF generati: identici). Restano segnalati `python-jose` ed
+`ecdsa`, senza correzione e non sfruttabili qui (JWT HS256 con chiave segreta); passaggio a PyJWT da valutare.
 
 **Modelli e DB allineati (v4.30.9)**: indici e vincoli creati dalle migrazioni vanno dichiarati anche
 nel modello (`Index(...)` in `__table_args__`), altrimenti il DB di test (`create_all()`) ne è privo e i
