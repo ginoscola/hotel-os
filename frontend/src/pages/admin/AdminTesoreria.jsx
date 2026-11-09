@@ -571,7 +571,7 @@ export function AdminTesoreriaInterventi() {
       {visibili.length === 0 ? <StatoVuoto>Nessuna spesa straordinaria{annoFiltro !== 'tutti' ? ' in questo anno' : ''}</StatoVuoto> : (
         <Table compact>
           <thead>
-            <tr><Th>Anno</Th><Th>Descrizione</Th><Th>Struttura</Th><Th>Fornitore</Th><Th num>Importo (€)</Th><Th>Pagamenti</Th><Th>Stato</Th><Th center>In previsione</Th><Th num>Costo finora</Th><Th num>Ancora da coprire</Th><Th></Th></tr>
+            <tr><Th>Anno</Th><Th>Descrizione</Th><Th>Struttura</Th><Th title={AIUTO_FORNITORE_SPESA}>Fornitore principale</Th><Th num>Importo (€)</Th><Th>Pagamenti</Th><Th>Stato</Th><Th center>In previsione</Th><Th num>Costo finora</Th><Th num>Ancora da coprire</Th><Th></Th></tr>
           </thead>
           <tbody>
             {visibili.map(i => {
@@ -592,7 +592,7 @@ export function AdminTesoreriaInterventi() {
                       {STRUTTURE_INTERVENTO.map(s => <option key={s} value={s}>{s}</option>)}
                     </Select>
                   </Td>
-                  <Td><Input value={v.fornitore || ''} style={{ width: 150 }} onChange={e => set({ fornitore: e.target.value })} /></Td>
+                  <Td><Input value={v.fornitore || ''} style={{ width: 150 }} placeholder="facoltativo" title={AIUTO_FORNITORE_SPESA} onChange={e => set({ fornitore: e.target.value })} /></Td>
                   <Td num><Input value={v.importo_stimato ?? ''} inputMode="decimal" style={{ width: 100 }} onChange={e => set({ importo_stimato: e.target.value })} /></Td>
                   <Td style={{ whiteSpace: 'nowrap' }}>
                     <Button size="sm" variant="secondary" onClick={() => setRateDi(i.id)}>Rate ({i.rate.length})</Button>
@@ -1053,6 +1053,7 @@ export function AdminTesoreriaAdvertising() {
   )
 }
 
+const AIUTO_FORNITORE_SPESA = 'Facoltativo. Solo per lavori con una ditta principale: la finestra Fatture e pagamenti mostra prima le sue fatture e i suoi pagamenti. Lascialo vuoto se i fornitori sono tanti.'
 const ORIGINE_FATTURA = { passcom: 'Scadenzario', sdi: 'SDI' }
 
 /** Data salvata quando si esce dal campo o si preme Invio, non a ogni tasto: mentre si scrive l'anno il browser passa
