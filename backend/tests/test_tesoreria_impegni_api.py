@@ -236,3 +236,60 @@ def test_avviso_tari_sostituisce_la_stima(client):
     assert i[f"tari:{ANNO}:conguaglio:1"]["importo"] == 100
     assert i[f"tari:{ANNO}:conguaglio:1"]["fonte"] == "avviso"
     assert f"tari:{ANNO}:acconto" in i
+
+
+def _due_f24_e_credito(client):
+    """Due F24 manuali da 100 € (domani e fra 10 giorni) e 100 € di credito IVA: lo prende il primo."""
+    _parametri(client, crediti_iva=[{"importo": 100, "disponibile_dal": "2020-01-01"}])
+    domani = date.today() + timedelta(days=1)
+    a = client.post("/tesoreria/impegni", json={"descrizione": "F24 A", "data_scadenza": domani.isoformat(),
+                                               "importo": 100, "compensabile": True}).json()
+    b = client.post("/tesoreria/impegni", json={"descrizione": "F24 B", "data_scadenza": (domani + timedelta(days=10)).isoformat(),
+                                               "importo": 100, "compensabile": True}).json()
+    client.post("/tesoreria/impegni/genera")
+    i = {x["id"]: x for x in client.get("/tesoreria/impegni").json()["impegni"]}
+    assert i[a["id"]]["stato_vista"] == "coperto" and i[b["id"]]["da_pagare"] == 100
+    return a, b, domani
+
+
+def test_senza_credito_passa_il_credito_al_successivo(client):
+    a, b, _ = _due_f24_e_credito(client)
+    r = client.put(f"/tesoreria/impegni/{a['id']}", json={"senza_credito": True})
+    assert r.status_code == 200 and r.json()["senza_credito"] is True and r.json()["da_pagare"] == 100
+    i = {x["id"]: x for x in client.get("/tesoreria/impegni").json()["impegni"]}
+    assert i[b["id"]]["coperto_credito"] == 100 and i[b["id"]]["da_pagare"] == 0
+    # togliendo la spunta torna come prima
+    client.put(f"/tesoreria/impegni/{a['id']}", json={"senza_credito": False})
+    i = {x["id"]: x for x in client.get("/tesoreria/impegni").json()["impegni"]}
+    assert i[a["id"]]["coperto_credito"] == 100 and i[b["id"]]["coperto_credito"] == 0
+
+
+def test_senza_credito_solo_su_f24(client):
+    m = client.post("/tesoreria/impegni", json={"descrizione": "Bonifico", "data_scadenza": f"{ANNO}-01-10", "importo": 1}).json()
+    assert client.put(f"/tesoreria/impegni/{m['id']}", json={"senza_credito": True}).status_code == 400
+
+
+def test_f24_coperto_pagato_in_banca_proposto_e_conferma_libera_il_credito(client, test_engine):
+    a, b, domani = _due_f24_e_credito(client)
+    mov = _movimento(test_engine, "f24", domani + timedelta(days=1), Decimal("-100.00"))
+    assert client.post("/tesoreria/impegni/abbina").json()["proposti"] == 1    # mai automatico
+    i = {x["id"]: x for x in client.get("/tesoreria/impegni").json()["impegni"]}
+    assert i[a["id"]]["abbinamento"] == "proposto" and i[a["id"]]["movimento_id"] == mov
+    r = client.post(f"/tesoreria/impegni/{a['id']}/abbinamento", json={"azione": "conferma"})
+    assert r.json()[0]["stato"] == "pagato" and r.json()[0]["senza_credito"] is True
+    i = {x["id"]: x for x in client.get("/tesoreria/impegni").json()["impegni"]}
+    assert i[b["id"]]["coperto_credito"] == 100
+
+
+def test_conferma_con_credito_usato_non_spunta(client, test_engine):
+    """Addebito pari al netto del credito: lo studio l'ha usato, la casella resta vuota."""
+    _parametri(client, crediti_iva=[{"importo": 40, "disponibile_dal": "2020-01-01"}])
+    domani = date.today() + timedelta(days=1)
+    a = client.post("/tesoreria/impegni", json={"descrizione": "F24", "data_scadenza": domani.isoformat(),
+                                               "importo": 100, "compensabile": True}).json()
+    client.post("/tesoreria/impegni/genera")
+    _movimento(test_engine, "f24", domani, Decimal("-60.00"))
+    assert client.post("/tesoreria/impegni/abbina").json()["automatici"] == 1
+    _movimento(test_engine, "f24", domani, Decimal("-1.00"))   # non tocca l'impegno già pagato
+    i = {x["id"]: x for x in client.get("/tesoreria/impegni").json()["impegni"]}
+    assert i[a["id"]]["stato"] == "pagato" and i[a["id"]]["senza_credito"] is False

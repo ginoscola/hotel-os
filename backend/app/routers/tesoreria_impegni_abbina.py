@@ -5,6 +5,9 @@
 - Affitti: controparte e importo esatto chiudono da soli; solo uno dei due → proposto (pagamenti parziali o nomi diversi).
 - Compensi dei soci: di solito due bonifici lo stesso giorno, quindi conta la somma del giorno.
 - Mutuo: importo esatto vicino alla scadenza. Ricorrenti: stessa categoria, sempre proposti se l'importo varia.
+- F24 coperti dal credito IVA (da pagare 0): un addebito F24 vicino alla scadenza viene solo proposto, confrontato con
+  l'importo senza credito IVA (lo studio può decidere di pagarli e tenersi il credito). Confermandolo si spunta
+  `senza_credito` (`segna_pagati_senza_credito()`).
 Chiude da solo solo l'importo esatto: le stime non coincidono quasi mai. Le scelte dell'utente non cambiano.
 """
 
@@ -43,6 +46,23 @@ def _movimenti(db: Session, categoria_filtro, giorno, finestra) -> list:
         TesoreriaMovimento.data_contabile >= giorno - timedelta(days=prima),
         TesoreriaMovimento.data_contabile <= giorno + timedelta(days=dopo),
     ).all()
+
+
+def _da_pagare(impegni, con_credito_iva=True) -> Decimal:
+    return sum((max(importo_impegno(i) - (i.coperto_credito if con_credito_iva else ZERO) - i.coperto_altri, ZERO)
+                for i in impegni), ZERO)
+
+
+def segna_pagati_senza_credito(db: Session, gruppo: list) -> None:
+    """Conferma di un addebito F24: se supera quanto previsto al netto del credito IVA, lo studio non l'ha usato
+    (in tutto o in parte) → `senza_credito` sugli impegni che il credito copriva, così il credito resta per i
+    successivi."""
+    movimento = db.get(TesoreriaMovimento, gruppo[0].movimento_id) if gruppo and gruppo[0].movimento_id else None
+    if movimento is None or -movimento.importo <= _da_pagare(gruppo) + Decimal("0.01"):
+        return
+    for g in gruppo:
+        if g.compensabile and g.coperto_credito > 0:
+            g.senza_credito, g.coperto_credito = True, ZERO
 
 
 def _segna(impegni, movimento_id, tipo, esito):
@@ -153,8 +173,14 @@ def abbina_impegni(db: Session) -> dict:
         finestra = FINESTRA_TASSA if categoria == "tassa_soggiorno" else FINESTRA_F24
         candidati = [(m.id, -m.importo, abs((m.data_contabile - giorno).days))
                      for m in _movimenti(db, TesoreriaCategoria.codice == categoria, giorno, finestra) if m.id not in usati]
-        da_pagare = sum((max(importo_impegno(i) - i.coperto_credito - i.coperto_altri, ZERO) for i in impegni), ZERO)
-        scelta = abbina_gruppo(da_pagare, candidati) if da_pagare > 0 else None
+        da_pagare = _da_pagare(impegni)
+        if da_pagare > 0:
+            scelta = abbina_gruppo(da_pagare, candidati)
+        else:
+            # Tutto coperto dal credito: un addebito qui vuol dire che lo studio ha pagato senza usarlo → solo proposto
+            lordo = _da_pagare(impegni, con_credito_iva=False)
+            scelta = abbina_gruppo(lordo, candidati) if lordo > 0 else None
+            scelta = (scelta[0], "proposto") if scelta else None
         if scelta:
             usati.add(scelta[0])
             _segna(impegni, scelta[0], scelta[1], esito)

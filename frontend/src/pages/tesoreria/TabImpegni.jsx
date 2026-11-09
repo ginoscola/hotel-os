@@ -22,10 +22,12 @@ function ModaleModifica({ impegno, onChiudi, onSalvato }) {
   const [importo, setImporto] = useState(impegno.importo_confermato ?? '')
   const [data, setData] = useState(impegno.data_scadenza)
   const [nota, setNota] = useState(impegno.nota || '')
+  const [senzaCredito, setSenzaCredito] = useState(impegno.senza_credito)
   const avvisi = useAvvisi()
 
   async function salva(extra = {}) {
     const corpo = { nota, ...extra }
+    if (impegno.compensabile && senzaCredito !== impegno.senza_credito) corpo.senza_credito = senzaCredito
     if (!extra.togli_conferma && importo !== '') corpo.importo_confermato = String(importo).replace(',', '.')
     if (!extra.ripristina_data && data !== impegno.data_scadenza) corpo.data_scadenza = data
     try { await api.put(`/tesoreria/impegni/${impegno.id}`, corpo); onSalvato() } catch (e) { avvisi.errore(mostraErrore(e)) }
@@ -47,6 +49,15 @@ function ModaleModifica({ impegno, onChiudi, onSalvato }) {
         <Field label="Scadenza"><Input type="date" value={data} onChange={e => setData(e.target.value)} /></Field>
         {impegno.data_manuale && impegno.fonte !== 'manuale' && (
           <div><Button size="sm" variant="secondary" onClick={() => salva({ ripristina_data: true })}>Torna alla data prevista</Button></div>
+        )}
+        {impegno.compensabile && (
+          <div>
+            <Checkbox label="Pagare senza usare il credito IVA" checked={senzaCredito} onChange={setSenzaCredito} />
+            <p className="ui-text-muted" style={{ marginTop: 4 }}>
+              Se lo studio paga questo F24 e tiene il credito per dopo: l'importo resta da pagare e il credito passa agli F24
+              successivi. Gli altri crediti stimati (rimborsi e conguagli dei dipendenti) restano.
+            </p>
+          </div>
         )}
         <Field label="Nota"><Input value={nota} onChange={e => setNota(e.target.value)} /></Field>
       </div>
@@ -201,7 +212,10 @@ export default function TabImpegni({ permessi }) {
                       <Td num>{formatEuro(i.importo)}</Td>
                       <Td num>{i.coperto_credito + i.coperto_altri > 0 ? formatEuro(i.coperto_credito + i.coperto_altri) : '—'}</Td>
                       <Td num tot>{formatEuro(i.stato === 'pagato' ? 0 : i.da_pagare)}</Td>
-                      <Td><Badge tono={tono}>{nome}</Badge></Td>
+                      <Td>
+                        <Badge tono={tono}>{nome}</Badge>
+                        {i.senza_credito && <> <Badge tono="neutral" title="Pagato senza usare il credito IVA">senza credito</Badge></>}
+                      </Td>
                       <Td><span className="ui-text-muted">{i.base_stima || ''}</span></Td>
                       <Td style={{ whiteSpace: 'nowrap' }}>
                         {permessi?.puo_modificare && <>

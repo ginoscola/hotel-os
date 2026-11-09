@@ -1275,6 +1275,17 @@ Passcom dalle fatture trovate nello scadenzario attuale). Due viste:
   (`FORMATI_IN_LINEA`), il resto (testi, ZIP, XML, HTML) come `attachment` `application/octet-stream` + `nosniff`, perché l'HTML
   di un fornitore aperto in linea verrebbe eseguito. ZIP originale cancellato → `allegati_non_disponibili`.
 
+### F24 pagato senza usare il credito IVA (09/11/2026, v4.35.0)
+Richiesta dell'utente: lo studio può decidere di pagare un F24 e tenersi il credito per dopo.
+- Colonna `tesoreria_impegni.senza_credito` (`tes021_2026`), casella in Impegni → **Modifica** (solo impegni `compensabile`,
+  altrimenti 400), etichetta "senza credito" nella riga. `ricalcola_credito()` non dà il **credito IVA** a quegli impegni,
+  che passa agli F24 successivi; gli **altri crediti** stimati (`coperto_altri`) restano (scelta dell'utente).
+- **Banca**: un gruppo F24 tutto coperto (da pagare 0) prima non cercava addebiti; ora un addebito F24 nella finestra viene
+  **proposto** (mai automatico) confrontandolo con l'importo senza credito IVA. Alla conferma
+  (`segna_pagati_senza_credito()`): se l'addebito supera il netto del credito, `senza_credito` si spunta da solo.
+- ⚠️ Il residuo del credito in Dati fiscali resta da aggiornare a mano dalle quietanze: il ricalcolo guarda solo gli
+  impegni da oggi in poi, quindi il credito usato sugli F24 passati non viene scalato.
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**

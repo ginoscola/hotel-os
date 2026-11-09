@@ -22,7 +22,7 @@ from app.database import get_db
 from app.models.revenue import AppConfig, User
 from app.models.tesoreria import TesoreriaImpegno
 from app.routers.dipendenti import costi_f24_per_mese
-from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno
+from app.routers.tesoreria_impegni_abbina import abbina_impegni, importo_impegno, segna_pagati_senza_credito
 from app.routers.tesoreria_import import _leggi_anteprima, _pulisci_anteprime_scadute
 from app.routers.tesoreria_iva import iva_mesi_conclusi
 from app.routers.tesoreria_kpi import _tassa_incassata_per_mese
@@ -136,7 +136,8 @@ def ricalcola_credito(db: Session, oggi: date) -> Optional[Decimal]:
             i.coperto_altri = max(min(importo_impegno(i), disponibile), ZERO)
             usati[chiave] = usati.get(chiave, ZERO) + i.coperto_altri
     coperti, residuo = simula_credito(
-        [(i.id, i.data_scadenza, importo_impegno(i) - i.coperto_altri, i.compensabile) for i in impegni], _tranche(parametri),
+        [(i.id, i.data_scadenza, importo_impegno(i) - i.coperto_altri, i.compensabile and not i.senza_credito)
+         for i in impegni], _tranche(parametri),
     )
     for i in impegni:
         i.coperto_credito = coperti.get(i.id, ZERO)
@@ -152,7 +153,7 @@ def _json(i: TesoreriaImpegno) -> dict:
         "importo_stimato": euro(i.importo_stimato), "importo_confermato": euro(i.importo_confermato),
         "importo": euro(importo), "coperto_credito": euro(i.coperto_credito), "coperto_altri": euro(i.coperto_altri),
         "da_pagare": euro(max(importo - i.coperto_credito - i.coperto_altri, ZERO)), "base_stima": i.base_stima,
-        "compensabile": i.compensabile, "stato": i.stato, "stato_vista": "coperto" if coperto else i.stato,
+        "compensabile": i.compensabile, "senza_credito": i.senza_credito, "stato": i.stato, "stato_vista": "coperto" if coperto else i.stato,
         "movimento_id": i.movimento_id, "abbinamento": i.abbinamento, "nota": i.nota,
     }
 
@@ -212,6 +213,7 @@ class ImpegnoModifica(BaseModel):
     data_scadenza: Optional[date] = None
     ripristina_data: bool = False
     nota: Optional[str] = None
+    senza_credito: Optional[bool] = None       # F24 pagato senza usare il credito IVA
 
 
 class AzioneAbbinamento(BaseModel):
@@ -321,6 +323,12 @@ def modifica_impegno(impegno_id: int, corpo: ImpegnoModifica, db: Session = Depe
         i.data_scadenza, i.data_manuale = corpo.data_scadenza, True
     if corpo.nota is not None:
         i.nota = corpo.nota or None
+    if corpo.senza_credito is not None:
+        if corpo.senza_credito and not i.compensabile:
+            raise HTTPException(400, "Questo impegno non si paga con F24: il credito IVA non lo copre comunque")
+        i.senza_credito = corpo.senza_credito
+        if i.senza_credito:
+            i.coperto_credito = ZERO     # anche se già scaduto (il ricalcolo guarda solo da oggi in poi)
     i.utente_id = getattr(utente, "id", None)
     db.flush()
     ricalcola_credito(db, date.today())
@@ -351,12 +359,16 @@ def scegli_abbinamento(impegno_id: int, corpo: AzioneAbbinamento, db: Session = 
     # Un addebito chiude tutti gli F24 della stessa scadenza: la scelta vale per l'intero gruppo
     gruppo = [i] if i.movimento_id is None else db.query(TesoreriaImpegno).filter(
         TesoreriaImpegno.movimento_id == i.movimento_id).all()
+    if corpo.azione == "conferma":
+        segna_pagati_senza_credito(db, gruppo)
     for g in gruppo:
         if corpo.azione == "conferma":
             g.abbinamento, g.stato = "confermato", "pagato"
         else:
             g.movimento_id, g.abbinamento = None, "scartato" if corpo.azione == "scarta" else None
             g.stato = "confermato" if g.importo_confermato is not None else "stimato"
+    db.flush()
+    ricalcola_credito(db, date.today())
     db.commit()
     return [_json(g) for g in gruppo]
 
