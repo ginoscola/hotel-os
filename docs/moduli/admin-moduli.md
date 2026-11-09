@@ -6,6 +6,12 @@ Tabelle: `modules` (code PK, name, icon, route, ordine, attivo, colore), `module
 NavBar L1: tab moduli da `GET /modules/`; L2: sotto-nav del modulo attivo.
 Su schermi ≤ 768 px (cellulare, v4.32.0) L1 mostra solo logo e pulsante ☰, che apre un menu a tendina con moduli, Admin e
 utente/Esci (si chiude al cambio pagina); L2 scorre in orizzontale. Regole solo in `@media` di `NavBar.css`: il computer non cambia.
+Stile (v4.34.0, "F6"): L1 a tasti a tutta altezza (64 px) separati dal fondo scuro `--color-nav-fondo`, **senza icone**;
+ogni tasto ha in basso una striscia del colore del modulo (`modules.colore`, passato come variabile CSS `--c`), l'attivo è
+bianco con riga in alto del colore e si unisce alla L2 chiara (46 px, voce attiva sottolineata). Logo grande con nome e
+versione sotto; blocco utente con nome e ruolo. Sotto 1360 px i tasti si stringono, sotto 1100 px spariscono nome app e
+utente. I nomi dei moduli in `modules.name` sono con la sola iniziale maiuscola (es. "Statistiche occupazione"):
+il menu li mostra così come sono, quindi un nuovo modulo va scritto allo stesso modo.
 Permessi: al login → `localStorage['moduli_permessi']`; ProtectedRoute verifica `puo_vedere`.
 **Permessi lato backend per modulo** (`app/permessi.py`, ottobre 2026): `permessi_modulo(db, utente,
 modulo)` è l'unica implementazione delle regole (admin sempre tutto; modulo disattivato = niente per

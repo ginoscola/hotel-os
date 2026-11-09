@@ -9,6 +9,8 @@ export const colors = {
   primaryHover:  '#16304f',
   primaryStrong: '#152a45', // intestazioni colonne totali
   primarySoft:   '#e8eef6', // sfondi selezionati / evidenziati tenui
+  navFondo:      '#0f2238', // NavBar: fondo scuro tra i tasti (solo NavBar.css)
+  navHover:      '#274a73', // NavBar: tasto al passaggio del mouse
 
   // Scala di grigi unica (slate) — non usare la famiglia "gray" (#6b7280, #374151, ...)
   text:        '#1e293b', // testo principale

@@ -12,6 +12,8 @@
   --color-primary-strong: #152a45;
   --color-primary-soft: #e8eef6;
   --color-primary-light: #2d4f7c; /* seconda riga di intestazioni a due livelli */
+  --color-nav-fondo: #0f2238;   /* NavBar: fondo scuro che fa da separatore tra i tasti */
+  --color-nav-hover: #274a73;   /* NavBar: tasto modulo al passaggio del mouse */
 
   --color-text: #1e293b;
   --color-text-strong: #0f172a;

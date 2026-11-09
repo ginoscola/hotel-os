@@ -122,11 +122,13 @@ export default function NavBar() {
         {/* Brand */}
         <NavLink to="/home" className="navbar-brand">
           <img src="/hotelos-icon.svg" alt="HotelOS" className="navbar-brand-logo" />
-          {appName}
-          <span className="navbar-version">v{APP_VERSION}</span>
+          <span className="navbar-brand-nome">
+            {appName}
+            <span className="navbar-version">v{APP_VERSION}</span>
+          </span>
         </NavLink>
 
-        {/* Tab moduli */}
+        {/* Tab moduli: tasti a tutta altezza, striscia in basso del colore del modulo (--c) */}
         <div className="navbar-moduli">
           {moduli.map(m => (
             <NavLink
@@ -135,12 +137,9 @@ export default function NavBar() {
               className={({ isActive }) =>
                 ['navbar-modulo', codiceAttivo === m.code ? 'navbar-modulo--active' : ''].filter(Boolean).join(' ')
               }
-              style={codiceAttivo === m.code && m.colore
-                ? { borderBottomColor: m.colore, color: '#fff' }
-                : {}}
+              style={m.colore ? { '--c': m.colore } : undefined}
             >
-              <span className="navbar-modulo-icon">{m.icon}</span>
-              <span className="navbar-modulo-name">{m.name}</span>
+              {m.name}
             </NavLink>
           ))}
         </div>
@@ -148,13 +147,13 @@ export default function NavBar() {
         {/* Utente */}
         <div className="navbar-user">
           {isAdmin && (
-            <Link to="/admin" className="navbar-admin-link">
-              ⚙ Admin
-            </Link>
+            <Link to="/admin" className="navbar-tasto navbar-admin-link">Admin</Link>
           )}
-          <span className="navbar-username">{utente.username}</span>
-          <span className={`navbar-badge navbar-badge--${utente.ruolo}`}>{utente.ruolo}</span>
-          <button className="navbar-logout" onClick={handleLogout}>Esci</button>
+          <span className="navbar-chi">
+            {utente.username}
+            <small>{isAdmin ? 'Amministratore' : 'Sola lettura'}</small>
+          </span>
+          <button className="navbar-tasto navbar-logout" onClick={handleLogout}>Esci</button>
         </div>
 
         {/* Cellulare: moduli e utente in un menu a tendina (visibile solo su schermi stretti, vedi NavBar.css) */}
@@ -168,14 +167,14 @@ export default function NavBar() {
             <Link key={m.code} to={m.route || '/'} onClick={() => setMenuAperto(false)}
               className={['navbar-mobile-voce', codiceAttivo === m.code ? 'navbar-mobile-voce--active' : ''].filter(Boolean).join(' ')}
               style={codiceAttivo === m.code && m.colore ? { borderLeftColor: m.colore } : {}}>
-              <span className="navbar-modulo-icon">{m.icon}</span> {m.name}
+              {m.name}
             </Link>
           ))}
-          {isAdmin && <Link to="/admin" className="navbar-mobile-voce navbar-mobile-admin" onClick={() => setMenuAperto(false)}>⚙ Admin</Link>}
+          {isAdmin && <Link to="/admin" className="navbar-mobile-voce navbar-mobile-admin" onClick={() => setMenuAperto(false)}>Admin</Link>}
           <div className="navbar-mobile-utente">
             <span className="navbar-username">{utente.username}</span>
-            <span className={`navbar-badge navbar-badge--${utente.ruolo}`}>{utente.ruolo}</span>
-            <button className="navbar-logout" onClick={handleLogout}>Esci</button>
+            <span className="navbar-mobile-ruolo">{isAdmin ? 'Amministratore' : 'Sola lettura'}</span>
+            <button className="navbar-mobile-esci" onClick={handleLogout}>Esci</button>
           </div>
         </nav>
       )}
