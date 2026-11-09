@@ -74,7 +74,16 @@ CATALOGO = [
              parti=("disdetta", "non_disdetta"), link="/forecast", nota="Forecast → Importa Welcome, due file."),
     Attivita("previsione", "Salva previsione di cassa", "Tesoreria", "mensile", giorno=5, link="/tesoreria",
              nota="Si salva da sola al primo estratto conto che arriva a fine mese prima; altrimenti Previsione → Salva previsione."),
-    Attivita("passcom", "Scadenzario fornitori Passcom", "Tesoreria", "mensile", giorno=5, link="/tesoreria"),
+    Attivita("passcom", "Scadenzario fornitori Passcom", "Tesoreria", "mensile", giorno=5, link="/tesoreria",
+             nota="Dove: Passcom → stampa «Scadenzario fornitori» (modulo SCADDOC), con le selezioni memorizzate. "
+                  "Filtri: «Stato rata» VUOTO (= solo rate da pagare; con «P» esce il file delle pagate, che HotelOS "
+                  "rifiuta). Le date di scadenza Da/A non contano: Passcom mostra comunque solo l'anno contabile "
+                  "aperto, quindi si possono lasciare vuote. Esporta in Excel: esce un file .xml (non .xlsx), da "
+                  "caricare così com'è. Dove va: Tesoreria → Import e saldi → Scadenzario fornitori (Passcom); la "
+                  "data della fotografia è la «Data di stampa» del file. Ogni caricamento è la fotografia dei debiti "
+                  "aperti a quella data e diventa il riferimento per Scadenzario, Fatture e Previsione. A inizio anno, "
+                  "quando lo studio apre il nuovo anno contabile, può servire scaricarlo per entrambi gli anni: "
+                  "chiedere a Claude. Fatta se nel mese è stato caricato uno scadenzario."),
     Attivita("fatture_ade", "ZIP fatture ricevute dall'AdE (mese prima)", "Tesoreria", "mensile", giorno=5,
              link="/tesoreria",
              nota="Portale Fatture e Corrispettivi: Ricevute, data di ricezione, mese intero. Fatta se è caricato "
