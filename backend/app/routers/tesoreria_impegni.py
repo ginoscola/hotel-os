@@ -53,7 +53,9 @@ PARAMETRI_DEFAULT = {
     "fissi": [],                           # [{codice, descrizione, mese, giorno, importo}]
     "crediti_iva": [],                     # [{importo, disponibile_dal, anticipabile_dal?}]
     "altri_crediti_f24": {},               # {'AAAA-MM' di versamento: 1701, 1704, 1631... dalle quietanze}
+    "credito_iva_aggiornamenti": [],       # date ISO in cui sono stati cambiati i crediti IVA (residuo dal gestionale)
 }
+MAX_AGGIORNAMENTI_CREDITO = 36
 
 
 def leggi_parametri(db: Session) -> dict:
@@ -236,9 +238,11 @@ def lista_impegni(data_da: Optional[date] = Query(None), data_a: Optional[date] 
     if tipo:
         q = q.filter(TesoreriaImpegno.tipo == tipo)
     righe = q.order_by(TesoreriaImpegno.data_scadenza, TesoreriaImpegno.codice).all()
+    parametri = leggi_parametri(db)
     return {
         "impegni": [_json(i) for i in righe],
-        "credito_iva_previsto": euro(sum((_dec(c["importo"]) for c in leggi_parametri(db)["crediti_iva"]), ZERO)),
+        "credito_iva_previsto": euro(sum((_dec(c["importo"]) for c in parametri["crediti_iva"]), ZERO)),
+        "credito_iva_aggiornato_al": max(parametri["credito_iva_aggiornamenti"], default=None),
         "totale": euro(sum((importo_impegno(i) for i in righe), ZERO)),
         "coperto_credito": euro(sum((i.coperto_credito for i in righe), ZERO)),
         "coperto_altri": euro(sum((i.coperto_altri for i in righe), ZERO)),
@@ -256,7 +260,15 @@ def put_parametri(corpo: dict, db: Session = Depends(get_db), _=Depends(puo_modi
     sconosciute = set(corpo) - set(PARAMETRI_DEFAULT)
     if sconosciute:
         raise HTTPException(400, f"Parametri sconosciuti: {', '.join(sorted(sconosciute))}")
-    parametri = {**leggi_parametri(db), **corpo}
+    prima = leggi_parametri(db)
+    parametri = {**prima, **corpo}
+    # Residuo del credito aggiornato a mano ogni mese: si tiene la data (avviso se vecchio, attività ricorrente fatta)
+    if parametri["crediti_iva"] != prima["crediti_iva"]:
+        oggi = date.today().isoformat()
+        storico = [d for d in prima["credito_iva_aggiornamenti"] if d != oggi] + [oggi]
+        parametri["credito_iva_aggiornamenti"] = storico[-MAX_AGGIORNAMENTI_CREDITO:]
+    else:
+        parametri["credito_iva_aggiornamenti"] = prima["credito_iva_aggiornamenti"]
     riga = db.query(AppConfig).filter(AppConfig.key == CHIAVE_PARAMETRI).first()
     if riga:
         riga.value = json.dumps(parametri)

@@ -293,3 +293,14 @@ def test_conferma_con_credito_usato_non_spunta(client, test_engine):
     _movimento(test_engine, "f24", domani, Decimal("-1.00"))   # non tocca l'impegno già pagato
     i = {x["id"]: x for x in client.get("/tesoreria/impegni").json()["impegni"]}
     assert i[a["id"]]["stato"] == "pagato" and i[a["id"]]["senza_credito"] is False
+
+
+def test_data_aggiornamento_credito_solo_se_cambia(client):
+    _parametri(client, crediti_iva=[{"importo": 100, "disponibile_dal": "2020-01-01"}])
+    assert client.get("/tesoreria/impegni").json()["credito_iva_aggiornato_al"] == date.today().isoformat()
+    # salvare altro (stessi crediti) non cambia lo storico; il campo inviato dal client viene ignorato
+    r = client.put("/tesoreria/impegni/parametri", json={"giorno_tassa_soggiorno": 16, "credito_iva_aggiornamenti": ["2000-01-01"]})
+    assert r.json()["credito_iva_aggiornamenti"] == [date.today().isoformat()]
+    # stesso giorno, nuovo importo: una sola data
+    r = client.put("/tesoreria/impegni/parametri", json={"crediti_iva": [{"importo": 80, "disponibile_dal": "2020-01-01"}]})
+    assert r.json()["credito_iva_aggiornamenti"] == [date.today().isoformat()]

@@ -41,6 +41,7 @@ from app.models.tesoreria import (TesoreriaConto, TesoreriaFattureImport, Tesore
                                   TesoreriaSaldo, TesoreriaScadImport)
 from app.models.usali import UsaliFnbCoperti
 from app.models.usali_contabile import UsaliImport
+from app.routers.tesoreria_impegni import leggi_parametri as leggi_parametri_fiscali
 from app.services.attivita import (CATALOGO, ETICHETTE_PARTI, MESI_LUNGHI, PER_CODICE, applica_parametri,
                                    descrivi_frequenza, in_ritardo, riepilogo, testo, valida_parametri, voci_mese)
 from app.utils.locale_it import formatta_data_it
@@ -124,6 +125,9 @@ def _evidenze(db: Session, da: date, a: date) -> dict:
     ev["fatture_ade"] = {"": _mese_dopo({(r.year, r.month) for (r,) in db.query(TesoreriaFattureImport.ricezione_a)
                                          .filter(TesoreriaFattureImport.ricezione_a.isnot(None))
                                          if r >= _fine_mese(r) - timedelta(days=3)})}
+    # Credito IVA: date in cui è stato salvato in Dati fiscali (residuo preso dal gestionale)
+    ev["credito_iva"] = {"": sorted(d for d in (date.fromisoformat(x) for x in leggi_parametri_fiscali(db)
+                                                  ["credito_iva_aggiornamenti"]) if da <= d <= a)}
     ev["passcom"] = {"": _date(db.query(_creato(TesoreriaScadImport.created_at)).filter(
         tra(_creato(TesoreriaScadImport.created_at))))}
     ev["ce_contabile"] = {"": _date(db.query(_creato(UsaliImport.created_at)).filter(

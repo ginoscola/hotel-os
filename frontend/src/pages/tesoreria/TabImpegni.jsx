@@ -14,6 +14,15 @@ const ETICHETTE_TIPO = {
   f24_dipendenti: 'F24 dipendenti', iva: 'IVA', ires: 'IRES', irap: 'IRAP', tassa_soggiorno: 'Tassa di soggiorno', tari: 'TARI',
   tributo_fisso: 'Tributi fissi', affitto: 'Affitti', mutuo: 'Mutuo', ricorrente: 'Ricorrenti', intervento: 'Interventi', compenso: 'Compensi soci', advertising: 'Advertising (carta)', carta: 'Estratti carte', altro: 'Altro',
 }
+const GIORNI_CREDITO_VECCHIO = 40   // residuo del credito IVA dal gestionale: aggiornato ogni mese
+
+function giorniDa(iso) {
+  if (!iso) return null
+  const [a, m, g] = iso.split('-').map(Number)
+  const oggi = new Date()
+  return Math.round((new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate()) - new Date(a, m - 1, g)) / 86400000)
+}
+
 const STATI = {
   stimato: ['Stimato', 'neutral'], confermato: ['Confermato', 'info'], pagato: ['Pagato', 'ok'], coperto: ['Coperto da crediti', 'ok'],
 }
@@ -185,9 +194,17 @@ export default function TabImpegni({ permessi }) {
         <div className="ui-kpi-row">
           <KpiTile size="lg" label="Da pagare in banca" value={formatEuro(dati.da_pagare)} sub={`${dati.impegni.length} impegni nel periodo`} />
           <KpiTile label="Importo totale" value={formatEuro(dati.totale)} />
-          <KpiTile label="Coperto dal credito IVA" value={formatEuro(dati.coperto_credito)} sub={`crediti previsti ${formatEuro(dati.credito_iva_previsto)}`} />
+          <KpiTile label="Coperto dal credito IVA" value={formatEuro(dati.coperto_credito)}
+            sub={`crediti previsti ${formatEuro(dati.credito_iva_previsto)} · ${dati.credito_iva_aggiornato_al ? `aggiornato al ${formatData(dati.credito_iva_aggiornato_al)}` : 'mai aggiornato'}`} />
           <KpiTile label="Coperto da altri crediti F24" value={formatEuro(dati.coperto_altri)} sub="stima dall'anno prima" />
         </div>
+
+        {(giorniDa(dati.credito_iva_aggiornato_al) ?? Infinity) > GIORNI_CREDITO_VECCHIO && (
+          <Messaggio tipo="warn">
+            Credito IVA {dati.credito_iva_aggiornato_al ? `aggiornato l'ultima volta il ${formatData(dati.credito_iva_aggiornato_al)}` : 'mai aggiornato'}:
+            {' '}inserire il residuo dal gestionale in Admin → Tesoreria → Dati fiscali, altrimenti la copertura degli F24 è una stima.
+          </Messaggio>
+        )}
 
         {daConfermare.length > 0 && (
           <Messaggio tipo="warn">{daConfermare.length} impegni hanno un pagamento in banca da confermare: usa Conferma o Scarta nella tabella.</Messaggio>

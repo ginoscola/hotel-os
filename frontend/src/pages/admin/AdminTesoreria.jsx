@@ -1583,7 +1583,13 @@ export function AdminTesoreriaFiscale() {
       </Card>
       <Card title="Credito IVA">
         <p className="ui-text-muted" style={{ marginBottom: 8 }}>
-          Una riga per credito. «Intero dal» = dopo la dichiarazione; «5.000 € dal» = quota usabile prima. Aggiornare quando arriva la dichiarazione IVA.
+          Una riga per credito. «Intero dal» = dopo la dichiarazione; «5.000 € dal» = quota usabile prima. Ogni mese, dopo gli F24
+          del 16, la prima riga va portata al residuo letto nel gestionale; la riga del credito dell'anno dopo si corregge quando
+          arriva la dichiarazione IVA.
+        </p>
+        <p style={{ marginBottom: 8, fontSize: 13 }}>
+          Ultimo aggiornamento: <b>{p.credito_iva_aggiornamenti?.length ? formatData(p.credito_iva_aggiornamenti[p.credito_iva_aggiornamenti.length - 1]) : 'mai'}</b>
+          <span className="ui-text-muted"> (si registra da solo quando si salvano i crediti modificati)</span>
         </p>
         <Table compact>
           <thead><tr><Th num>Importo (€)</Th><Th>Intero dal</Th><Th>5.000 € dal</Th><Th></Th></tr></thead>

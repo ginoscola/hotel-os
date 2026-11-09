@@ -92,9 +92,11 @@ per gli admin, `pages/home/RiquadroAttivita.jsx` ("N attività in ritardo · M e
   letto da `hooks/useSchedaDaUrl.js` (`schedaRichiesta()` per lo stato iniziale + `useSchedaDaUrl()` che poi toglie il
   parametro) in Tesoreria, Corrispettivi, Statistiche Produzione, USALI, Forecast e Dipendenti. Scheda inesistente o
   non visibile per il ruolo → la pagina apre l'ultima usata. Nuova pagina a schede raggiungibile da un'attività: stesso hook.
-- Dati fiscali della Tesoreria (v4.35.2): `quietanze_f24` (mensile, il 20: credito IVA 6099, altri crediti, IVA di
-  agosto) e `dati_fiscali` (annuale, 31/1: tributi fissi, orizzonte, crediti esauriti), con dichiarazione IVA, Redditi
-  e TARI già presenti; `quietanze_f24` diventerà automatica con l'import delle quietanze.
+- Dati fiscali della Tesoreria: `credito_iva` (v4.36.0, mensile, il 20, **automatica**: fatta se nel mese i crediti IVA
+  sono stati salvati in Dati fiscali, date in `credito_iva_aggiornamenti`; residuo preso dal gestionale, fonte ancora
+  da definire con l'utente) e `dati_fiscali` (annuale, 31/1: tributi fissi, orizzonte, crediti esauriti), con
+  dichiarazione IVA, Redditi e TARI già presenti. L'import delle quietanze F24 è stato valutato e scartato
+  dall'utente (09/11/2026) come troppo complesso rispetto al residuo mensile dal gestionale.
 - Attività `automatica=False` (ZIP fatture AdE, coda caparre, TARI, dichiarazioni, advertising, interventi,
   compensi): solo spunta a mano. La spunta (`attivita_fatte`, migrazione `att001_2026`, UNIQUE codice+scadenza) vale
   anche sulle automatiche, per una scadenza senza file.

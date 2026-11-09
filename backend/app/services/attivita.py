@@ -98,16 +98,12 @@ CATALOGO = [
              link="/statistiche-produzione?tab=prod-occupazione", nota="Occupazione e Consumo, dati del mese prima."),
     Attivita("caparre", "Completa la coda delle caparre", "Tesoreria", "mensile", giorno=15, mesi=INVERNO,
              automatica=False, link="/tesoreria?tab=caparre"),
-    Attivita("quietanze_f24", "Quietanze F24 del mese: credito IVA e F24 pagati", "Tesoreria", "mensile", giorno=20,
-             automatica=False, link="/admin?s=tes-fiscale",
-             nota="Dove: cassetto fiscale AdE → Versamenti → F24 → «Quietanza di versamento» di ogni delega del mese "
-                  "(di solito il 16; anche il 30 per gli acconti di novembre e giugno), oppure chiederle allo studio. "
-                  "Cosa leggere: codice 6099 nella colonna «importi a credito compensati» = credito IVA usato; "
-                  "1701, 1704, 1631, 1627 a credito = altri crediti; «Saldo delega» = quanto esce dalla banca; a "
-                  "settembre il codice 6008 a debito = IVA di agosto. Dove va: Admin → Tesoreria → Dati fiscali → "
-                  "Credito IVA: togliere dalla prima riga il 6099 usato (= nuovo residuo); se lo studio paga un F24 "
-                  "senza usare il credito: Tesoreria → Impegni → Modifica → «Pagare senza usare il credito IVA». In "
-                  "alternativa: PDF in uploads/tesoreria_campioni/fisco e li inserisce Claude."),
+    Attivita("credito_iva", "Credito IVA residuo dal gestionale", "Tesoreria", "mensile", giorno=20,
+             link="/admin?s=tes-fiscale",
+             nota="Dopo che lo studio ha registrato gli F24 del 16. Dove: gestionale → [fonte da definire]. Dove va: "
+                  "Admin → Tesoreria → Dati fiscali → Credito IVA, prima riga = residuo (le righe dei crediti degli "
+                  "anni dopo restano). Se lo studio paga un F24 senza usare il credito: Tesoreria → Impegni → Modifica "
+                  "→ «Pagare senza usare il credito IVA». Fatta quando il credito IVA viene salvato nel mese."),
     Attivita("ce_contabile", "Export della contabilità (CE contabile)", "USALI", "mensile", giorno=20,
              link="/usali?tab=contabile", nota="Conto Economico contabile → Import."),
     Attivita("tasca", "Saldo prepagata TASCA", "Tesoreria", "mensile", giorno=28, link="/tesoreria?tab=import"),

@@ -1286,6 +1286,17 @@ Richiesta dell'utente: lo studio può decidere di pagare un F24 e tenersi il cre
 - ⚠️ Il residuo del credito in Dati fiscali resta da aggiornare a mano dalle quietanze: il ricalcolo guarda solo gli
   impegni da oggi in poi, quindi il credito usato sugli F24 passati non viene scalato.
 
+### Residuo del credito IVA aggiornato ogni mese (09/11/2026, v4.36.0)
+Decisione dell'utente: **niente import delle quietanze F24** (piano preparato e scartato perché troppo complesso: codici
+tributo da classificare, deleghe parziali, ravvedimenti, crediti una tantum). Ogni mese, dopo gli F24 del 16, l'utente
+porta la prima riga di `crediti_iva` al residuo letto nel gestionale (fonte da definire con l'utente, poi nella nota
+dell'attività `credito_iva`).
+- `credito_iva_aggiornamenti` in `tesoreria_fiscale_parametri`: date in cui `crediti_iva` è cambiato, scritte solo dal
+  backend in `put_parametri()` (quello inviato dal client è ignorato), al massimo 36. Valore iniziale sul DB reale
+  `2026-11-02` (residuo 12.379,13 € dalle quietanze fino al 16/10).
+- `GET /tesoreria/impegni` → `credito_iva_aggiornato_al`; Impegni: data nel riquadro del credito e avviso oltre 40 giorni.
+- Attività ricorrente `credito_iva` (il 20, automatica sulle date sopra) al posto di `quietanze_f24`.
+
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
   riferimento (`anno_riferimento()`, il più recente). ⚠️ Per l'utente i dati affidabili partono dalla **stagione 2026**
