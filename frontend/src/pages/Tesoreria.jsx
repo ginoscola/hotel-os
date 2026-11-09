@@ -15,6 +15,7 @@ import TabPosizione from './tesoreria/TabPosizione.jsx'
 import TabPrevisione from './tesoreria/TabPrevisione.jsx'
 import TabScadenzario from './tesoreria/TabScadenzario.jsx'
 import { LS_TIPO_ANNO, OPZIONI_TIPO_ANNO, permessiTesoreria, useAnagrafiche } from './tesoreria/helpers.jsx'
+import { schedaRichiesta, useSchedaDaUrl } from '../hooks/useSchedaDaUrl.js'
 
 const LS_TAB = 'tesoreria_tab'
 
@@ -33,6 +34,8 @@ const TABS = [
 
 export default function Tesoreria() {
   const [tab, setTab] = useState(() => {
+    const daUrl = schedaRichiesta(TABS)
+    if (daUrl) return daUrl
     const salvata = localStorage.getItem(LS_TAB)
     return TABS.some(t => t.id === salvata) ? salvata : 'posizione'
   })
@@ -48,6 +51,7 @@ export default function Tesoreria() {
     setTab(id)
     localStorage.setItem(LS_TAB, id)
   }
+  useSchedaDaUrl(TABS, cambiaTab)
   const cambiaTipoAnno = v => {
     setTipoAnno(v)
     try { localStorage.setItem(LS_TIPO_ANNO, v) } catch { /* preferenza non salvata */ }

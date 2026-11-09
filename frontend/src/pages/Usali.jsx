@@ -4,6 +4,7 @@ import UsaliMovimentiAttivi from './UsaliMovimentiAttivi'
 import UsaliContabile from './usaliContabile/UsaliContabile.jsx'
 import UsaliFnb from './usaliFnb/UsaliFnb.jsx'
 import { PageHeader, Tabs } from '../components/ui'
+import { schedaRichiesta, useSchedaDaUrl } from '../hooks/useSchedaDaUrl.js'
 
 const LS_TAB = 'usali_tab'
 
@@ -15,12 +16,13 @@ const TABS = [
 ]
 
 export default function Usali() {
-  const [tab, setTab] = useState(() => localStorage.getItem(LS_TAB) || 'conto-economico')
+  const [tab, setTab] = useState(() => schedaRichiesta(TABS) || localStorage.getItem(LS_TAB) || 'conto-economico')
 
   const cambiaTab = (id) => {
     setTab(id)
     localStorage.setItem(LS_TAB, id)
   }
+  useSchedaDaUrl(TABS, cambiaTab)
 
   return (
     <div>

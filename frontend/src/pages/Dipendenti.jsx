@@ -7,12 +7,28 @@ import {
   SectionTitle, SegmentedControl, Select, StatoVuoto, Table, Tabs, Td, Th, useAvvisi, useConferma,
 } from '../components/ui'
 import { colors, coloreStruttura } from '../styles/tokens.js'
+import { schedaRichiesta, useSchedaDaUrl } from '../hooks/useSchedaDaUrl.js'
 
 
 const MESI = [
   '', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
   'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
 ]
+
+/** Schede della pagina (Import e Storico solo per gli admin). */
+function schedeDipendenti() {
+  let admin = false
+  try { admin = JSON.parse(localStorage.getItem('auth_user') || '{}').ruolo === 'admin' } catch { /* utente non leggibile: schede base */ }
+  return [
+    { id: 'report', label: 'Report mensile' },
+    { id: 'analisi', label: 'Analisi CC' },
+    { id: 'anagrafica', label: 'Anagrafica' },
+    ...(admin ? [
+      { id: 'import', label: 'Import PDF' },
+      { id: 'storico', label: 'Storico import' },
+    ] : []),
+  ]
+}
 
 export default function Dipendenti() {
   const mesePrecedente = new Date()
@@ -24,7 +40,8 @@ export default function Dipendenti() {
   const [storici, setStorici] = useState([])
   const [annoAnagrafica, setAnnoAnagrafica] = useState(new Date().getFullYear())
   const [cercaDipendente, setCercaDipendente] = useState('')
-  const [sezione, setSezione] = useState('report')
+  const [sezione, setSezione] = useState(() => schedaRichiesta(schedeDipendenti()) || 'report')
+  useSchedaDaUrl(schedeDipendenti(), setSezione)
   const [caricando, setCaricando] = useState(false)
   const [errore, setErrore] = useState(null)
   const [uploadState, setUploadState] = useState({ stato: 'idle', messaggio: '', risultato: null })
@@ -161,15 +178,7 @@ export default function Dipendenti() {
         )}
       </PageHeader>
 
-      <Tabs value={sezione} onChange={setSezione} tabs={[
-        { id: 'report', label: 'Report mensile' },
-        { id: 'analisi', label: 'Analisi CC' },
-        { id: 'anagrafica', label: 'Anagrafica' },
-        ...(isAdmin() ? [
-          { id: 'import', label: 'Import PDF' },
-          { id: 'storico', label: 'Storico import' },
-        ] : []),
-      ]} />
+      <Tabs value={sezione} onChange={setSezione} tabs={schedeDipendenti()} />
 
       {/* ── SEZIONE REPORT ─────────────────────────────────────────────────── */}
       {sezione === 'report' && (

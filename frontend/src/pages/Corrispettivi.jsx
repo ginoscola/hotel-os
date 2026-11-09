@@ -14,6 +14,7 @@ import api from '../api/client'
 import { isAdmin } from '../utils/corrispettiviHelpers'
 import { PageHeader, Tabs, ToggleIva } from '../components/ui'
 import { colors } from '../styles/tokens.js'
+import { schedaRichiesta, useSchedaDaUrl } from '../hooks/useSchedaDaUrl.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,8 @@ const TABS_ADMIN = [
 export default function Corrispettivi() {
   const tabsDisponibili = isAdmin() ? TABS_ADMIN : TABS_BASE
   const [tab, setTab] = useState(() => {
+    const daUrl = schedaRichiesta(tabsDisponibili)
+    if (daUrl) return daUrl
     const salvato = localStorage.getItem(LS_TAB)
     return TABS_ADMIN.some(t => t.id === salvato) ? salvato : 'giornalieri'
   })
@@ -59,6 +62,7 @@ export default function Corrispettivi() {
     setTab(id)
     localStorage.setItem(LS_TAB, id)
   }
+  useSchedaDaUrl(tabsDisponibili, cambiaTab)
   const cambiaLordo = (v) => {
     setLordo(v)
     localStorage.setItem(LS_LORDO, String(v))

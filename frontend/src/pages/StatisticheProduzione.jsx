@@ -11,6 +11,7 @@ import TabOccupazioneConsumi from './produzione/TabOccupazioneConsumi'
 import TabTest from './produzione/TabTest'
 import { isAdmin, LS_TAB, LS_LORDO } from '../utils/produzioneHelpers'
 import { PageHeader, Tabs, ToggleIva } from '../components/ui'
+import { schedaRichiesta, useSchedaDaUrl } from '../hooks/useSchedaDaUrl.js'
 
 const TABS_BASE = [
   { id: 'prod-import', label: 'Import' },
@@ -32,7 +33,7 @@ const TAB_SENZA_TOGGLE_IVA = new Set(['prod-import', 'prod-test', 'prod-conteggi
 
 export default function StatisticheProduzione() {
   const tabsDisponibili = isAdmin() ? TABS_ADMIN : TABS_BASE
-  const [tab, setTab] = useState(() => localStorage.getItem(LS_TAB) || 'prod-giornaliera')
+  const [tab, setTab] = useState(() => schedaRichiesta(tabsDisponibili) || localStorage.getItem(LS_TAB) || 'prod-giornaliera')
   const [lordo, setLordo] = useState(() => {
     const v = localStorage.getItem(LS_LORDO)
     return v === null ? true : v === 'true'
@@ -43,6 +44,7 @@ export default function StatisticheProduzione() {
     setTab(id)
     localStorage.setItem(LS_TAB, id)
   }
+  useSchedaDaUrl(tabsDisponibili, cambiaTab)
   const cambiaLordo = (v) => {
     setLordo(v)
     localStorage.setItem(LS_LORDO, String(v))

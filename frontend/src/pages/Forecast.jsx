@@ -13,6 +13,7 @@ import {
   Textarea, Th, ThOrdinabile, useAvvisi, useConferma,
 } from '../components/ui'
 import { colors } from '../styles/tokens.js'
+import { schedaRichiesta, useSchedaDaUrl } from '../hooks/useSchedaDaUrl.js'
 
 // ---------------------------------------------------------------------------
 // Costanti
@@ -49,7 +50,8 @@ const TABS = [
 // ---------------------------------------------------------------------------
 
 export default function Forecast() {
-  const [tabAttiva, setTabAttiva] = useState('riepilogo')
+  const [tabAttiva, setTabAttiva] = useState(() => schedaRichiesta(TABS) || 'riepilogo')
+  useSchedaDaUrl(TABS, setTabAttiva)
   const [anno, setAnno] = useState(new Date().getFullYear())
   const [hotelSelezionato, setHotelSelezionato] = useState('all')
   const [hotels, setHotels] = useState([])
