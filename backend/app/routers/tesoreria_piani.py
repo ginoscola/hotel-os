@@ -24,7 +24,7 @@ from app.routers.tesoreria_report import _addebiti_candidati
 from app.routers.tesoreria_scadenzario_report import stato_scadenze
 from app.routers.tesoreria_shared import euro, puo_importare, puo_modificare, puo_vedere
 from app.services.tesoreria_abbinamento import forza_nome
-from app.services.tesoreria_fatture import PREFISSO_CHIAVE, impronta_da_chiave
+from app.services.tesoreria_fatture import PREFISSO_CHIAVE, assegnabile_a_spesa, impronta_da_chiave, rata_estera
 from app.services.tesoreria_parser import ErroreImportTesoreria
 from app.services.tesoreria_piani import (
     MESI_STAGIONE, TOLLERANZA_PERCENTUALE, anno_calendario, chiudi_totale, data_addebito_advertising, data_addebito_carta, date_ricorrente, importi_rate, importi_rate_intervento, nome_corrisponde, parse_piano_mutuo,
@@ -294,7 +294,8 @@ def _aggiorna_interventi_pagati(db: Session, oggi: date) -> None:
     def pagata(f) -> bool:
         if f.chiave.startswith(PREFISSO_CHIAVE):
             riga = righe_sdi.get(impronta_da_chiave(f.chiave))
-            return riga is None or riga["stato"] in STATI_SDI_CHIUSA
+            # autofattura di un acquisto estero: già pagato, modalità e data le inserisce l'utente
+            return riga is None or riga["stato"] in STATI_SDI_CHIUSA or riga["stato"] == "autofattura"
         return f.chiave not in aperte or aperte[f.chiave] in STATI_PAGATA
 
     for i in collegati:
@@ -1313,7 +1314,8 @@ def collega_fattura(intervento_id: int, corpo: FatturaIn, db: Session = Depends(
 def assegna_fatture_sdi(intervento_id: int, corpo: FattureSdiIn, db: Session = Depends(get_db), _=Depends(puo_modificare)):
     """Assegna alla spesa fatture ricevute dallo SDI, anche già pagate e chiuse (scheda Fatture). Una fattura nello
     scadenzario Passcom attuale si collega con le sue scadenze, le altre con le rate del file. Una fattura già
-    assegnata a un'altra spesa viene spostata (modalità e data restano). Le autofatture non si assegnano."""
+    assegnata a un'altra spesa viene spostata (modalità e data restano). Delle autofatture si assegnano solo gli acquisti
+    dall'estero (TD17/TD18) per l'imponibile, senza modalità e data proposte (le inserisce l'utente)."""
     from app.routers.tesoreria_fatture_stato import stato_fatture
     i = db.get(TesoreriaIntervento, intervento_id)
     if i is None:
@@ -1329,8 +1331,21 @@ def assegna_fatture_sdi(intervento_id: int, corpo: FattureSdiIn, db: Session = D
         if f.id not in voluti:
             continue
         trovate += 1
-        if f.autofattura:
+        if not assegnabile_a_spesa(f):
             saltate.append(f"{f.cedente_denominazione} n. {f.numero}: autofattura, non è un pagamento")
+            continue
+        if f.autofattura:
+            x = rata_estera(f)
+            esistente = db.query(TesoreriaInterventoScadenza).filter(TesoreriaInterventoScadenza.chiave == x.chiave).first()
+            if esistente is None:
+                db.add(TesoreriaInterventoScadenza(intervento_id=i.id, chiave=x.chiave, fornitore=(x.fornitore or "")[:200],
+                                                   data_scadenza=x.data_scadenza, numero_documento=f.numero, importo=x.importo))
+                esiti["nuovo"] += 1
+            elif esistente.intervento_id == i.id:
+                esiti["gia"] += 1
+            else:
+                esistente.intervento_id = i.id
+                esiti["spostato"] += 1
             continue
         carta = r["stato"] == "pagata_carta"
         if r["passcom"]:

@@ -40,7 +40,7 @@ KM = "04569190400"
 
 
 def fattura_xml(piva, nome, numero, data, totale, tipo="TD01", modalita=None, scadenza=None, rata=None,
-                paese="IT") -> bytes:
+                paese="IT", collegata=None) -> bytes:
     pagamento = ""
     if modalita or scadenza or rata:
         pagamento = ("<DatiPagamento><CondizioniPagamento>TP02</CondizioniPagamento><DettaglioPagamento>"
@@ -49,6 +49,8 @@ def fattura_xml(piva, nome, numero, data, totale, tipo="TD01", modalita=None, sc
                      + f"<ImportoPagamento>{rata or totale}</ImportoPagamento></DettaglioPagamento></DatiPagamento>")
     imponibile = (Decimal(totale) / Decimal("1.22")).quantize(Decimal("0.01"))
     imposta = Decimal(totale) - imponibile
+    collegate = (f"<DatiFattureCollegate><IdDocumento>{collegata[0]}</IdDocumento><Data>{collegata[1]}</Data>"
+                 "</DatiFattureCollegate>") if collegata else ""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <p:FatturaElettronica versione="FPR12" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
 <FatturaElettronicaHeader>
@@ -59,7 +61,7 @@ def fattura_xml(piva, nome, numero, data, totale, tipo="TD01", modalita=None, sc
 </FatturaElettronicaHeader>
 <FatturaElettronicaBody>
 <DatiGenerali><DatiGeneraliDocumento><TipoDocumento>{tipo}</TipoDocumento><Divisa>EUR</Divisa><Data>{data}</Data>
-<Numero>{numero}</Numero><ImportoTotaleDocumento>{totale}</ImportoTotaleDocumento></DatiGeneraliDocumento></DatiGenerali>
+<Numero>{numero}</Numero><ImportoTotaleDocumento>{totale}</ImportoTotaleDocumento></DatiGeneraliDocumento>{collegate}</DatiGenerali>
 <DatiBeniServizi><DatiRiepilogo><AliquotaIVA>22.00</AliquotaIVA><ImponibileImporto>{imponibile}</ImponibileImporto>
 <Imposta>{imposta}</Imposta></DatiRiepilogo></DatiBeniServizi>
 {pagamento}
@@ -393,7 +395,7 @@ def test_fattura_chiusa_assegnata_a_spesa_esce_dallo_storico(client, Sessione, t
     _importa(client, zip_fatture([
         ("1", ricevuta, fattura_xml("03333333333", "Arredi Spa", "77", ricevuta.isoformat(), "305.00",
                                     modalita="MP12", scadenza=scad.isoformat())),
-        ("2", ricevuta, fattura_xml("03333333333", "Arredi Spa", "78", ricevuta.isoformat(), "50.00", tipo="TD17")),
+        ("2", ricevuta, fattura_xml("03333333333", "Arredi Spa", "78", ricevuta.isoformat(), "50.00", tipo="TD16")),
     ]))
     with Sessione() as db:
         cat = TesoreriaCategoria(codice="fornitori_riba", nome="Fornitori Ri.Ba.", tipo="uscita")
@@ -411,7 +413,7 @@ def test_fattura_chiusa_assegnata_a_spesa_esce_dallo_storico(client, Sessione, t
     assert i["anno"] == 2026
     r = client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture-sdi", json={"fattura_ids": [ids["77"], ids["78"]]})
     assert r.status_code == 200, r.text
-    assert r.json()["n_nuove"] == 1 and len(r.json()["saltate"]) == 1      # l'autofattura non si assegna
+    assert r.json()["n_nuove"] == 1 and len(r.json()["saltate"]) == 1      # l'integrazione TD16 non si assegna
     assert r.json()["spesa"]["costo_finale"] == 305
     f = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["collegate"][0]
     assert f["modalita_pagamento"] == "riba" and f["data_pagamento"] == scad.isoformat()
@@ -430,6 +432,35 @@ def test_fattura_chiusa_assegnata_a_spesa_esce_dallo_storico(client, Sessione, t
     r = client.post(f"/tesoreria/piani/interventi/{j['id']}/fatture-sdi", json={"fattura_ids": [ids["77"]]})
     assert r.json()["n_spostate"] == 1
     assert client.get(f"/tesoreria/piani/interventi/{j['id']}/fatture").json()["collegate"][0]["modalita_pagamento"] == "contanti"
+
+
+def test_acquisto_estero_td18_assegnato_a_spesa_per_imponibile(client, Sessione, test_engine):
+    """Integrazione TD18 (acquisto dall'estero, unica traccia nello SDI): si assegna per l'imponibile alla data della
+    fattura originale, senza modalità né data di pagamento (le inserisce l'utente); la spesa risulta pagata."""
+    with test_engine.begin() as conn:
+        conn.execute(text("TRUNCATE tesoreria_interventi, tesoreria_impegni RESTART IDENTITY CASCADE"))
+    _passcom(Sessione, OGGI - timedelta(days=1), [("601.00001", "ALTRO", "1", date(2026, 1, 1), "10.00", OGGI + timedelta(days=200))])
+    ricevuta = OGGI - timedelta(days=40)
+    originale = ricevuta - timedelta(days=5)
+    _importa(client, zip_fatture([("1", ricevuta, fattura_xml("ESB1", "Arredi Esteri SL", "10/134", ricevuta.isoformat(),
+                                                              "122.00", tipo="TD18", paese="ES",
+                                                              collegata=("11643", originale.isoformat())))]))
+    f = client.get("/tesoreria/fatture").json()["fatture"][0]
+    assert f["stato"] == "autofattura" and f["assegnabile"] is True
+    i = client.post("/tesoreria/piani/interventi", json={"descrizione": "Arredi terrazza", "importo_stimato": "100"}).json()
+    r = client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture-sdi", json={"fattura_ids": [f["id"]]})
+    assert r.status_code == 200, r.text
+    assert r.json()["n_nuove"] == 1 and r.json()["saltate"] == []
+    assert r.json()["spesa"]["costo_finale"] == 100 and r.json()["spesa"]["stato"] == "pagato"
+    c = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["collegate"]
+    assert [(x["importo"], x["data_scadenza"], x["numero_documento"], x["modalita_pagamento"], x["data_pagamento"],
+             x["fattura_id"]) for x in c] == [(100, originale.isoformat(), "10/134", None, None, f["id"])]
+    assert client.get("/tesoreria/fatture", params={"spesa": "si"}).json()["fatture"][0]["spesa"]["descrizione"] == "Arredi terrazza"
+    # di nuovo sulla stessa spesa: già collegata; su un'altra: spostata
+    r = client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture-sdi", json={"fattura_ids": [f["id"]]})
+    assert r.json()["n_gia"] == 1
+    j = client.post("/tesoreria/piani/interventi", json={"descrizione": "Altro"}).json()
+    assert client.post(f"/tesoreria/piani/interventi/{j['id']}/fatture-sdi", json={"fattura_ids": [f["id"]]}).json()["n_spostate"] == 1
 
 
 def test_fattura_leggibile_e_pdf_del_fornitore(client):

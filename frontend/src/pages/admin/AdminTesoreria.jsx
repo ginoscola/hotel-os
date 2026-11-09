@@ -1102,7 +1102,7 @@ function CercaFattureSdi({ intervento, onAssegnate, onVedi }) {
     }, 400)
     return () => clearTimeout(t)
   }, [q, avvisi])
-  const selezionabili = (elenco || []).filter(f => f.spesa?.id !== intervento.id && !f.tipo_documento.match(/^TD(1[6-9]|2[0-3]|2[6-8])$/))
+  const selezionabili = (elenco || []).filter(f => f.spesa?.id !== intervento.id && f.assegnabile)
   const cambia = (id, si) => setScelte(s => { const n = new Set(s); if (si) n.add(id); else n.delete(id); return n })
   async function assegna() {
     try {

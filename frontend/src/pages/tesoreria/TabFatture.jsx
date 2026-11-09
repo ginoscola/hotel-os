@@ -315,7 +315,7 @@ export default function TabFatture({ permessi, onVaiA }) {
   const pagate = ['pagata_banca', 'pagata_manuale', 'pagata_carta']
   const vuoto = dati && Object.keys(c).length === 0
   const puoAssegnare = permessi.puo_modificare
-  const assegnabili = (dati?.fatture || []).filter(f => f.stato !== 'autofattura')
+  const assegnabili = (dati?.fatture || []).filter(f => f.assegnabile)
   const cambiaScelta = (id, si) => setScelte(x => { const n = new Set(x); if (si) n.add(id); else n.delete(id); return n })
   const tuttePagina = assegnabili.length > 0 && assegnabili.every(f => scelte.has(f.id))
   const cambiaPagina = si => setScelte(x => { const n = new Set(x); assegnabili.forEach(f => (si ? n.add(f.id) : n.delete(f.id))); return n })
@@ -400,7 +400,7 @@ export default function TabFatture({ permessi, onVaiA }) {
                       className={f.stato === 'da_registrare' ? 'ui-riga-avviso' : undefined}>
                       {puoAssegnare && (
                         <Td onClick={e => e.stopPropagation()}>
-                          {f.stato !== 'autofattura' && <Checkbox checked={scelte.has(f.id)} onChange={x => cambiaScelta(f.id, x)} />}
+                          {f.assegnabile && <Checkbox checked={scelte.has(f.id)} onChange={x => cambiaScelta(f.id, x)} />}
                         </Td>
                       )}
                       <Td>{f.data_ricezione ? formatData(f.data_ricezione.slice(0, 10)) : '—'}</Td>

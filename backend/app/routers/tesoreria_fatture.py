@@ -44,7 +44,7 @@ from app.routers.tesoreria_shared import (
 from app.models.tesoreria import (
     TesoreriaAbbinamento, TesoreriaAbbinamentoScadenza, TesoreriaIntervento, TesoreriaInterventoScadenza,
 )
-from app.services.tesoreria_fatture import NOMI_MODALITA, PREFISSO_CHIAVE
+from app.services.tesoreria_fatture import NOMI_MODALITA, PREFISSO_CHIAVE, assegnabile_a_spesa
 from app.services.tesoreria_fatture_parser import parse_zip_fatture
 from app.services.tesoreria_fatture_vista import allegati, documento_leggibile, tipo_mime, trova_nel_zip
 from app.services.tesoreria_parser import ErroreImportTesoreria
@@ -273,7 +273,7 @@ def _riga_json(r: dict) -> dict:
     f = r["fattura"]
     return {
         "id": f.id, "impronta": f.impronta, "id_sdi": f.id_sdi, "stato": r["stato"],
-        "stato_etichetta": ETICHETTE_STATO[r["stato"]],
+        "stato_etichetta": ETICHETTE_STATO[r["stato"]], "assegnabile": assegnabile_a_spesa(f),
         "data_ricezione": f.data_ricezione.isoformat() if f.data_ricezione else None,
         "cedente_denominazione": f.cedente_denominazione, "cedente_piva": f.cedente_piva,
         "cedente_paese": f.cedente_paese, "codice_fornitore": r["codice_fornitore"],

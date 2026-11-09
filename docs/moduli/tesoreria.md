@@ -1223,6 +1223,16 @@ una tendina di sole fatture aperte). Migrazione `tes020_2026` (applicata al DB r
   Limite noto: un bonifico singolo collegato come "pagamento senza fattura" **e** la sua fattura con modalità bonifico verrebbero
   tolti due volte (la finestra avvisa di non farlo).
 
+**v4.31.3 — acquisti dall'estero assegnabili alle spese straordinarie** (09/11/2026, richiesta dell'utente: es. Sklum
+TD18 10/134). Le fatture estere arrivano allo SDI solo come integrazione (lo studio le carica dai PDF che gli mandiamo), quindi
+prima non si potevano assegnare. Ora le **TD17 e TD18** (`TIPI_ESTERI_ASSEGNABILI`, `assegnabile_a_spesa()` in
+`services/tesoreria_fatture.py`, campo `assegnabile` in `/tesoreria/fatture`, usato dalla scheda Fatture e dalla ricerca in Admin)
+si assegnano con `POST /piani/interventi/{id}/fatture-sdi`: una rata `XML:{impronta}#1` (`rata_estera()`) per l'**imponibile**
+(l'IVA dell'integrazione è a debito e a credito insieme, al fornitore estero si paga l'imponibile) alla data della fattura
+originale (`fatture_collegate`), **senza modalità né data di pagamento proposte**: le inserisce l'utente (scelta sua: sono poche e
+sa come sono state pagate), finché mancano la spesa conta "da completare". Stato SDI `autofattura` = pagata per la spesa.
+TD16/TD19 restano escluse (la fattura vera del fornitore italiano è già nello SDI: si conterebbe due volte).
+
 **v4.30.2 — linea "senza le spese straordinarie" anche sul passato** (06/11/2026, scelta (a) dell'utente): ogni punto di
 `storico` ha `straordinarie` del mese (`_straordinarie_pagate()` in `tesoreria_previsione.py`: uscite dei conti banca segnate
 straordinarie + fatture collegate con pagamento non già straordinario, `_fatture_straordinarie()`, una volta sola) e la risposta

@@ -127,6 +127,30 @@ def rate_da_pagare(f, codice_fornitore: str, giorni: Optional[int]) -> list:
     return out
 
 
+# Integrazioni di acquisti dall'estero (servizi TD17, beni UE TD18): unica traccia nello SDI della fattura del fornitore
+# estero, quindi assegnabili alle spese straordinarie. TD16/TD19 no: la fattura vera del fornitore italiano è già nello SDI.
+TIPI_ESTERI_ASSEGNABILI = ("TD17", "TD18")
+
+
+def assegnabile_a_spesa(f) -> bool:
+    return not f.autofattura or f.tipo_documento in TIPI_ESTERI_ASSEGNABILI
+
+
+def rata_estera(f) -> RataXml:
+    """Spesa di un acquisto dall'estero: l'imponibile (l'IVA dell'integrazione è a debito e a credito insieme, al
+    fornitore estero si paga solo l'imponibile), alla data della fattura originale. Modalità e data di pagamento le
+    inserisce l'utente."""
+    originale = next((c for c in (f.fatture_collegate or []) if c.get("data")), None)
+    try:
+        data = date.fromisoformat(originale["data"]) if originale else f.data_documento
+    except ValueError:
+        data = f.data_documento
+    return RataXml(chiave=chiave_rata(f.impronta, 1), impronta=f.impronta, numero_rata=1, data_scadenza=data,
+                   data_stimata=False, tipo_pagamento="NON INDICATA", codice_fornitore=f"PIVA:{f.cedente_piva}",
+                   fornitore=f.cedente_denominazione, importo=f.imponibile if f.imponibile is not None else f.totale,
+                   numero_documento=f.numero, data_documento=f.data_documento)
+
+
 def stato_fattura(f, in_passcom: bool, stati_abbinamento: set, pagata_a_mano: bool, carta: bool,
                   limite: Optional[date], oggi: date) -> str:
     """`stati_abbinamento`: stati degli abbinamenti con la banca delle rate della fattura. Ordine nel docstring."""
