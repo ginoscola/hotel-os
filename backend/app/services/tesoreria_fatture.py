@@ -127,9 +127,11 @@ def rate_da_pagare(f, codice_fornitore: str, giorni: Optional[int]) -> list:
     return out
 
 
-# Integrazioni di acquisti dall'estero (servizi TD17, beni UE TD18): unica traccia nello SDI della fattura del fornitore
-# estero, quindi assegnabili alle spese straordinarie. TD16/TD19 no: la fattura vera del fornitore italiano è già nello SDI.
-TIPI_ESTERI_ASSEGNABILI = ("TD17", "TD18")
+# Integrazioni (TD16 reverse charge interno, TD17 servizi dall'estero, TD18 beni UE, TD19 beni ex art. 17): nei dati reali
+# sono tutte acquisti da fornitori esteri o venditori online (Maisons du Monde, Amazon, venditori cinesi) la cui fattura
+# originale non è nello SDI (verificato 09/11/2026 su 411 integrazioni: nessun originale presente), quindi sono l'unica
+# traccia dell'acquisto e si assegnano alle spese straordinarie.
+TIPI_ESTERI_ASSEGNABILI = ("TD16", "TD17", "TD18", "TD19")
 
 
 def assegnabile_a_spesa(f) -> bool:

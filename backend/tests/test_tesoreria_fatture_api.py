@@ -395,7 +395,7 @@ def test_fattura_chiusa_assegnata_a_spesa_esce_dallo_storico(client, Sessione, t
     _importa(client, zip_fatture([
         ("1", ricevuta, fattura_xml("03333333333", "Arredi Spa", "77", ricevuta.isoformat(), "305.00",
                                     modalita="MP12", scadenza=scad.isoformat())),
-        ("2", ricevuta, fattura_xml("03333333333", "Arredi Spa", "78", ricevuta.isoformat(), "50.00", tipo="TD16")),
+        ("2", ricevuta, fattura_xml("03333333333", "Arredi Spa", "78", ricevuta.isoformat(), "50.00", tipo="TD20")),
     ]))
     with Sessione() as db:
         cat = TesoreriaCategoria(codice="fornitori_riba", nome="Fornitori Ri.Ba.", tipo="uscita")
@@ -413,7 +413,7 @@ def test_fattura_chiusa_assegnata_a_spesa_esce_dallo_storico(client, Sessione, t
     assert i["anno"] == 2026
     r = client.post(f"/tesoreria/piani/interventi/{i['id']}/fatture-sdi", json={"fattura_ids": [ids["77"], ids["78"]]})
     assert r.status_code == 200, r.text
-    assert r.json()["n_nuove"] == 1 and len(r.json()["saltate"]) == 1      # l'integrazione TD16 non si assegna
+    assert r.json()["n_nuove"] == 1 and len(r.json()["saltate"]) == 1      # l'autofattura TD20 non si assegna
     assert r.json()["spesa"]["costo_finale"] == 305
     f = client.get(f"/tesoreria/piani/interventi/{i['id']}/fatture").json()["collegate"][0]
     assert f["modalita_pagamento"] == "riba" and f["data_pagamento"] == scad.isoformat()

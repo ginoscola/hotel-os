@@ -1315,7 +1315,7 @@ def assegna_fatture_sdi(intervento_id: int, corpo: FattureSdiIn, db: Session = D
     """Assegna alla spesa fatture ricevute dallo SDI, anche già pagate e chiuse (scheda Fatture). Una fattura nello
     scadenzario Passcom attuale si collega con le sue scadenze, le altre con le rate del file. Una fattura già
     assegnata a un'altra spesa viene spostata (modalità e data restano). Delle autofatture si assegnano solo gli acquisti
-    dall'estero (TD17/TD18) per l'imponibile, senza modalità e data proposte (le inserisce l'utente)."""
+    (TD16–TD19, acquisti da fornitori esteri o online) per l'imponibile, senza modalità e data proposte (le inserisce l'utente)."""
     from app.routers.tesoreria_fatture_stato import stato_fatture
     i = db.get(TesoreriaIntervento, intervento_id)
     if i is None:

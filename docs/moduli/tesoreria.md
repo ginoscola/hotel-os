@@ -1231,7 +1231,8 @@ si assegnano con `POST /piani/interventi/{id}/fatture-sdi`: una rata `XML:{impro
 (l'IVA dell'integrazione è a debito e a credito insieme, al fornitore estero si paga l'imponibile) alla data della fattura
 originale (`fatture_collegate`), **senza modalità né data di pagamento proposte**: le inserisce l'utente (scelta sua: sono poche e
 sa come sono state pagate), finché mancano la spesa conta "da completare". Stato SDI `autofattura` = pagata per la spesa.
-TD16/TD19 restano escluse (la fattura vera del fornitore italiano è già nello SDI: si conterebbe due volte).
+~~TD16/TD19 escluse~~ → **v4.32.1: assegnabili anche TD16 e TD19** (caso Maisons du Monde TD16 10/93): nei dati reali sono
+anch'esse acquisti da fornitori esteri/online senza originale nello SDI (verificato su tutte le integrazioni: nessun originale).
 **v4.31.4** — date di pagamento delle fatture collegate e date delle rate delle spese salvate all'uscita dal campo
 (`InputDataSalvata`), non a ogni tasto: scrivendo 2025 venivano salvati anni come 0002/0025; il backend rifiuta anni < 2000.
 
