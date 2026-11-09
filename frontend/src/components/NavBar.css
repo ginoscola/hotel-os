@@ -221,3 +221,60 @@
   font-style: italic;
   padding: 0 0.5rem;
 }
+
+/* ── Cellulare (schermi stretti): moduli e utente nel menu a tendina ☰, sotto-navigazione scorrevole ── */
+
+.navbar-hamburger { display: none; }
+.navbar-mobile { display: none; }
+
+@media (max-width: 768px) {
+  .navbar-l1 { padding: 0 1rem; }
+  .navbar-moduli, .navbar-user, .navbar-version { display: none; }
+  .navbar-brand { margin-right: auto; }
+  .navbar-hamburger {
+    display: block;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+    width: 40px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+  .navbar-mobile {
+    display: flex;
+    flex-direction: column;
+    background: var(--color-primary);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+  }
+  .navbar-mobile-voce {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 12px 1rem;
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    font-size: var(--fs-md);
+    border-left: 3px solid transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .navbar-mobile-voce--active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    border-left-color: #fff; /* sostituito inline con il colore del modulo */
+  }
+  .navbar-mobile-admin { color: #fbbf24; font-weight: 700; }
+  .navbar-mobile-utente {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 12px 1rem;
+  }
+  .navbar-mobile-utente .navbar-logout { margin-left: auto; }
+  .navbar-l2 { padding: 0 1rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .navbar-l2-inner { flex-shrink: 0; white-space: nowrap; }
+}

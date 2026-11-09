@@ -78,10 +78,12 @@ export default function NavBar() {
   const [appName, setAppName] = useState('HotelOS')
   const [moduli, setModuli] = useState([])
   const [hotels, setHotels] = useState([])
+  const [menuAperto, setMenuAperto] = useState(false)   // menu a tendina su cellulare
 
-  // Rilegge utente al cambio route
+  // Rilegge utente al cambio route (e chiude il menu del cellulare)
   useEffect(() => {
     setUtente(getUtenteCorrente())
+    setMenuAperto(false)
   }, [location.pathname])
 
   // Ascolta storage (login/logout da altra tab)
@@ -154,7 +156,29 @@ export default function NavBar() {
           <span className={`navbar-badge navbar-badge--${utente.ruolo}`}>{utente.ruolo}</span>
           <button className="navbar-logout" onClick={handleLogout}>Esci</button>
         </div>
+
+        {/* Cellulare: moduli e utente in un menu a tendina (visibile solo su schermi stretti, vedi NavBar.css) */}
+        <button className="navbar-hamburger" aria-label="Menu" aria-expanded={menuAperto}
+          onClick={() => setMenuAperto(a => !a)}>{menuAperto ? '✕' : '☰'}</button>
       </nav>
+
+      {menuAperto && (
+        <nav className="navbar-mobile">
+          {moduli.map(m => (
+            <Link key={m.code} to={m.route || '/'} onClick={() => setMenuAperto(false)}
+              className={['navbar-mobile-voce', codiceAttivo === m.code ? 'navbar-mobile-voce--active' : ''].filter(Boolean).join(' ')}
+              style={codiceAttivo === m.code && m.colore ? { borderLeftColor: m.colore } : {}}>
+              <span className="navbar-modulo-icon">{m.icon}</span> {m.name}
+            </Link>
+          ))}
+          {isAdmin && <Link to="/admin" className="navbar-mobile-voce navbar-mobile-admin" onClick={() => setMenuAperto(false)}>⚙ Admin</Link>}
+          <div className="navbar-mobile-utente">
+            <span className="navbar-username">{utente.username}</span>
+            <span className={`navbar-badge navbar-badge--${utente.ruolo}`}>{utente.ruolo}</span>
+            <button className="navbar-logout" onClick={handleLogout}>Esci</button>
+          </div>
+        </nav>
+      )}
 
       {/* ── Livello 2: sotto-navigazione ── */}
       {subnav.length > 0 && (

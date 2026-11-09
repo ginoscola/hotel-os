@@ -4,6 +4,8 @@
 Moduli: `revenue` (/dashboard/gruppo), `produzione` (/statistiche-produzione — Statistiche Produzione, vedi sezione dedicata), `budget` (/budget), `usali` (/usali — Conto Economico, Movimenti Attivi, CE contabile, Food & Beverage, vedi sezioni dedicate), `dipendenti` (/dipendenti), `corrispettivi` (/corrispettivi), `forecast` (/forecast), `tesoreria` (/tesoreria — flusso di cassa, vedi sezione Modulo Tesoreria; endpoint con permessi per modulo di `app/permessi.py`).
 Tabelle: `modules` (code PK, name, icon, route, ordine, attivo, colore), `module_permissions` (module_code, ruolo, puo_vedere, puo_modificare, puo_importare).
 NavBar L1: tab moduli da `GET /modules/`; L2: sotto-nav del modulo attivo.
+Su schermi ≤ 768 px (cellulare, v4.32.0) L1 mostra solo logo e pulsante ☰, che apre un menu a tendina con moduli, Admin e
+utente/Esci (si chiude al cambio pagina); L2 scorre in orizzontale. Regole solo in `@media` di `NavBar.css`: il computer non cambia.
 Permessi: al login → `localStorage['moduli_permessi']`; ProtectedRoute verifica `puo_vedere`.
 **Permessi lato backend per modulo** (`app/permessi.py`, ottobre 2026): `permessi_modulo(db, utente,
 modulo)` è l'unica implementazione delle regole (admin sempre tutto; modulo disattivato = niente per
