@@ -125,8 +125,10 @@
 }
 .navbar-tasto:hover { background: var(--color-nav-hover); color: #fff; }
 
-.navbar-admin-link,
-.navbar-admin-link:hover { color: #fcd34d; }
+/* Admin: ingranaggio in un tasto quadrato; giallo solo quando si è nell'area Admin */
+.navbar-admin-link { width: 64px; padding: 0; }
+.navbar-admin-link--active,
+.navbar-admin-link--active:hover { color: #fcd34d; }
 
 .navbar-chi {
   display: flex;

@@ -9,7 +9,7 @@ utente/Esci (si chiude al cambio pagina); L2 scorre in orizzontale. Regole solo 
 Stile (v4.34.0, "F6"): L1 a tasti a tutta altezza (64 px) separati dal fondo scuro `--color-nav-fondo`, **senza icone**;
 ogni tasto ha in basso una striscia del colore del modulo (`modules.colore`, passato come variabile CSS `--c`), l'attivo è
 bianco con riga in alto del colore e si unisce alla L2 chiara (46 px, voce attiva sottolineata). Logo grande con nome e
-versione sotto; blocco utente con nome e ruolo. Sotto 1360 px i tasti si stringono, sotto 1100 px spariscono nome app e
+versione sotto; Admin = ingranaggio SVG in un tasto quadrato (giallo solo dentro `/admin`, v4.35.1); blocco utente con nome e ruolo. Sotto 1360 px i tasti si stringono, sotto 1100 px spariscono nome app e
 utente. I nomi dei moduli in `modules.name` sono con la sola iniziale maiuscola (es. "Statistiche occupazione"):
 il menu li mostra così come sono, quindi un nuovo modulo va scritto allo stesso modo.
 Permessi: al login → `localStorage['moduli_permessi']`; ProtectedRoute verifica `puo_vedere`.
