@@ -98,12 +98,28 @@ CATALOGO = [
              link="/statistiche-produzione?tab=prod-occupazione", nota="Occupazione e Consumo, dati del mese prima."),
     Attivita("caparre", "Completa la coda delle caparre", "Tesoreria", "mensile", giorno=15, mesi=INVERNO,
              automatica=False, link="/tesoreria?tab=caparre"),
+    Attivita("quietanze_f24", "Quietanze F24 del mese: credito IVA e F24 pagati", "Tesoreria", "mensile", giorno=20,
+             automatica=False, link="/admin?s=tes-fiscale",
+             nota="Dove: cassetto fiscale AdE → Versamenti → F24 → «Quietanza di versamento» di ogni delega del mese "
+                  "(di solito il 16; anche il 30 per gli acconti di novembre e giugno), oppure chiederle allo studio. "
+                  "Cosa leggere: codice 6099 nella colonna «importi a credito compensati» = credito IVA usato; "
+                  "1701, 1704, 1631, 1627 a credito = altri crediti; «Saldo delega» = quanto esce dalla banca; a "
+                  "settembre il codice 6008 a debito = IVA di agosto. Dove va: Admin → Tesoreria → Dati fiscali → "
+                  "Credito IVA: togliere dalla prima riga il 6099 usato (= nuovo residuo); se lo studio paga un F24 "
+                  "senza usare il credito: Tesoreria → Impegni → Modifica → «Pagare senza usare il credito IVA». In "
+                  "alternativa: PDF in uploads/tesoreria_campioni/fisco e li inserisce Claude."),
     Attivita("ce_contabile", "Export della contabilità (CE contabile)", "USALI", "mensile", giorno=20,
              link="/usali?tab=contabile", nota="Conto Economico contabile → Import."),
     Attivita("tasca", "Saldo prepagata TASCA", "Tesoreria", "mensile", giorno=28, link="/tesoreria?tab=import"),
     Attivita("bcc", "Estratto carta BCC (chiusura il 28)", "Tesoreria", "mensile", giorno=31, link="/tesoreria?tab=import",
              nota="Import e saldi → saldo manuale = saldo attuale."),
     # ── Ogni anno ──
+    Attivita("dati_fiscali", "Controllo annuale dei Dati fiscali {anno}", "Tesoreria", "annuale", giorno=31, mese=1,
+             automatica=False, link="/admin?s=tes-fiscale",
+             nota="Admin → Tesoreria → Dati fiscali: tributi fissi dell'anno (registro dei contratti, libri sociali: "
+                  "importi e date dagli F24 dell'anno prima); «Previsione fino al» spostata in avanti di un anno (la "
+                  "previsione deve guardare sempre 12–15 mesi avanti); crediti IVA esauriti da togliere; stima del "
+                  "credito dell'anno nuovo («5.000 € dal» = 1° gennaio). «Salva» aggiorna da solo le scadenze."),
     Attivita("dich_iva", "Dichiarazione IVA {anno} (anno {prima}): credito IVA", "Tesoreria", "annuale", giorno=30,
              mese=4, automatica=False, link="/admin?s=tes-fiscale",
              nota="Dove: cassetto fiscale AdE → Dichiarazioni fiscali → modello «IVA {anno}», presentato nel {anno} "
