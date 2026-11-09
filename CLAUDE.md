@@ -162,6 +162,9 @@ UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % 
     admin chiamati anche per altri ruoli, letture di preferenze da `localStorage`, Login/Stampante RT con messaggi propri.
 - **Mai `toISOString()` per ricavare una data da un `Date` locale** (in Italia mezzanotte → giorno prima in UTC):
   usare `isoLocale(d)` / `oggiIso()` di `utils/format.js`. Bug reale in Budget e in altri 5 punti (corretti v4.30.11).
+- Campo data che **salva subito** (senza pulsante Salva): salvare all'uscita dal campo/Invio, mai a ogni `onChange`
+  (scrivendo l'anno il browser passa per 0002, 0020, 0202… e il ricaricamento rimescola la data: bug reale in Tesoreria,
+  `InputDataSalvata` in `AdminTesoreria.jsx`).
 - Mai leggere stato React dentro un `setTimeout` di debounce: usare un ref o passare il valore (bug reale in Budget).
 - `key` React nelle liste: sul Fragment restituito dal `.map()` (`<Fragment key=…>`), non sui figli.
 

@@ -1381,6 +1381,8 @@ def modifica_pagamento_fattura(fattura_id: int, corpo: PagamentoFatturaIn, db: S
             f.data_pagamento = date.fromisoformat(corpo.data_pagamento) if corpo.data_pagamento else None
         except ValueError:
             raise HTTPException(400, "Data di pagamento non valida")
+        if f.data_pagamento and f.data_pagamento.year < 2000:
+            raise HTTPException(400, "Data di pagamento non valida")
     db.commit()
     return _fattura_json(f, pagamenti_fatture(db, _voci([f])))
 

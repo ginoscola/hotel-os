@@ -1232,6 +1232,8 @@ si assegnano con `POST /piani/interventi/{id}/fatture-sdi`: una rata `XML:{impro
 originale (`fatture_collegate`), **senza modalità né data di pagamento proposte**: le inserisce l'utente (scelta sua: sono poche e
 sa come sono state pagate), finché mancano la spesa conta "da completare". Stato SDI `autofattura` = pagata per la spesa.
 TD16/TD19 restano escluse (la fattura vera del fornitore italiano è già nello SDI: si conterebbe due volte).
+**v4.31.4** — date di pagamento delle fatture collegate e date delle rate delle spese salvate all'uscita dal campo
+(`InputDataSalvata`), non a ogni tasto: scrivendo 2025 venivano salvati anni come 0002/0025; il backend rifiuta anni < 2000.
 
 **v4.30.2 — linea "senza le spese straordinarie" anche sul passato** (06/11/2026, scelta (a) dell'utente): ogni punto di
 `storico` ha `straordinarie` del mese (`_straordinarie_pagate()` in `tesoreria_previsione.py`: uscite dei conti banca segnate

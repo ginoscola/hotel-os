@@ -735,7 +735,7 @@ function ModaleRate({ piano, titolo, url, onChiudi, onAggiorna }) {
           <tbody>
             {piano.rate.map(r => (
               <tr key={r.id}>
-                <Td><Input type="date" value={r.data_prevista} disabled={r.pagata} onChange={e => salvaData(r, e.target.value)} /></Td>
+                <Td><InputDataSalvata valore={r.data_prevista} disabled={r.pagata} onSalva={v => salvaData(r, v)} /></Td>
                 <Td num>
                   <Input value={r.automatica ? r.percentuale : (percentuali[r.id] ?? r.percentuale)} inputMode="decimal" disabled={r.automatica || r.pagata} style={{ width: 90 }}
                     onChange={e => setPercentuali({ ...percentuali, [r.id]: e.target.value })} onBlur={() => salvaPercentuale(r)} />
@@ -1055,6 +1055,20 @@ export function AdminTesoreriaAdvertising() {
 
 const ORIGINE_FATTURA = { passcom: 'Scadenzario', sdi: 'SDI' }
 
+/** Data salvata quando si esce dal campo o si preme Invio, non a ogni tasto: mentre si scrive l'anno il browser passa
+ *  per date valide intermedie (0002, 0020, 0202…) che, salvate e ricaricate, rimescolano quello che si sta scrivendo. */
+function InputDataSalvata({ valore, onSalva, ...props }) {
+  const [bozza, setBozza] = useState(valore || '')
+  useEffect(() => { setBozza(valore || '') }, [valore])
+  const conferma = () => {
+    if (bozza === (valore || '')) return
+    if (bozza && !/^(19|20)\d\d-/.test(bozza)) { setBozza(valore || ''); return }   // anno incompleto: si torna al salvato
+    onSalva(bozza)
+  }
+  return <Input type="date" {...props} value={bozza} onChange={e => setBozza(e.target.value)} onBlur={conferma}
+    onKeyDown={e => { if (e.key === 'Enter') conferma() }} />
+}
+
 function contiene(testo, q) {
   return !q || (testo || '').toLowerCase().includes(q.toLowerCase())
 }
@@ -1080,7 +1094,7 @@ function RigaFatturaCollegata({ f, onCambia, onTogli, onVedi }) {
         </Select>
       </Td>
       <Td>
-        <Input type="date" value={f.data_pagamento || ''} onChange={e => salva({ data_pagamento: e.target.value })} />
+        <InputDataSalvata valore={f.data_pagamento} onSalva={v => salva({ data_pagamento: v })} />
         {f.pagamento_banca && <div className="ui-text-muted">trovato in banca il {formatData(f.pagamento_banca.data)}{f.pagamento_banca.straordinario ? ' (già straordinario)' : ''}</div>}
       </Td>
       <Td><Button size="sm" variant="ghost" onClick={onTogli}>Togli</Button></Td>

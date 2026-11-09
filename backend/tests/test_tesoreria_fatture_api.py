@@ -427,6 +427,8 @@ def test_fattura_chiusa_assegnata_a_spesa_esce_dallo_storico(client, Sessione, t
     assert client.put(f"/tesoreria/piani/interventi/fatture/{f['id']}", json={"modalita_pagamento": "contanti"}).status_code == 200
     assert client.get("/tesoreria/previsione").json()["straordinarie_tolte"] == []
     assert client.put(f"/tesoreria/piani/interventi/fatture/{f['id']}", json={"modalita_pagamento": "xx"}).status_code == 400
+    # anno scritto a metà nel campo data (0025): rifiutato
+    assert client.put(f"/tesoreria/piani/interventi/fatture/{f['id']}", json={"data_pagamento": "0025-01-01"}).status_code == 400
     # riassegnata a un'altra spesa: si sposta con la sua modalità
     j = client.post("/tesoreria/piani/interventi", json={"descrizione": "Altro lavoro"}).json()
     r = client.post(f"/tesoreria/piani/interventi/{j['id']}/fatture-sdi", json={"fattura_ids": [ids["77"]]})
