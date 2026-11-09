@@ -3,6 +3,7 @@ avviso TARI (PDF finto con reportlab). DB dedicato, file in cartella temporanea.
 import io
 import os
 import sys
+import json
 from datetime import date, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -304,3 +305,14 @@ def test_data_aggiornamento_credito_solo_se_cambia(client):
     # stesso giorno, nuovo importo: una sola data
     r = client.put("/tesoreria/impegni/parametri", json={"crediti_iva": [{"importo": 80, "disponibile_dal": "2020-01-01"}]})
     assert r.json()["credito_iva_aggiornamenti"] == [date.today().isoformat()]
+
+
+def test_credito_futuro_non_conta_come_aggiornamento(client, test_engine):
+    """Cambiare la stima del credito dell'anno dopo non vuol dire aver aggiornato il residuo."""
+    with test_engine.begin() as conn:
+        conn.execute(text("INSERT INTO app_config (key, value) VALUES ('tesoreria_fiscale_parametri', :v)"), {"v": json.dumps({
+            "crediti_iva": [{"importo": 100, "disponibile_dal": "2020-01-01"}, {"importo": 500, "disponibile_dal": "2099-04-16"}],
+            "credito_iva_aggiornamenti": ["2026-11-02"]})})
+    r = client.put("/tesoreria/impegni/parametri", json={"crediti_iva": [
+        {"importo": 100, "disponibile_dal": "2020-01-01"}, {"importo": 300, "disponibile_dal": "2099-04-16"}]})
+    assert r.json()["credito_iva_aggiornamenti"] == ["2026-11-02"]

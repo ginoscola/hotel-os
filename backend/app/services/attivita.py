@@ -100,7 +100,9 @@ CATALOGO = [
              automatica=False, link="/tesoreria?tab=caparre"),
     Attivita("credito_iva", "Credito IVA residuo dal gestionale", "Tesoreria", "mensile", giorno=20,
              link="/admin?s=tes-fiscale",
-             nota="Dopo che lo studio ha registrato gli F24 del 16. Dove: gestionale → [fonte da definire]. Dove va: "
+             nota="Dopo che lo studio ha registrato gli F24 del 16. Dove: gestionale → [fonte da definire; probabile: "
+                  "scheda contabile del conto 415.00011 Erario c/IVA, compensazioni F24, da confermare con lo studio — il "
+                  "saldo del conto da solo comprende anche il credito che si forma nell'anno, non usabile in F24]. Dove va: "
                   "Admin → Tesoreria → Dati fiscali → Credito IVA, prima riga = residuo (le righe dei crediti degli "
                   "anni dopo restano). Se lo studio paga un F24 senza usare il credito: Tesoreria → Impegni → Modifica "
                   "→ «Pagare senza usare il credito IVA». Fatta quando il credito IVA viene salvato nel mese."),
@@ -115,13 +117,17 @@ CATALOGO = [
              nota="Admin → Tesoreria → Dati fiscali: tributi fissi dell'anno (registro dei contratti, libri sociali: "
                   "importi e date dagli F24 dell'anno prima); «Previsione fino al» spostata in avanti di un anno (la "
                   "previsione deve guardare sempre 12–15 mesi avanti); crediti IVA esauriti da togliere; stima del "
-                  "credito dell'anno nuovo («5.000 € dal» = 1° gennaio). «Salva» aggiorna da solo le scadenze."),
+                  "credito dell'anno appena chiuso (riga con «5.000 € dal» = 1° gennaio) = saldo al 31/12 dal bilancio di "
+                  "verifica: conto 415.00011 Erario c/IVA (se in attività) + 212.00001 IVA su acquisti. «Salva» aggiorna "
+                  "da solo le scadenze."),
     Attivita("dich_iva", "Dichiarazione IVA {anno} (anno {prima}): credito IVA", "Tesoreria", "annuale", giorno=30,
              mese=4, automatica=False, link="/admin?s=tes-fiscale",
              nota="Dove: cassetto fiscale AdE → Dichiarazioni fiscali → modello «IVA {anno}», presentato nel {anno} "
                   "per l'anno d'imposta {prima} (se c'è, anche l'integrativa: vale l'ultima). Cosa serve: il credito "
                   "IVA annuo, quadro VL, rigo VL33. Dove va: Admin → Tesoreria → Dati fiscali, crediti IVA (oltre "
-                  "5.000 € si usa in F24 solo dopo la presentazione). In alternativa: PDF in "
+                  "5.000 € si usa in F24 solo dopo la presentazione). Il credito della dichiarazione comprende già il "
+                  "residuo dell'anno prima non usato: quella riga va azzerata o tolta, altrimenti conta due volte. In "
+                  "alternativa: PDF in "
                   "uploads/tesoreria_campioni/fisco e lo inserisce Claude."),
     Attivita("tari_acconto", "Avviso TARI {anno} di acconto", "Tesoreria", "annuale", giorno=31, mese=5,
              automatica=False, link="/tesoreria?tab=impegni",

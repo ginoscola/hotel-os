@@ -58,6 +58,15 @@ PARAMETRI_DEFAULT = {
 MAX_AGGIORNAMENTI_CREDITO = 36
 
 
+def _residuo_credito(crediti: list) -> Optional[tuple]:
+    """Il credito già disponibile (prima riga per data): è quello portato ogni mese al residuo del gestionale.
+    Le righe dei crediti futuri (stime, dichiarazione) non contano come aggiornamento del residuo."""
+    if not crediti:
+        return None
+    c = min(crediti, key=lambda x: str(x.get("disponibile_dal", "")))
+    return str(c.get("disponibile_dal", "")), str(c.get("importo"))
+
+
 def leggi_parametri(db: Session) -> dict:
     parametri = json.loads(json.dumps(PARAMETRI_DEFAULT))
     riga = db.query(AppConfig).filter(AppConfig.key == CHIAVE_PARAMETRI).first()
@@ -263,7 +272,7 @@ def put_parametri(corpo: dict, db: Session = Depends(get_db), _=Depends(puo_modi
     prima = leggi_parametri(db)
     parametri = {**prima, **corpo}
     # Residuo del credito aggiornato a mano ogni mese: si tiene la data (avviso se vecchio, attività ricorrente fatta)
-    if parametri["crediti_iva"] != prima["crediti_iva"]:
+    if _residuo_credito(parametri["crediti_iva"]) != _residuo_credito(prima["crediti_iva"]):
         oggi = date.today().isoformat()
         storico = [d for d in prima["credito_iva_aggiornamenti"] if d != oggi] + [oggi]
         parametri["credito_iva_aggiornamenti"] = storico[-MAX_AGGIORNAMENTI_CREDITO:]

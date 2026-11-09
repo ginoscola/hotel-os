@@ -1296,6 +1296,13 @@ dell'attività `credito_iva`).
   `2026-11-02` (residuo 12.379,13 € dalle quietanze fino al 16/10).
 - `GET /tesoreria/impegni` → `credito_iva_aggiornato_al`; Impegni: data nel riquadro del credito e avviso oltre 40 giorni.
 - Attività ricorrente `credito_iva` (il 20, automatica sulle date sopra) al posto di `quietanze_f24`.
+- Conta come aggiornamento solo il cambio del credito **già disponibile** (riga con `disponibile_dal` minore,
+  `_residuo_credito()`): cambiare la stima del credito dell'anno dopo non spunta l'attività.
+- **Bilancio di verifica al 09/11/2026** (Passcom, BILAGRA): 415.00011 Erario c/IVA 14.363,94 € in attività + 212.00001 IVA
+  su acquisti 9.869,71 € = ~24.234 € = residuo 2025 (12.379 €) + credito 2026 in formazione (~11.855 €, HotelOS a fine
+  ottobre 10.548 €: coerente). La stima del credito 2026 (dichiarazione 2027) copiata dal 2025 (57.266 €) era il doppio:
+  **portata a 24.000 €** (scelta dell'utente), copertura F24 2027 da 60.404 € a 27.138 €. A gennaio: saldo al 31/12 di
+  quei due conti; alla dichiarazione azzerare la riga del residuo (già compreso nel credito nuovo).
 
 ### Da fare più avanti (idee approvate dall'utente, non ancora pianificate)
 - **Ritmo di incasso da più anni** (03/11/2026): oggi entrate e caparre della previsione usano un solo anno di
