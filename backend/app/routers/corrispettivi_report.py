@@ -18,7 +18,7 @@ from datetime import date
 from typing import List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -26,6 +26,7 @@ from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.models.corrispettivi import (
     CorrispettiviDocumento, CorrispettiviImport, CorrispettiviManuale, CorrispettiviIncassoStorico,
 )
+from app.services.corrispettivi_competenza import data_competenza_col
 from app.routers.corrispettivi_shared import (
     STRUTTURE_HOTEL, STRUTTURE_MANUALI, STRUTTURE_ORDINE, NOME_STRUTTURA, CATEGORIE, _to_float,
 )
@@ -272,11 +273,49 @@ def check_totali(
     }
 
 
+def _acconti_altri_anni(db: Session, anno: int, is_test: bool, valore) -> dict:
+    """Acconti che la vista per competenza sposta tra anni (tassa di soggiorno esclusa, come il totale):
+    `verso_anni_successivi` = emessi nell'anno per soggiorni di anni dopo (fuori dal totale dell'anno),
+    `da_anni_precedenti` = emessi in anni prima per soggiorni di quest'anno (dentro il totale).
+    `valore(lordo, categoria)` = conversione lordo/netto di report_fatturati."""
+    anno_doc = func.extract('year', CorrispettiviDocumento.data_documento)
+    anno_comp = func.extract('year', data_competenza_col())
+    emesso_ora = (anno_doc == anno).label('emesso_ora')
+    righe = (
+        db.query(
+            emesso_ora,
+            CorrispettiviDocumento.categoria,
+            func.count(CorrispettiviDocumento.id),
+            func.sum(CorrispettiviDocumento.totale_lordo
+                     - func.coalesce(CorrispettiviDocumento.tassa_soggiorno, 0)),
+        )
+        .filter(
+            CorrispettiviDocumento.data_competenza.isnot(None),
+            anno_comp != anno_doc,
+            or_(anno_doc == anno, anno_comp == anno),
+            CorrispettiviDocumento.tipo.in_(['scontrino', 'fattura']),
+            CorrispettiviDocumento.annullato == False,
+            CorrispettiviDocumento.is_test == is_test,
+            func.coalesce(CorrispettiviDocumento.categoria, 'altro') != 'tassa_soggiorno',
+        )
+        .group_by(emesso_ora, CorrispettiviDocumento.categoria)
+        .all()
+    )
+    out = {'verso_anni_successivi': {'importo': 0.0, 'n_documenti': 0},
+           'da_anni_precedenti': {'importo': 0.0, 'n_documenti': 0}}
+    for ora, cat, n, lordo_tot in righe:
+        chiave = 'verso_anni_successivi' if ora else 'da_anni_precedenti'
+        out[chiave]['importo'] = round(out[chiave]['importo'] + valore(_to_float(lordo_tot), cat or 'altro'), 2)
+        out[chiave]['n_documenti'] += int(n)
+    return out
+
+
 @router.get("/report/fatturati")
 def report_fatturati(
     anno: int = Query(..., ge=2020, le=2030),
     lordo: bool = Query(True),
     is_test: bool = Query(False),
+    competenza: bool = Query(False, description="True = per data di competenza (acconti al giorno di arrivo)"),
     db: Session = Depends(get_db),
     _=Depends(richiedi_utente_attivo),
 ):
@@ -286,8 +325,15 @@ def report_fatturati(
     (annullato=false) più corrispettivi_manuali per MMS/BON.
     Tassa soggiorno esclusa dal totale (transito verso il Comune).
     Se lordo=false applica divisori per categoria.
+    competenza=False (default, usato dalle chiamate interne: IVA e previsioni di Tesoreria, WAVE,
+    Analisi Ricavi) = per data del documento, come i giornalieri e l'RT. competenza=True = per data di
+    competenza (services/corrispettivi_competenza.py) + `acconti` con quanto spostato da/verso altri anni.
     """
     from app.utils.locale_it import MESI_IT
+
+    # Chiamata interna senza il parametro: il default è l'oggetto Query, non un bool.
+    competenza = competenza is True
+    data_col = data_competenza_col() if competenza else CorrispettiviDocumento.data_documento
 
     ALIQ: dict = {
         'arrangiamenti': 10.0,
@@ -304,7 +350,7 @@ def report_fatturati(
         return round(val_lordo / (1 + aliq / 100), 2) if aliq else round(val_lordo, 2)
 
     # ── Query documenti aggregata per (mese, struttura, categoria) ────────────
-    mese_col = func.extract('month', CorrispettiviDocumento.data_documento).label('mese')
+    mese_col = func.extract('month', data_col).label('mese')
     righe_doc = (
         db.query(
             mese_col,
@@ -315,7 +361,7 @@ def report_fatturati(
             func.sum(CorrispettiviDocumento.tassa_soggiorno).label('sum_ts'),
         )
         .filter(
-            func.extract('year', CorrispettiviDocumento.data_documento) == anno,
+            func.extract('year', data_col) == anno,
             CorrispettiviDocumento.tipo.in_(['scontrino', 'fattura']),
             CorrispettiviDocumento.annullato == False,
             CorrispettiviDocumento.is_test == is_test,
@@ -389,9 +435,13 @@ def report_fatturati(
             per_mese[m][sc] = _empty_cats()
         per_mese[m][sc]['arrangiamenti'] += arr
 
+    acconti = _acconti_altri_anni(db, anno, is_test, _v) if competenza else None
+
     if not per_mese:
         return {
             'anno': anno,
+            'competenza': competenza,
+            'acconti': acconti,
             'strutture': [],
             'mesi': [],
             'totale_anno': {
@@ -467,6 +517,8 @@ def report_fatturati(
 
     return {
         'anno': anno,
+        'competenza': competenza,
+        'acconti': acconti,
         'strutture': strutture_presenti,
         'mesi': mesi_output,
         'totale_anno': {
@@ -1250,6 +1302,7 @@ def export_fatturati(
     anno: int = Query(..., ge=2020, le=2030),
     lordo: bool = Query(True),
     is_test: bool = Query(False),
+    competenza: bool = Query(False),
     db: Session = Depends(get_db),
     _=Depends(richiedi_utente_attivo),
 ):
@@ -1261,7 +1314,7 @@ def export_fatturati(
     from openpyxl.utils import get_column_letter
 
     # Riusa la logica di report_fatturati
-    dati = report_fatturati(anno=anno, lordo=lordo, is_test=is_test, db=db, _=None)
+    dati = report_fatturati(anno=anno, lordo=lordo, is_test=is_test, competenza=competenza, db=db, _=None)
     strutture = dati['strutture']
     mesi = dati['mesi']
     tot_anno = dati['totale_anno']
@@ -1330,6 +1383,20 @@ def export_fatturati(
                  tot_anno.get('totale_ristoranti') or 0.0,
                  tot_anno.get('totale_generale') or 0.0]
     _tot_row(ws1, len(mesi) + 2, tot_vals)
+    # Vista per competenza: cosa è stato spostato da/verso altri anni (sotto il totale, fuori tabella)
+    riga_nota = len(mesi) + 4
+    ws1.cell(row=riga_nota, column=1,
+             value='Per competenza: acconti al giorno di arrivo' if competenza
+             else 'Per data scontrino (come giornalieri e RT)').font = Font(italic=True, size=9)
+    acconti = dati.get('acconti') or {}
+    for etichetta, chiave in (('Acconti per anni successivi (esclusi)', 'verso_anni_successivi'),
+                              ('di cui incassati in anni precedenti (inclusi)', 'da_anni_precedenti')):
+        voce = acconti.get(chiave) or {}
+        if voce.get('n_documenti'):
+            riga_nota += 1
+            ws1.cell(row=riga_nota, column=1, value=etichetta)
+            cella = ws1.cell(row=riga_nota, column=2, value=float(voce['importo']))
+            cella.number_format = NUM_FMT
     _autowidth(ws1)
 
     # ── Foglio 2: Tassa di Soggiorno ──────────────────────────────────────────
@@ -1390,7 +1457,7 @@ def export_fatturati(
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    filename = f'corrispettivi_fatturati_{anno}.xlsx'
+    filename = f'corrispettivi_fatturati_{anno}{"_competenza" if competenza else ""}.xlsx'
     return StreamingResponse(
         buf,
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

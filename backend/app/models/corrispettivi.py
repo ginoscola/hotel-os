@@ -93,6 +93,11 @@ class CorrispettiviDocumento(Base):
     data_creazione_doc = Column(Date, nullable=True)
     utente_creazione = Column(Text, nullable=True)
 
+    # Data di competenza gestionale (v4.37.0): NULL = data_documento. Un acconto incassato prima
+    # dell'arrivo conta nel giorno di arrivo (services/corrispettivi_competenza.py). Solo report
+    # gestionali: i report fiscali (giornalieri, RT, IVA) restano su data_documento.
+    data_competenza = Column(Date, nullable=True)
+
     # Campi audit per modifiche manuali
     modificato_manualmente = Column(Boolean, nullable=False, default=False)
     totale_lordo_originale = Column(Numeric(12, 2), nullable=True)

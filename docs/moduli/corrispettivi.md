@@ -47,6 +47,28 @@ Annullamenti negativi: usare `abs(imponibile)` nella categorizzazione (non `impo
   `tassa_soggiorno_nrs`, `num_documenti`, `pagato_contanti`, `pagato_elettronico` — tutti nullable
   (assenti sulle righe manuali che non arrivano da import XML).
 
+### Data di competenza — acconti incassati prima dell'arrivo (v4.37.0, 16/11/2026)
+Caso reale: tariffa prepagata non rimborsabile introdotta nel 2026, scontrino D-SC 1943 del 12/11/2026 (433,50 €,
+tipo conto Welcome "Acconto") per un soggiorno dal 29/05/2027. **Fiscalmente resta nel giorno dello scontrino**
+(chiusura RT, IVA esigibile all'incasso); **gestionalmente è ricavo del soggiorno**: al check-out Welcome emetterà
+solo il saldo, con l'acconto già scalato.
+- Colonna `corrispettivi_documenti.data_competenza` (NULL = `data_documento`), regola unica in
+  `services/corrispettivi_competenza.py`: scontrino/fattura con `maschera_conto='Acconto'` e `arrivo > data_documento`
+  → `data_competenza = arrivo` (come se il cliente avesse pagato al check-in, come per il 58% degli scontrini).
+  Calcolata all'import (anche con `aggiorna`); i documenti già caricati sono stati ricalcolati dalla migrazione
+  `corrcomp001_2026` (48 acconti, 5.867,77 €: uno solo cambia anno, ~1.670 € cambiano mese).
+- Gli acconti emessi **durante** il soggiorno (320, il grosso) o alla partenza non si spostano.
+- Correggibile a mano in "Modifica scontrino" (campo "Data di competenza"; vuota o uguale alla data = nessuno
+  spostamento): serve per il formato Excel base, che non ha la colonna arrivo. In lista: badge "→ gg/mm/aaaa".
+- **Per competenza**: Riepilogo Fatturati (selettore "Per competenza" di default / "Per data scontrino", anche
+  nell'export `?competenza=true`, risposta con `acconti.verso_anni_successivi` e `acconti.da_anni_precedenti`),
+  Conto Economico USALI (`_ricavi_ristorante`, `_somma_penali_corrispettivi`), Food & Beverage (`_carica_corrispettivi`).
+- **Per data del documento** (invariati): giornalieri e relativo export, Controllo RT, `report_fatturati()` chiamato
+  dall'interno senza `competenza` (default False: IVA, KPI e previsioni di Tesoreria, WAVE, Analisi Ricavi).
+  `report_fatturati` converte `competenza` con `is True`: nelle chiamate interne il default è l'oggetto `Query`.
+- Una prepagata disdetta diventa penale senza nuovo scontrino: resta l'acconto, di competenza dell'anno del soggiorno.
+- I ricavi camere degli hotel in USALI vengono dal modulo Revenue (per notte): lì l'acconto era già nel 2027.
+
 ### Idempotenza import
 - **salta** (default): ON CONFLICT DO NOTHING
 - **aggiorna**: aggiorna campi MA protegge `modificato_manualmente=True`

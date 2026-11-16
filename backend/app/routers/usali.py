@@ -26,6 +26,7 @@ from app.models.revenue import (
     EmployeeCostCenterMonthly, EmployeeMonthly, PayrollImport,
 )
 from app.models.corrispettivi import CorrispettiviDocumento, CorrispettiviManuale
+from app.services.corrispettivi_competenza import data_competenza_col
 from app.models.produzione import ProdCategoria, ProdRiga
 from app.services.usali_contabile_ce import (
     VOCI_AUTO as VOCI_AUTO_CONTABILE, mesi_contabili, voci_da_contabile,
@@ -284,7 +285,7 @@ def _ricavi_ristorante(db: Session, struttura_code: str, da: date, a: date) -> O
         db.query(func.sum(CorrispettiviDocumento.imponibile))
         .filter(
             CorrispettiviDocumento.struttura_code == struttura_code,
-            CorrispettiviDocumento.data_documento.between(da, a),
+            data_competenza_col().between(da, a),
             CorrispettiviDocumento.tipo.in_(['scontrino', 'fattura']),
             CorrispettiviDocumento.categoria == 'arrangiamenti',
             CorrispettiviDocumento.annullato == False,
@@ -885,7 +886,7 @@ def _somma_penali_corrispettivi(db: Session, struttura_code: str, da: date, a: d
         .filter(
             CorrispettiviDocumento.struttura_code == struttura_code,
             CorrispettiviDocumento.categoria == 'penali',
-            CorrispettiviDocumento.data_documento.between(da, a),
+            data_competenza_col().between(da, a),
             CorrispettiviDocumento.annullato.is_(False),
             CorrispettiviDocumento.is_test.is_(False),
         )

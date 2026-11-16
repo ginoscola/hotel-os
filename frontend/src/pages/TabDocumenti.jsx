@@ -87,6 +87,8 @@ function ModalModifica({ doc, tipo, onSalva, onChiudi }) {
     ospiti:             doc?.ospiti ?? '',
     tipo_pagamento:     doc?.tipo_pagamento ?? '',
     categoria_pagamento: doc?.categoria_pagamento ?? '',
+    // vuota = data del documento (il backend azzera anche se uguale alla data del documento)
+    data_competenza:    doc?.data_competenza ?? '',
   })
   const [tipiPagamento, setTipiPagamento] = useState([])
   const [saving, setSaving] = useState(false)
@@ -221,6 +223,15 @@ function ModalModifica({ doc, tipo, onSalva, onChiudi }) {
               <option key={c} value={c}>{NOME_CAT[c]}</option>
             ))}
           </Select>
+        </Field>
+
+        <Field label="Data di competenza" style={pieno}>
+          <Input type="date" value={form.data_competenza} max="2099-12-31"
+            onChange={e => setForm(f => ({ ...f, data_competenza: e.target.value }))} style={pieno} />
+          <span className="ui-text-muted" style={{ fontSize: 'var(--fs-xs)' }}>
+            Vuota = data dello scontrino ({fmtD(doc.data_documento)}). Un acconto incassato prima dell'arrivo va al giorno
+            di arrivo{doc.arrivo ? ` (${fmtD(doc.arrivo)})` : ''}. Vale solo per Riepilogo Fatturati e USALI: giornalieri, RT e IVA restano sulla data dello scontrino.
+          </span>
         </Field>
 
         <Field label="Forma di pagamento" style={pieno}>
@@ -506,7 +517,13 @@ export default function TabDocumenti({ endpoint, tipo, lordo, refreshKey }) {
           <tbody>
             {docs.map(d => (
               <tr key={d.id} className={[d.annullato && 'ui-riga-annullata', d.modificato_manualmente && 'ui-riga-modificata'].filter(Boolean).join(' ') || undefined}>
-                <Td style={{ color: colors.textSecond, whiteSpace: 'nowrap' }}>{fmtD(d.data_documento)}</Td>
+                <Td style={{ color: colors.textSecond, whiteSpace: 'nowrap' }}>
+                  {fmtD(d.data_documento)}
+                  {d.data_competenza && (
+                    <Badge tono="info" style={{ marginLeft: 6 }}
+                      title="Acconto: nel Riepilogo Fatturati e in USALI conta in questa data (competenza)">→ {fmtD(d.data_competenza)}</Badge>
+                  )}
+                </Td>
                 <Td num>{d.numero}</Td>
                 <Td muted>{d.suffisso}</Td>
                 <Td><HotelTag code={d.struttura_code} /></Td>

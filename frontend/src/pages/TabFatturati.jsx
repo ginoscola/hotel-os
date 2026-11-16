@@ -59,6 +59,9 @@ export default function TabFatturati({ lordo }) {
   const [raggruppaPer, setRaggruppaPer] = useState('struttura')
   const [apriTs, setApriTs] = useState(false)
   const [apriControllo, setApriControllo] = useState(false)
+  // 'competenza' = acconti incassati prima dell'arrivo al giorno di arrivo (default) | 'documento' = data scontrino
+  const [vista, setVista] = useState('competenza')
+  const competenza = vista === 'competenza'
   const avvisi = useAvvisi()
 
   const carica = useCallback(async () => {
@@ -67,7 +70,7 @@ export default function TabFatturati({ lordo }) {
     setDrillDown(null)
     try {
       const [r1, r2] = await Promise.all([
-        api.get('/corrispettivi/report/fatturati', { params: { anno, lordo } }),
+        api.get('/corrispettivi/report/fatturati', { params: { anno, lordo, competenza } }),
         api.get('/corrispettivi/report/tipo-incasso', { params: { anno } }),
       ])
       setDati(r1.data)
@@ -77,7 +80,7 @@ export default function TabFatturati({ lordo }) {
     } finally {
       setLoading(false)
     }
-  }, [anno, lordo])
+  }, [anno, lordo, competenza])
 
   useEffect(() => { carica() }, [carica])
 
@@ -88,6 +91,7 @@ export default function TabFatturati({ lordo }) {
   const strutture = dati.strutture || []
   const mesi      = dati.mesi || []
   const totAnno   = dati.totale_anno || {}
+  const acconti   = dati.acconti
   const strutHotel = strutture.filter(s => STRUTTURE_HOTEL.includes(s))
   const strutRist  = strutture.filter(s => STRUTTURE_MANUALI.includes(s))
 
@@ -142,13 +146,13 @@ export default function TabFatturati({ lordo }) {
   const esportaExcel = async () => {
     try {
       const res = await api.get('/corrispettivi/export/fatturati', {
-        params: { anno, lordo },
+        params: { anno, lordo, competenza },
         responseType: 'blob',
       })
       const url = URL.createObjectURL(res.data)
       const link = document.createElement('a')
       link.href = url
-      link.download = `corrispettivi_fatturati_${anno}.xlsx`
+      link.download = `corrispettivi_fatturati_${anno}${competenza ? '_competenza' : ''}.xlsx`
       link.click()
       URL.revokeObjectURL(url)
     } catch (e) {
@@ -177,6 +181,12 @@ export default function TabFatturati({ lordo }) {
           <Select value={anno} onChange={e => setAnno(Number(e.target.value))}>
             {[2024, 2025, 2026, 2027].map(a => <option key={a} value={a}>{a}</option>)}
           </Select>
+        </Field>
+        <Field label="Date">
+          <SegmentedControl value={vista} onChange={setVista} options={[
+            { value: 'competenza', label: 'Per competenza' },
+            { value: 'documento', label: 'Per data scontrino' },
+          ]} />
         </Field>
         {mesi.length > 0 && (
           <>
@@ -236,6 +246,21 @@ export default function TabFatturati({ lordo }) {
               </tr>
             </tbody>
           </Table>
+
+          {/* ── Acconti spostati tra anni (solo vista per competenza) ──────── */}
+          <p className="ui-text-muted" style={{ marginTop: -16, marginBottom: 24, fontSize: 'var(--fs-xs)' }}>
+            {competenza
+              ? 'Per competenza: gli acconti incassati prima dell\'arrivo (es. tariffa prepagata non rimborsabile) contano nel giorno di arrivo. I corrispettivi giornalieri, il Controllo RT e l\'IVA restano sulla data dello scontrino.'
+              : 'Per data scontrino: come i corrispettivi giornalieri e la chiusura RT.'}
+            {competenza && acconti?.verso_anni_successivi?.n_documenti > 0 && (
+              <><br />Acconti per stagioni future, esclusi dal totale: <strong>{formatEuro(acconti.verso_anni_successivi.importo)}</strong>
+                {' '}({acconti.verso_anni_successivi.n_documenti} {acconti.verso_anni_successivi.n_documenti === 1 ? 'documento' : 'documenti'})</>
+            )}
+            {competenza && acconti?.da_anni_precedenti?.n_documenti > 0 && (
+              <><br />Di cui incassati in anni precedenti, inclusi nel totale: <strong>{formatEuro(acconti.da_anni_precedenti.importo)}</strong>
+                {' '}({acconti.da_anni_precedenti.n_documenti} {acconti.da_anni_precedenti.n_documenti === 1 ? 'documento' : 'documenti'})</>
+            )}
+          </p>
 
           {/* ── Drill-down categorie ───────────────────────────────────────── */}
           {drillDown && drillDati && (
@@ -310,7 +335,7 @@ export default function TabFatturati({ lordo }) {
               </SezioneApribile>
 
               {/* ── Riepilogo di controllo ──────────────────────────────────────── */}
-              <SezioneApribile titolo="Riepilogo di controllo" nota="(il Totale Lordo deve coincidere con i corrispettivi giornalieri)"
+              <SezioneApribile titolo="Riepilogo di controllo" nota={competenza ? '(vista per competenza: per il confronto con i giornalieri scegliere "Per data scontrino")' : '(il Totale Lordo deve coincidere con i corrispettivi giornalieri)'}
                 aperta={apriControllo} onToggle={() => setApriControllo(v => !v)}>
                 <Table compact minWidth={420}>
                   <thead>

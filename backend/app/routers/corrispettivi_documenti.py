@@ -140,6 +140,7 @@ def _fmt_documento(d: CorrispettiviDocumento) -> dict:
         'contabilizzato_mexal': d.contabilizzato_mexal,
         'causale_cancellazione': d.causale_cancellazione,
         'maschera_conto': d.maschera_conto,
+        'data_competenza': d.data_competenza.isoformat() if d.data_competenza else None,
         'data_creazione_doc': d.data_creazione_doc.isoformat() if d.data_creazione_doc else None,
         'utente_creazione': d.utente_creazione,
     }
@@ -303,6 +304,15 @@ def _modifica_documento(doc_id: int, body: dict, db: Session, utente) -> dict:
     for campo, valore in body.items():
         if campo in campi_modificabili:
             setattr(doc, campo, valore)
+
+    # Data di competenza (v4.37.0): vuota o uguale alla data del documento = nessuno spostamento.
+    if 'data_competenza' in body:
+        valore = body['data_competenza'] or None
+        try:
+            nuova = date.fromisoformat(valore) if valore else None
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="data_competenza non valida (formato AAAA-MM-GG)")
+        doc.data_competenza = None if nuova == doc.data_documento else nuova
 
     # Ricalcola aliquota e categoria se imponibile/iva modificati
     if 'imponibile' in body or 'iva' in body:

@@ -29,6 +29,7 @@ from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from app.models.corrispettivi import CorrispettiviDocumento, CorrispettiviManuale
+from app.services.corrispettivi_competenza import data_competenza_col
 from app.models.produzione import ProdCategoria, ProdDettaglioCategoria, ProdRiga
 from app.models.revenue import (
     AppConfig, CostCenter, EmployeeCostCenterMonthly, EmployeeMonthly, PayrollImport,
@@ -262,15 +263,15 @@ def _carica_corrispettivi(db: Session, codice: str, anno: int) -> dict:
     ):
         out[int(mese)] += round(_f(lordo) / IVA_RISTORANTE, 2)
     for mese, imp in (
-        db.query(extract('month', CorrispettiviDocumento.data_documento),
+        db.query(extract('month', data_competenza_col()),
                  func.sum(CorrispettiviDocumento.imponibile))
         .filter(CorrispettiviDocumento.struttura_code == codice,
                 CorrispettiviDocumento.tipo.in_(['scontrino', 'fattura']),
                 CorrispettiviDocumento.categoria == 'arrangiamenti',
                 CorrispettiviDocumento.annullato.is_(False),
                 CorrispettiviDocumento.is_test.is_(False),
-                extract('year', CorrispettiviDocumento.data_documento) == anno)
-        .group_by(extract('month', CorrispettiviDocumento.data_documento)).all()
+                extract('year', data_competenza_col()) == anno)
+        .group_by(extract('month', data_competenza_col())).all()
     ):
         out[int(mese)] += _f(imp)
     return out

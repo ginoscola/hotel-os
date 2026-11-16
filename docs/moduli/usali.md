@@ -320,3 +320,8 @@ dato Welcome/PMS, tutto manuale come già in Corrispettivi per MMS/BON).
 azione di configurazione via endpoint già esistente, nessun codice toccato. Mostra 0€ finché
 l'Articolo Welcome esatto per gli acquisti shop non viene mappato a questa categoria in Mapping
 Dettagli (e, per import già caricati, dopo un "Ricalcola categorie righe esistenti").
+
+### Data di competenza dei Corrispettivi (v4.37.0, 16/11/2026)
+Le letture da `corrispettivi_documenti` (`_ricavi_ristorante`, `_somma_penali_corrispettivi`, F&B
+`_carica_corrispettivi`) filtrano su `data_competenza_col()` (= `data_competenza` o `data_documento`), non su
+`data_documento`: un acconto incassato prima dell'arrivo conta nel giorno di arrivo. Regola in `corrispettivi.md`.

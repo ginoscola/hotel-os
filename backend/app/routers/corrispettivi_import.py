@@ -17,6 +17,7 @@ from app.database import get_db
 from app.auth import richiedi_admin, richiedi_utente_attivo
 from app.models.corrispettivi import CorrispettiviDocumento, CorrispettiviImport
 from app.services.corrispettivi_excel_parser import parse_excel
+from app.services.corrispettivi_competenza import calcola_data_competenza
 from app.routers.corrispettivi_shared import _d
 
 router = APIRouter()
@@ -162,6 +163,7 @@ def importa_excel(
             maschera_conto=d.maschera_conto,
             data_creazione_doc=d.data_creazione_doc,
             utente_creazione=d.utente_creazione,
+            data_competenza=calcola_data_competenza(d.tipo, d.maschera_conto, d.arrivo, d.data_documento),
         )
 
     def _valori_doc(d, import_id: int) -> dict:
