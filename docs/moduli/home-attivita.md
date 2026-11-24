@@ -80,12 +80,13 @@ per gli admin, `pages/home/RiquadroAttivita.jsx` ("N attività in ritardo · M e
 - **Stato ricavato dagli import**, nessuna spunta per la maggior parte delle voci: catalogo `CATALOGO` in
   `services/attivita.py` (puro: occorrenze, finestre, stato), evidenze in `_evidenze()` di `routers/attivita.py`
   (date degli import/dati: corrispettivi per `data_documento`, `rt_chiusure`, incassi MMS/BON, snapshot Revenue per
-  hotel, `created_at` degli import di banca/Produzione/Passbi/Passcom/CE contabile/Welcome/previsioni salvate,
+  hotel, `created_at` degli import di banca/Produzione/Passbi/Passcom/CE contabile (per struttura)/Welcome/previsioni salvate,
   versamenti in Cassa, saldi manuali AMEX/BCC/TASCA; dati per (anno, mese) — cedolini, coperti, utenze — contano
   dal 1° del mese dopo; budget e stagioni dell'anno dopo contano a dicembre dell'anno prima).
 - Finestre: giornaliera = giorno del dato (scadenza il giorno dopo, solo nei giorni di `hotel_seasons` degli hotel
   indicati), settimanale = settimana lun–dom della scadenza, mensile = il mese, annuale = l'anno. `parti` = evidenze
-  richieste tutte (Revenue DPH/CLB/INT, coperti MMS/BON, Welcome disdette/non disdette).
+  richieste tutte (Revenue DPH/CLB/INT, coperti MMS/BON, Welcome disdette/non disdette, CE contabile DPH/CLB/INT/BON
+  da v4.37.1: export GoProfit, `UsaliImport.struttura_code`).
 - Titoli e note accettano `{anno}`/`{prima}` (anno della scadenza e anno prima, `testo()`): le voci fiscali dicono
   dove cercare nel cassetto fiscale e con quali anni (v4.23.1); nel PDF la nota è stampata sotto le voci a mano.
 - **«Vai» porta alla scheda giusta** (v4.33.0): i `link` del catalogo hanno `?tab=<id scheda>` (es. `/tesoreria?tab=import`),

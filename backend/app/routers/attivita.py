@@ -130,8 +130,8 @@ def _evidenze(db: Session, da: date, a: date) -> dict:
                                                   ["credito_iva_aggiornamenti"]) if da <= d <= a)}
     ev["passcom"] = {"": _date(db.query(_creato(TesoreriaScadImport.created_at)).filter(
         tra(_creato(TesoreriaScadImport.created_at))))}
-    ev["ce_contabile"] = {"": _date(db.query(_creato(UsaliImport.created_at)).filter(
-        tra(_creato(UsaliImport.created_at))))}
+    ev["ce_contabile"] = _per_parte(db.query(UsaliImport.struttura_code, _creato(UsaliImport.created_at)).filter(
+        tra(_creato(UsaliImport.created_at))))
     ev["cedolini"] = {"": _mese_dopo(db.query(PayrollImport.anno, PayrollImport.mese).filter(
         PayrollImport.is_test.is_(False)).distinct())}
     coperti = {}

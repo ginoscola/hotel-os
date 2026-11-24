@@ -106,8 +106,16 @@ CATALOGO = [
                   "Admin → Tesoreria → Dati fiscali → Credito IVA, prima riga = residuo (le righe dei crediti degli "
                   "anni dopo restano). Se lo studio paga un F24 senza usare il credito: Tesoreria → Impegni → Modifica "
                   "→ «Pagare senza usare il credito IVA». Fatta quando il credito IVA viene salvato nel mese."),
-    Attivita("ce_contabile", "Export della contabilità (CE contabile)", "USALI", "mensile", giorno=20,
-             link="/usali?tab=contabile", nota="Conto Economico contabile → Import."),
+    Attivita("ce_contabile", "Export della contabilità GoProfit (CE contabile)", "USALI", "mensile", giorno=20,
+             parti=("DPH", "CLB", "INT", "BON"), link="/usali?tab=contabile",
+             nota="Dove: GoProfit → conto economico riclassificato USALI, una struttura per volta (DPH con Mare "
+                  "Mosso, CLB, INT, BON), periodo da gennaio all'ultimo mese chiuso. Prima di esportare espandere "
+                  "tutte le righe (con righe chiuse i subtotali non tornano e l'import viene rifiutato). Dalla "
+                  "stessa vista scaricare l'Excel (.xlsx, obbligatorio: gerarchia e importi) e il CSV (consigliato: "
+                  "riconosce da solo la struttura e aggiunge gli id dei conti); xlsx e csv di due esportazioni "
+                  "diverse non si abbinano e il csv viene ignorato. Dove va: USALI → Conto Economico contabile → "
+                  "Import, una coppia xlsx + csv per struttura: ogni import sostituisce i mesi già caricati di "
+                  "quella struttura. Fatta quando nel mese c'è un import per ognuna delle quattro strutture."),
     Attivita("tasca", "Saldo prepagata TASCA", "Tesoreria", "mensile", giorno=28, link="/tesoreria?tab=import"),
     Attivita("bcc", "Estratto carta BCC (chiusura il 28)", "Tesoreria", "mensile", giorno=31, link="/tesoreria?tab=import",
              nota="Import e saldi → saldo manuale = saldo attuale."),
