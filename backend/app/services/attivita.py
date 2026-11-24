@@ -109,8 +109,14 @@ CATALOGO = [
     Attivita("ce_contabile", "Export della contabilità GoProfit (CE contabile)", "USALI", "mensile", giorno=20,
              parti=("DPH", "CLB", "INT", "BON"), link="/usali?tab=contabile",
              nota="Dove: GoProfit → conto economico riclassificato USALI, una struttura per volta (DPH con Mare "
-                  "Mosso, CLB, INT, BON), periodo da gennaio all'ultimo mese chiuso. Prima di esportare espandere "
-                  "tutte le righe (con righe chiuse i subtotali non tornano e l'import viene rifiutato). Dalla "
+                  "Mosso, CLB, INT, BON). Filtri: anno in corso dal mese 1 (gennaio) per tanti mesi quanti fino "
+                  "all'ultimo mese chiuso (es. 10 = gennaio–ottobre); data di COMPETENZA (non registrazione né "
+                  "pagamento); una sola struttura; anni e mesi in colonna, valori «Somma di Valori». Il costo del "
+                  "personale (salari e stipendi, contributi, TFR, benefici, lavoro esternalizzato) è già incluso "
+                  "nell'export normale, nessun filtro in più: in HotelOS esce come personale contabile e la "
+                  "differenza con i cedolini va in «Costo del lavoro non suddiviso». Prima di esportare espandere "
+                  "tutte le righe fino ai singoli conti (con righe chiuse i subtotali non tornano e l'import viene "
+                  "rifiutato; un CSV con le righe chiuse ha solo Reddito Netto e Gran Totale e viene ignorato). Dalla "
                   "stessa vista scaricare l'Excel (.xlsx, obbligatorio: gerarchia e importi) e il CSV (consigliato: "
                   "riconosce da solo la struttura e aggiunge gli id dei conti); xlsx e csv di due esportazioni "
                   "diverse non si abbinano e il csv viene ignorato. Dove va: USALI → Conto Economico contabile → "

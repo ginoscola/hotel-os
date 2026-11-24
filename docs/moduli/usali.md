@@ -94,7 +94,10 @@ tenere a mente confrontando report per-struttura esportati prima di questa migra
 ## Modulo USALI — Conto Economico contabile (import dal gestionale, ottobre 2026)
 Terza scheda del modulo USALI (non un modulo NavBar a sé): conto economico **dalla contabilità
 vera**, export Flexmonster di **GoProfit** (il gestionale) già riclassificato USALI — una coppia xlsx+csv per
-struttura (DPH, CLB, INT, BON), da gennaio all'ultimo mese chiuso; attività ricorrente mensile per struttura — distinto dal "Conto Economico"
+struttura (DPH, CLB, INT, BON), da gennaio all'ultimo mese chiuso; attività ricorrente mensile per struttura
+(filtri GoProfit ricavati dai link del CSV: `AnnoDa`, `MeseDa=1`, `ValorePeriodo`=n. mesi,
+`DataCampoTabella=DataCompetenza`, `NumeroStrutture=1`; il personale è incluso senza filtri — verificato
+24/11/2026: contabilità 4 strutture 5–10% sopra il costo azienda dei cedolini KM DI MARE, per TFR/ratei) — distinto dal "Conto Economico"
 interno sopra (calcolato da daily_revenue/Dipendenti/voci manuali). Fasi: ✅ 1 modelli+parser+test,
 ✅ 2 import anteprima/conferma + report, ✅ 3 KPI + categorie, ✅ 4 frontend (v3.20.3).
 - **Modelli** `models/usali_contabile.py`, migrazione `usali006_2026`: `usali_struttura_gestionale`
