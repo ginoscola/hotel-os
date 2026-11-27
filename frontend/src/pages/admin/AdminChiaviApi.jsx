@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api, { API_URL } from '../../api/client.js'
-import { formatData, mostraErrore, oggiIso } from '../../utils/format.js'
+import { copiaTesto, formatData, mostraErrore, oggiIso } from '../../utils/format.js'
 import {
   Badge, Button, Card, Field, Input, Loading, Messaggio, Modal, PageHeader, Select, StatoVuoto, Table, Td, Th,
   useAvvisi, useConferma,
@@ -92,7 +92,7 @@ export default function AdminChiaviApi() {
 
   async function copia(testo) {
     try {
-      await navigator.clipboard.writeText(testo)
+      await copiaTesto(testo)
       avvisi.successo('Chiave copiata')
     } catch (e) {
       avvisi.errore(mostraErrore(e, 'Copia non riuscita: selezionala e copiala a mano.'))

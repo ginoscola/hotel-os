@@ -120,3 +120,27 @@ export async function leggiErroreBlob(err) {
 export function erroreDaSegnalare(e, fallback) {
   return e?.response?.status === 404 ? null : mostraErrore(e, fallback)
 }
+
+/**
+ * Copia un testo negli appunti. `navigator.clipboard` esiste solo su HTTPS (o localhost): da rete
+ * locale in HTTP (192.168.x.x:8080) è undefined, quindi si ripiega su textarea + execCommand('copy').
+ * Lancia un errore se nessuno dei due metodi riesce.
+ */
+export async function copiaTesto(testo) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(testo)
+    return
+  }
+  const area = document.createElement('textarea')
+  area.value = testo
+  area.setAttribute('readonly', '')
+  area.style.position = 'fixed'
+  area.style.opacity = '0'
+  document.body.appendChild(area)
+  area.select()
+  try {
+    if (!document.execCommand('copy')) throw new Error('Il browser non permette la copia automatica')
+  } finally {
+    document.body.removeChild(area)
+  }
+}

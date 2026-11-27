@@ -152,7 +152,7 @@ cd frontend && npm run lint                                       # eslint (esli
 UI: date in italiano, euro con €, percentuali con %.  occupancy sempre come % (mai €).
 
 ## Utility frontend (format.js)
-- `formatEuro(v)`, `formatEuroK(v)` (≥1000 → "Xk €"), `formatEuroIntero(v)`, `formatPerc(v)`, `formatN(v)`, `formatData(iso)`, `addDays(isoDate, n)`, `isoLocale(date)`, `oggiIso()`, `calcolaDelta(val, ref)`
+- `formatEuro(v)`, `formatEuroK(v)` (≥1000 → "Xk €"), `formatEuroIntero(v)`, `formatPerc(v)`, `formatN(v)`, `formatData(iso)`, `addDays(isoDate, n)`, `isoLocale(date)`, `oggiIso()`, `calcolaDelta(val, ref)`, `copiaTesto(t)` (appunti: mai `navigator.clipboard` diretto, in HTTP da LAN è undefined)
 - `percentualiA100(valori, decimali=1)` — percentuali di ripartizione che, arrotondate, sommano sempre esattamente 100 (metodo del resto maggiore). Usarla per ogni legenda/colonna "% sul totale" che l'utente usa per ripartire costi.
 - `mostraErrore(e)` — **OBBLIGATORIO in ogni catch block**. Se `localStorage('debug_errori')==='true'` → stack trace completo; altrimenti prima riga (legge anche gli errori di validazione 422, elenco `{loc,msg}`). **Mai** usare inline `e.response?.data?.detail || e.message`.
   - `erroreDaSegnalare(e)` = `mostraErrore` ma `null` sul 404 (molti endpoint rispondono 404 per "nessun dato"): per i
