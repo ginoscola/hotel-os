@@ -1,12 +1,15 @@
-"""Router FastAPI — area admin: statistiche, gestione utenti e cancellazione dati di test."""
+"""Router FastAPI — area admin: statistiche, gestione utenti, chiavi API degli agenti e cancellazione dati di test."""
+
+from datetime import date, datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.auth import hash_password, richiedi_admin
+from app.auth import genera_chiave_api, hash_password, richiedi_admin
 from app.database import get_db
-from pydantic import BaseModel
-from app.models.revenue import DailyRevenue, ImportSession, Module, ModulePermission, User, UserModulePermission
+from pydantic import BaseModel, Field
+from app.models.revenue import ApiKey, DailyRevenue, ImportSession, Module, ModulePermission, User, UserModulePermission
 from app.schemas.auth import UserCreate, UserRead, UserUpdate, ResetPasswordRequest
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(richiedi_admin)])
@@ -208,3 +211,71 @@ def set_permessi_utente(user_id: int, permessi: list[PermessoUtenteItem], db: Se
 
     db.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Chiavi API per agenti AI (bot Grok, in futuro Claude)
+# ---------------------------------------------------------------------------
+
+class ChiaveApiCreate(BaseModel):
+    user_id: int
+    nome: str = Field(..., min_length=1, max_length=100)
+    scade_il: Optional[date] = None
+
+
+class ChiaveApiRead(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    nome: str
+    prefisso: str
+    attiva: bool
+    scade_il: Optional[date] = None
+    created_at: Optional[datetime] = None
+    ultimo_uso: Optional[datetime] = None
+
+
+def _chiave_read(k: ApiKey) -> dict:
+    return {
+        "id": k.id, "user_id": k.user_id, "username": k.user.username, "nome": k.nome,
+        "prefisso": k.prefisso, "attiva": k.attiva, "scade_il": k.scade_il,
+        "created_at": k.created_at, "ultimo_uso": k.ultimo_uso,
+    }
+
+
+@router.get("/chiavi-api", response_model=list[ChiaveApiRead])
+def lista_chiavi_api(db: Session = Depends(get_db)):
+    """Chiavi API (senza la chiave in chiaro, che non è salvata), le più recenti prima."""
+    return [_chiave_read(k) for k in db.query(ApiKey).order_by(ApiKey.id.desc()).all()]
+
+
+@router.post("/chiavi-api", status_code=status.HTTP_201_CREATED)
+def crea_chiave_api(dati: ChiaveApiCreate, db: Session = Depends(get_db)):
+    """Crea una chiave per un utente non admin. La chiave in chiaro è restituita solo qui."""
+    utente = db.query(User).filter(User.id == dati.user_id).first()
+    if not utente:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utente non trovato")
+    if utente.ruolo == "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Le chiavi API si creano solo per utenti non admin (es. un utente dedicato all'agente)")
+    if dati.scade_il and dati.scade_il < date.today():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La data di scadenza è già passata")
+    chiave, prefisso, hash_ = genera_chiave_api()
+    record = ApiKey(user_id=utente.id, nome=dati.nome.strip(), prefisso=prefisso, hash_chiave=hash_,
+                    scade_il=dati.scade_il)
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return {**_chiave_read(record), "chiave": chiave}
+
+
+@router.post("/chiavi-api/{chiave_id}/revoca", response_model=ChiaveApiRead)
+def revoca_chiave_api(chiave_id: int, db: Session = Depends(get_db)):
+    """Disattiva una chiave: da subito ogni chiamata con quella chiave riceve 401. Non si riattiva."""
+    record = db.query(ApiKey).filter(ApiKey.id == chiave_id).first()
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chiave non trovata")
+    record.attiva = False
+    db.commit()
+    db.refresh(record)
+    return _chiave_read(record)

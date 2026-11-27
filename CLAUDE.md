@@ -105,6 +105,8 @@ L'utente `admin` creato all'installazione (password di default nella migrazione)
 - Lettura (dashboard, export, config): `richiedi_utente_attivo`
 - Scrittura (upload, budget, admin/*): `richiedi_admin`
 - Login: nessuna auth (rate limit 5/15min per IP)
+- Agenti AI: header `X-API-Key` (tabella `api_keys`), sempre sola lettura (solo GET) e mai valida su
+  `richiedi_admin` — dettagli in `admin-moduli.md` (Accessi agenti AI)
 - `api/client.js`: allega Bearer, gestisce 401 → redirect `/login?sessione_scaduta=1`
 - Permessi per modulo lato backend: `richiedi_permesso(code, 'vedere'|'modificare'|'importare')` di
   `app/permessi.py` (oggi solo Tesoreria) — dettagli in `admin-moduli.md`.

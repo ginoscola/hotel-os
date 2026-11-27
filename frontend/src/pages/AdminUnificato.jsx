@@ -11,6 +11,7 @@ import AdminWave from './admin/AdminWave.jsx'
 import AdminUsaliFnb from './admin/AdminUsaliFnb.jsx'
 import AdminAttivita from './admin/AdminAttivita.jsx'
 import AdminHotelCamere from './admin/AdminHotelCamere.jsx'
+import AdminChiaviApi from './admin/AdminChiaviApi.jsx'
 import {
   AdminTesoreriaAdvertising, AdminTesoreriaAffitti, AdminTesoreriaCategorie, AdminTesoreriaCompensi, AdminTesoreriaConti, AdminTesoreriaFiscale, AdminTesoreriaInterventi, AdminTesoreriaMutuo,
   AdminTesoreriaPrevisione, AdminTesoreriaRegole, AdminTesoreriaRicorrenti, AdminTesoreriaSoglie,
@@ -29,6 +30,7 @@ const SEZIONI = [
     gruppo: 'Comune',
     voci: [
       { id: 'utenti',   label: 'Utenti' },
+      { id: 'agenti-ai', label: 'Accessi agenti AI' },
       { id: 'stagioni', label: 'Stagioni operative' },
       { id: 'hotel-camere', label: 'Hotel e camere' },
       { id: 'moduli',   label: 'Gestione moduli' },
@@ -212,6 +214,7 @@ export default function AdminUnificato() {
 
 function Contenuto({ sezione }) {
   if (sezione === 'utenti')        return <AdminUtenti />
+  if (sezione === 'agenti-ai')     return <AdminChiaviApi />
   if (sezione === 'stagioni')      return <GestioneStagioni />
   if (sezione === 'hotel-camere')  return <AdminHotelCamere />
   if (sezione === 'moduli')        return <GestioneModuli />

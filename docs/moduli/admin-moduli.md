@@ -39,7 +39,7 @@ invece di cadere nel fallback "non ancora implementato". **Budget e Usali non to
 richiesto): mostrano ancora "in sviluppo" finché non verrà chiesto esplicitamente anche per loro.
 
 ## Area Admin (`/admin` → AdminUnificato.jsx, sidebar `?s=`)
-**Comune**: `utenti` (CRUD), `stagioni` (stagioni operative), `hotel-camere` (nome e camere di default degli hotel, anagrafica
+**Comune**: `utenti` (CRUD), `agenti-ai` (chiavi API degli agenti AI, vedi sotto), `stagioni` (stagioni operative), `hotel-camere` (nome e camere di default degli hotel, anagrafica
 camere con disattivazione al posto dell'eliminazione — `AdminHotelCamere.jsx`, v4.31.0; test `test_rooms_hotels.py`), `moduli` (attiva/disattiva/permessi), `attivita` (frequenze dello scadenziario, vedi "Attività ricorrenti")
 **Revenue**: `revenue-import` (bulk import), `revenue-test` (cancella is_test)
 **Dipendenti**: `dip-cc` (AdminCentriDiCosto), `dip-colori` (colori CC), `dip-test`
@@ -78,3 +78,24 @@ voce attiva resta visibile senza dover già sapere di aprire qualcosa. Se si nav
 il cui gruppo è chiuso (es. link diretto da un'altra pagina), quel gruppo si riapre automaticamente
 senza toccare lo stato degli altri. Aggiungere un nuovo gruppo in `SEZIONI` non richiede altro codice:
 eredita comportamento e persistenza automaticamente.
+
+
+## Accessi agenti AI — chiavi API (v4.38.0)
+Gli agenti AI (bot Grok con più ruoli: revenue manager, receptionist, contabile; in futuro Claude) leggono i
+dati via API invece di usare l'interfaccia da un "PC virtuale" (lento e costoso in token).
+- Tabella `api_keys` (modello `ApiKey` in `revenue.py`): utente collegato, nome, prefisso visibile, **solo
+  hash SHA-256** della chiave (in chiaro mostrata una volta alla creazione), `attiva`, `scade_il` (ultimo
+  giorno valido, NULL = senza scadenza), `ultimo_uso` (aggiornato al più ogni 5 minuti).
+- Autenticazione: header `X-API-Key: hos_…` in alternativa al Bearer JWT (`_leggi_utente_da_token` in
+  `auth.py`). La chiave vale come il suo utente → valgono ruolo e override per utente dei moduli.
+- **Sempre sola lettura**: con una chiave ogni metodo diverso da GET/HEAD/OPTIONS → 403, qualunque permesso
+  abbia l'utente. **Mai valida sugli endpoint admin** (`richiedi_admin` la rifiuta) e non si può creare per un
+  utente admin. Quindi anche i dati esposti solo da endpoint admin (es. costo del lavoro in Home) restano fuori.
+- Endpoint (admin): `GET|POST /admin/chiavi-api`, `POST /admin/chiavi-api/{id}/revoca` (non si riattiva).
+- Utente in uso: `agente-ai` (viewer, password casuale mai usata, override Tesoreria = vede; Dipendenti
+  visibile come per tutti i viewer: scelta dell'utente, 27/11/2026, la usa il bot contabile). Una sola chiave
+  condivisa dagli agenti Grok; la chiave la usa solo il titolare.
+- Per l'agente: indirizzo pubblico `VITE_API_URL`, elenco endpoint in `/openapi.json`.
+- Prossime fasi possibili: endpoint `/agenti/` con risposte compatte già calcolate per ruolo (fase B), server
+  MCP per Grok/Claude sugli stessi strumenti (fase C).
+- Test: `tests/test_chiavi_api.py`.

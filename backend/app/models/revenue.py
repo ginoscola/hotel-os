@@ -97,6 +97,29 @@ class User(Base):
     module_permissions = relationship("UserModulePermission", back_populates="user", cascade="all, delete-orphan")
 
 
+class ApiKey(Base):
+    """Chiave API per agenti AI (es. bot Grok): sostituisce il login e vale come il suo utente.
+
+    Sempre in sola lettura (solo GET) e mai valida sugli endpoint admin, qualunque sia il ruolo
+    dell'utente (vedi `app/auth.py`). Della chiave si salva solo l'hash SHA-256: in chiaro si
+    vede una volta sola, alla creazione.
+    """
+
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    nome = Column(String(100), nullable=False)
+    prefisso = Column(String(16), nullable=False)          # inizio della chiave, per riconoscerla
+    hash_chiave = Column(String(64), nullable=False, unique=True)
+    attiva = Column(Boolean, nullable=False, default=True, server_default='true')
+    scade_il = Column(Date, nullable=True)                 # ultimo giorno di validità; NULL = senza scadenza
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    ultimo_uso = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")
+
+
 class UserModulePermission(Base):
     """Override permessi modulo per singolo utente (sovrascrive il permesso di ruolo)."""
 
