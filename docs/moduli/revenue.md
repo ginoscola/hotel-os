@@ -79,3 +79,30 @@ Tre modalità (toggle, `localStorage('gruppo_modalita')`):
 - Excel: revenue `#,##0.00 "€"`, percentuali `0.0"%"`, interi `#,##0`. Intestazioni bold bianco su blu, righe alternate grigio.
 - PDF: landscape A4, 8pt.
 - Gruppo Excel: 2 fogli (aggregati settimanali + dettaglio hotel).
+
+## Riepilogo per gli agenti AI — `GET /agenti/revenue/settimanale` (v4.39.0)
+Fase B dell'accesso agenti (chiavi API in `admin-moduli.md`). Sostituisce le ~26 chiamate della routine settimanale
+del bot revenue manager (Grok): una risposta da ~23 KB in ~0,5 s invece di ~615 KB in ~12 s. Logica in
+`services/agenti_revenue.py::riepilogo_settimanale()`, router sottile `routers/agenti.py` (prefisso `/agenti`, per i
+prossimi endpoint degli altri agenti: CFO, Contabilità, Reception — chiedere prima a ciascun bot la sua scheda).
+- Parametri: `snapshot` (default l'ultima, senza dati di test), `confronto` (default la precedente),
+  `versione_budget` (default `v1`). 404 se mancano i dati, 400 se `confronto` ≥ `snapshot`.
+- Blocchi: `meta` (snapshot usate, `budget_disponibile`/`anno_precedente_disponibile` con motivo), `avvisi`,
+  `gruppo` e `hotel[]` (KPI di stagione con `revenue_rooms` assoluto e `camere_residue`, `pickup`, `vs_budget`,
+  `vs_anno_precedente`, `wave` stagione/mesi con `anno_record` e `delta_pp`), `settimane_future[]` (settimane non
+  finite prima della snapshot, `in_corso`, gruppo + hotel), `rettifiche_passato[]` (settimane concluse cambiate tra
+  le due snapshot; con le future danno il pick-up di stagione), `cancellazioni` (arrivi dalla snapshot a fine
+  stagione via `tasso_cancellazione`, `storicizzato: false`, `aggiornate_al` = ultimo import), `note` di lettura.
+- Riusa `_carica_righe`, `aggrega_totali_righe`/`calcola_kpi`, `wave_hotel`, `_entry_to_budget_dict`: numeri
+  uguali alle pagine. Collaudo 27/11/2026 su 17/08 vs 10/08/2026: gruppo +147 camere, +21.520,75 €
+  (+17.508,79 € camere), DPH +44, CLB +74, INT +29 — identico alla scheda del bot.
+- Budget: un hotel conta solo se il budget ha ricavi > 0 (nel 2026 non c'è: una riga vuota; il 2027 sì). OTB vs
+  somma del budget delle stesse settimane; gruppo con `hotel_inclusi` se il budget c'è solo per alcuni hotel.
+- Anno precedente: snapshot dell'anno prima più vicina a snapshot − `anno_confronto_giorni_offset` (364) entro
+  `anno_confronto_tolleranza_giorni` (30); settimane abbinate a −364 giorni. Nel 2026 mai disponibile (snapshot dal
+  16/03/2026): funziona dal 2027.
+- Hotel assente nella snapshot di confronto → avviso, pick-up null per lui e per il gruppo (mai un pick-up falso).
+- Nessuna soglia "anticipo/ritardo": solo numeri, il giudizio lo dà l'agente (scelta dell'utente).
+- Il bot è bloccato da Cloudflare (errore 1010) con lo User-Agent di Python: usa uno User-Agent tipo curl;
+  in alternativa regola WAF che salta il controllo per l'host API con header `X-API-Key`.
+- Test: `tests/test_agenti_revenue.py`.

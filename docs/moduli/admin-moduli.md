@@ -96,6 +96,6 @@ dati via API invece di usare l'interfaccia da un "PC virtuale" (lento e costoso 
   visibile come per tutti i viewer: scelta dell'utente, 27/11/2026, la usa il bot contabile). Una sola chiave
   condivisa dagli agenti Grok; la chiave la usa solo il titolare.
 - Per l'agente: indirizzo pubblico `VITE_API_URL`, elenco endpoint in `/openapi.json`.
-- Prossime fasi possibili: endpoint `/agenti/` con risposte compatte già calcolate per ruolo (fase B), server
-  MCP per Grok/Claude sugli stessi strumenti (fase C).
+- Fase B: `GET /agenti/revenue/settimanale` (v4.39.0, dettagli in `revenue.md`); altri agenti da fare. Fase C: server
+  MCP per Grok/Claude sugli stessi strumenti.
 - Test: `tests/test_chiavi_api.py`.

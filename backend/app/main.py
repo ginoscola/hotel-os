@@ -15,6 +15,7 @@ from app.routers import home as home_router
 from app.routers import prenotazioni as prenotazioni_router
 from app.routers import usali_contabile as usali_contabile_router
 from app.routers import usali_fnb as usali_fnb_router
+from app.routers import agenti as agenti_router
 from app.routers import budget_previsione as budget_previsione_router
 from app.routers import budget_ristoranti as budget_ristoranti_router
 from app.routers import tesoreria as tesoreria_router
@@ -87,6 +88,7 @@ app.include_router(usali_fnb_router.router)
 app.include_router(tesoreria_router.router)
 app.include_router(wave_router.router)
 app.include_router(attivita_router.router)
+app.include_router(agenti_router.router)
 
 
 @app.get("/")
